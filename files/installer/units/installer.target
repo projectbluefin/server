@@ -2,9 +2,6 @@
 Description=Bluefin Server Installer
 Documentation=https://github.com/projectbluefin/server
 DefaultDependencies=no
-# Network must be online before the installer runs (sysupdate needs it).
-Wants=network-online.target
-After=network-online.target
 # installer.service does the work; this target waits for it.
 Wants=installer.service
 After=installer.service
