@@ -186,7 +186,7 @@ config:
         if [ -n "$KVER" ] && [ -f "/mnt/root/boot/vmlinuz" ]; then
           mkdir -p /mnt/esp/EFI/Linux /mnt/esp/loader/entries
           cp "/mnt/root/boot/vmlinuz" "/mnt/esp/vmlinuz-$KVER"
-          printf 'title   Bluefin Server\nlinux   /vmlinuz-%s\noptions root=PARTLABEL=bluefin-server-root-a console=ttyS0,115200 rw\n' \
+          printf 'title   Bluefin Server\nlinux   /vmlinuz-%s\noptions root=/dev/vda2 console=ttyS0,115200 rw\n' \
             "$KVER" > "/mnt/esp/loader/entries/bluefin-server.conf"
           log "Boot entry written for kernel $KVER"
         else
