@@ -3,6 +3,7 @@ description: Build bootc from offline vendored sources.
 
 build-depends:
   - freedesktop-sdk.bst:components/rust.bst
+  - freedesktop-sdk.bst:components/gcc.bst
   - freedesktop-sdk.bst:components/pkg-config.bst
   - freedesktop-sdk.bst:components/git-minimal.bst
   - freedesktop-sdk.bst:components/make.bst
