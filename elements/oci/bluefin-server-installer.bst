@@ -159,7 +159,7 @@ config:
       # 4. Install the bootloader into the newly created ESP.
       ESP_DEV=""
       while read -r path type; do
-        if [ "$type" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then
+        if [ "${type,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then
           ESP_DEV="$path"
           break
         fi
@@ -174,6 +174,7 @@ config:
       done < <(lsblk -rno PATH,PARTLABEL "$DISK" 2>/dev/null)
 
       if [ -n "$ESP_DEV" ] && [ -n "$ROOT_DEV" ]; then
+        mkdir -p /mnt/esp /mnt/root
         mount "$ESP_DEV"  /mnt/esp
         mount -o ro "$ROOT_DEV" /mnt/root
         # Install systemd-boot loader binaries.
@@ -181,6 +182,7 @@ config:
           || log "WARNING: bootctl install failed (non-fatal)"
         # Create a loader entry pointing at the installed kernel.
         # systemd-boot uses Type 1 entries; kernel must be on the ESP.
+        KVER=$(ls /mnt/root/usr/lib/modules 2>/dev/null | head -1)
         if [ -n "$KVER" ] && [ -f "/mnt/root/boot/vmlinuz" ]; then
           mkdir -p /mnt/esp/EFI/Linux /mnt/esp/loader/entries
           cp "/mnt/root/boot/vmlinuz" "/mnt/esp/vmlinuz-$KVER"
