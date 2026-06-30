@@ -27,11 +27,9 @@ config:
   build-commands:
     - |
       tar --zstd -xf bootc-vendor.tar.zstd
-      cd bootc-1.16.2
       cargo build --release --frozen
 
   install-commands:
     - |
-      cd bootc-1.16.2
       mkdir -p "%{install-root}/usr/bin"
       cp target/release/bootc "%{install-root}/usr/bin/bootc"
