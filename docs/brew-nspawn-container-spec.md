@@ -66,29 +66,33 @@ No desktop stack. No Wayland/Mesa/PipeWire/GTK (hard rule #1 from AGENTS.md — 
 
 No package manager (apt/dnf/etc) — brew IS the package manager for this container.
 
-## BST element structure (suggested)
+## BST element structure
 
 ```
 elements/
   brew/
-    brew-deps.bst        # kind: stack — FSDK ruby, git, curl, gcc, ca-certs, systemd, bash
-    brew-runtime.bst     # kind: compose — carve brew-deps to runtime domains (keep shells)
-    brew-prefix.bst      # kind: manual — stage brew git repo into /home/linuxbrew prefix
-    brew-users.bst       # kind: manual — /etc/passwd, /etc/group, /etc/subuid entries
+    brew-deps.bst        # kind: manual — stage brew git repo into /home/linuxbrew prefix
+    brew-runtime.bst     # kind: stack — aggregate freedesktop-sdk dependencies
   oci/
     brew-nspawn.bst      # kind: script — assemble rootfs tar (NOT OCI image)
 ```
 
 ## The output element (brew-nspawn.bst)
 
-This is where it diverges from all other fsdk-containers outputs. Instead of `build-oci`, the script element must produce a `.tar.gz` of the rootfs:
+This is where it diverges from all other fsdk-containers outputs. Instead of `build-oci`, the script element must produce a `.tar.zst` of the rootfs:
 
 ```yaml
 kind: script
 build-depends:
-  - brew/brew-runtime.bst  # filename: ..., config: location: /layer
-  - brew/brew-prefix.bst   # filename: ..., config: location: /layer
-  - brew/brew-users.bst    # filename: ..., config: location: /layer
+  - base/base-stack.bst
+  - freedesktop-sdk.bst:components/tar.bst
+  - freedesktop-sdk.bst:components/zstd.bst
+  - filename: brew/brew-runtime.bst
+    config:
+      location: /layer
+  - filename: brew/brew-deps.bst
+    config:
+      location: /layer
 config:
   commands:
     - |

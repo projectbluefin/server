@@ -15,7 +15,7 @@ build-depends:
   - filename: brew/brew-runtime.bst
     config:
       location: /layer
-  - filename: brew/brew-prefix.bst
+  - filename: brew/brew-deps.bst
     config:
       location: /layer
 
