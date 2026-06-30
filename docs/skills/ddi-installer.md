@@ -30,7 +30,7 @@ metadata:
 > - ✅ sysupdate.d transfer config pulls OS DDI from GitHub Releases
 > - ✅ repart.d target disk layout defined
 > - ✅ `bluefin-install` orchestration script (sysupdate → repart → bootctl)
-> - ✅ Release dispatch workflow (`.github/workflows/release-installer.yml`) delegates installer build to testing-lab
+> - ✅ Release signal-tag workflow (`.github/workflows/release-installer.yml`) publishes installer build signal tags
 > - ✅ OS DDI artifact (`bluefin-server-ddi-@v.raw.zst`) integrated as a first-class payload
 
 ## Core Process
@@ -184,22 +184,21 @@ just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
 `.github/workflows/release-installer.yml` fires on `installer-v*` tags.
 **GitHub is the control plane only** — the workflow resolves the tag ref,
 runs `just validate-installer` (element graph resolution, no build), then
-dispatches `installer-build-requested` to `projectbluefin/testing-lab`.
-The lab builds the installer and uploads artifacts to the GitHub Release.
+publishes `installer-build/<installer-tag>` as a GitOps signal tag.
+The lab consumes that tag, builds the installer, and uploads artifacts to the GitHub Release.
 
 ```
 git tag installer-v0.1.0 && git push origin installer-v0.1.0
 ```
 
-The lab receives:
-- `client_payload.source_repo` — the triggering repo
-- `client_payload.tag`         — the installer tag (e.g. `installer-v0.1.0`)
-- `client_payload.sha`         — pinned commit SHA
+Signal tag format:
+- `installer-build/<installer-tag>` (e.g. `installer-build/installer-v0.1.0`)
+- tag object points at the pinned commit SHA being released
 
 The lab is responsible for:
 1. `just build-installer` + `just export-installer`
 2. `just build-ddi` + `just export-ddi`
-3. Creating the GitHub Release via Mergeraptor token
+3. Creating/updating the GitHub Release
 4. Uploading `bluefin-server-installer-<ver>.raw.zst`, `bluefin-server-ddi-<ver>.raw.zst`, and checksums.
 
 > No BST build compute runs on GitHub-hosted runners.

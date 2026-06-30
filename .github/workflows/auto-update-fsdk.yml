@@ -43,10 +43,8 @@ jobs:
         run: |
           just validate
 
-      - name: Create PR and Publish GitOps Lab Build Tag
+      - name: Create or update PR
         if: steps.check_changes.outputs.changes == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           BRANCH="auto/update-fsdk"
@@ -70,18 +68,10 @@ jobs:
               --base main \
               --head "$BRANCH" \
               --title "chore(deps): bump freedesktop-sdk point release" \
-              --body "Automated freedesktop-sdk point-release bump. Build validation is requested through a GitOps lab-build tag that points to this commit SHA.")
+              --body "Automated freedesktop-sdk point-release bump. Validation runs on pull_request; merge triggers the standard GitOps build signal flow.")
             echo "==> Opened new PR: $PR_URL"
           else
             echo "==> PR already exists: #$EXISTING_PR"
           fi
-
-          TAG="lab-build/$(git rev-parse HEAD)"
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
-            echo "==> ${TAG} already exists; skipping"
-          else
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -f "ref=refs/tags/${TAG}" \
-              -f "sha=$(git rev-parse HEAD)"
-            echo "==> Published GitOps build signal tag ${TAG}"
-          fi
+          
+          echo "==> PR ready; validation runs on pull_request."

@@ -62,40 +62,40 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 ```
 
 ### No PAT/App credentials in CI
-PATs and GitHub App credentials are out of scope for this repo's CI design.
-Use repository-native GitOps signals only:
-
-1. Use `GITHUB_TOKEN` for same-repo writes (branch updates, PR creation, and tag creation).
-2. Emit a Git ref signal that external automation can observe (for example `refs/tags/lab-build/<commit-sha>`).
-3. Drive lab/cluster automation from observed Git state (tag/release/commit), not `repository_dispatch`.
+- Personal Access Tokens (PATs) are banned.
+- GitHub App token plumbing is not used for build handoff.
+- `repository_dispatch` is not used for build handoff.
+- Build/release handoff is done by publishing immutable Git signal tags:
+  - `lab-build/<sha>`
+  - `installer-build/<installer-tag>`
 
 ## Workflow Structure
 
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
 | `validate` | `build.yml` | `pull_request` only | `just validate` — element graph resolution, no build |
-| `trigger-lab` | `build.yml` | `push/main`, `workflow_dispatch`, `repository_dispatch[fsdk-updated]` | Resolves HEAD SHA; calls `gh workflow run lab-release.yml --field ref=<sha>` |
-| `dispatch-lab-build` | `lab-release.yml` | Daily 04:00 UTC schedule, `workflow_dispatch`, triggered by `trigger-lab` | Sends `repository_dispatch[lab-build-requested]` to `projectbluefin/testing-lab`; actual builds and zot pushes happen in the lab |
+| `trigger-lab` | `build.yml` | `push/main`, `workflow_dispatch` | Resolves HEAD SHA and pushes `lab-build/<sha>` tag |
+| `dispatch-lab-build` | `lab-release.yml` | Daily 04:00 UTC schedule, `workflow_dispatch` | Resolves selected ref and pushes `lab-build/<sha>` tag |
+| `dispatch-lab-installer-build` | `release-installer.yml` | `push` on `installer-v*`, `workflow_dispatch` | Resolves installer tag/SHA and pushes `installer-build/<installer-tag>` tag |
 
 GitHub is the **control plane only** — no build compute runs here.
 
 ## Core Process
 
 1. Keep workflow triggers explicit (`pull_request` validate vs push/dispatch delegation).
-2. Resolve immutable refs (SHA/tag) in GitHub workflow and pass them as payload.
-3. Dispatch build execution to lab workflows via authenticated GitHub API/CLI calls.
-4. Keep actions SHA-pinned and token source aligned with org policy (Mergeraptor app for cross-repo writes).
+2. Resolve immutable refs (SHA/tag) in GitHub workflow.
+3. Publish Git signal tags (`lab-build/*`, `installer-build/*`) for downstream lab automation.
+4. Keep actions SHA-pinned and remove PAT/App-token/repository_dispatch handoff logic.
 5. Validate graph-only checks in GitHub and keep heavy build/push logic in lab.
 
 ### Daily schedule and manual trigger
 
 `lab-release.yml` runs on a `schedule` cron (`0 4 * * *`, 04:00 UTC) and on
-`workflow_dispatch`. Manual runs accept three optional inputs:
+`workflow_dispatch`. Manual runs accept one optional input:
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `ref` | `main` | Git ref to build (branch, tag, or SHA) |
-| `zot_target` | _(empty)_ | Zot registry target prefix override |
 
 The `concurrency.cancel-in-progress: false` guard on `lab-release` ensures an
 in-flight release dispatch is never cancelled by a subsequent trigger.

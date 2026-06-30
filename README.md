@@ -60,18 +60,19 @@ inside the FSDK `bst2` container -- nothing to install.
 
 ## CI / Release pipeline
 
-GitHub is the **control plane only** — it resolves refs and fires dispatch events.
+GitHub is the **control plane only** — it emits immutable Git refs/tags as build signals.
 All build compute and registry pushes happen inside the testing lab.
 
 | Trigger | Workflow / Job | What happens |
 |---------|---------------|--------------|
 | Pull request | `build.yml` → `validate` | `just validate` resolves the element graph — no build, no push |
-| Push to `main`, `repository_dispatch[fsdk-updated]`, `workflow_dispatch` | `build.yml` → `trigger-lab` | Resolves HEAD SHA; dispatches `lab-release.yml` with that SHA |
-| Daily **04:00 UTC** schedule | `lab-release.yml` → `dispatch-lab-build` | Sends `repository_dispatch[lab-build-requested]` to `projectbluefin/testing-lab` with repo, ref, and SHA |
-| `workflow_dispatch` on `lab-release.yml` | `lab-release.yml` → `dispatch-lab-build` | Same as above; accepts optional `ref` and `zot_target` inputs |
-| `lab-build-requested` in testing-lab | testing-lab workflows | BST builds run in the lab; images pushed to the zot registry |
+| Push to `main`, `workflow_dispatch` | `build.yml` → `trigger-lab` | Resolves HEAD SHA and publishes `lab-build/<sha>` tag |
+| Daily **04:00 UTC** schedule | `lab-release.yml` → `dispatch-lab-build` | Resolves selected ref and publishes `lab-build/<sha>` tag |
+| `workflow_dispatch` on `lab-release.yml` | `lab-release.yml` → `dispatch-lab-build` | Same as above; accepts optional `ref` input |
+| Push tag `installer-v*` | `release-installer.yml` → `dispatch-lab-installer-build` | Resolves tag/SHA and publishes `installer-build/<installer-tag>` tag |
+| `lab-build/*` and `installer-build/*` in testing-lab | testing-lab workflows | Lab builds artifacts and publishes to registry/releases |
 
-Cross-repo dispatch uses a **Mergeraptor** GitHub App token (PATs are banned).
+No PATs/App tokens/repository_dispatch are used for build handoff; Git refs are the signal.
 See [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for conventions.
 
 ## License

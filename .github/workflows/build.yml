@@ -4,12 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
-  repository_dispatch:
-    types: [fsdk-updated]
   workflow_dispatch:
 
 concurrency:
-  group: build-${{ github.event.client_payload.ref || github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -23,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.client_payload.ref || github.ref }}
+          ref: ${{ github.ref }}
       - uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2
         with:
           tool: just
@@ -35,20 +33,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      contents: read
-      actions: write
+      contents: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.client_payload.ref || github.ref }}
+          ref: ${{ github.ref }}
       - name: Resolve commit SHA
         id: sha
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Dispatch lab build pipeline
+      - name: Publish GitOps lab-build tag
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_SHA: ${{ steps.sha.outputs.sha }}
         run: |
-          gh workflow run lab-release.yml \
-            --repo "${{ github.repository }}" \
-            --ref main \
-            --field ref="${{ steps.sha.outputs.sha }}"
+          set -euo pipefail
+          TAG="lab-build/${BUILD_SHA}"
+          if REMOTE_REF="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}' | head -n1)" && [ -n "${REMOTE_REF}" ]; then
+            if [ "${REMOTE_REF}" = "${BUILD_SHA}" ]; then
+              echo "==> ${TAG} already exists at expected SHA; skipping"
+              exit 0
+            fi
+            echo "ERROR: ${TAG} exists but points to ${REMOTE_REF}, expected ${BUILD_SHA}" >&2
+            exit 1
+          fi
+          git tag "${TAG}" "${BUILD_SHA}"
+          git push origin "${TAG}"
