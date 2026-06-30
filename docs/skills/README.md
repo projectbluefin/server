@@ -17,6 +17,7 @@ load the focused skill for your task.
 | ------------------ | ---- |
 | Add a new distroless image (python, node, etc.) | [add-new-image.md](add-new-image.md) |
 | Add a non-distroless nspawn machine image (dev env, tarball) | [nspawn-machine-image.md](nspawn-machine-image.md) |
+| Build or debug the DDI live installer | [ddi-installer.md](ddi-installer.md) |
 | Make an image smaller / apply the SLIM recipe | [slim-an-image.md](slim-an-image.md) |
 | Move to a new FSDK release / retag | [bump-fsdk-version.md](bump-fsdk-version.md) |
 | Prove an image is still distroless | [verify-distroless.md](verify-distroless.md) |

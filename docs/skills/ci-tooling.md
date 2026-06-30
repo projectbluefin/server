@@ -4,6 +4,10 @@ description: >
   CI workflow conventions for fsdk-containers. Use when writing or editing
   .github/workflows/*.yml, debugging a failing build job, or adding a new
   CI step.
+metadata:
+  context7-sources:
+    - /websites/github_en_actions
+    - /websites/cli_github_manual
 ---
 
 # CI Tooling
@@ -82,13 +86,34 @@ Pushes made with the default `GITHUB_TOKEN` do **not** trigger other GitHub Acti
 
 ## Workflow Structure
 
-| Job | Trigger | Purpose |
-|---|---|---|
-| `validate` | `pull_request` only | `bst show` element graph resolution, no build |
-| `build` | `push`, `workflow_dispatch` | matrix (x86_64 + aarch64), build + verify + tag-push |
-| `manifest` | after `build` succeeds | assemble and push multi-arch manifest |
+| Job | Workflow | Trigger | Purpose |
+|-----|----------|---------|---------|
+| `validate` | `build.yml` | `pull_request` only | `just validate` — element graph resolution, no build |
+| `trigger-lab` | `build.yml` | `push/main`, `workflow_dispatch`, `repository_dispatch[fsdk-updated]` | Resolves HEAD SHA; calls `gh workflow run lab-release.yml --field ref=<sha>` |
+| `dispatch-lab-build` | `lab-release.yml` | Daily 04:00 UTC schedule, `workflow_dispatch`, triggered by `trigger-lab` | Sends `repository_dispatch[lab-build-requested]` to `projectbluefin/testing-lab`; actual builds and zot pushes happen in the lab |
 
-`fail-fast` on a 2-element matrix has no practical effect — omit it.
+GitHub is the **control plane only** — no build compute runs here.
+
+## Core Process
+
+1. Keep workflow triggers explicit (`pull_request` validate vs push/dispatch delegation).
+2. Resolve immutable refs (SHA/tag) in GitHub workflow and pass them as payload.
+3. Dispatch build execution to lab workflows via authenticated GitHub API/CLI calls.
+4. Keep actions SHA-pinned and token source aligned with org policy (Mergeraptor app for cross-repo writes).
+5. Validate graph-only checks in GitHub and keep heavy build/push logic in lab.
+
+### Daily schedule and manual trigger
+
+`lab-release.yml` runs on a `schedule` cron (`0 4 * * *`, 04:00 UTC) and on
+`workflow_dispatch`. Manual runs accept three optional inputs:
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `ref` | `main` | Git ref to build (branch, tag, or SHA) |
+| `zot_target` | _(empty)_ | Zot registry target prefix override |
+
+The `concurrency.cancel-in-progress: false` guard on `lab-release` ensures an
+in-flight release dispatch is never cancelled by a subsequent trigger.
 
 ## Common Rationalizations
 

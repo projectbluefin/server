@@ -1,0 +1,75 @@
+name: Release DDI installer
+
+# Delegates the installer build to the testing lab via repository_dispatch.
+# GitHub is the control plane: resolves the tag ref and fires the dispatch event.
+# Actual BST build and GitHub Release upload happen in the lab.
+#
+# Tag format: installer-v<semver>  e.g. installer-v0.1.0
+
+on:
+  push:
+    tags:
+      - 'installer-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. installer-v0.1.0)'
+        required: true
+
+concurrency:
+  group: release-installer-${{ github.ref }}
+  cancel-in-progress: false  # never cancel an in-flight release
+
+permissions: read-all
+
+env:
+  LAB_REPO: projectbluefin/testing-lab
+
+jobs:
+  dispatch-lab-installer-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Get mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          owner: projectbluefin
+          repositories: testing-lab
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2
+        with:
+          tool: just
+
+      - name: Resolve installer tag and SHA
+        id: resolve
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          TAG="${INPUT_TAG#refs/tags/}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate installer element graph (pre-flight)
+        run: just validate-installer
+
+      - name: Dispatch installer build to testing lab
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_REPO: ${{ github.repository }}
+          INSTALLER_TAG: ${{ steps.resolve.outputs.tag }}
+          BUILD_SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${LAB_REPO}/dispatches" \
+            -f event_type="installer-build-requested" \
+            -F "client_payload[source_repo]=${SOURCE_REPO}" \
+            -F "client_payload[tag]=${INSTALLER_TAG}" \
+            -F "client_payload[sha]=${BUILD_SHA}"
+          echo "==> Dispatched installer build for ${SOURCE_REPO}@${INSTALLER_TAG} (${BUILD_SHA}) -> ${LAB_REPO}"

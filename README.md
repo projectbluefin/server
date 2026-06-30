@@ -53,13 +53,29 @@ Every image self-declares its base via `io.projectbluefin.fsdk.version` and
 
 ## Build locally
 
-Requires `podman` and [`just`](https://github.com/casey/just). BuildStream runs
+Requires `podman` and [`just`](https://github.com/caesar/just). BuildStream runs
 inside the FSDK `bst2` container -- nothing to install.
 
     just validate        # resolve the element graph
     just build           # build + load ghcr.io/projectbluefin/base:latest
     just verify          # assert distroless + certs + tzdata
     just tags            # show derived tags
+
+## CI / Release pipeline
+
+GitHub is the **control plane only** — it resolves refs and fires dispatch events.
+All build compute and registry pushes happen inside the testing lab.
+
+| Trigger | Workflow / Job | What happens |
+|---------|---------------|--------------|
+| Pull request | `build.yml` → `validate` | `just validate` resolves the element graph — no build, no push |
+| Push to `main`, `repository_dispatch[fsdk-updated]`, `workflow_dispatch` | `build.yml` → `trigger-lab` | Resolves HEAD SHA; dispatches `lab-release.yml` with that SHA |
+| Daily **04:00 UTC** schedule | `lab-release.yml` → `dispatch-lab-build` | Sends `repository_dispatch[lab-build-requested]` to `projectbluefin/testing-lab` with repo, ref, and SHA |
+| `workflow_dispatch` on `lab-release.yml` | `lab-release.yml` → `dispatch-lab-build` | Same as above; accepts optional `ref` and `zot_target` inputs |
+| `lab-build-requested` in testing-lab | testing-lab workflows | BST builds run in the lab; images pushed to the zot registry |
+
+Cross-repo dispatch uses a **Mergeraptor** GitHub App token (PATs are banned).
+See [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for conventions.
 
 ## License
 
