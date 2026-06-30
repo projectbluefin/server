@@ -157,10 +157,21 @@ config:
         || fail "systemd-repart failed"
 
       # 4. Install the bootloader into the newly created ESP.
-      ESP_DEV=$(lsblk -rno PATH,PARTTYPE "$DISK" 2>/dev/null \
-        | awk '$2 == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print $1}' | head -1)
-      ROOT_DEV=$(lsblk -rno PATH,PARTLABEL "$DISK" 2>/dev/null \
-        | awk '$2 == "bluefin-server-root-a" {print $1}' | head -1)
+      ESP_DEV=""
+      while read -r path type; do
+        if [ "$type" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then
+          ESP_DEV="$path"
+          break
+        fi
+      done < <(lsblk -rno PATH,PARTTYPE "$DISK" 2>/dev/null)
+
+      ROOT_DEV=""
+      while read -r path label; do
+        if [ "$label" = "bluefin-server-root-a" ]; then
+          ROOT_DEV="$path"
+          break
+        fi
+      done < <(lsblk -rno PATH,PARTLABEL "$DISK" 2>/dev/null)
 
       if [ -n "$ESP_DEV" ] && [ -n "$ROOT_DEV" ]; then
         mount "$ESP_DEV"  /mnt/esp
