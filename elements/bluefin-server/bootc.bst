@@ -29,24 +29,22 @@ variables:
 config:
   build-commands:
     - |
-      tar --zstd -xf bootc-vendor.tar.zstd -C bootc-1.16.2
-      mkdir -p bootc-1.16.2/.cargo
-      cat << 'EOF' > bootc-1.16.2/.cargo/config.toml
+      tar --zstd -xf bootc-vendor.tar.zstd
+      mkdir -p .cargo
+      cat << 'EOF' > .cargo/config.toml
       [source.crates-io]
       replace-with = "vendored-sources"
 
       [source.vendored-sources]
-      directory = "../vendor"
+      directory = "vendor"
 
       [patch."https://github.com/composefs/composefs-rs"]
-      composefs-ctl = { path = "../vendor/composefs-ctl" }
+      composefs-ctl = { path = "vendor/composefs-ctl" }
       EOF
-      cd bootc-1.16.2
       rm -rf crates/tests-integration
       cargo build --release --offline -p bootc
 
   install-commands:
     - |
-      cd bootc-1.16.2
       mkdir -p "%{install-root}/usr/bin"
       cp target/release/bootc "%{install-root}/usr/bin/bootc"
