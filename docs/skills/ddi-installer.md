@@ -187,11 +187,27 @@ just export-installer      # export .raw.zst + SHA256SUMS to dist/
 
 ## Release
 
-`.github/workflows/release-installer.yml` publishes on `installer-v*` tags:
+`.github/workflows/release-installer.yml` fires on `installer-v*` tags.
+**GitHub is the control plane only** — the workflow resolves the tag ref,
+runs `just validate-installer` (element graph resolution, no build), then
+dispatches `installer-build-requested` to `projectbluefin/testing-lab`.
+The lab builds the installer and uploads artifacts to the GitHub Release.
+
 ```
 git tag installer-v0.1.0 && git push origin installer-v0.1.0
 ```
-Uploads `bluefin-server-installer-<ver>.raw.zst` + `SHA256SUMS`.
+
+The lab receives:
+- `client_payload.source_repo` — the triggering repo
+- `client_payload.tag`         — the installer tag (e.g. `installer-v0.1.0`)
+- `client_payload.sha`         — pinned commit SHA
+
+The lab is responsible for:
+1. `just build-installer` + `just export-installer`
+2. Creating the GitHub Release via Mergeraptor token
+3. Uploading `bluefin-server-installer-<ver>.raw.zst` + `SHA256SUMS`
+
+> No BST build compute runs on GitHub-hosted runners.
 
 ## Related
 

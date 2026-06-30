@@ -50,20 +50,25 @@ jobs:
 
       - name: Resolve build ref and SHA
         id: resolve
+        env:
+          INPUT_REF: ${{ github.event.inputs.ref || github.ref }}
         run: |
-          echo "ref=${{ github.event.inputs.ref || github.ref }}" >> "$GITHUB_OUTPUT"
+          echo "ref=${INPUT_REF}" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch build to testing lab
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ZOT_TARGET: ${{ github.event.inputs.zot_target || '' }}
+          SOURCE_REPO: ${{ github.repository }}
+          BUILD_REF: ${{ steps.resolve.outputs.ref }}
+          BUILD_SHA: ${{ steps.resolve.outputs.sha }}
         run: |
           set -euo pipefail
           gh api "repos/${LAB_REPO}/dispatches" \
             -f event_type="lab-build-requested" \
-            -F "client_payload[source_repo]=${{ github.repository }}" \
-            -F "client_payload[ref]=${{ steps.resolve.outputs.ref }}" \
-            -F "client_payload[sha]=${{ steps.resolve.outputs.sha }}" \
+            -F "client_payload[source_repo]=${SOURCE_REPO}" \
+            -F "client_payload[ref]=${BUILD_REF}" \
+            -F "client_payload[sha]=${BUILD_SHA}" \
             -F "client_payload[zot_target]=${ZOT_TARGET}"
-          echo "==> Dispatched lab build for ${{ github.repository }}@${{ steps.resolve.outputs.sha }} -> ${LAB_REPO}"
+          echo "==> Dispatched lab build for ${SOURCE_REPO}@${BUILD_SHA} -> ${LAB_REPO}"
