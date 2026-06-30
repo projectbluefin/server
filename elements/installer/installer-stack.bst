@@ -1,15 +1,15 @@
 kind: stack
 description: |
   Live installer environment stack. Provides systemd (with systemd-repart,
-  systemd-firstboot, bootctl, systemd-sysupdate), cryptsetup, dracut, and the
-  server kernel. NOT distroless — the installer needs tools and a shell.
+  systemd-firstboot, bootctl, systemd-sysupdate), cryptsetup, and the server
+  kernel. NOT distroless — the installer needs tools and a shell.
+
+  No dracut: the initrd is assembled directly from this rootfs via cpio in
+  bluefin-server-installer.bst. This keeps the toolchain minimal and removes
+  the dracut dependency chain.
 
   The installer uses systemd-sysupdate to pull the OS DDI from GitHub Releases
   over the network, then systemd-repart applies it to the target disk.
-
-  NOTE: This is the build-time staging stack. The UKI (installer.efi) is
-  generated separately from this; see elements/oci/bluefin-server-installer.bst
-  for the TODO on UKI/initrd generation.
 
 depends:
   # Base runtime
@@ -28,10 +28,7 @@ depends:
   # Disk setup: LUKS partition support during install
   - freedesktop-sdk.bst:components/cryptsetup.bst
 
-  # initrd generator — dracut wires repart + sysupdate into the live initrd
-  - freedesktop-sdk.bst:components/dracut.bst
-
-  # Kernel (installer boots from this)
+  # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
   - bluefin-server/kernel-server.bst
 
   # repart.d configs describing the TARGET disk layout
@@ -39,4 +36,8 @@ depends:
 
   # sysupdate.d transfer config for pulling the OS DDI from GitHub Releases
   - installer/installer-sysupdate.bst
+
+  # Installer systemd units (installer.target + installer.service)
+  - installer/installer-units.bst
+
 

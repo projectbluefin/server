@@ -1,0 +1,20 @@
+[Unit]
+Description=Bluefin Server DDI Installer Service
+Documentation=https://github.com/castrojo/bluefin-server
+DefaultDependencies=no
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/bin/bluefin-install
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/bluefin-install
+StandardOutput=journal+console
+StandardError=journal+console
+# Power off automatically on success; on failure stay up so the journal is readable.
+SuccessAction=poweroff
+FailureAction=none
+
+[Install]
+WantedBy=installer.target
