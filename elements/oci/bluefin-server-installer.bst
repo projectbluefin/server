@@ -206,6 +206,27 @@ config:
     # the newc format the kernel expects. The kernel strips the leading dot.
     - |
       set -eu
+
+      # Clean up bloat from /layer before packing (reduces initrd size from 1.4G to ~100M!)
+      rm -rf /layer/usr/lib/debug /layer/usr/share/doc /layer/usr/share/man /layer/usr/include
+      find /layer -type f -name '*.debug' -delete
+
+      # Strip unneeded large kernel modules (GPU, wireless, sound, media, bluetooth)
+      KVER=$(ls /layer/usr/lib/modules | head -1)
+      if [ -n "${KVER}" ]; then
+        MOD_DIR="/layer/usr/lib/modules/${KVER}/kernel"
+        if [ -d "${MOD_DIR}" ]; then
+          rm -rf "${MOD_DIR}/drivers/gpu"
+          rm -rf "${MOD_DIR}/drivers/net/wireless"
+          rm -rf "${MOD_DIR}/drivers/sound" "${MOD_DIR}/sound"
+          rm -rf "${MOD_DIR}/drivers/media"
+          rm -rf "${MOD_DIR}/drivers/bluetooth"
+          rm -rf "${MOD_DIR}/drivers/infiniband"
+        fi
+        # Re-run depmod to update module dependencies after stripping unneeded modules
+        depmod -b /layer "${KVER}" || true
+      fi
+
       ( cd /layer && find . -print0 \
           | cpio --null --create --format=newc ) \
         | zstd -T0 -19 -q -o /installer.cpio.zst
@@ -246,8 +267,8 @@ config:
       Type=esp
       Format=vfat
       CopyFiles=/boot/efi:/
-      SizeMinBytes=2G
-      SizeMaxBytes=2G
+      SizeMinBytes=1G
+      SizeMaxBytes=1G
       RCONF
       systemd-repart \
         --empty=create \
