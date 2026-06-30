@@ -1,0 +1,69 @@
+name: Daily lab release
+
+# Triggers the testing-lab build pipeline via repository_dispatch.
+# Actual image build and zot push happen in the lab; this workflow is the
+# GitOps control-plane that resolves the ref and fires the dispatch event.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # 04:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build (branch, tag, or SHA; default: main)'
+        required: false
+        default: 'main'
+      lab_repo:
+        description: 'Testing-lab repository (owner/repo)'
+        required: false
+        default: 'projectbluefin/testing-lab'
+      zot_target:
+        description: 'Zot registry target prefix (e.g. zot.example.com/projectbluefin)'
+        required: false
+        default: ''
+
+concurrency:
+  group: lab-release
+  cancel-in-progress: false  # Never cancel an in-flight release trigger
+
+permissions: read-all
+
+env:
+  LAB_REPO: ${{ github.event.inputs.lab_repo || 'projectbluefin/testing-lab' }}
+
+jobs:
+  dispatch-lab-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Get mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          owner: projectbluefin
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Resolve build ref and SHA
+        id: resolve
+        run: |
+          echo "ref=${{ github.event.inputs.ref || github.ref }}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch build to testing lab
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ZOT_TARGET: ${{ github.event.inputs.zot_target || '' }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${LAB_REPO}/dispatches" \
+            -f event_type="lab-build-requested" \
+            -F "client_payload[source_repo]=${{ github.repository }}" \
+            -F "client_payload[ref]=${{ steps.resolve.outputs.ref }}" \
+            -F "client_payload[sha]=${{ steps.resolve.outputs.sha }}" \
+            -F "client_payload[zot_target]=${ZOT_TARGET}"
+          echo "==> Dispatched lab build for ${{ github.repository }}@${{ steps.resolve.outputs.sha }} -> ${LAB_REPO}"
