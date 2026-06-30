@@ -18,6 +18,7 @@ depends:
   - freedesktop-sdk.bst:components/ostree.bst
   - freedesktop-sdk.bst:components/composefs.bst
   - bluefin-server/bootc.bst
+  - bluefin-server/prepare-root-config.bst
 
   # Stock FSDK Kernel & Server-Chiseled Firmware
   - freedesktop-sdk.bst:components/linux.bst
