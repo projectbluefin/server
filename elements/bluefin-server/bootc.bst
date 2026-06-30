@@ -31,8 +31,20 @@ config:
   build-commands:
     - |
       tar --zstd -xf bootc-vendor.tar.zstd -C bootc-source
+      mkdir -p bootc-source/.cargo
+      cat << 'EOF' > bootc-source/.cargo/config.toml
+      [source.crates-io]
+      replace-with = "vendored-sources"
+
+      [source.vendored-sources]
+      directory = "../vendor"
+
+      [patch."https://github.com/composefs/composefs-rs"]
+      composefs-ctl = { path = "../vendor/composefs-ctl" }
+      EOF
       cd bootc-source
-      cargo build --release --frozen
+      rm -rf crates/tests-integration
+      cargo build --release --offline -p bootc
 
   install-commands:
     - |
