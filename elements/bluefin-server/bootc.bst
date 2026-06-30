@@ -12,14 +12,13 @@ depends:
   - freedesktop-sdk.bst:components/openssl.bst
 
 sources:
-  - kind: git_repo
-    url: https://github.com/containers/bootc.git
-    track: main
-    ref: 093ddc656662b89380fa1bab243006a6c365217a
+  - kind: tar
+    url: https://github.com/bootc-dev/bootc/releases/download/v1.16.2/bootc-1.16.2-vendor.tar.zstd
+    ref: 53d759ca521144a675af67e68d23c3f5f18dca784e4e900052d0cfdc4467732b
 
 config:
   build-commands:
-    - cargo build --release --locked
+    - cargo build --release --frozen
 
   install-commands:
     - mkdir -p "%{install-root}/usr/bin"
