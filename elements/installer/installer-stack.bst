@@ -29,7 +29,7 @@ depends:
   - freedesktop-sdk.bst:components/cryptsetup.bst
 
   # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
-  - bluefin-server/kernel-server.bst
+  - freedesktop-sdk.bst:components/linux.bst
 
   # repart.d configs describing the TARGET disk layout
   - installer/installer-repart.bst

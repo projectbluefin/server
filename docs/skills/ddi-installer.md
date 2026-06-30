@@ -169,6 +169,9 @@ which:
 2. Runs `mkfs.ext4` to format the rootfs directory `/layer` into an ext4 image.
 3. Compresses the raw image via `zstd` and generates `SHA256SUMS`.
 
+> [!NOTE]
+> **Lab OCI Packaging:** In-cluster build pipelines push artifacts to the local Zot registry. Because the DDI payload and installer disk image are raw script outputs (not native OCI layouts), the `bluefin-server-build-pipeline` automatically detects this and wraps them in a minimal `scratch` OCI image (using `FROM scratch; COPY . /`) before pushing.
+
 ## Justfile commands
 
 ```
