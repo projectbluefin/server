@@ -4,6 +4,10 @@ description: >
   CI workflow conventions for fsdk-containers. Use when writing or editing
   .github/workflows/*.yml, debugging a failing build job, or adding a new
   CI step.
+metadata:
+  context7-sources:
+    - /websites/github_en_actions
+    - /websites/cli_github_manual
 ---
 
 # CI Tooling
@@ -89,6 +93,14 @@ Pushes made with the default `GITHUB_TOKEN` do **not** trigger other GitHub Acti
 | `dispatch-lab-build` | `lab-release.yml` | Daily 04:00 UTC schedule, `workflow_dispatch`, triggered by `trigger-lab` | Sends `repository_dispatch[lab-build-requested]` to `projectbluefin/testing-lab`; actual builds and zot pushes happen in the lab |
 
 GitHub is the **control plane only** — no build compute runs here.
+
+## Core Process
+
+1. Keep workflow triggers explicit (`pull_request` validate vs push/dispatch delegation).
+2. Resolve immutable refs (SHA/tag) in GitHub workflow and pass them as payload.
+3. Dispatch build execution to lab workflows via authenticated GitHub API/CLI calls.
+4. Keep actions SHA-pinned and token source aligned with org policy (Mergeraptor app for cross-repo writes).
+5. Validate graph-only checks in GitHub and keep heavy build/push logic in lab.
 
 ### Daily schedule and manual trigger
 

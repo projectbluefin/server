@@ -151,7 +151,7 @@ for the key files — keep those out of the repo).
 ```ini
 [Source]
 Type=url-file
-Path=https://github.com/castrojo/bluefin-server/releases/download/
+Path=https://github.com/projectbluefin/server/releases/download/
 MatchPattern=bluefin-server-ddi-@v.raw.zst
 SHA256Sum=SHA256SUMS
 
@@ -214,5 +214,4 @@ The lab is responsible for:
 - `docs/skills/nspawn-machine-image.md` — tarball artifact pattern
 - `elements/oci/brew-nspawn.bst` — reference for non-OCI script elements
 - FSDK `elements/vm/minimal-secure/` — repart + ukify toolchain reference
-
 
