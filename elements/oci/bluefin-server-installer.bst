@@ -178,7 +178,7 @@ config:
         mount "$ESP_DEV"  /mnt/esp
         mount -o ro "$ROOT_DEV" /mnt/root
         # Install systemd-boot loader binaries.
-        bootctl install --esp-path=/mnt/esp --root=/mnt/root \
+        bootctl install --esp-path=/mnt/esp \
           || log "WARNING: bootctl install failed (non-fatal)"
         # Create a loader entry pointing at the installed kernel.
         # systemd-boot uses Type 1 entries; kernel must be on the ESP.
