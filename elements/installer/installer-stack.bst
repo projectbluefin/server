@@ -28,6 +28,7 @@ depends:
   # Disk setup: LUKS partition support during install
   - freedesktop-sdk.bst:components/cryptsetup.bst
   - freedesktop-sdk.bst:components/xfsprogs.bst
+  - freedesktop-sdk.bst:components/dosfstools.bst
 
   # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
   - freedesktop-sdk.bst:components/linux.bst
