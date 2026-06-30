@@ -60,10 +60,9 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Build and verify all images
         run: |
-          for IMAGE in base static skopeo lab-runner; do
+          for IMAGE in bluefin-server-bootc; do
             echo "::group::Build ${IMAGE}"
             BUILD_IMAGE_NAME=${IMAGE} just build
-            BUILD_IMAGE_NAME=${IMAGE} just verify
             BUILD_IMAGE_NAME=${IMAGE} just tag-push "${BUILD_IMAGE_REGISTRY}/${IMAGE}-${{ matrix.arch }}"
             echo "::endgroup::"
           done
@@ -109,15 +108,12 @@ jobs:
       - name: Assemble multi-arch manifests, sign, and attach SBOMs
         run: |
           set -euo pipefail
-          for IMAGE in base static skopeo lab-runner; do
+          for IMAGE in bluefin-server-bootc; do
             echo "::group::Processing SBOM and manifest for ${IMAGE}"
             
             case "${IMAGE}" in
-              base)       DESC="Minimal, high-integrity distroless base image built on freedesktop-sdk" ;;
-              static)     DESC="Static-tier runner for compiled Go/Rust binaries built on freedesktop-sdk" ;;
-              skopeo)     DESC="Skopeo OCI image utility built on freedesktop-sdk" ;;
-              lab-runner) DESC="Shell-enabled CI/CD utility container for Project Bluefin workflows" ;;
-              *)          DESC="Project Bluefin distroless container image" ;;
+              bluefin-server-bootc) DESC="An FSDK-built server bootc image designed for Flatcar sysext compatibility" ;;
+              *)          DESC="Project Bluefin server bootable container image" ;;
             esac
             
             REPO="${BUILD_IMAGE_REGISTRY}/${IMAGE}"
@@ -133,7 +129,7 @@ jobs:
               podman manifest add "${REPO}:${t}" "docker://${REPO}-aarch64:${t}"
               
               # Annotate the multi-arch manifest index itself with OCI labels for GHCR
-              podman manifest annotate --index --annotation "org.opencontainers.image.source=https://github.com/projectbluefin/fsdk-containers" "${REPO}:${t}"
+              podman manifest annotate --index --annotation "org.opencontainers.image.source=https://github.com/castrojo/bluefin-server" "${REPO}:${t}"
               podman manifest annotate --index --annotation "org.opencontainers.image.description=${DESC}" "${REPO}:${t}"
               podman manifest annotate --index --annotation "org.opencontainers.image.title=${IMAGE}" "${REPO}:${t}"
               podman manifest annotate --index --annotation "org.opencontainers.image.licenses=Apache-2.0" "${REPO}:${t}"
