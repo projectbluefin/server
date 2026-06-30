@@ -200,6 +200,7 @@ config:
 
       log "Installation complete. Powering off."
       sleep 2
+      systemctl poweroff --force
       SCRIPT
       chmod +x /layer/usr/bin/bluefin-install
 
