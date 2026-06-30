@@ -31,15 +31,13 @@ spec in `docs/brew-nspawn-container-spec.md`).
 
 ## Element chain
 
-1. `*-deps.bst` (`stack`) — reuse `base/base-stack.bst`, add `components/systemd.bst`
+1. `*-runtime.bst` (`stack`) — reuse `base/base-stack.bst`, add `components/systemd.bst`
    plus the runtime tools (ruby, git, curl, gcc, make, patch, diffutils, which,
    procps, tar/gzip/xz/zstd, sed/gawk/grep/findutils, file, util-linux, shadow).
    On Linux also add `components/patchelf.bst` (Homebrew bottle relocation).
-2. `*-runtime.bst` (`compose`) — exclude only `debug/doc/tests`. **Keep**
-   `devel/locale/shells/zoneinfo/sysconf`.
-3. `*-prefix.bst` (`manual`) — stage the app tree from a `git_repo` source (do NOT
-   run network installers in the sandbox; "untar in place" the repo).
-4. `oci/<name>.bst` (`script`) — assemble the tarball (below).
+2. `*-deps.bst` (`manual`) — stage the app tree directly from a `git_repo` source 
+   (do NOT run network installers in the sandbox; "untar in place" the repo).
+3. `oci/<name>.bst` (`script`) — assemble the tarball (below).
 
 ## The assembly script (the divergence)
 
