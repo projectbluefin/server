@@ -19,8 +19,9 @@ depends:
   - freedesktop-sdk.bst:components/composefs.bst
   - bluefin-server/bootc.bst
 
-  # Stock FSDK Kernel
+  # Stock FSDK Kernel & Server-Chiseled Firmware
   - freedesktop-sdk.bst:components/linux.bst
+  - bluefin-server/linux-firmware-split.bst
 
   # Sysext Compatibility Identity
   - bluefin-server/os-release-flatcar.bst
