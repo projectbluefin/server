@@ -13,10 +13,6 @@ on:
         description: 'Git ref to build (branch, tag, or SHA; default: main)'
         required: false
         default: 'main'
-      lab_repo:
-        description: 'Testing-lab repository (owner/repo)'
-        required: false
-        default: 'projectbluefin/testing-lab'
       zot_target:
         description: 'Zot registry target prefix (e.g. zot.example.com/projectbluefin)'
         required: false
@@ -29,7 +25,7 @@ concurrency:
 permissions: read-all
 
 env:
-  LAB_REPO: ${{ github.event.inputs.lab_repo || 'projectbluefin/testing-lab' }}
+  LAB_REPO: projectbluefin/testing-lab
 
 jobs:
   dispatch-lab-build:
@@ -43,6 +39,7 @@ jobs:
           app-id: ${{ secrets.MERGERAPTOR_APP_ID }}
           private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
           owner: projectbluefin
+          repositories: testing-lab
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:

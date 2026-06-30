@@ -14,15 +14,15 @@ No bootc, no OCI image pull, no dracut — purely systemd-native:
 
 ## Status
 
-**Fully wired — no remaining stubs.** `just validate-installer` passes.
+**Partially wired.** Installer media pipeline is wired; OS DDI artifact lane is still pending.
 
 - ✅ Dracut-free cpio initrd assembled inline by the BST script element
 - ✅ UKI built with `ukify` (unsigned; Secure Boot signing is opt-in)
 - ✅ sysupdate.d transfer config pulls OS DDI from GitHub Releases
 - ✅ repart.d target disk layout defined
 - ✅ `bluefin-install` orchestration script (sysupdate → repart → bootctl)
-- ✅ Release workflow (`.github/workflows/release-installer.yml`)
-- 🔲 OS DDI artifact (`bluefin-server-ddi-@v.raw.zst`) — separate todo
+- ✅ Release dispatch workflow (`.github/workflows/release-installer.yml`) delegates installer build to testing-lab
+- 🔲 OS DDI artifact (`bluefin-server-ddi-@v.raw.zst`) — still required for full install path
 
 ## Element chain
 
@@ -214,4 +214,3 @@ The lab is responsible for:
 - `docs/skills/nspawn-machine-image.md` — tarball artifact pattern
 - `elements/oci/brew-nspawn.bst` — reference for non-OCI script elements
 - FSDK `elements/vm/minimal-secure/` — repart + ukify toolchain reference
-

@@ -110,7 +110,6 @@ GitHub is the **control plane only** — no build compute runs here.
 | Input | Default | Description |
 |-------|---------|-------------|
 | `ref` | `main` | Git ref to build (branch, tag, or SHA) |
-| `lab_repo` | `projectbluefin/testing-lab` | Target testing-lab repository |
 | `zot_target` | _(empty)_ | Zot registry target prefix override |
 
 The `concurrency.cancel-in-progress: false` guard on `lab-release` ensures an

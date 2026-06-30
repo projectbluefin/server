@@ -248,16 +248,16 @@ verify-brew: export-brew
 # -- DDI live installer -------------------------------------------------------
 # Produces a bootable GPT disk image that runs systemd-repart to install
 # Bluefin Server onto a target disk (see docs/skills/ddi-installer.md).
-# NOTE: build-installer and export-installer are stubs until the two blockers
-# in elements/oci/bluefin-server-installer.bst are resolved (UKI generation
-# and OS DDI payload). validate-installer works today.
+# NOTE: build-installer/export-installer are local development commands.
+# Release publication is delegated to testing-lab by
+# .github/workflows/release-installer.yml.
 
 # Validate the installer element graph without building.
 [group('installer')]
 validate-installer:
     just bst show --deps all oci/bluefin-server-installer.bst
 
-# Build the installer disk image (stub until blockers resolved).
+# Build the installer disk image locally.
 [group('installer')]
 build-installer:
     just bst build oci/bluefin-server-installer.bst
@@ -360,5 +360,4 @@ sboms:
                     --output "/src/${img}.spdx.json"
             done
         '
-
 
