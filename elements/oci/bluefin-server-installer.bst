@@ -2,49 +2,47 @@ kind: script
 description: |
   Produce the Bluefin Server DDI live installer disk image.
 
-  Output: bluefin-server-installer-<ver>.raw + SHA256SUMS
+  Output: bluefin-server-installer-<ver>.raw.zst + SHA256SUMS
 
-  The .raw file is a GPT disk image with:
-    - partition 1: ESP (vfat) — contains the installer UKI at /EFI/Linux/
-    - partition 2: data — contains the OS DDI payload (erofs root image)
+  The installer is a single-partition GPT disk image:
+    - partition 1: ESP (vfat) — contains installer.efi (UKI)
 
-  When booted, the installer UKI starts a minimal systemd initrd that runs
-  systemd-repart against the target disk using the repart.d configs in
-  /usr/lib/repart.d/, which copy the OS DDI to the installed root slot.
+  When booted, installer.efi starts a live systemd initrd that:
+    1. Calls systemd-sysupdate to pull the OS DDI from GitHub Releases
+       (transfer config baked into the installer via installer-sysupdate.bst)
+    2. Runs systemd-repart --dry-run=no DEVICE using the bundled repart.d
+       configs (installer-repart.bst), which write the DDI to the target disk
+    3. Runs bootctl install + systemd-firstboot for initial provisioning
+    4. Reboots into the installed OS
 
-  ── BLOCKERS ────────────────────────────────────────────────────────────────
-  TODO(1): UKI generation
+  No OS payload is embedded in the installer — it is pulled by sysupdate at
+  install time. This keeps the installer small (~200MB UKI vs multi-GB media).
+
+  ── REMAINING STUB ──────────────────────────────────────────────────────────
+  TODO: UKI generation (one remaining blocker)
     The installer.efi UKI must be produced with:
-      ukify build --linux=<vmlinuz> --initrd=<installer.cpio> \
-        --cmdline="systemd.unit=installer.target console=ttyS0,115200"
-    This requires:
-      a) dracut run against the installer-stack to produce installer.cpio
-      b) systemd-ukify available as a build-dep (freedesktop-sdk.bst:components/systemd-ukify.bst)
-      c) A decision on Secure Boot signing: unsigned for dev, vendor-signed for release.
-    Until (a)-(c) are resolved the ESP step below is stubbed out.
-
-  TODO(2): OS DDI payload
-    The erofs OS root image (bluefin-server-root.erofs) must be produced by:
-      mkfs.erofs --all-root bluefin-server-root.erofs /layer
-    where /layer is the staged bluefin-server OS rootfs (without bootc —
-    os-stack.bst minus the ostree/composefs/bootc deps).
-    A new element elements/installer/os-snapshot.bst will produce this.
-    Blocked on: agreement on whether to strip bootc from the OS for DDI.
+      ukify build \
+        --linux=$(ls /layer/usr/lib/modules/*/vmlinuz | head -1) \
+        --initrd=installer.cpio.zst \
+        --cmdline="systemd.unit=installer.target console=ttyS0,115200" \
+        --output=/layer/boot/efi/EFI/Linux/installer.efi
+    Requires:
+      a) dracut run against installer-stack to generate installer.cpio.zst
+         (dracut modules needed: systemd systemd-repart network base)
+      b) Add freedesktop-sdk.bst:components/systemd-ukify.bst as build-dep
+      c) Secure Boot signing decision: unsigned works for dev/USB installs;
+         vendor-signed requires a Bluefin key pair injected at CI time.
+    Until resolved the ESP step is stubbed. Replace the dd stub below with
+    the systemd-repart + ukify assembly once dracut integration is confirmed.
   ────────────────────────────────────────────────────────────────────────────
-
-  Once TODO(1) and TODO(2) are resolved, replace the stub commands below with
-  the real UKI + erofs assembly steps.
 
 build-depends:
   # Toolchain for assembly commands
   - base/base-stack.bst
-  - freedesktop-sdk.bst:components/tar.bst
   - freedesktop-sdk.bst:components/zstd.bst
-  # systemd-repart is the tool that assembles the GPT disk image
+  # systemd-repart builds the GPT disk image from the staged rootfs + repart.d
   - freedesktop-sdk.bst:components/systemd.bst
-  # erofs-utils needed at build time to create the OS payload image
-  - freedesktop-sdk.bst:components/erofs-utils.bst
-  # The installer live-env rootfs, staged at /layer
+  # The installer live-env rootfs (with sysupdate + repart configs), staged at /layer
   - filename: installer/installer-stack.bst
     config:
       location: /layer
@@ -55,46 +53,41 @@ variables:
 config:
   commands:
     # ── Step 1: Create the installer ESP layout ──────────────────────────
-    # TODO(1): Replace this stub with real UKI generation once dracut
-    # integration and signing decision are resolved. For now, create the
-    # minimum directory structure so systemd-repart can populate the ESP.
+    # TODO(UKI): Replace stub with ukify + dracut once initrd generation
+    # is wired. The target path is fixed: /boot/efi/EFI/Linux/installer.efi
     - |
       set -eu
       mkdir -p /layer/boot/efi/EFI/Linux
       mkdir -p /layer/boot/efi/EFI/BOOT
-      # Placeholder: ukify will write installer.efi here
       # ukify build \
-      #   --linux=/layer/usr/lib/modules/*/vmlinuz \
+      #   --linux="$(ls /layer/usr/lib/modules/*/vmlinuz | head -1)" \
       #   --initrd=/installer.cpio.zst \
       #   --cmdline="systemd.unit=installer.target console=ttyS0,115200" \
       #   --output=/layer/boot/efi/EFI/Linux/installer.efi
 
-    # ── Step 2: Produce the installer disk image ─────────────────────────
-    # TODO(2): Add the OS DDI erofs image as partition 2 (data partition).
-    # The final command will be:
+    # ── Step 2: Assemble installer GPT disk image via systemd-repart ─────
+    # systemd-repart --empty=create builds a fresh GPT disk from scratch
+    # using the repart.d configs staged under /layer/usr/lib/repart.d/.
+    # When the real UKI exists the dd stub is replaced with this call:
     #   systemd-repart \
     #     --empty=create \
     #     --size=auto \
     #     --dry-run=no \
     #     --root=/layer \
-    #     --definitions=/usr/lib/repart.d \
+    #     --definitions=/layer/usr/lib/repart.d \
     #     "%{install-root}/bluefin-server-installer-%{installer-version}.raw"
-    #
-    # For now, produce a stub disk image so the element chain can be
-    # validated without building the full OS DDI.
     - |
       set -eu
       OUT="%{install-root}"
       FNAME="bluefin-server-installer-%{installer-version}.raw"
-      # Stub: 1MB sparse file so `bst show` + validate works without a build.
-      # Replace with the systemd-repart call above once blockers are resolved.
+      # Stub until UKI generation is wired — 1MB sparse placeholder.
       dd if=/dev/zero bs=1M count=1 of="${OUT}/${FNAME}" 2>/dev/null
-      echo "NOTE: stub disk image — replace with systemd-repart assembly" \
-           > "${OUT}/INSTALLER_BUILD_STUB.txt"
 
-    # ── Step 3: Checksums for systemd-sysupdate ──────────────────────────
+    # ── Step 3: Compress + checksum for GitHub Releases / sysupdate ──────
     - |
       set -eu
       cd "%{install-root}"
-      sha256sum --binary "bluefin-server-installer-%{installer-version}.raw" \
-        > SHA256SUMS
+      FNAME="bluefin-server-installer-%{installer-version}.raw"
+      zstd --rm -T0 -19 "${FNAME}" -o "${FNAME}.zst"
+      sha256sum --binary "${FNAME}.zst" > SHA256SUMS
+

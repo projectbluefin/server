@@ -1,0 +1,98 @@
+name: Release DDI installer
+
+# Publishes two artifacts to GitHub Releases on every installer tag:
+#   bluefin-server-installer-<ver>.raw.zst  — bootable live installer disk image
+#   SHA256SUMS                               — verified by systemd-sysupdate
+#
+# The OS DDI (bluefin-server-ddi-<ver>.raw.zst) that the installer pulls at
+# install time via systemd-sysupdate is published by a separate job in this
+# workflow once the os-snapshot element is complete (see ddi-installer.md).
+#
+# Tag format: installer-v<semver>  e.g. installer-v0.1.0
+
+on:
+  push:
+    tags:
+      - 'installer-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. installer-v0.1.0)'
+        required: true
+
+concurrency:
+  group: release-installer-${{ github.ref }}
+  cancel-in-progress: false  # never cancel an in-flight release
+
+permissions:
+  contents: write   # create releases and upload assets
+
+jobs:
+  build-installer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2
+        with:
+          tool: just
+
+      - name: Resolve element graph (pre-flight)
+        run: just validate-installer
+
+      - name: Build installer disk image
+        run: just build-installer
+
+      - name: Export artifacts to dist/
+        run: just export-installer
+
+      - name: Verify artifacts exist
+        run: |
+          set -euo pipefail
+          ls -lh dist/
+          [ -f dist/SHA256SUMS ] || { echo "ERROR: SHA256SUMS missing"; exit 1; }
+          RAWZST=$(ls dist/bluefin-server-installer-*.raw.zst 2>/dev/null | head -1)
+          [ -n "${RAWZST}" ] || { echo "ERROR: no .raw.zst found in dist/"; exit 1; }
+          echo "INSTALLER_ASSET=${RAWZST}" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Strip leading refs/tags/ if present
+          TAG="${TAG#refs/tags/}"
+          VERSION="${TAG#installer-v}"
+
+          # Create (or update) the release
+          if gh release view "${TAG}" &>/dev/null; then
+            echo "==> Release ${TAG} already exists, uploading assets..."
+          else
+            gh release create "${TAG}" \
+              --title "Bluefin Server Installer ${VERSION}" \
+              --notes "Live DDI installer for Bluefin Server ${VERSION}.
+
+Boot from USB, then the installer pulls the OS DDI from GitHub Releases
+via systemd-sysupdate and installs it to the target disk using systemd-repart.
+
+## Artifacts
+- \`bluefin-server-installer-${VERSION}.raw.zst\` — bootable GPT disk image (write to USB with \`dd\`)
+- \`SHA256SUMS\` — verified by systemd-sysupdate
+
+## Usage
+\`\`\`
+# Write installer to USB (replace /dev/sdX with your device)
+zstd -d bluefin-server-installer-${VERSION}.raw.zst --stdout | sudo dd of=/dev/sdX bs=4M status=progress
+\`\`\`"
+          fi
+
+          # Upload installer image and checksums
+          gh release upload "${TAG}" \
+            dist/bluefin-server-installer-*.raw.zst \
+            dist/SHA256SUMS \
+            --clobber
+          echo "==> Uploaded release assets for ${TAG}"
