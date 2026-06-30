@@ -1,5 +1,5 @@
 kind: stack
-description: Stack containing all elements required to build a bootc-bootable Flatcar clone.
+description: Stack containing all elements required to build a pure DDI Bluefin Server rootfs.
 
 depends:
   # Base runtime & core libraries
@@ -13,12 +13,6 @@ depends:
   - freedesktop-sdk.bst:components/systemd.bst
   - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/shadow.bst
-
-  # Image-based deployment / bootc layers
-  - freedesktop-sdk.bst:components/ostree.bst
-  - freedesktop-sdk.bst:components/composefs.bst
-  - bluefin-server/bootc.bst
-  - bluefin-server/prepare-root-config.bst
 
   # Stock FSDK Kernel & Server-Chiseled Firmware
   - freedesktop-sdk.bst:components/linux.bst

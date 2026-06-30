@@ -1,4 +1,4 @@
-name: Build images
+name: Build DDI artifacts
 
 on:
   pull_request:
@@ -52,4 +52,3 @@ jobs:
             --repo "${{ github.repository }}" \
             --ref main \
             --field ref="${{ steps.sha.outputs.sha }}"
-

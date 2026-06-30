@@ -7,7 +7,7 @@ description: |
 
   Partition layout:
     10-esp.conf          EFI System Partition (vfat, 500M–1G)
-    20-root-a.conf       Root slot A — erofs DDI payload copied here
+    20-root-a.conf       Root slot A — DDI filesystem image copied here
     30-var.conf          /var — xfs, writable, grows to fill disk
 
 sources:

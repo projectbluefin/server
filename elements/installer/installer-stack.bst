@@ -39,5 +39,3 @@ depends:
 
   # Installer systemd units (installer.target + installer.service)
   - installer/installer-units.bst
-
-

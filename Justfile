@@ -4,8 +4,8 @@ default:
     @just --list
 
 # -- Configuration ---------------------------------------------------------
-export image_name := env("BUILD_IMAGE_NAME", "bluefin-server-bootc")
-export image_registry := env("BUILD_IMAGE_REGISTRY", "ghcr.io/castrojo")
+export image_name := env("BUILD_IMAGE_NAME", "bluefin-server-installer")
+export image_registry := env("BUILD_IMAGE_REGISTRY", "ghcr.io/projectbluefin")
 
 # Same bst2 container image FSDK/dakota CI uses -- pinned by SHA.
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:64eb0b4930d57a92710822898fb73af6cc1ae35d")
@@ -54,57 +54,24 @@ tags:
 # ── Validate ──────────────────────────────────────────────────────────
 [group('dev')]
 validate:
-    just bst show --deps all oci/bluefin-server-bootc.bst
+    just bst show --deps all oci/bluefin-server-ddi.bst
+    just bst show --deps all oci/bluefin-server-installer.bst
 
 # ── Build ─────────────────────────────────────────────────────────────
-# Build one OCI image (controlled by BUILD_IMAGE_NAME) and load into podman.
+# Build and export both pure DDI artifacts (OS DDI payload + live installer media).
 [group('build')]
 build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "==> Building oci/{{image_name}}.bst with BuildStream..."
-    just bst build "oci/{{image_name}}.bst"
-    just export
+    just build-ddi
+    just export-ddi
+    just build-installer
+    just export-installer
 
 # ── Export ────────────────────────────────────────────────────────────
-# Checkout the built OCI image and squash into a single layer in podman.
+# Export both pure DDI artifacts to dist/.
 [group('build')]
 export:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    FINAL_REF="{{image_registry}}/{{image_name}}:latest"
-
-    echo "==> Exporting OCI image -> ${FINAL_REF}..."
-    rm -rf .build-out
-    just bst artifact checkout "oci/{{image_name}}.bst" --directory /src/.build-out
-
-    IMAGE_ID=$({{sudo_cmd}} podman pull -q oci:.build-out)
-    rm -rf .build-out
-
-    case "{{image_name}}" in
-        bluefin-server-bootc) DESC="An FSDK-built server bootc image designed for Flatcar sysext compatibility" ;;
-        base)       DESC="Minimal, high-integrity distroless base image built on freedesktop-sdk" ;;
-        static)     DESC="Static-tier runner for compiled Go/Rust binaries built on freedesktop-sdk" ;;
-        skopeo)     DESC="Skopeo OCI image utility built on freedesktop-sdk" ;;
-        lab-runner) DESC="Shell-enabled CI/CD utility container for Project Bluefin workflows" ;;
-        *)          DESC="Project Bluefin distroless container image" ;;
-    esac
-
-    LABEL_ARGS=()
-    [ -n "${OCI_IMAGE_CREATED}" ]  && LABEL_ARGS+=(--label "org.opencontainers.image.created=${OCI_IMAGE_CREATED}")
-    [ -n "${OCI_IMAGE_REVISION}" ] && LABEL_ARGS+=(--label "org.opencontainers.image.revision=${OCI_IMAGE_REVISION}")
-    LABEL_ARGS+=(--label "org.opencontainers.image.version={{fsdk_version}}")
-    LABEL_ARGS+=(--label "org.opencontainers.image.title={{image_name}}")
-    LABEL_ARGS+=(--label "org.opencontainers.image.description=${DESC}")
-    LABEL_ARGS+=(--label "org.opencontainers.image.source=https://github.com/castrojo/bluefin-server")
-    LABEL_ARGS+=(--label "org.opencontainers.image.licenses=Apache-2.0")
-    LABEL_ARGS+=(--label "io.projectbluefin.fsdk.version={{fsdk_version}}")
-    LABEL_ARGS+=(--label "io.projectbluefin.fsdk.ref={{fsdk_ref}}")
-
-    # Squash to a single layer and apply dynamic labels.
-    printf 'FROM %s\n' "$IMAGE_ID" \
-      | {{sudo_cmd}} podman build --pull=never --squash-all "${LABEL_ARGS[@]}" -t "${FINAL_REF}" -f - .
-    echo "==> Built ${FINAL_REF}"
+    just export-ddi
+    just export-installer
 
 # Push the locally built :latest under all derived tags to a given repo ref.
 # Usage: just tag-push ghcr.io/projectbluefin/base
@@ -248,9 +215,23 @@ verify-brew: export-brew
 # -- DDI live installer -------------------------------------------------------
 # Produces a bootable GPT disk image that runs systemd-repart to install
 # Bluefin Server onto a target disk (see docs/skills/ddi-installer.md).
+# OS DDI payload image and live installer media are both first-class artifacts.
 # NOTE: build-installer/export-installer are local development commands.
 # Release publication is delegated to testing-lab by
 # .github/workflows/release-installer.yml.
+
+# Build the OS DDI payload filesystem image.
+[group('installer')]
+build-ddi:
+    just bst build oci/bluefin-server-ddi.bst
+
+# Export the OS DDI payload + SHA256SUMS to dist/ddi/.
+[group('installer')]
+export-ddi: build-ddi
+    rm -rf dist/ddi
+    mkdir -p dist/ddi
+    just bst artifact checkout oci/bluefin-server-ddi.bst --directory /src/dist/ddi
+    @echo "==> wrote DDI payload:" && ls -lh dist/ddi/
 
 # Validate the installer element graph without building.
 [group('installer')]
@@ -268,6 +249,95 @@ export-installer: build-installer
     rm -rf dist
     just bst artifact checkout oci/bluefin-server-installer.bst --directory dist
     @echo "==> wrote:" && ls -lh dist/
+
+# Build, install, and reboot the server in QEMU using the raw installer disk.
+[group('test')]
+show-me-the-future:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
+    mkdir -p "$CACHE_DIR"
+    WORKDIR="$(mktemp -d "${CACHE_DIR}/bluefin-show-future.XXXXXX")"
+    trap 'rm -rf "$WORKDIR"' EXIT
+
+    just build-ddi
+    just export-ddi
+    # Stash DDI before export-installer wipes dist/.
+    cp dist/ddi/bluefin-server-ddi-*.raw.zst "$WORKDIR/ddi.raw.zst"
+    just build-installer
+    just export-installer
+
+    cp dist/bluefin-server-installer-*.raw.zst "$WORKDIR/installer.raw.zst"
+    zstd -d "$WORKDIR/installer.raw.zst" -o "$WORKDIR/installer.raw"
+    # DDI raw filesystem image passed as /dev/vdc inside the installer VM.
+    # The installer detects this large read-only device and uses it directly
+    # via CopyBlocks= instead of downloading from GitHub (avoids tmpfs OOM).
+    zstd -d "$WORKDIR/ddi.raw.zst" -o "$WORKDIR/ddi.raw"
+    truncate -s 16G "$WORKDIR/target.raw"
+
+    OVMF_CODE=""
+    for candidate in \
+        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-code.fd \
+        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-secure-code.fd \
+        /usr/share/edk2/ovmf/OVMF_CODE.fd \
+        /usr/share/OVMF/OVMF_CODE.fd \
+        /usr/share/OVMF/OVMF_CODE_4M.fd \
+        /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+        /usr/share/qemu/OVMF_CODE.fd; do
+        if [ -f "$candidate" ]; then
+            OVMF_CODE="$candidate"
+            break
+        fi
+    done
+    [ -n "$OVMF_CODE" ] || { echo "ERROR: OVMF_CODE not found"; exit 1; }
+
+    OVMF_VARS=""
+    for candidate in \
+        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-vars.fd \
+        /usr/share/edk2/ovmf/OVMF_VARS.fd \
+        /usr/share/OVMF/OVMF_VARS.fd \
+        /usr/share/OVMF/OVMF_VARS_4M.fd \
+        /usr/share/edk2/x64/OVMF_VARS.4m.fd \
+        /usr/share/qemu/OVMF_VARS.fd; do
+        if [ -f "$candidate" ]; then
+            OVMF_VARS="$candidate"
+            break
+        fi
+    done
+    if [ -n "$OVMF_VARS" ]; then
+        cp "$OVMF_VARS" "$WORKDIR/ovmf-vars.fd"
+    else
+        truncate -s "$(stat -c '%s' "$OVMF_CODE")" "$WORKDIR/ovmf-vars.fd"
+    fi
+
+    echo "==> Booting installer media in QEMU..."
+    qemu-system-x86_64 \
+        -enable-kvm \
+        -m 4096 \
+        -cpu host \
+        -smp 2 \
+        -drive file="$WORKDIR/installer.raw",format=raw,if=virtio,readonly=on \
+        -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
+        -drive file="$WORKDIR/ddi.raw",format=raw,if=virtio,readonly=on \
+        -netdev user,id=n1,hostname=bluefin-installer \
+        -device virtio-net-pci,netdev=n1 \
+        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+        -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
+        -nographic \
+        -serial mon:stdio
+
+    echo "==> Rebooting into the installed server..."
+    qemu-system-x86_64 \
+        -enable-kvm \
+        -m 4096 \
+        -cpu host \
+        -smp 2 \
+        -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
+        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+        -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
+        -nographic \
+        -serial mon:stdio
 
 # Generate a BST-native SBOM (SPDX 2.3) using buildstream-sbom.
 [group('test')]

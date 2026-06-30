@@ -1,6 +1,6 @@
 [Unit]
 Description=Bluefin Server Installer
-Documentation=https://github.com/castrojo/bluefin-server
+Documentation=https://github.com/projectbluefin/server
 DefaultDependencies=no
 # Network must be online before the installer runs (sysupdate needs it).
 Wants=network-online.target

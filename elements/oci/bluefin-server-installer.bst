@@ -29,6 +29,8 @@ build-depends:
   - freedesktop-sdk.bst:components/systemd-ukify.bst
   # systemd-repart assembles the GPT installer disk image
   - freedesktop-sdk.bst:components/systemd.bst
+  - freedesktop-sdk.bst:components/dosfstools.bst
+  - freedesktop-sdk.bst:components/mtools.bst
   # Installer live-env rootfs staged at /layer
   - filename: installer/installer-stack.bst
     config:
@@ -48,6 +50,22 @@ config:
       ln -sf usr/lib/systemd/systemd /layer/init
       # Mount points needed by the installer service
       mkdir -p /layer/efi /layer/mnt/esp /layer/mnt/root /layer/run/installer
+      # Keep the network service users available even if sysusers runs too late.
+      printf 'systemd-network:x:998:998:systemd Network Management:/run/systemd:/usr/sbin/nologin\nsystemd-resolve:x:997:997:systemd Resolver:/run/systemd:/usr/sbin/nologin\n' >> /layer/etc/passwd
+      printf 'systemd-network:x:998:\nsystemd-resolve:x:997:\n' >> /layer/etc/group
+      # Ensure systemd-sysusers runs early (materialises systemd-network user),
+      # and networkd/resolved are enabled so the installer can reach GitHub.
+      mkdir -p /layer/usr/lib/systemd/system/sysinit.target.wants
+      ln -sf /usr/lib/systemd/system/systemd-sysusers.service \
+        /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-sysusers.service
+      ln -sf /usr/lib/systemd/system/systemd-networkd.service \
+        /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-networkd.service
+      ln -sf /usr/lib/systemd/system/systemd-resolved.service \
+        /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-resolved.service
+      # DHCP on all ethernet interfaces — needed for sysupdate to reach GitHub.
+      mkdir -p /layer/usr/lib/systemd/network
+      printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
+        > /layer/usr/lib/systemd/network/80-dhcp.network
 
     # ── Step 2: Write the bluefin-install orchestration script ──────────
     # Written inline to avoid a separate import element just for one script.
@@ -57,28 +75,21 @@ config:
       cat > /layer/usr/bin/bluefin-install << 'SCRIPT'
       #!/bin/bash
       set -euo pipefail
+      exec >/dev/console 2>&1
       log()  { echo "[bluefin-install] $*"; }
       fail() { log "ERROR: $*"; exit 1; }
 
       log "Bluefin Server DDI Installer starting"
 
-      # 1. Pull the OS DDI from GitHub Releases
-      log "Pulling OS DDI via systemd-sysupdate..."
-      systemd-sysupdate --definitions=/usr/lib/sysupdate.d update \
-        || fail "sysupdate failed — check network connectivity and release URL"
-
-      [ -e /run/installer/bluefin-server-ddi.raw ] \
-        || fail "/run/installer/bluefin-server-ddi.raw missing after sysupdate"
-      log "DDI ready: $(ls -lh /run/installer/bluefin-server-ddi.raw)"
-
-      # 2. Detect target disk
+      # 1. Detect target disk.
       # Override with installer.disk=<path> on the kernel cmdline if needed.
       DISK=""
       for arg in $(cat /proc/cmdline); do
         case "$arg" in installer.disk=*) DISK="${arg#installer.disk=}" ;; esac
       done
       if [ -z "$DISK" ]; then
-        for candidate in /dev/vda /dev/sda /dev/nvme0n1 /dev/mmcblk0; do
+        # vdb is the second virtio disk (target) when vda is the read-only installer media.
+        for candidate in /dev/vda /dev/vdb /dev/sda /dev/sdb /dev/nvme0n1 /dev/mmcblk0; do
           [ -b "$candidate" ] || continue
           RO=$(cat "/sys/block/$(basename "$candidate")/ro" 2>/dev/null || echo 1)
           [ "$RO" = "0" ] && DISK="$candidate" && break
@@ -88,21 +99,64 @@ config:
         || fail "No writable disk found. Pass installer.disk=/dev/DEVICE on cmdline."
       log "Target disk: $DISK"
 
-      # 3. Partition and install OS via systemd-repart
-      # Reads /usr/lib/repart.d/:
-      #   10-esp.conf    -> creates vfat ESP (empty; bootloader installed below)
-      #   20-root-a.conf -> creates root partition, copies DDI via CopyBlocks=
-      #   30-var.conf    -> creates /var xfs partition
-      log "Running systemd-repart..."
+      # 2. Detect a local DDI source device (for VM dev/test — avoids network download).
+      # The DDI ext4 image is stamped with label 'bluefin-roota' by mkfs.ext4.
+      # blkid -L is exact and immune to size/ordering assumptions.
+      # If none is found, sysupdate downloads the DDI from GitHub Releases (production).
+      DDI_SRC=""
+      DDI_SRC=$(blkid -L bluefin-roota 2>/dev/null || true)
+
+      # 3. Partition the target disk via systemd-repart.
+      # If a local DDI source was found, point CopyBlocks at it directly so repart
+      # streams block-for-block without buffering in RAM (prevents OOM on small VMs).
+      # Otherwise keep the default definitions that use CopyBlocks from the sysupdate
+      # download path (/run/installer/bluefin-server-ddi.raw).
+      REPART_DEFS=/usr/lib/repart.d
+      if [ -n "$DDI_SRC" ]; then
+        log "Local DDI source detected: $DDI_SRC — skipping network download"
+        mkdir -p /tmp/repart.d
+        for f in /usr/lib/repart.d/*.conf; do
+          base=$(basename "$f")
+          out="/tmp/repart.d/$base"
+          if [ "$base" = "20-root-a.conf" ]; then
+            printf '%s\n' \
+              '# Root partition — slot A' \
+              '# systemd-repart copies the DDI payload block-for-block from the file that' \
+              '# systemd-sysupdate downloaded to /run/installer/bluefin-server-ddi.raw' \
+              '# (a stable CurrentSymlink set by the sysupdate transfer config).' \
+              '# The source is a raw filesystem image; repart copies it verbatim.' \
+              '[Partition]' \
+              'Type=root' \
+              'Label=bluefin-server-root-a' \
+              "CopyBlocks=$DDI_SRC" \
+              'SizeMinBytes=4G' \
+              'SizeMaxBytes=16G' \
+              > "$out"
+          else
+            cp "$f" "$out"
+          fi
+        done
+        REPART_DEFS=/tmp/repart.d
+      else
+        log "No local DDI device found — pulling OS DDI via systemd-sysupdate..."
+        systemctl start systemd-networkd-wait-online.service \
+          || fail "network never became ready"
+        /usr/lib/systemd/systemd-sysupdate --definitions=/usr/lib/sysupdate.d update \
+          || fail "sysupdate failed — check network connectivity and release URL"
+        [ -e /run/installer/bluefin-server-ddi.raw ] \
+          || fail "/run/installer/bluefin-server-ddi.raw missing after sysupdate"
+        log "DDI ready: $(ls -lh /run/installer/bluefin-server-ddi.raw)"
+      fi
+
+      log "Running systemd-repart (definitions: $REPART_DEFS)..."
       systemd-repart \
         --dry-run=no \
         --empty=force \
-        --definitions=/usr/lib/repart.d \
+        --definitions="$REPART_DEFS" \
         "$DISK" \
         || fail "systemd-repart failed"
 
-      # 4. Install the bootloader into the newly created ESP
-      # Mount ESP and root-a, run bootctl install, then unmount.
+      # 4. Install the bootloader into the newly created ESP.
       ESP_DEV=$(lsblk -rno PATH,PARTTYPE "$DISK" 2>/dev/null \
         | awk '$2 == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print $1}' | head -1)
       ROOT_DEV=$(lsblk -rno PATH,PARTLABEL "$DISK" 2>/dev/null \
@@ -111,8 +165,21 @@ config:
       if [ -n "$ESP_DEV" ] && [ -n "$ROOT_DEV" ]; then
         mount "$ESP_DEV"  /mnt/esp
         mount -o ro "$ROOT_DEV" /mnt/root
+        # Install systemd-boot loader binaries.
         bootctl install --esp-path=/mnt/esp --root=/mnt/root \
           || log "WARNING: bootctl install failed (non-fatal)"
+        # Create a loader entry pointing at the installed kernel.
+        # systemd-boot uses Type 1 entries; kernel must be on the ESP.
+        KVER=$(ls /mnt/root/usr/lib/modules/ 2>/dev/null | head -1)
+        if [ -n "$KVER" ] && [ -f "/mnt/root/usr/lib/modules/$KVER/vmlinuz" ]; then
+          mkdir -p /mnt/esp/EFI/Linux /mnt/esp/loader/entries
+          cp "/mnt/root/usr/lib/modules/$KVER/vmlinuz" "/mnt/esp/vmlinuz-$KVER"
+          printf 'title   Bluefin Server\nlinux   /vmlinuz-%s\noptions root=PARTLABEL=bluefin-server-root-a console=ttyS0,115200 rw\n' \
+            "$KVER" > "/mnt/esp/loader/entries/bluefin-server.conf"
+          log "Boot entry written for kernel $KVER"
+        else
+          log "WARNING: kernel not found under /mnt/root — manual boot entry required"
+        fi
         umount /mnt/esp /mnt/root
       else
         log "WARNING: Could not locate ESP ($ESP_DEV) or root ($ROOT_DEV)."
@@ -158,6 +225,8 @@ config:
         --initrd=/installer.cpio.zst \
         --cmdline="systemd.unit=installer.target console=ttyS0,115200 rw" \
         --output=/layer/boot/efi/EFI/Linux/installer.efi
+      mkdir -p /layer/boot/efi/EFI/BOOT
+      cp /layer/boot/efi/EFI/Linux/installer.efi /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
       ls -lh /layer/boot/efi/EFI/Linux/installer.efi
 
     # ── Step 6: Assemble installer GPT disk image ────────────────────────
@@ -178,8 +247,8 @@ config:
       Type=esp
       Format=vfat
       CopyFiles=/boot/efi:/
-      SizeMinBytes=500M
-      SizeMaxBytes=1G
+      SizeMinBytes=2G
+      SizeMaxBytes=2G
       RCONF
       systemd-repart \
         --empty=create \
@@ -198,5 +267,3 @@ config:
       zstd --rm -T0 -19 -q "${FNAME}" -o "${FNAME}.zst"
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS
       ls -lh
-
-

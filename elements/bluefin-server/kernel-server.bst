@@ -5,17 +5,26 @@ build-depends:
   - freedesktop-sdk.bst:components/bison.bst
   - freedesktop-sdk.bst:components/flex.bst
   - freedesktop-sdk.bst:components/elfutils.bst
+  - freedesktop-sdk.bst:components/gcc.bst
   - freedesktop-sdk.bst:components/openssl.bst
   - freedesktop-sdk.bst:components/bc.bst
   - freedesktop-sdk.bst:components/kmod.bst
+  - freedesktop-sdk.bst:components/make.bst
+  - freedesktop-sdk.bst:components/sed.bst
+  - freedesktop-sdk.bst:components/grep.bst
+  - freedesktop-sdk.bst:components/gawk.bst
   - freedesktop-sdk.bst:components/tar.bst
   - freedesktop-sdk.bst:components/gzip.bst
+  - freedesktop-sdk.bst:components/stripper.bst
 
 sources:
   - kind: git_repo
     url: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
-    track: linux-7.1.y
-    ref: efc5691923e0bea478840cf93521b579f5d2cadc
+    track: refs/heads/linux-7.1.y
+    ref: c9acdc466e9aa96352f658b9276aa8a45b8e817d
+
+variables:
+  strip-binaries: ""
 
 config:
   build-commands:
@@ -93,7 +102,7 @@ config:
       KVER=$(make -s kernelrelease)
       mkdir -p "%{install-root}/usr/lib/modules/${KVER}"
 
-      # Copy bzImage to the standard bootc modules location
+      # Copy bzImage to the standard modules location
       cp arch/x86/boot/bzImage "%{install-root}/usr/lib/modules/${KVER}/vmlinuz"
 
       # Clean up unneeded build symlinks to keep image size small

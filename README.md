@@ -1,42 +1,39 @@
-# fsdk-containers
+# Bluefin Server
 
-**Bringing distroless patterns to [freedesktop-sdk](https://gitlab.com/freedesktop-sdk/freedesktop-sdk) (FSDK) containers.**
+**The world’s premier FSDK server operating system.**
 
-FSDK already maintains beautifully patched, reproducible builds of glibc and
-every major runtime. This repo applies the distroless playbook to them — carve
-out only the runtime, strip the bloat, ship slim by default — so you get a free,
-OSS distroless suite that **inherits FSDK's CVE patching** instead of maintaining
-a separate package set.
+Bluefin Server is the private, image-based server track for Project Bluefin. It is built from freedesktop-sdk components, keeps the host immutable, and pushes everything non-essential into containers, GitOps, or other isolated tooling. The goal is simple: a server that stays out of your way, updates atomically, and remains reproducible enough to trust in production.
 
-These containers are maintained for projectblufin/fsdk usage for cluster ops, etc. Digital sovereignty isn't just for nations, this controls our supply chain. 
+Bluefin Server borrows the Bluefin philosophy: hands-off by default, purposeful about what belongs on the base system, and opinionated about the 96% case. The difference is the audience — this tree is aimed at server operators who want cloud-native workflows, immutable infrastructure, and a clean operating-system boundary.
 
-## Images
+## What it is
 
-| Image | Size | Description |
-| ----- | ---- | ----------- |
-| `ghcr.io/projectbluefin/base` | ~40 MB | Distroless base: glibc, coreutils, CA certificates, timezone data. No shell, no package manager. Multi-arch: linux/amd64, linux/arm64. |
+- FSDK-first server OS work in progress
+- Image-based updates and atomic rollbacks
+- GitOps-driven builds in the lab
+- Private repo during migration to `projectbluefin/server`
 
-### Machine images (not distroless)
+## Build model
 
-| Image | Size | Description |
-| ----- | ---- | ----------- |
-| `ghcr.io/projectbluefin/brew` | ~410 MB | Homebrew developer environment as a **systemd-nspawn machine image** (a `.tar.zst` rootfs for `machinectl import-tar`, **not** an OCI image). Full dev env: bash, ruby, git, curl, gcc, patchelf, systemd init + the linuxbrew prefix. The distroless/slim rules do **not** apply here — see [docs/skills/nspawn-machine-image.md](docs/skills/nspawn-machine-image.md). Built with `just export-brew`. |
+The current tree still contains BuildStream scaffolding used to stage and validate server artifacts locally. That remains useful for development, but the canonical build path is moving to the lab through GitOps.
 
-## How it works
+The lab already exposes a `bluefin-server-build-pipeline` WorkflowTemplate in `projectbluefin/testing-lab`; that is the build hook this repo should align with as the migration completes.
+Build workflows emit `lab-build/<commit-sha>` tags so lab automation can build from immutable Git refs without cross-repo dispatch tokens.
 
-Each image is composed from raw FSDK `components/*` (never `platform.bst`),
-then chiseled with a BuildStream `compose` element that drops every non-runtime
-split-rule domain, and finally run through the **SLIM recipe** in the OCI script
-step. The slim recipe removes the large runtime-domain bloat that has no FSDK
-domain to exclude it: shell binaries, `terminfo`, gcc sanitizer/fortran runtimes,
-the `gconv` charset long-tail, the glibc `locale-archive`, and leaked build tools.
+Use the local `just` targets while iterating:
 
-It deliberately **keeps** the cheap crash-preventers — `tzdata`, a common charset
-set, CA certificates — so `datetime`/TLS work out of the box without the wheel
-gymnastics other distroless suites push onto you.
+```sh
+just validate
+just build
+just export
+just build-installer
+just export-installer
+just build-ddi
+just export-ddi
+just show-me-the-future
+```
 
-Pipeline: `stack` (deps) -> `compose` (chisel) -> `script` (slim + oci-builder).
-See [`docs/skills/slim-an-image.md`](docs/skills/slim-an-image.md) for the recipe.
+## Repository status
 
 ## Versioning
 
