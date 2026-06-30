@@ -15,7 +15,7 @@ sources:
   - kind: git_repo
     url: https://github.com/containers/bootc.git
     track: main
-    ref: 525d56cd31be7144a507f451db5ad87ccb816640
+    ref: 093ddc656662b89380fa1bab243006a6c365217a
 
 config:
   build-commands:
