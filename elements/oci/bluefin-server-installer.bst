@@ -37,7 +37,7 @@ build-depends:
       location: /layer
 
 variables:
-  installer-version: "0.1.0"
+  installer-version: "25.08.13"
 
 config:
   commands:

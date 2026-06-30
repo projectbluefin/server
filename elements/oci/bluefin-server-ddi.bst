@@ -17,7 +17,7 @@ build-depends:
       location: /layer
 
 variables:
-  ddi-version: "0.1.0"
+  ddi-version: "25.08.13"
 
 config:
   commands:
