@@ -170,10 +170,9 @@ config:
           || log "WARNING: bootctl install failed (non-fatal)"
         # Create a loader entry pointing at the installed kernel.
         # systemd-boot uses Type 1 entries; kernel must be on the ESP.
-        KVER=$(ls /mnt/root/usr/lib/modules/ 2>/dev/null | head -1)
-        if [ -n "$KVER" ] && [ -f "/mnt/root/usr/lib/modules/$KVER/vmlinuz" ]; then
+        if [ -n "$KVER" ] && [ -f "/mnt/root/boot/vmlinuz" ]; then
           mkdir -p /mnt/esp/EFI/Linux /mnt/esp/loader/entries
-          cp "/mnt/root/usr/lib/modules/$KVER/vmlinuz" "/mnt/esp/vmlinuz-$KVER"
+          cp "/mnt/root/boot/vmlinuz" "/mnt/esp/vmlinuz-$KVER"
           printf 'title   Bluefin Server\nlinux   /vmlinuz-%s\noptions root=PARTLABEL=bluefin-server-root-a console=ttyS0,115200 rw\n' \
             "$KVER" > "/mnt/esp/loader/entries/bluefin-server.conf"
           log "Boot entry written for kernel $KVER"
@@ -221,7 +220,7 @@ config:
       KVER=$(ls /layer/usr/lib/modules | head -1)
       mkdir -p /layer/boot/efi/EFI/Linux
       ukify build \
-        --linux="/layer/usr/lib/modules/${KVER}/vmlinuz" \
+        --linux="/layer/boot/vmlinuz" \
         --initrd=/installer.cpio.zst \
         --cmdline="systemd.unit=installer.target console=ttyS0,115200 rw" \
         --output=/layer/boot/efi/EFI/Linux/installer.efi
