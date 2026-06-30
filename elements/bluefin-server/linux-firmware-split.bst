@@ -5,6 +5,13 @@ build-depends:
   - freedesktop-sdk.bst:components/linux-firmware.bst
 
 config:
+  # Exclude debug symbols, development files, and locales from composed output
+  exclude:
+    - debug
+    - devel
+    - doc
+    - locale
+
   # Only include CPU microcode, virtual, net, and amdgpu/APU firmware needed for servers
   include:
     # CPU Microcodes (intel & amd)
