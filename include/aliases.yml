@@ -1,0 +1,7 @@
+# Source aliases — only those referenced by elements in this repo.
+aliases:
+  pypi: https://files.pythonhosted.org/packages/
+
+  github: https://github.com/
+  gitlab: https://gitlab.com/
+  gnome: https://gitlab.gnome.org/GNOME/

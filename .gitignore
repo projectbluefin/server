@@ -1,0 +1,12 @@
+**/__pycache__/
+.bst
+.bst2
+.cache/*
+*.img
+*.raw
+*.tar
+*.tar.gz
+*.spdx.json
+dist/
+.build-out
+.worktrees/

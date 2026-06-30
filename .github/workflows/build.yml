@@ -1,0 +1,180 @@
+name: Build images
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [fsdk-updated]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.event.client_payload.ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  BUILD_IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.client_payload.ref || github.ref }}
+      - uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2
+        with:
+          tool: just
+      - name: Resolve element graph
+        run: just validate
+
+  build:
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.client_payload.ref || github.ref }}
+      - uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2
+        with:
+          tool: just
+      - name: Compute OCI Metadata
+        run: |
+          echo "OCI_IMAGE_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "OCI_IMAGE_CREATED=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+      - name: Log in to ghcr
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and verify all images
+        run: |
+          for IMAGE in base static skopeo lab-runner; do
+            echo "::group::Build ${IMAGE}"
+            BUILD_IMAGE_NAME=${IMAGE} just build
+            BUILD_IMAGE_NAME=${IMAGE} just verify
+            BUILD_IMAGE_NAME=${IMAGE} just tag-push "${BUILD_IMAGE_REGISTRY}/${IMAGE}-${{ matrix.arch }}"
+            echo "::endgroup::"
+          done
+
+  manifest:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write      # Required for Sigstore keyless signing
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.client_payload.ref || github.ref }}
+      - uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2
+        with:
+          tool: just
+
+      - name: Restore pip cache for buildstream-sbom
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6
+        with:
+          path: ~/.cache/pip
+          key: pip-sbom-0706fec3bedf6f73bd9d2fed32c2aed585feef8d
+          restore-keys: pip-sbom-
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2.0.0
+
+      - name: Log in to ghcr
+        run: |
+          mkdir -p ~/.docker
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin --compat-auth-file ~/.docker/config.json
+
+      - name: Generate all BuildStream-native SBOMs
+        run: just sboms
+
+      - name: Assemble multi-arch manifests, sign, and attach SBOMs
+        run: |
+          set -euo pipefail
+          for IMAGE in base static skopeo lab-runner; do
+            echo "::group::Processing SBOM and manifest for ${IMAGE}"
+            
+            case "${IMAGE}" in
+              base)       DESC="Minimal, high-integrity distroless base image built on freedesktop-sdk" ;;
+              static)     DESC="Static-tier runner for compiled Go/Rust binaries built on freedesktop-sdk" ;;
+              skopeo)     DESC="Skopeo OCI image utility built on freedesktop-sdk" ;;
+              lab-runner) DESC="Shell-enabled CI/CD utility container for Project Bluefin workflows" ;;
+              *)          DESC="Project Bluefin distroless container image" ;;
+            esac
+            
+            REPO="${BUILD_IMAGE_REGISTRY}/${IMAGE}"
+            
+            # Step 1: Create, annotate, and push all tags
+            FIRST_TAG=""
+            while read -r t; do
+              if [[ -z "${FIRST_TAG}" ]]; then
+                FIRST_TAG="${t}"
+              fi
+              podman manifest create "${REPO}:${t}"
+              podman manifest add "${REPO}:${t}" "docker://${REPO}-x86_64:${t}"
+              podman manifest add "${REPO}:${t}" "docker://${REPO}-aarch64:${t}"
+              
+              # Annotate the multi-arch manifest index itself with OCI labels for GHCR
+              podman manifest annotate --index --annotation "org.opencontainers.image.source=https://github.com/projectbluefin/fsdk-containers" "${REPO}:${t}"
+              podman manifest annotate --index --annotation "org.opencontainers.image.description=${DESC}" "${REPO}:${t}"
+              podman manifest annotate --index --annotation "org.opencontainers.image.title=${IMAGE}" "${REPO}:${t}"
+              podman manifest annotate --index --annotation "org.opencontainers.image.licenses=Apache-2.0" "${REPO}:${t}"
+              
+              podman manifest push --all "${REPO}:${t}" "docker://${REPO}:${t}"
+              echo "==> published ${REPO}:${t} (multi-arch)"
+            done < <(just tags)
+
+            # Step 2: Resolve canonical manifest list digest exactly once
+            DIGEST=$(skopeo inspect --creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" "docker://${REPO}:${FIRST_TAG}" | jq -r '.Digest')
+            if [[ -z "${DIGEST}" || "${DIGEST}" == "null" ]]; then
+              echo "ERROR: Failed to resolve digest for ${REPO}:${FIRST_TAG}"
+              exit 1
+            fi
+            echo "==> Canonical digest for ${REPO}:${FIRST_TAG}: ${DIGEST}"
+
+            # Step 3: Keyless-sign the OCI image manifest list digest exactly once
+            cosign sign -y "${REPO}@${DIGEST}"
+
+            # Step 4: Attach and sign the SBOM exactly once
+            SBOM_FILE="${IMAGE}.spdx.json"
+            if [[ -f "${SBOM_FILE}" ]]; then
+              echo "==> Attaching SBOM ${SBOM_FILE} to ${REPO}@${DIGEST}..."
+              
+              oras attach \
+                --artifact-type application/vnd.spdx+json \
+                --annotation "filename=${SBOM_FILE}" \
+                "${REPO}@${DIGEST}" \
+                "${SBOM_FILE}"
+
+              SBOM_DIGEST=$(oras discover --format json "${REPO}@${DIGEST}" \
+                | jq -r '.referrers[] | select(.artifactType == "application/vnd.spdx+json") | .digest' \
+                | head -n1)
+
+              if [[ -n "${SBOM_DIGEST}" && "${SBOM_DIGEST}" != "null" ]]; then
+                echo "==> Signing SBOM artifact ${REPO}@${SBOM_DIGEST}..."
+                cosign sign -y "${REPO}@${SBOM_DIGEST}"
+              else
+                echo "WARNING: Failed to capture SBOM digest for ${REPO}:${FIRST_TAG}"
+              fi
+            fi
+            echo "::endgroup::"
+          done
+
