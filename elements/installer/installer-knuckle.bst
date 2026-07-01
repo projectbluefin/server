@@ -1,4 +1,4 @@
-kind: script
+kind: manual
 description: |
   Stage the knuckle interactive installer binary at /opt/knuckle.
 
@@ -11,15 +11,19 @@ description: |
 
   Source: https://github.com/projectbluefin/knuckle/releases
 
+build-depends:
+  - base/base-stack.bst
+
 # NOTE: Update url and ref after each knuckle release.
 # To update ref: curl -sL <url> | sha256sum
 sources:
   - kind: remote
-    url: https://github.com/projectbluefin/knuckle/releases/download/v0.9.0/knuckle_linux_amd64
-    # sha256 of knuckle_linux_amd64 — update after each release
-    ref: 0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5
+    url: https://github.com/projectbluefin/knuckle/releases/download/v0.9.0/knuckle-linux-amd64
+    # sha256 of knuckle-linux-amd64 — update after each release
+    ref: ddaa1d67eb1422d76a1d1e2bc2fad3936b9da136f416d4da12c88f7311226693
     filename: knuckle
 
 config:
-  commands:
-    - install -Dm755 "%{sourcedir}/knuckle" "%{install-root}/opt/knuckle"
+  install-commands:
+    - install -Dm755 knuckle "%{install-root}/opt/knuckle"
+  strip-commands: []
