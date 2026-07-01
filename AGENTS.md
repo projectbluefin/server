@@ -1,46 +1,44 @@
 # AGENTS.md
 
-`fsdk-containers` brings **distroless patterns to [freedesktop-sdk](https://gitlab.com/freedesktop-sdk/freedesktop-sdk) (FSDK)**.
-It is a [BuildStream 2](https://buildstream.build/) project. No Containerfiles for
-the images themselves, no package managers in the output — BST elements that carve
-runtime-only, slim-by-default OCI images out of FSDK `components/*`.
+`projectbluefin/server` is **Bluefin Server** — an FSDK-based, image-based Linux
+server OS in the same use-case space as Flatcar Linux, Fedora CoreOS, and Talos.
+It is a [BuildStream 2](https://buildstream.build/) project. No Containerfiles —
+BST elements build reproducible OCI images and DDI installer media from FSDK
+`components/*`.
 
 Load **[docs/skills/README.md](docs/skills/README.md)** for the skill routing table.
 Only load the docs relevant to your task.
 
 > **Before using any tool or library: look up its docs via Context7 first. Always.**
-> BuildStream, oci-builder, podman, GitHub Actions, FSDK split-rules — every tool
-> has live, authoritative docs. Pattern: `resolve-library-id` → `get-library-docs`
-> → implement → cite the section. Guessing and trial-and-error are banned.
+> BuildStream, knuckle, podman, GitHub Actions, systemd (repart/sysupdate/ukify) —
+> every tool has live, authoritative docs. Pattern: `resolve-library-id` →
+> `get-library-docs` → implement → cite the section. Guessing is banned.
 
 ## What this repo is
 
-- **Focus:** apply the distroless playbook (carve runtime, strip bloat, ship slim)
-  to FSDK's already-patched components.
-- **Inheritance, not reinvention:** images get FSDK's CVE patching and reproducible
-  builds for free. We never maintain a separate package set.
-- **Slim by default:** there is no "batteries" tier. The default image is the slim
-  image. Keep only cheap crash-preventers (tzdata, common charsets, CA certs).
-- **One documented exception — machine images.** A non-distroless lane exists for
-  full dev-environment containers booted by `systemd-nspawn`/`machinectl` (e.g.
-  `brew`): a rootfs `.tar.gz`, with shell/init/locale kept and the SLIM recipe NOT
-  applied. This is deliberate and scoped — see
-  [docs/skills/nspawn-machine-image.md](docs/skills/nspawn-machine-image.md). Do not
-  generalise it to the OCI images.
+- **OS image:** `oci/bluefin-server-ddi.bst` — the server OS DDI payload (ext4
+  image compressed with zstd), deployed by the installer onto the target disk.
+- **Installer media:** `oci/bluefin-server-installer.bst` — a bootable GPT image
+  (ESP-only) containing a UKI (kernel + cpio initrd). At boot, systemd reaches
+  `installer.target`, which launches **knuckle** — a Go TUI interactive installer.
+- **Knuckle installer:** `installer/installer-knuckle.bst` stages the
+  `projectbluefin/knuckle` release binary at `/opt/knuckle`. knuckle prompts for
+  disk, username, password, and SSH key; runs systemd-repart + user provisioning;
+  writes a stable PARTUUID boot entry; then reboots.
+- **No shell in the OS image.** The DDI payload is distroless. The installer
+  rootfs carries only what knuckle needs to install the OS.
 
 ## Hard rules
 
 1. **Compose from `components/*`, never `platform.bst`.** `platform.bst` drags in
-   Wayland/Mesa/PipeWire desktop bloat. Always target the minimum component set.
-2. **No `x86_64_v3`.** This is a broad-compatibility baseline (diverges from dakota).
-   Do not re-add the v3 micro-arch option.
-3. **Don't duplicate upstream.** If a tool already ships an official, maintained
-   CNCF/upstream distroless image (e.g. `kubectl`), consume that — do not rebuild
-   it here. This is a contributor guideline, not the repo's headline; the headline
-   is "distroless patterns for FSDK".
-4. **Distroless means no shell.** The bash binary lives in the FSDK `runtime`
-   domain, not the `shells` domain, so `compose exclude: shells` does NOT remove it.
-   The SLIM recipe `rm`s it explicitly. Keep `just verify` green.
+   Wayland/Mesa/PipeWire desktop bloat.
+2. **No `x86_64_v3`.** Broad-compatibility baseline only.
+3. **No non-interactive bash installer scripts.** The installer is knuckle.
+   A bash script cannot prompt for username, password, or SSH key on a TTY.
+4. **Installer binary comes from knuckle releases.** Update `installer-knuckle.bst`
+   `ref:` (sha256) when bumping knuckle. Never vendor the binary directly.
+5. **PARTUUID boot entries only.** Never hardcode `/dev/vda2` or similar.
+   knuckle uses `lsblk` to find the `PARTLABEL=bluefin-server-root-a` PARTUUID.
 
 ## Build / test commands (verified)
 
@@ -48,21 +46,27 @@ BuildStream runs inside the FSDK `bst2` container via the `just bst` wrapper —
 nothing to install but `podman` + [`just`](https://github.com/casey/just).
 
 ```
-just validate   # resolve the element graph (no build)
-just build      # build + load ghcr.io/projectbluefin/base:latest
-just verify     # 4 gates: no shell, CA certs, tzdata, slim-bloat-removed
-just tags       # show FSDK-derived tags
+just validate-installer   # resolve installer element graph (no build)
+just build-installer      # full build: cpio + ukify + systemd-repart
+just export-installer     # export .raw.zst + SHA256SUMS to dist/
+just build-ddi            # build OS DDI filesystem payload
+just export-ddi           # export DDI + SHA256SUMS to dist/ddi/
+just tags                 # show FSDK-derived version tags
 ```
 
-`just verify` is the contract. All four gates must pass before merge.
+There is no `just verify` gate for the server repo (that is fsdk-containers).
+The contract here is: element graph resolves (`just validate-installer`) and the
+lab build completes without error.
 
 ## Versioning
 
 The version axis is the **FSDK release**, parsed from the pinned junction ref in
-`elements/freedesktop-sdk.bst`: `:latest` (rolling), `:25.08` (FSDK minor line),
-`:25.08.13` (point release, immutable). Every image self-declares its base via
-`io.projectbluefin.fsdk.version` and `io.projectbluefin.fsdk.ref` labels. Follow
-the FSDK lifecycle — see [docs/skills/bump-fsdk-version.md](docs/skills/bump-fsdk-version.md).
+`elements/freedesktop-sdk.bst`. The installer and DDI assets carry matching
+version strings from the same FSDK pin. Follow the FSDK lifecycle — see
+[docs/skills/bump-fsdk-version.md](docs/skills/bump-fsdk-version.md).
+
+Knuckle is versioned independently. Current: **v0.9.0**. Update
+`elements/installer/installer-knuckle.bst` (`url:` + `ref:`) when bumping.
 
 ## The self-improvement loop
 

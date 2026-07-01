@@ -1,6 +1,6 @@
 ---
 name: ddi-installer
-description: "Use when building or debugging the Bluefin Server DDI live installer, sysupdate release assets, or the lab GitOps build hook."
+description: "Use when building or debugging the Bluefin Server DDI live installer, updating the knuckle installer binary, sysupdate release assets, or the lab GitOps build hook."
 metadata:
   context7-sources:
     - /systemd/systemd
@@ -11,74 +11,104 @@ metadata:
 
 ## When to Use
 
-- Adding or changing the Bluefin Server live installer
-- Wiring `systemd-sysinstall`, `systemd-sysupdate`, `systemd-repart`, or `bootctl`
+- Building or debugging the Bluefin Server live installer media
+- Bumping the knuckle installer binary version
+- Wiring `systemd-sysupdate`, `systemd-repart`, `bootctl`, or `ukify`
 - Packaging or publishing DDI assets to GitHub Releases
 - Updating the Argo/GitOps build hook in the lab
 
 ## When NOT to Use
 
-- OCI-only image work
+- OCI-only image work (no installer involvement)
 - Bootc-specific changes
 - Desktop or nspawn machine image work
-- Dracut-based installer design unless the repo explicitly reintroduces it
+- Adding a network-pull installer — the current design is local-DDI via knuckle
 
-> [!NOTE]
-> **Fully wired.** Both the live installer media and the OS DDI payload image pipelines are now fully implemented.
-> - ✅ Dracut-free cpio initrd assembled inline by the BST script element
-> - ✅ UKI built with `ukify` (unsigned; Secure Boot signing is opt-in)
-> - ✅ sysupdate.d transfer config pulls OS DDI from GitHub Releases
-> - ✅ repart.d target disk layout defined
-> - ✅ `bluefin-install` orchestration script (sysupdate → repart → bootctl)
-> - ✅ Release signal-tag workflow (`.github/workflows/release-installer.yml`) publishes installer build signal tags
-> - ✅ OS DDI artifact (`bluefin-server-ddi-@v.raw.zst`) integrated as a first-class payload
+## Architecture
+
+The installer is **knuckle** — a Go TUI interactive installer
+(`projectbluefin/knuckle`) that replaced the non-interactive `bluefin-install`
+bash script. knuckle prompts the user for:
+
+- Target disk (detected via `lsblk`)
+- Username, password (bcrypt-hashed), SSH key
+- Confirmation before writing
+
+Then it runs `systemd-repart`, provisions the user, writes a stable
+`PARTUUID`-based boot entry via `bootctl`, and reboots.
+
+**Why knuckle and not systemd-sysinstall?**
+`systemd-sysinstall` requires systemd ≥261 (released June 2026) and does NOT
+prompt for username/password — it defers to `systemd-firstboot` on first boot.
+knuckle is already used for Flatcar/FCOS installs in this org, is tested, and
+provides full user provisioning during install. Parity with the Flatcar variant
+was the requirement.
 
 ## Core Process
 
-1. Keep the live media thin: it should orchestrate install-time flow, not define a second distro.
-2. Prefer systemd-native pieces first: `systemd-sysinstall`, `systemd-sysupdate`, `systemd-repart`, `bootctl`, `ukify`.
-3. Use a cpio-based initrd when the installer rootfs is already known at build time; avoid dracut unless you truly need hardware autodetection.
-4. Publish installer media and OS DDI payload as versioned release assets with matching checksums.
-5. Make the lab GitOps pipeline clone the moved repo and build the installer element from the server repo.
-6. Keep repo URLs, release URLs, and labels aligned after any rename or transfer.
-7. Use `just show-me-the-future` as the end-to-end VM test: boot the installer read-only, install to a second raw disk, then reboot into the installed server.
+1. Keep the live media thin: orchestrate install-time flow via knuckle, not a second distro.
+2. knuckle binary lives at `/opt/knuckle` in the installer rootfs — staged by `installer/installer-knuckle.bst`.
+3. `installer.service` runs `ExecStart=/opt/knuckle --os bluefin-ddi` on `tty1`.
+4. knuckle uses `PARTLABEL=bluefin-server-root-a` to find its root partition — never hardcode `/dev/vda2`.
+5. Publish installer media and OS DDI payload as versioned release assets with matching checksums.
+6. The lab GitOps pipeline clones the server repo and builds the installer element.
+7. Use `just show-me-the-future` as the end-to-end VM test: boot installer, install to a second disk, reboot into installed system.
 
-## Common Rationalizations
+## Bumping the knuckle version
 
-| Rationalization | Reality |
-|---|---|
-| "Dracut is the safe default." | It is heavier than a known rootfs + cpio path when the installer contents are already reproducible. |
-| "The installer should carry the whole OS payload." | The live media should install a DDI payload, not become a second OS lineage. |
-| "GitHub Releases is just a download bucket." | `systemd-sysupdate` needs stable versioned assets and checksums, so the release contract matters. |
+When a new knuckle release is cut:
 
-## Red Flags
+```bash
+# 1. Get the SHA256 of the new binary
+SHA=$(curl -sL https://github.com/projectbluefin/knuckle/releases/download/vX.Y.Z/knuckle_linux_amd64 | sha256sum | awk '{print $1}')
 
-- The installer depends on bootc or OCI pulls instead of DDI assets
-- The live image is carrying unrelated desktop or runtime bloat
-- `systemd-sysupdate` URLs still point at the old repo name after a move
-- A lab build template clones the wrong repository or builds the wrong element
-- Dracut is added without a specific, documented need
+# 2. Update elements/installer/installer-knuckle.bst
+#    Change both `url:` (version in path) and `ref:` (sha256)
+```
+
+`installer-knuckle.bst` uses `kind: script` with a `kind: remote` source
+(BST verifies the sha256 on fetch). The script stages the binary at
+`/opt/knuckle` with mode 755.
+
+**Current version:** knuckle v0.9.0
+**SHA256:** `0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5`
+
+## Installer boot flow
+
+```
+UEFI reads ESP → systemd-boot → installer.efi (UKI)
+     │
+     ▼
+systemd PID 1 starts, reaches installer.target
+     │
+     ▼
+installer.service → /opt/knuckle --os bluefin-ddi
+     │
+     ├─ TUI: disk selection (lsblk detects candidates)
+     ├─ TUI: username / password / SSH key
+     ├─ systemd-repart --dry-run=no /dev/TARGET
+     │      reads /usr/lib/repart.d/ (10-esp, 20-root-a, 30-var)
+     ├─ User provisioning (useradd + authorized_keys + sudoers)
+     ├─ bootctl install (PARTUUID boot entry)
+     └─ Reboot into installed Bluefin Server
+```
 
 ## Initrd assembly (cpio-native)
 
-Packing the entire rootfs as a cpio with `find . | cpio --null --create --format=newc` and pointing `ukify` at it is the approach the systemd project uses for its own test images (`mkosi`-built images use the same mechanism without a generator). It requires only `cpio` + `find` + `zstd` — all in FSDK `components/`.
-
-The initrd is larger than a hand-tuned dracut output (because it includes all kernel modules), but size is not a concern for USB installer media, and the approach is simpler to maintain and debug.
-
-The `bluefin-server-installer.bst` script element:
+The `bluefin-server-installer.bst` script element builds the UKI inline:
 
 ```bash
-# 1. Add /init symlink (Linux initrd protocol: kernel executes /init as PID 1)
+# 1. /init symlink (Linux initrd protocol)
 ln -sf usr/lib/systemd/systemd /layer/init
 
 # 2. Link default.target -> installer.target
 ln -sf installer.target /layer/usr/lib/systemd/system/default.target
 
-# 3. Pack the entire rootfs as a newc cpio archive + zstd-compress
+# 3. Pack rootfs as newc cpio + zstd
 ( cd /layer && find . -print0 | cpio --null --create --format=newc ) \
   | zstd -T0 -19 -q -o /installer.cpio.zst
 
-# 4. Build the UKI (unsigned for dev; add --secureboot-* for release signing)
+# 4. Build UKI
 KVER=$(ls /layer/usr/lib/modules | head -1)
 ukify build \
   --linux="/layer/usr/lib/modules/${KVER}/vmlinuz" \
@@ -86,63 +116,18 @@ ukify build \
   --cmdline="systemd.unit=installer.target console=ttyS0,115200 rw" \
   --output=/layer/boot/efi/EFI/Linux/installer.efi
 
-# 5. Assemble a single-partition GPT disk (ESP only) for the installer media
-#    (separate from the target-disk repart.d in /usr/lib/repart.d/)
+# 5. Assemble single-partition GPT disk (ESP only)
 systemd-repart --empty=create --size=auto --dry-run=no \
   --root=/layer --definitions=/installer-media-repart.d \
   bluefin-server-installer-<ver>.raw
 ```
 
-## Network-pull install flow
+## OS DDI payload
 
-```
-Installer boot (UEFI reads ESP → systemd-boot → installer.efi)
-     │
-     ▼
-installer.efi (UKI: kernel + cpio initrd)
-     │
-     ▼
-systemd PID 1 starts, reaches installer.target
-     │
-     ▼
-installer.service → bluefin-install script:
-     │
-     ├─ systemd-sysupdate --definitions=/usr/lib/sysupdate.d update
-     │      fetches bluefin-server-ddi-@v.raw.zst from GitHub Releases
-     │      deposits /run/installer/bluefin-server-ddi.raw
-     │
-     ├─ systemd-repart --dry-run=no --empty=force /dev/TARGET
-     │      reads /usr/lib/repart.d/ (10-esp, 20-root-a, 30-var)
-     │      20-root-a: CopyBlocks=/run/installer/bluefin-server-ddi.raw
-     │
-     ├─ bootctl install --esp-path=/mnt/esp --root=/mnt/root
-     │      installs systemd-boot + OS UKI into the new ESP
-     │
-     └─ systemctl poweroff
-          │
-          ▼
-     Reboot into installed Bluefin Server
-```
-
-## Target disk detection
-
-The `bluefin-install` script auto-detects the first writable non-removable
-block device (`/dev/vda`, `/dev/sda`, `/dev/nvme0n1`, `/dev/mmcblk0`).
-To override, pass `installer.disk=/dev/TARGET` on the kernel cmdline.
-
-## Secure Boot signing (opt-in)
-
-The installer UKI is produced unsigned by default. To produce a signed UKI:
-
-```bash
-# Add to ukify build invocation in bluefin-server-installer.bst:
---secureboot-private-key=/path/to/vendor.key \
---secureboot-certificate=/path/to/vendor.crt
-```
-
-Inject the key files as BST secrets or CI secrets. The FSDK pattern for this
-is in `elements/vm/minimal-secure/signed-boot.bst` (uses `kind: local` sources
-for the key files — keep those out of the repo).
+`oci/bluefin-server-ddi.bst` builds the OS DDI payload:
+1. Depends on `bluefin-server/os-stack.bst`
+2. Runs `mkfs.ext4` on the rootfs `/layer` directory
+3. Compresses with `zstd` → `bluefin-server-ddi-@v.raw.zst` + `SHA256SUMS`
 
 ## sysupdate.d transfer config
 
@@ -160,18 +145,6 @@ MatchPattern=bluefin-server-ddi-@v.raw
 CurrentSymlink=/run/installer/bluefin-server-ddi.raw
 ```
 
-## OS DDI payload image
-
-The DDI payload `bluefin-server-ddi-@v.raw.zst` is the raw ext4 filesystem image
-that `systemd-sysupdate` pulls. It is built by `elements/oci/bluefin-server-ddi.bst`
-which:
-1. Depends on `bluefin-server/os-stack.bst` (stripped of bootc/ostree bloat).
-2. Runs `mkfs.ext4` to format the rootfs directory `/layer` into an ext4 image.
-3. Compresses the raw image via `zstd` and generates `SHA256SUMS`.
-
-> [!NOTE]
-> **Lab OCI Packaging:** In-cluster build pipelines push artifacts to the local Zot registry. Because the DDI payload and installer disk image are raw script outputs (not native OCI layouts), the `bluefin-server-build-pipeline` automatically detects this and wraps them in a minimal `scratch` OCI image (using `FROM scratch; COPY . /`) before pushing.
-
 ## Justfile commands
 
 ```
@@ -186,37 +159,46 @@ just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
 
 `.github/workflows/release-installer.yml` fires on `installer-v*` tags.
 **GitHub is the control plane only** — the workflow resolves the tag ref,
-runs `just validate-installer` (element graph resolution, no build), then
-publishes `installer-build/<installer-tag>` as a GitOps signal tag.
-The lab consumes that tag, builds the installer, and uploads artifacts to the GitHub Release.
+runs `just validate-installer`, then publishes an `installer-build/<tag>`
+GitOps signal tag. The lab consumes that tag, builds, and uploads artifacts.
 
-```
+```bash
 git tag installer-v0.1.0 && git push origin installer-v0.1.0
 ```
 
-Signal tag format:
-- `installer-build/<installer-tag>` (e.g. `installer-build/installer-v0.1.0`)
-- tag object points at the pinned commit SHA being released
-
-The lab is responsible for:
-1. `just build-installer` + `just export-installer`
-2. `just build-ddi` + `just export-ddi`
-3. Creating/updating the GitHub Release
-4. Uploading `bluefin-server-installer-<ver>.raw.zst`, `bluefin-server-ddi-<ver>.raw.zst`, and checksums.
-
 > No BST build compute runs on GitHub-hosted runners.
 
-## Related
+## Common Rationalizations
 
-- `docs/skills/nspawn-machine-image.md` — tarball artifact pattern
-- `elements/oci/brew-nspawn.bst` — reference for non-OCI script elements
-- FSDK `elements/vm/minimal-secure/` — repart + ukify toolchain reference
+| Rationalization | Reality |
+|---|---|
+| "A bash script is simpler." | A bash script cannot prompt for username/password/SSH key. That's why we had a broken installer all day. |
+| "Use systemd-sysinstall instead." | Requires systemd ≥261 AND doesn't set username/password — defers to systemd-firstboot. knuckle is already prod-tested for Flatcar. |
+| "Hardcode root=/dev/vda2 for QEMU." | Bare metal has different device names. Always use PARTUUID. |
+| "SuccessAction=poweroff in installer.service." | knuckle drives shutdown. Having both races. Remove from service, let knuckle decide. |
+
+## Red Flags
+
+- `installer.service` has `SuccessAction=poweroff` (knuckle handles this)
+- `installer.service` `ExecStart` points at a bash script instead of `/opt/knuckle`
+- `installer-knuckle.bst` `ref:` is a placeholder (`PLACEHOLDER_*`)
+- Boot cmdline has `root=/dev/vda2` (hardcoded device path)
+- knuckle binary is vendored in the repo instead of fetched from releases
+- `installer-stack.bst` missing `installer/installer-knuckle.bst` dependency
 
 ## Verification
 
-- `just validate-installer` resolves the BuildStream graph
-- The installer image builds a bootable live media artifact
-- The release workflow publishes DDI assets and `SHA256SUMS`
-- The release workflow publishes installer + DDI assets in the same `installer-v*` release stream
-- The lab GitOps build template points at the moved repo and the installer element
-- Repo URLs in README, workflows, and sysupdate configs match the current GitHub location
+- [ ] `just validate-installer` resolves the BuildStream graph without errors
+- [ ] `installer-knuckle.bst` `ref:` matches `sha256sum` of the release binary
+- [ ] `installer.service` `ExecStart=/opt/knuckle --os bluefin-ddi`
+- [ ] `installer.service` has NO `SuccessAction=poweroff`
+- [ ] `installer-stack.bst` includes `installer/installer-knuckle.bst`
+- [ ] Lab build template points at correct repo and installer element
+- [ ] Repo URLs in sysupdate configs match current GitHub location (`projectbluefin/server`)
+
+## Related
+
+- `projectbluefin/knuckle` — TUI installer source; `internal/install/ddi.go`
+- `docs/skills/nspawn-machine-image.md` — tarball artifact pattern
+- FSDK `elements/vm/minimal-secure/` — repart + ukify toolchain reference
+
