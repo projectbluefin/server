@@ -59,6 +59,15 @@ config:
     # to /init as PID 1). For systemd-native initrds this is a symlink.
     - |
       set -eu
+      # Ensure critical tools are present in the staged rootfs before packing
+      # ponytail: fail fast if critical dependencies are missing, preventing broken images
+      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl useradd; do
+        if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
+          echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
+          exit 1
+        fi
+      done
+
       # systemd-native initrd: /init -> PID 1
       ln -sf usr/lib/systemd/systemd /layer/init
       # Mount points needed by the installer service
@@ -259,7 +268,7 @@ config:
       cat > /mnt/esp/loader/entries/bluefin-server.conf << EOF
       title   Bluefin Server
       linux   ${VMLINUZ_ENTRY}
-      options root=PARTUUID=${ROOT_PARTUUID} console=tty0 console=ttyS0,115200 rw
+      options root=PARTUUID=${ROOT_PARTUUID} console=ttyS0,115200 console=tty0 rw
       EOF
 
       echo "Installation successfully completed!"
