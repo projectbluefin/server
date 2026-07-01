@@ -4,7 +4,7 @@
 
 Bluefin Server an operating system designed for modern workloads. The use case is the same as Flatcar Linux, Fedora CoreOS, and Talos. 
 
-The difference is this is built with buildstream. API and GitOps driven.
+The difference is this is [DDI first](https://0pointer.net/blog/fitting-everything-together.html) and built with buildstream. API and GitOps driven. 
 
 ## What it is
 
