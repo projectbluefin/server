@@ -117,7 +117,7 @@ systemd PID 1 starts, reaches installer.target
      ▼
 installer.service
   ExecStartPre: modprobe nvme + udevadm settle
-  ExecStartPre: mount -L bluefin-installer-data /run/installer
+  ExecStartPre: mount /dev/disk/by-partlabel/bluefin-installer-data /run/installer
      │
      ▼
 /opt/knuckle --os bluefin-ddi
@@ -243,7 +243,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `just validate-installer` resolves the BuildStream graph without errors
 - [ ] `installer-knuckle.bst` `ref:` matches `sha256sum` of the release binary
 - [ ] `installer.service` `ExecStart=/opt/knuckle --os bluefin-ddi`
-- [ ] `installer.service` mounts `LABEL=bluefin-installer-data /run/installer` before knuckle
+- [ ] `installer.service` mounts `/dev/disk/by-partlabel/bluefin-installer-data` to `/run/installer` before knuckle
 - [ ] `installer.service` has NO `SuccessAction=poweroff`
 - [ ] `installer-stack.bst` includes `installer/installer-knuckle.bst`
 - [ ] `installer-stack.bst` does NOT include `installer/installer-sysupdate.bst`
