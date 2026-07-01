@@ -67,7 +67,7 @@ The version axis is the **FSDK release**, parsed from the pinned junction ref in
 version strings from the same FSDK pin. Follow the FSDK lifecycle — see
 [docs/skills/bump-fsdk-version.md](docs/skills/bump-fsdk-version.md).
 
-Knuckle is versioned independently. Current: **v0.9.0**. Update
+Knuckle is versioned independently. Current: **v0.9.1**. Update
 `elements/installer/installer-knuckle.bst` (`url:` + `ref:`) when bumping.
 
 ## The self-improvement loop

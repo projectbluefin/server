@@ -72,8 +72,8 @@ SHA=$(curl -sL https://github.com/projectbluefin/knuckle/releases/download/vX.Y.
 (BST verifies the sha256 on fetch). The script stages the binary at
 `/opt/knuckle` with mode 755.
 
-**Current version:** knuckle v0.9.0
-**SHA256:** `ddaa1d67eb1422d76a1d1e2bc2fad3936b9da136f416d4da12c88f7311226693`
+**Current version:** knuckle v0.9.1
+**SHA256:** `b2d80d7d6ccb4b552b9640ff5f3eeb36d6fd995e41d2e8ac975a127f603a1a41`
 
 ## SSH access to live installer
 
