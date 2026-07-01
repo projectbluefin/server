@@ -29,13 +29,11 @@ config:
       rm -rf /layer/usr/lib/debug
       find /layer -type f -name '*.debug' -delete
 
-      # Reserve overhead for metadata and future growth.
+      # Content + 10% overhead for ext4 metadata and journal.
+      # No artificial floor — the server rootfs is immutable; it doesn't grow in-place.
       set -- $(du -sk /layer)
       ROOT_BYTES=$(( $1 * 1024 ))
-      TARGET_BYTES=$(( ROOT_BYTES + (2 * 1024 * 1024 * 1024) ))
-      if [ "$TARGET_BYTES" -lt $((8 * 1024 * 1024 * 1024)) ]; then
-        TARGET_BYTES=$((8 * 1024 * 1024 * 1024))
-      fi
+      TARGET_BYTES=$(( ROOT_BYTES + ROOT_BYTES / 10 ))
 
       BLOCKS=$(( TARGET_BYTES / 4096 ))
       mkfs.ext4 -F -L bluefin-roota -d /layer "${OUT}/${FNAME}" "${BLOCKS}"

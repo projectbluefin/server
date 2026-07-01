@@ -184,8 +184,6 @@ config:
       Label=bluefin-installer-data
       Format=ext4
       CopyFiles=/bluefin-server-ddi.raw:/bluefin-server-ddi.raw
-      SizeMinBytes=10G
-      SizeMaxBytes=16G
       RCONF
 
       systemd-repart \
