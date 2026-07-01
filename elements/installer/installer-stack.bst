@@ -41,3 +41,6 @@ depends:
 
   # Installer systemd units (installer.target + installer.service)
   - installer/installer-units.bst
+
+  # knuckle interactive TUI installer binary staged at /opt/knuckle
+  - installer/installer-knuckle.bst

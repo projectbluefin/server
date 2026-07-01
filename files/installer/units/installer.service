@@ -2,14 +2,19 @@
 Description=Bluefin Server DDI Installer Service
 Documentation=https://github.com/projectbluefin/server
 DefaultDependencies=no
-ConditionPathExists=/usr/bin/bluefin-install
-SuccessAction=poweroff
+ConditionPathExists=/opt/knuckle
+After=basic.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/bluefin-install
-FailureAction=none
+ExecStart=/opt/knuckle --os bluefin-ddi
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal+console
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
 
 [Install]
 WantedBy=installer.target

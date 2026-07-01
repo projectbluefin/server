@@ -10,8 +10,13 @@ description: |
   correctly when the initrd is a plain rootfs cpio with /init -> systemd.
   This is the approach the systemd project uses for its own test images.
 
+  The installer UI is knuckle (/opt/knuckle --os bluefin-ddi), a Go TUI
+  (Bubble Tea) that presents a full interactive installer. It prompts for
+  disk, username, password, and SSH key — then runs systemd-repart,
+  provisions the user, and installs the bootloader.
+
   Build pipeline:
-    1. Add /init symlink and bluefin-install script to the staged rootfs
+    1. Add /init symlink + mount points; wire networking and sysusers
     2. Link default.target -> installer.target
     3. Pack rootfs as newc cpio + zstd -> installer.cpio.zst
     4. ukify build: kernel + cpio.zst -> installer.efi (unsigned UKI)
@@ -67,144 +72,7 @@ config:
       printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
         > /layer/usr/lib/systemd/network/80-dhcp.network
 
-    # ── Step 2: Write the bluefin-install orchestration script ──────────
-    # Written inline to avoid a separate import element just for one script.
-    - |
-      set -eu
-      mkdir -p /layer/usr/bin
-      cat > /layer/usr/bin/bluefin-install << 'SCRIPT'
-      #!/bin/bash
-      set -euo pipefail
-      exec >/dev/console 2>&1
-      log()  { echo "[bluefin-install] $*"; }
-      fail() { log "ERROR: $*"; exit 1; }
-
-      log "Bluefin Server DDI Installer starting"
-
-      # 1. Detect target disk.
-      # Override with installer.disk=<path> on the kernel cmdline if needed.
-      DISK=""
-      for arg in $(cat /proc/cmdline); do
-        case "$arg" in installer.disk=*) DISK="${arg#installer.disk=}" ;; esac
-      done
-      if [ -z "$DISK" ]; then
-        # vdb is the second virtio disk (target) when vda is the read-only installer media.
-        for candidate in /dev/vda /dev/vdb /dev/sda /dev/sdb /dev/nvme0n1 /dev/mmcblk0; do
-          [ -b "$candidate" ] || continue
-          RO=$(cat "/sys/block/$(basename "$candidate")/ro" 2>/dev/null || echo 1)
-          [ "$RO" = "0" ] && DISK="$candidate" && break
-        done
-      fi
-      [ -n "$DISK" ] \
-        || fail "No writable disk found. Pass installer.disk=/dev/DEVICE on cmdline."
-      log "Target disk: $DISK"
-
-      # 2. Detect a local DDI source device (for VM dev/test — avoids network download).
-      # The DDI ext4 image is stamped with label 'bluefin-roota' by mkfs.ext4.
-      # blkid -L is exact and immune to size/ordering assumptions.
-      # If none is found, sysupdate downloads the DDI from GitHub Releases (production).
-      DDI_SRC=""
-      DDI_SRC=$(blkid -L bluefin-roota 2>/dev/null || true)
-
-      # 3. Partition the target disk via systemd-repart.
-      # If a local DDI source was found, point CopyBlocks at it directly so repart
-      # streams block-for-block without buffering in RAM (prevents OOM on small VMs).
-      # Otherwise keep the default definitions that use CopyBlocks from the sysupdate
-      # download path (/run/installer/bluefin-server-ddi.raw).
-      REPART_DEFS=/usr/lib/repart.d
-      if [ -n "$DDI_SRC" ]; then
-        log "Local DDI source detected: $DDI_SRC — skipping network download"
-        mkdir -p /tmp/repart.d
-        for f in /usr/lib/repart.d/*.conf; do
-          base=$(basename "$f")
-          out="/tmp/repart.d/$base"
-          if [ "$base" = "20-root-a.conf" ]; then
-            printf '%s\n' \
-              '# Root partition — slot A' \
-              '# systemd-repart copies the DDI payload block-for-block from the file that' \
-              '# systemd-sysupdate downloaded to /run/installer/bluefin-server-ddi.raw' \
-              '# (a stable CurrentSymlink set by the sysupdate transfer config).' \
-              '# The source is a raw filesystem image; repart copies it verbatim.' \
-              '[Partition]' \
-              'Type=root' \
-              'Label=bluefin-server-root-a' \
-              "CopyBlocks=$DDI_SRC" \
-              'SizeMinBytes=4G' \
-              'SizeMaxBytes=16G' \
-              > "$out"
-          else
-            cp "$f" "$out"
-          fi
-        done
-        REPART_DEFS=/tmp/repart.d
-      else
-        log "No local DDI device found — pulling OS DDI via systemd-sysupdate..."
-        systemctl start systemd-networkd-wait-online.service \
-          || fail "network never became ready"
-        /usr/lib/systemd/systemd-sysupdate --definitions=/usr/lib/sysupdate.d update \
-          || fail "sysupdate failed — check network connectivity and release URL"
-        [ -e /run/installer/bluefin-server-ddi.raw ] \
-          || fail "/run/installer/bluefin-server-ddi.raw missing after sysupdate"
-        log "DDI ready: $(ls -lh /run/installer/bluefin-server-ddi.raw)"
-      fi
-
-      log "Running systemd-repart (definitions: $REPART_DEFS)..."
-      systemd-repart \
-        --dry-run=no \
-        --empty=force \
-        --definitions="$REPART_DEFS" \
-        "$DISK" \
-        || fail "systemd-repart failed"
-
-      # 4. Install the bootloader into the newly created ESP.
-      ESP_DEV=""
-      while read -r path type; do
-        if [ "${type,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then
-          ESP_DEV="$path"
-          break
-        fi
-      done < <(lsblk -rno PATH,PARTTYPE "$DISK" 2>/dev/null)
-
-      ROOT_DEV=""
-      while read -r path label; do
-        if [ "$label" = "bluefin-server-root-a" ]; then
-          ROOT_DEV="$path"
-          break
-        fi
-      done < <(lsblk -rno PATH,PARTLABEL "$DISK" 2>/dev/null)
-
-      if [ -n "$ESP_DEV" ] && [ -n "$ROOT_DEV" ]; then
-        mkdir -p /mnt/esp /mnt/root
-        mount "$ESP_DEV"  /mnt/esp
-        mount -o ro "$ROOT_DEV" /mnt/root
-        # Install systemd-boot loader binaries.
-        bootctl install --esp-path=/mnt/esp \
-          || log "WARNING: bootctl install failed (non-fatal)"
-        # Create a loader entry pointing at the installed kernel.
-        # systemd-boot uses Type 1 entries; kernel must be on the ESP.
-        KVER=$(ls /mnt/root/usr/lib/modules 2>/dev/null | head -1)
-        if [ -n "$KVER" ] && [ -f "/mnt/root/boot/vmlinuz" ]; then
-          mkdir -p /mnt/esp/EFI/Linux /mnt/esp/loader/entries
-          cp "/mnt/root/boot/vmlinuz" "/mnt/esp/vmlinuz-$KVER"
-          printf 'title   Bluefin Server\nlinux   /vmlinuz-%s\noptions root=/dev/vda2 console=ttyS0,115200 rw\n' \
-            "$KVER" > "/mnt/esp/loader/entries/bluefin-server.conf"
-          log "Boot entry written for kernel $KVER"
-        else
-          log "WARNING: kernel not found under /mnt/root — manual boot entry required"
-        fi
-        umount /mnt/esp /mnt/root
-      else
-        log "WARNING: Could not locate ESP ($ESP_DEV) or root ($ROOT_DEV)."
-        log "  Bootloader not installed — run bootctl manually after reboot."
-      fi
-
-      log "Installation complete. Powering off."
-      sleep 2
-      systemctl poweroff --force
-      SCRIPT
-      chmod +x /layer/usr/bin/bluefin-install
-
-    # ── Step 3: Wire default.target -> installer.target ─────────────────
+    # ── Step 2: Wire default.target -> installer.target ─────────────────
     - |
       set -eu
       rm -f /layer/usr/lib/systemd/system/default.target
@@ -215,7 +83,7 @@ config:
       ln -sf /usr/lib/systemd/system/installer.service \
         /layer/usr/lib/systemd/system/installer.target.wants/installer.service
 
-    # ── Step 4: Pack initrd cpio ─────────────────────────────────────────
+    # ── Step 3: Pack initrd cpio ─────────────────────────────────────────
     # find . from /layer gives paths like ./usr/bin/... which is exactly
     # the newc format the kernel expects. The kernel strips the leading dot.
     - |
