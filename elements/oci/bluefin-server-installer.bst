@@ -109,25 +109,47 @@ config:
       echo "=================================================="
 
       # 1. Detect target disk (prefer smallest NVMe, fallback to smallest non-installer disk)
+      # ponytail: pure bash parsing avoids external tool dependency (like awk) and is 100% robust.
       echo "Detecting NVMe disks..."
-      TARGET_DISK=$(lsblk -dno NAME,SIZE,TYPE | grep nvme | sort -k2 -h | head -n 1 | awk '{print "/dev/"$1}')
+      TARGET_DISK=""
+      while read -r name size type; do
+          if [[ "${name}" =~ nvme ]]; then
+              TARGET_DISK="/dev/${name}"
+              break
+          fi
+      done <<< "$(lsblk -dno NAME,SIZE,TYPE | sort -k2 -h)"
 
       if [ -z "${TARGET_DISK}" ]; then
           echo "No NVMe disk found. Falling back to the smallest virtio/SCSI/SATA disk..."
-          # Find the installer disk to exclude it from being formatted
-          INSTALLER_DISK=$(lsblk -no PKNAME,LABEL | grep "bluefin-installer-data" | head -n 1 | awk '{print "/dev/"$1}' | sed 's/[0-9]*$//')
-          if [ -z "${INSTALLER_DISK}" ]; then
-              INSTALLER_DISK=$(lsblk -no PKNAME,PARTLABEL | grep "bluefin-installer-data" | head -n 1 | awk '{print "/dev/"$1}' | sed 's/[0-9]*$//')
-          fi
-          echo "Live installer source disk identified: ${INSTALLER_DISK}"
-
-          TARGET_DISK=$(lsblk -dno NAME,SIZE,TYPE | grep disk | sort -k2 -h | while read -r name size type; do
-              dev_path="/dev/${name}"
-              if [ "${dev_path}" != "${INSTALLER_DISK}" ]; then
-                  echo "${dev_path}"
+          
+          # Find the installer parent disk name directly from its partition label
+          # ponytail: PKNAME of /dev/nvme0n1p2 is nvme0n1, sda2 is sda. Perfect native solution!
+          INSTALLER_DISK=""
+          while read -r pkname label; do
+              if [ "${label}" = "bluefin-installer-data" ]; then
+                  INSTALLER_DISK="/dev/${pkname}"
                   break
               fi
-          done)
+          done <<< "$(lsblk -no PKNAME,LABEL)"
+
+          if [ -z "${INSTALLER_DISK}" ]; then
+              while read -r pkname label; do
+                  if [ "${label}" = "bluefin-installer-data" ]; then
+                      INSTALLER_DISK="/dev/${pkname}"
+                      break
+                  fi
+              done <<< "$(lsblk -no PKNAME,PARTLABEL)"
+          fi
+
+          echo "Live installer source disk identified: ${INSTALLER_DISK}"
+
+          while read -r name size type; do
+              dev_path="/dev/${name}"
+              if [ "${dev_path}" != "${INSTALLER_DISK}" ] && [ "${type}" = "disk" ]; then
+                  TARGET_DISK="${dev_path}"
+                  break
+              fi
+          done <<< "$(lsblk -dno NAME,SIZE,TYPE | sort -k2 -h)"
       fi
 
       if [ -z "${TARGET_DISK}" ]; then
