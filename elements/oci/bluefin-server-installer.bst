@@ -89,6 +89,164 @@ config:
       printf 'PermitRootLogin yes\nPermitEmptyPasswords yes\n' \
         > /layer/etc/ssh/sshd_config.d/installer.conf
 
+      # Bake SSH keys into the root user's authorized_keys in the live environment
+      mkdir -p /layer/root/.ssh
+      cat > /layer/root/.ssh/authorized_keys << 'SSHKEY'
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPTn9YbnzdPkWSHjfaM8cs3oTmPN5KNqQxF28qIQmoYW jorge.castro@gmail.com
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzkpPRSOzDwEUwkTxS257lewEBz8za8vMuwUWsFO1sp jorge.castro@gmail.com
+      SSHKEY
+      chmod 700 /layer/root/.ssh
+      chmod 600 /layer/root/.ssh/authorized_keys
+
+      # Create fully automated non-interactive install script
+      mkdir -p /layer/usr/sbin
+      cat > /layer/usr/sbin/bluefin-autoinstall << 'AUTOINSTALL'
+      #!/bin/bash
+      set -euo pipefail
+
+      echo "=================================================="
+      echo "      BLUEFIN SERVER AUTOMATED INSTALLER"
+      echo "=================================================="
+
+      # 1. Detect target disk (prefer smallest NVMe, fallback to smallest non-installer disk)
+      echo "Detecting NVMe disks..."
+      TARGET_DISK=$(lsblk -dno NAME,SIZE,TYPE | grep nvme | sort -k2 -h | head -n 1 | awk '{print "/dev/"$1}')
+
+      if [ -z "${TARGET_DISK}" ]; then
+          echo "No NVMe disk found. Falling back to the smallest virtio/SCSI/SATA disk..."
+          # Find the installer disk to exclude it from being formatted
+          INSTALLER_DISK=$(lsblk -no PKNAME,LABEL | grep "bluefin-installer-data" | head -n 1 | awk '{print "/dev/"$1}' | sed 's/[0-9]*$//')
+          if [ -z "${INSTALLER_DISK}" ]; then
+              INSTALLER_DISK=$(lsblk -no PKNAME,PARTLABEL | grep "bluefin-installer-data" | head -n 1 | awk '{print "/dev/"$1}' | sed 's/[0-9]*$//')
+          fi
+          echo "Live installer source disk identified: ${INSTALLER_DISK}"
+
+          TARGET_DISK=$(lsblk -dno NAME,SIZE,TYPE | grep disk | sort -k2 -h | while read -r name size type; do
+              dev_path="/dev/${name}"
+              if [ "${dev_path}" != "${INSTALLER_DISK}" ]; then
+                  echo "${dev_path}"
+                  break
+              fi
+          done)
+      fi
+
+      if [ -z "${TARGET_DISK}" ]; then
+          echo "ERROR: No suitable target disk found for automated installation!"
+          exit 1
+      fi
+
+      echo "Target disk selected: ${TARGET_DISK}"
+      echo "Wiping and partitioning ${TARGET_DISK} using systemd-repart..."
+
+      # 2. Run systemd-repart to partition the target disk and copy DDI block-for-block
+      systemd-repart --dry-run=no --empty=force --definitions=/usr/lib/repart.d/ "${TARGET_DISK}"
+
+      # Settle udev to make sure partition devices are created
+      echo "Settling udev..."
+      udevadm settle --timeout=15
+
+      # 3. Detect created partitions
+      echo "Detecting created partitions..."
+      ESP_DEV=""
+      ROOT_DEV=""
+      ROOT_PARTUUID=""
+
+      lines=$(lsblk -rno PATH,PARTTYPE,PARTUUID,PARTLABEL "${TARGET_DISK}")
+      while read -r path parttype partuuid label; do
+          if [ "${parttype}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then
+              ESP_DEV="${path}"
+          fi
+          if [ "${label}" = "bluefin-server-root-a" ]; then
+              ROOT_DEV="${path}"
+              ROOT_PARTUUID="${partuuid}"
+          fi
+      done <<< "${lines}"
+
+      if [ -z "${ESP_DEV}" ] || [ -z "${ROOT_DEV}" ]; then
+          echo "ERROR: Failed to detect ESP or ROOT partition on ${TARGET_DISK}!"
+          exit 1
+      fi
+
+      echo "Detected ESP: ${ESP_DEV}"
+      echo "Detected ROOT: ${ROOT_DEV} (PARTUUID: ${ROOT_PARTUUID})"
+
+      # 4. Mount partitions
+      echo "Mounting partitions..."
+      mkdir -p /mnt/esp /mnt/root
+      mount "${ESP_DEV}" /mnt/esp
+      mount "${ROOT_DEV}" /mnt/root
+
+      # Set up automatic cleanup on exit (unmount)
+      cleanup() {
+          echo "Cleaning up mounts..."
+          umount /mnt/root || true
+          umount /mnt/esp || true
+      }
+      trap cleanup EXIT
+
+      # 5. Provision user 'jorge' and install SSH keys
+      echo "Provisioning user 'jorge'..."
+      useradd --root /mnt/root --create-home --groups wheel,sudo --shell /bin/bash jorge
+
+      # Create .ssh directory and write authorized_keys
+      mkdir -p /mnt/root/home/jorge/.ssh
+      cat > /mnt/root/home/jorge/.ssh/authorized_keys << 'EOF'
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPTn9YbnzdPkWSHjfaM8cs3oTmPN5KNqQxF28qIQmoYW jorge.castro@gmail.com
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzkpPRSOzDwEUwkTxS257lewEBz8za8vMuwUWsFO1sp jorge.castro@gmail.com
+      EOF
+
+      chmod 700 /mnt/root/home/jorge/.ssh
+      chmod 600 /mnt/root/home/jorge/.ssh/authorized_keys
+      chroot /mnt/root chown -R jorge:jorge /home/jorge/.ssh
+
+      # Enable passwordless sudo for user 'jorge'
+      echo "jorge ALL=(ALL) NOPASSWD: ALL" > /mnt/root/etc/sudoers.d/jorge
+      chmod 0440 /mnt/root/etc/sudoers.d/jorge
+
+      # Also bake the SSH keys into the root user's authorized_keys in the installed system
+      echo "Baking SSH keys into installed root account..."
+      mkdir -p /mnt/root/root/.ssh
+      cat > /mnt/root/root/.ssh/authorized_keys << 'EOF'
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPTn9YbnzdPkWSHjfaM8cs3oTmPN5KNqQxF28qIQmoYW jorge.castro@gmail.com
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzkpPRSOzDwEUwkTxS257lewEBz8za8vMuwUWsFO1sp jorge.castro@gmail.com
+      EOF
+      chmod 700 /mnt/root/root/.ssh
+      chmod 600 /mnt/root/root/.ssh/authorized_keys
+
+      # 6. systemd-firstboot for hostname and timezone
+      echo "Setting up hostname and timezone..."
+      systemd-firstboot --image-root=/mnt/root --hostname=bluefin-server --timezone=UTC || true
+
+      # 7. systemd-boot installation
+      echo "Installing systemd-boot..."
+      bootctl install --esp-path=/mnt/esp || true
+
+      # 8. Write boot entry
+      echo "Writing boot entry..."
+      mkdir -p /mnt/esp/loader/entries
+
+      KVER=$(ls /mnt/root/usr/lib/modules | head -n 1)
+      if [ -n "${KVER}" ]; then
+          cp /mnt/root/boot/vmlinuz "/mnt/esp/vmlinuz-${KVER}"
+          VMLINUZ_ENTRY="/vmlinuz-${KVER}"
+      else
+          cp /mnt/root/boot/vmlinuz /mnt/esp/vmlinuz
+          VMLINUZ_ENTRY="/vmlinuz"
+      fi
+
+      cat > /mnt/esp/loader/entries/bluefin-server.conf << EOF
+      title   Bluefin Server
+      linux   ${VMLINUZ_ENTRY}
+      options root=PARTUUID=${ROOT_PARTUUID} console=tty0 console=ttyS0,115200 rw
+      EOF
+
+      echo "Installation successfully completed!"
+      echo "Rebooting machine..."
+      sleep 3
+      systemctl reboot
+      AUTOINSTALL
+      chmod +x /layer/usr/sbin/bluefin-autoinstall
+
     # ── Step 2: Wire default.target -> installer.target ─────────────────
     - |
       set -eu

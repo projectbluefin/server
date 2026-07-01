@@ -13,7 +13,7 @@ ExecStartPre=modprobe nvme
 ExecStartPre=modprobe nvme_core
 ExecStartPre=udevadm settle --timeout=15
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 15); do [ -e /dev/disk/by-partlabel/bluefin-installer-data ] && exit 0; sleep 1; done; echo "DDI partition not found"; exit 1'
-ExecStart=/opt/knuckle --os bluefin-ddi
+ExecStart=/usr/sbin/bluefin-autoinstall
 StandardInput=tty
 StandardOutput=tty
 StandardError=journal+console
