@@ -4,6 +4,9 @@ description: |
 
   Output: bluefin-server-installer-<ver>.raw.zst + SHA256SUMS
 
+  Offline installer: the OS DDI payload is embedded as a data partition on
+  the installer media. No network required at install time.
+
   Initrd approach: dracut-free, cpio-native.
   The installer-stack rootfs is packed directly into a cpio.zst initrd using
   POSIX find + cpio. No initrd generator is needed — systemd PID 1 works
@@ -16,13 +19,14 @@ description: |
   provisions the user, and installs the bootloader.
 
   Build pipeline:
-    1. Add /init symlink + mount points; wire networking and sysusers
+    1. Add /init symlink + mount points
     2. Link default.target -> installer.target
     3. Pack rootfs as newc cpio + zstd -> installer.cpio.zst
     4. ukify build: kernel + cpio.zst -> installer.efi (unsigned UKI)
-    5. systemd-repart --empty=create: assemble single-partition GPT disk
-       (ESP only; the installer pulls the OS DDI over the network at runtime)
-    6. Compress final disk as .raw.zst + SHA256SUMS for GitHub Releases
+    5. Decompress DDI payload into /layer for embedding (after cpio, not in initrd)
+    6. systemd-repart --empty=create: assemble two-partition GPT disk
+       (ESP with UKI + data partition with embedded DDI payload)
+    7. Compress final disk as .raw.zst + SHA256SUMS for GitHub Releases
 
 build-depends:
   # Toolchain for assembly
@@ -40,6 +44,10 @@ build-depends:
   - filename: installer/installer-stack.bst
     config:
       location: /layer
+  # OS DDI payload staged at /ddi — embedded into the installer media data partition
+  - filename: oci/bluefin-server-ddi.bst
+    config:
+      location: /ddi
 
 variables:
   installer-version: "25.08.13"
@@ -55,22 +63,10 @@ config:
       ln -sf usr/lib/systemd/systemd /layer/init
       # Mount points needed by the installer service
       mkdir -p /layer/efi /layer/mnt/esp /layer/mnt/root /layer/run/installer
-      # Keep the network service users available even if sysusers runs too late.
-      printf 'systemd-network:x:998:998:systemd Network Management:/run/systemd:/usr/sbin/nologin\nsystemd-resolve:x:997:997:systemd Resolver:/run/systemd:/usr/sbin/nologin\n' >> /layer/etc/passwd
-      printf 'systemd-network:x:998:\nsystemd-resolve:x:997:\n' >> /layer/etc/group
-      # Ensure systemd-sysusers runs early (materialises systemd-network user),
-      # and networkd/resolved are enabled so the installer can reach GitHub.
+      # Ensure systemd-sysusers runs early to materialise system users.
       mkdir -p /layer/usr/lib/systemd/system/sysinit.target.wants
       ln -sf /usr/lib/systemd/system/systemd-sysusers.service \
         /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-sysusers.service
-      ln -sf /usr/lib/systemd/system/systemd-networkd.service \
-        /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-networkd.service
-      ln -sf /usr/lib/systemd/system/systemd-resolved.service \
-        /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-resolved.service
-      # DHCP on all ethernet interfaces — needed for sysupdate to reach GitHub.
-      mkdir -p /layer/usr/lib/systemd/network
-      printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
-        > /layer/usr/lib/systemd/network/80-dhcp.network
 
     # ── Step 2: Wire default.target -> installer.target ─────────────────
     - |
@@ -114,7 +110,7 @@ config:
         | zstd -T0 -19 -q -o /installer.cpio.zst
       ls -lh /installer.cpio.zst
 
-    # ── Step 5: Build the UKI ────────────────────────────────────────────
+    # ── Step 4: Build the UKI ────────────────────────────────────────────
     # Unsigned UKI — acceptable for USB installer media. Secure Boot
     # signing can be layered on by passing --secureboot-private-key /
     # --secureboot-certificate if keys are injected at CI time.
@@ -131,19 +127,30 @@ config:
       cp /layer/boot/efi/EFI/Linux/installer.efi /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
       ls -lh /layer/boot/efi/EFI/Linux/installer.efi
 
+    # ── Step 5: Decompress DDI payload for embedding ─────────────────────
+    # This runs AFTER the initrd cpio is packed (Step 3), so the DDI is NOT
+    # included in the initrd. It is placed in /layer temporarily so that
+    # systemd-repart's CopyFiles= (which resolves paths under --root=/layer)
+    # can copy it into the installer media data partition.
+    - |
+      set -eu
+      zstd -d /ddi/bluefin-server-ddi-*.raw.zst -o /layer/bluefin-server-ddi.raw
+      ls -lh /layer/bluefin-server-ddi.raw
+
     # ── Step 6: Assemble installer GPT disk image ────────────────────────
-    # installer-stack/repart.d has only 10-esp.conf so the installer media
-    # is a minimal single-partition GPT with just the ESP (+ UKI inside).
-    # The OS DDI is not embedded — it is pulled at install time by sysupdate.
+    # Two-partition layout:
+    #   10-esp.conf:      ESP (1G) — UKI lives here; boots the installer
+    #   20-ddi-data.conf: Data (ext4) — bluefin-server-ddi.raw embedded here
     #
-    # Note: we use a dedicated repart.d just for the INSTALLER DISK (1 conf:
-    # 10-esp.conf) which is different from the TARGET DISK repart.d (3 confs
-    # staged in /usr/lib/repart.d/ inside the installer rootfs).
+    # At install time, installer.service mounts the data partition to
+    # /run/installer/ so systemd-repart can find the DDI at the path
+    # expected by repart.d/20-root-a.conf (CopyBlocks=).
     - |
       set -eu
       OUT="%{install-root}"
       FNAME="bluefin-server-installer-%{installer-version}.raw"
       mkdir -p /installer-media-repart.d
+
       cat > /installer-media-repart.d/10-esp.conf << 'RCONF'
       [Partition]
       Type=esp
@@ -152,6 +159,17 @@ config:
       SizeMinBytes=1G
       SizeMaxBytes=1G
       RCONF
+
+      cat > /installer-media-repart.d/20-ddi-data.conf << 'RCONF'
+      [Partition]
+      Type=linux-generic
+      Label=bluefin-installer-data
+      Format=ext4
+      CopyFiles=/bluefin-server-ddi.raw:/bluefin-server-ddi.raw
+      SizeMinBytes=10G
+      SizeMaxBytes=16G
+      RCONF
+
       systemd-repart \
         --empty=create \
         --size=auto \
@@ -160,6 +178,9 @@ config:
         --definitions=/installer-media-repart.d \
         "${OUT}/${FNAME}"
       ls -lh "${OUT}/${FNAME}"
+
+      # Clean up DDI from /layer — it's now in the installer media partition.
+      rm -f /layer/bluefin-server-ddi.raw
 
     # ── Step 7: Compress + checksum ──────────────────────────────────────
     - |

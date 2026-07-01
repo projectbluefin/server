@@ -58,30 +58,28 @@ validate:
     just bst show --deps all oci/bluefin-server-installer.bst
 
 # ── Build ─────────────────────────────────────────────────────────────
-# Build and export both pure DDI artifacts (OS DDI payload + live installer media).
+# Build and export the installer (DDI is embedded; built as a dependency).
 [group('build')]
 build:
-    just build-ddi
-    just export-ddi
     just build-installer
     just export-installer
 
 # ── Export ────────────────────────────────────────────────────────────
-# Export both pure DDI artifacts to dist/.
+# Export installer disk image to dist/.
 [group('build')]
 export:
-    just export-ddi
     just export-installer
 
 # -- DDI live installer -------------------------------------------------------
 # Produces a bootable GPT disk image that runs systemd-repart to install
 # Bluefin Server onto a target disk (see docs/skills/ddi-installer.md).
-# OS DDI payload image and live installer media are both first-class artifacts.
+# The DDI payload is embedded as a data partition; no network required.
 # NOTE: build-installer/export-installer are local development commands.
 # Release publication is delegated to testing-lab by
 # .github/workflows/release-installer.yml.
 
-# Build the OS DDI payload filesystem image.
+# Build the OS DDI payload filesystem image (implicit dep of build-installer;
+# useful when you need the standalone artifact for release publishing).
 [group('installer')]
 build-ddi:
     just bst build oci/bluefin-server-ddi.bst
@@ -122,19 +120,11 @@ show-me-the-future:
     WORKDIR="$(mktemp -d "${CACHE_DIR}/bluefin-show-future.XXXXXX")"
     trap 'rm -rf "$WORKDIR"' EXIT
 
-    just build-ddi
-    just export-ddi
-    # Stash DDI before export-installer wipes dist/.
-    cp dist/ddi/bluefin-server-ddi-*.raw.zst "$WORKDIR/ddi.raw.zst"
     just build-installer
     just export-installer
 
     cp dist/bluefin-server-installer-*.raw.zst "$WORKDIR/installer.raw.zst"
     zstd -d "$WORKDIR/installer.raw.zst" -o "$WORKDIR/installer.raw"
-    # DDI raw filesystem image passed as /dev/vdc inside the installer VM.
-    # The installer detects this large read-only device and uses it directly
-    # via CopyBlocks= instead of downloading from GitHub (avoids tmpfs OOM).
-    zstd -d "$WORKDIR/ddi.raw.zst" -o "$WORKDIR/ddi.raw"
     truncate -s 16G "$WORKDIR/target.raw"
 
     OVMF_CODE=""
@@ -180,7 +170,6 @@ show-me-the-future:
         -smp 2 \
         -drive file="$WORKDIR/installer.raw",format=raw,if=virtio,readonly=on \
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
-        -drive file="$WORKDIR/ddi.raw",format=raw,if=virtio,readonly=on \
         -netdev user,id=n1,hostname=bluefin-installer \
         -device virtio-net-pci,netdev=n1 \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \

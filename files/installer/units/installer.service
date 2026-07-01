@@ -12,6 +12,9 @@ RemainAfterExit=yes
 ExecStartPre=modprobe nvme
 ExecStartPre=modprobe nvme_core
 ExecStartPre=udevadm settle --timeout=15
+# Mount the embedded DDI data partition so repart.d/20-root-a.conf can find it.
+ExecStartPre=-/bin/mkdir -p /run/installer
+ExecStartPre=/bin/mount -L bluefin-installer-data /run/installer
 ExecStart=/opt/knuckle --os bluefin-ddi
 StandardInput=tty
 StandardOutput=tty
