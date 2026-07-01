@@ -125,7 +125,7 @@ config:
       ukify build \
         --linux="/layer/boot/vmlinuz" \
         --initrd=/installer.cpio.zst \
-        --cmdline="systemd.unit=installer.target console=ttyS0,115200 rw" \
+        --cmdline="systemd.unit=installer.target console=tty0 console=ttyS0,115200 rw" \
         --output=/layer/boot/efi/EFI/Linux/installer.efi
       mkdir -p /layer/boot/efi/EFI/BOOT
       cp /layer/boot/efi/EFI/Linux/installer.efi /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
