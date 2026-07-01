@@ -75,7 +75,25 @@ SHA=$(curl -sL https://github.com/projectbluefin/knuckle/releases/download/vX.Y.
 **Current version:** knuckle v0.9.0
 **SHA256:** `ddaa1d67eb1422d76a1d1e2bc2fad3936b9da136f416d4da12c88f7311226693`
 
-## Installer media layout
+## SSH access to live installer
+
+The installer live environment runs sshd. Connect headlessly during install:
+
+```
+ssh root@<installer-ip>   # no password required
+```
+
+sshd config drop-in (`/etc/ssh/sshd_config.d/installer.conf`):
+```
+PermitRootLogin yes
+PermitEmptyPasswords yes
+```
+
+Root has no password in the installer rootfs. Network comes up via DHCP
+on all `en*/eth*/ens*/enp*` interfaces. Find the IP from the console or
+your DHCP server's lease table.
+
+
 
 The installer media is a two-partition GPT disk:
 
