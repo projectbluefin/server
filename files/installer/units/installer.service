@@ -3,11 +3,15 @@ Description=Bluefin Server DDI Installer Service
 Documentation=https://github.com/projectbluefin/server
 DefaultDependencies=no
 ConditionPathExists=/opt/knuckle
-After=basic.target
+After=basic.target systemd-udev-settle.service
+Wants=systemd-udev-settle.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+ExecStartPre=modprobe nvme
+ExecStartPre=modprobe nvme_core
+ExecStartPre=udevadm settle --timeout=15
 ExecStart=/opt/knuckle --os bluefin-ddi
 StandardInput=tty
 StandardOutput=tty
