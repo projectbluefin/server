@@ -50,7 +50,7 @@ provides full user provisioning during install.
 
 1. Keep the live media thin: orchestrate install-time flow via knuckle, not a second distro.
 2. knuckle binary lives at `/opt/knuckle` in the installer rootfs — staged by `installer/installer-knuckle.bst`.
-3. `installer.service` mounts the embedded DDI partition, then runs `/opt/knuckle --os bluefin-ddi` on `tty1`.
+3. `installer.service` waits for the raw partition device to be ready, then runs `/opt/knuckle --os bluefin-ddi` on `tty1`.
 4. knuckle uses `PARTLABEL=bluefin-server-root-a` to find its root partition — never hardcode `/dev/vda2`.
 5. Publish installer media as a single versioned release asset with matching checksum.
 6. The lab GitOps pipeline clones the server repo and builds the installer element.
