@@ -18,9 +18,9 @@ build-depends:
 # To update ref: curl -sL <url> | sha256sum
 sources:
   - kind: remote
-    url: https://github.com/projectbluefin/knuckle/releases/download/v0.9.1/knuckle-linux-amd64
+    url: https://github.com/projectbluefin/knuckle/releases/download/v0.9.2/knuckle-linux-amd64
     # sha256 of knuckle-linux-amd64 — update after each release
-    ref: b2d80d7d6ccb4b552b9640ff5f3eeb36d6fd995e41d2e8ac975a127f603a1a41
+    ref: 86ffc55ffef59fac13e1c61204a112a10491ba34d856b8a81a4caadf9e295eb0
     filename: knuckle
 
 config:
