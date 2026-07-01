@@ -148,7 +148,7 @@ config:
     # ── Step 5: Decompress DDI payload for embedding ─────────────────────
     # This runs AFTER the initrd cpio is packed (Step 3), so the DDI is NOT
     # included in the initrd. It is placed in /layer temporarily so that
-    # systemd-repart's CopyFiles= (which resolves paths under --root=/layer)
+    # systemd-repart's CopyBlocks= (which resolves paths under --root=/layer)
     # can copy it into the installer media data partition.
     - |
       set -eu
@@ -158,7 +158,7 @@ config:
     # ── Step 6: Assemble installer GPT disk image ────────────────────────
     # Two-partition layout:
     #   10-esp.conf:      ESP (1G) — UKI lives here; boots the installer
-    #   20-ddi-data.conf: Data (ext4) — bluefin-server-ddi.raw embedded here
+    #   20-ddi-data.conf: Data (ext4) — bluefin-server-ddi.raw copied here block-for-block
     #
     # At install time, installer.service mounts the data partition to
     # /run/installer/ so systemd-repart can find the DDI at the path
@@ -182,8 +182,7 @@ config:
       [Partition]
       Type=linux-generic
       Label=bluefin-installer-data
-      Format=ext4
-      CopyFiles=/bluefin-server-ddi.raw:/bluefin-server-ddi.raw
+      CopyBlocks=/bluefin-server-ddi.raw
       RCONF
 
       systemd-repart \
