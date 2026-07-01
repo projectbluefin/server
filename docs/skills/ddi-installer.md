@@ -251,6 +251,8 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] DDI decompression step is AFTER the cpio step in `bluefin-server-installer.bst`
 - [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)
 - [ ] Lab build template points at correct repo and installer element
+- [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, and `grep` packages
+- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `useradd`) at build-time
 
 ## Related
 
