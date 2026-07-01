@@ -2,7 +2,9 @@
 
 **The world’s premier FSDK server operating system.**
 
-Bluefin Server an operating system designed for modern workloads. The use case is the same as Flatcar Linux, Fedora CoreOS, and Talos. The difference is this is built with buildstream.API and GitOps driven.
+Bluefin Server an operating system designed for modern workloads. The use case is the same as Flatcar Linux, Fedora CoreOS, and Talos. 
+
+The difference is this is built with buildstream. API and GitOps driven.
 
 ## What it is
 
