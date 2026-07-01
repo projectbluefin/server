@@ -170,7 +170,7 @@ show-me-the-future:
         -smp 2 \
         -drive file="$WORKDIR/installer.raw",format=raw,if=virtio,readonly=on \
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
-        -netdev user,id=n1,hostname=bluefin-installer \
+        -netdev user,id=n1,hostname=bluefin-installer,hostfwd=tcp::2222-:22 \
         -device virtio-net-pci,netdev=n1 \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \

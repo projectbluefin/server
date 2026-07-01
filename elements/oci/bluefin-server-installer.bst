@@ -77,6 +77,9 @@ config:
         /layer/usr/lib/systemd/system/multi-user.target.wants/systemd-resolved.service
       ln -sf /usr/lib/systemd/system/sshd.service \
         /layer/usr/lib/systemd/system/multi-user.target.wants/sshd.service
+      # Mask systemd-firstboot to prevent interactive credential blocks on tty1
+      mkdir -p /layer/etc/systemd/system
+      ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
       # DHCP on all ethernet interfaces
       mkdir -p /layer/usr/lib/systemd/network
       printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \

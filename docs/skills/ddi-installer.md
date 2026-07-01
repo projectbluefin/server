@@ -100,11 +100,9 @@ The installer media is a two-partition GPT disk:
 | Partition | Type | Size | Contents |
 |---|---|---|---|
 | ESP | vfat | 768M | `installer.efi` + `BOOTX64.EFI` (UKI) |
-| `bluefin-installer-data` | XFS | 10–16G | `bluefin-server-ddi.raw` (OS filesystem image) |
+| `bluefin-installer-data` | XFS | 2.4G | OS filesystem DDI image (block copy) |
 
-At install time, `installer.service` mounts the data partition before knuckle
-runs so `repart.d/20-root-a.conf`'s `CopyBlocks=` finds the DDI at
-`/run/installer/bluefin-server-ddi.raw`.
+At install time, target partition `20-root-a.conf`'s `CopyBlocks=` copies blocks directly from `/dev/disk/by-partlabel/bluefin-installer-data`.
 
 ## Installer boot flow
 
@@ -117,7 +115,6 @@ systemd PID 1 starts, reaches installer.target
      ▼
 installer.service
   ExecStartPre: modprobe nvme + udevadm settle
-  ExecStartPre: mount /dev/disk/by-partlabel/bluefin-installer-data /run/installer
      │
      ▼
 /opt/knuckle --os bluefin-ddi
@@ -126,7 +123,7 @@ installer.service
      ├─ TUI: username / password / SSH key
      ├─ systemd-repart --dry-run=no /dev/TARGET
      │      reads /usr/lib/repart.d/ (10-esp, 20-root-a, 30-var)
-     │      20-root-a: CopyBlocks=/run/installer/bluefin-server-ddi.raw
+     │      20-root-a: CopyBlocks=/dev/disk/by-partlabel/bluefin-installer-data
      ├─ User provisioning (useradd + authorized_keys + sudoers)
      ├─ bootctl install (PARTUUID boot entry)
      └─ Reboot into installed Bluefin Server
@@ -245,7 +242,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `just validate-installer` resolves the BuildStream graph without errors
 - [ ] `installer-knuckle.bst` `ref:` matches `sha256sum` of the release binary
 - [ ] `installer.service` `ExecStart=/opt/knuckle --os bluefin-ddi`
-- [ ] `installer.service` mounts `/dev/disk/by-partlabel/bluefin-installer-data` to `/run/installer` before knuckle
+- [ ] `installer.service` waits for `/dev/disk/by-partlabel/bluefin-installer-data` to appear before knuckle
 - [ ] `installer.service` has NO `SuccessAction=poweroff`
 - [ ] `installer-stack.bst` includes `installer/installer-knuckle.bst`
 - [ ] `installer-stack.bst` does NOT include `installer/installer-sysupdate.bst`
