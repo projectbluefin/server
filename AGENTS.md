@@ -10,7 +10,7 @@ Load **[docs/skills/README.md](docs/skills/README.md)** for the skill routing ta
 Only load the docs relevant to your task.
 
 > **Before using any tool or library: look up its docs via Context7 first. Always.**
-> BuildStream, knuckle, podman, GitHub Actions, systemd (repart/sysupdate/ukify) —
+> BuildStream, knuckle, podman, GitHub Actions, systemd (repart/ukify) —
 > every tool has live, authoritative docs. Pattern: `resolve-library-id` →
 > `get-library-docs` → implement → cite the section. Guessing is banned.
 
@@ -19,8 +19,10 @@ Only load the docs relevant to your task.
 - **OS image:** `oci/bluefin-server-ddi.bst` — the server OS DDI payload (ext4
   image compressed with zstd), deployed by the installer onto the target disk.
 - **Installer media:** `oci/bluefin-server-installer.bst` — a bootable GPT image
-  (ESP-only) containing a UKI (kernel + cpio initrd). At boot, systemd reaches
+  (ESP + embedded DDI data partition). At boot, systemd reaches
   `installer.target`, which launches **knuckle** — a Go TUI interactive installer.
+  The OS DDI is embedded at build time; no network required at install time.
+  SSH is available on the live installer (`ssh root@<ip>`, no password).
 - **Knuckle installer:** `installer/installer-knuckle.bst` stages the
   `projectbluefin/knuckle` release binary at `/opt/knuckle`. knuckle prompts for
   disk, username, password, and SSH key; runs systemd-repart + user provisioning;

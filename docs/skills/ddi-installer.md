@@ -182,12 +182,12 @@ SizeMaxBytes=16G
 
 `oci/bluefin-server-ddi.bst` builds the OS DDI payload:
 1. Depends on `bluefin-server/os-stack.bst`
-2. Runs `mkfs.ext4` on the rootfs `/layer` directory
+2. Strips debug files, then runs `mkfs.ext4` sized at content + 10% overhead
 3. Compresses with `zstd` → `bluefin-server-ddi-@v.raw.zst` + `SHA256SUMS`
 
-`bluefin-server-installer.bst` depends on `bluefin-server-ddi.bst` — the DDI
-is built as part of the installer build graph. No separate DDI release step
-is needed unless publishing the DDI as a standalone artifact.
+**No minimum size floor.** The rootfs is immutable — updates replace the whole DDI,
+it never grows in-place. A typical server rootfs (~2GB content) produces a ~2.2GB
+DDI. Do not add a `SizeMinBytes` floor "for future growth" — that headroom is wasted.
 
 ## Justfile commands
 
@@ -221,8 +221,9 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 | "Use systemd-sysinstall instead." | Requires systemd ≥261 AND doesn't set username/password. knuckle is prod-tested. |
 | "Hardcode root=/dev/vda2 for QEMU." | Bare metal has different device names. Always use PARTUUID. |
 | "Pull the DDI from the network at install time." | Network failures = broken installs. DDI must be embedded in the installer media. |
-| "Put the DDI in the initrd cpio." | DDI is 8GB+. The initrd cpio step must run BEFORE the DDI is placed in /layer. |
-| "Store DDI in the ESP (FAT32)." | FAT32 has a 4GB per-file limit. DDI is 8GB+. Use a separate ext4 partition. |
+| "Put the DDI in the initrd cpio." | DDI is 2GB+. The initrd cpio step must run BEFORE the DDI is placed in /layer. |
+| "Store DDI in the ESP (FAT32)." | FAT32 has a 4GB per-file limit. Use a separate ext4 partition. |
+| "Add an 8GB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + 10% overhead is enough. |
 | "SuccessAction=poweroff in installer.service." | knuckle drives shutdown. Having both races. Remove from service. |
 
 ## Red Flags
@@ -248,6 +249,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `installer-stack.bst` does NOT include `installer/installer-sysupdate.bst`
 - [ ] `bluefin-server-installer.bst` depends on `oci/bluefin-server-ddi.bst`
 - [ ] DDI decompression step is AFTER the cpio step in `bluefin-server-installer.bst`
+- [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 10% (no hardcoded floor)
 - [ ] Lab build template points at correct repo and installer element
 
 ## Related
