@@ -48,14 +48,13 @@ provides full user provisioning during install.
 
 ## Core Process
 
-1. Keep the live media thin: orchestrate install-time flow via a non-interactive script or knuckle, not a second distro.
-2. The automated non-interactive installer script lives at `/usr/sbin/bluefin-autoinstall` in the installer rootfs — staged by `elements/oci/bluefin-server-installer.bst`.
-3. `installer.service` waits for the raw partition device to be ready, then runs `/usr/sbin/bluefin-autoinstall` on `tty1`.
-4. The autoinstall script automatically detects the smallest NVMe disk, with a fallback to the smallest non-installer virtual block device (e.g. `/dev/vdb` in QEMU), partitions it with `systemd-repart`, formats ESP/root-a/var, provisions the local user accounts with baked-in SSH public keys, and reboots.
-5. knuckle uses `PARTLABEL=bluefin-server-root-a` to find its root partition — never hardcode `/dev/vda2`.
-6. Publish installer media as a single versioned release asset with matching checksum.
-7. The lab GitOps pipeline clones the server repo and builds the installer element.
-8. Use `just show-me-the-future` as the end-to-end VM test: boot installer, install to a second disk, reboot into installed system.
+1. Keep the live media thin: orchestrate install-time flow via knuckle, not a second distro.
+2. knuckle binary lives at `/opt/knuckle` in the installer rootfs — staged by `installer/installer-knuckle.bst`.
+3. `installer.service` waits for the raw partition device to be ready, then runs `/opt/knuckle --os bluefin-ddi` on `tty1`.
+4. knuckle uses `PARTLABEL=bluefin-server-root-a` to find its root partition — never hardcode `/dev/vda2`.
+5. Publish installer media as a single versioned release asset with matching checksum.
+6. The lab GitOps pipeline clones the server repo and builds the installer element.
+7. Use `just show-me-the-future` as the end-to-end VM test: boot installer, install to a second disk, reboot into installed system.
 
 ## Bumping the knuckle version
 
@@ -242,8 +241,8 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 
 - [ ] `just validate-installer` resolves the BuildStream graph without errors
 - [ ] `installer-knuckle.bst` `ref:` matches `sha256sum` of the release binary
-- [ ] `installer.service` `ExecStart=/usr/sbin/bluefin-autoinstall`
-- [ ] `installer.service` waits for `/dev/disk/by-partlabel/bluefin-installer-data` to appear before executing the script
+- [ ] `installer.service` `ExecStart=/opt/knuckle --os bluefin-ddi`
+- [ ] `installer.service` waits for `/dev/disk/by-partlabel/bluefin-installer-data` to appear before executing knuckle
 - [ ] `installer.service` has NO `SuccessAction=poweroff`
 - [ ] `installer-stack.bst` includes `installer/installer-knuckle.bst`
 - [ ] `installer-stack.bst` does NOT include `installer/installer-sysupdate.bst`
