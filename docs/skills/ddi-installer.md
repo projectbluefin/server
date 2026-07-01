@@ -168,22 +168,24 @@ rm -f /layer/bluefin-server-ddi.raw
 ```
 
 The data partition repart config:
+
 ```ini
 [Partition]
 Type=linux-generic
 Label=bluefin-installer-data
-Format=ext4
-CopyFiles=/bluefin-server-ddi.raw:/bluefin-server-ddi.raw
-SizeMinBytes=10G
-SizeMaxBytes=16G
+CopyBlocks=/bluefin-server-ddi.raw
 ```
 
 ## OS DDI payload
 
 `oci/bluefin-server-ddi.bst` builds the OS DDI payload:
 1. Depends on `bluefin-server/os-stack.bst`
-2. Strips debug files, then runs `mkfs.ext4` sized at content + 10% overhead
-3. Compresses with `zstd` → `bluefin-server-ddi-@v.raw.zst` + `SHA256SUMS`
+2. Strips debug files
+3. Sums up all file sizes across the layered sandbox bind mounts using find & pure bash arithmetic to bypass overlayfs block reporting bugs.
+4. Align filesystem target size to 4096-byte sectors.
+5. Pre-allocates the raw file using `truncate -s` (since mkfs.ext4 ignores block size counts on regular files).
+6. Runs `mkfs.ext4` on the pre-allocated file with 25% overhead and 100MB margin for ext4 structures (no static floor).
+7. Compresses with `zstd` → `bluefin-server-ddi-@v.raw.zst` + `SHA256SUMS`
 
 **No minimum size floor.** The rootfs is immutable — updates replace the whole DDI,
 it never grows in-place. A typical server rootfs (~2GB content) produces a ~2.2GB
