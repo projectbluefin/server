@@ -99,7 +99,7 @@ The installer media is a two-partition GPT disk:
 
 | Partition | Type | Size | Contents |
 |---|---|---|---|
-| ESP | vfat | 512M | `installer.efi` + `BOOTX64.EFI` (UKI) |
+| ESP | vfat | 768M | `installer.efi` + `BOOTX64.EFI` (UKI) |
 | `bluefin-installer-data` | XFS | 10–16G | `bluefin-server-ddi.raw` (OS filesystem image) |
 
 At install time, `installer.service` mounts the data partition before knuckle
