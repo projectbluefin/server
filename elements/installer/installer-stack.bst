@@ -14,6 +14,7 @@ description: |
 depends:
   # Base runtime
   - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
+  - freedesktop-sdk.bst:components/ca-certificates.bst
   - freedesktop-sdk.bst:components/tzdata.bst
   - freedesktop-sdk.bst:integration/extra-fs.bst
   - freedesktop-sdk.bst:integration/ldconfig.bst
@@ -22,6 +23,9 @@ depends:
   - freedesktop-sdk.bst:components/systemd.bst
   - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/shadow.bst
+
+  # SSH access to live installer environment
+  - freedesktop-sdk.bst:components/openssh.bst
 
   # Disk setup: LUKS partition support during install
   - freedesktop-sdk.bst:components/cryptsetup.bst

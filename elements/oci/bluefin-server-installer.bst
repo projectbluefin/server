@@ -63,10 +63,28 @@ config:
       ln -sf usr/lib/systemd/systemd /layer/init
       # Mount points needed by the installer service
       mkdir -p /layer/efi /layer/mnt/esp /layer/mnt/root /layer/run/installer
-      # Ensure systemd-sysusers runs early to materialise system users.
+      # System users for networkd/resolved
+      printf 'systemd-network:x:998:998:systemd Network Management:/run/systemd:/usr/sbin/nologin\nsystemd-resolve:x:997:997:systemd Resolver:/run/systemd:/usr/sbin/nologin\n' >> /layer/etc/passwd
+      printf 'systemd-network:x:998:\nsystemd-resolve:x:997:\n' >> /layer/etc/group
+      # Enable sysusers, networkd, resolved, sshd at boot
       mkdir -p /layer/usr/lib/systemd/system/sysinit.target.wants
       ln -sf /usr/lib/systemd/system/systemd-sysusers.service \
         /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-sysusers.service
+      mkdir -p /layer/usr/lib/systemd/system/multi-user.target.wants
+      ln -sf /usr/lib/systemd/system/systemd-networkd.service \
+        /layer/usr/lib/systemd/system/multi-user.target.wants/systemd-networkd.service
+      ln -sf /usr/lib/systemd/system/systemd-resolved.service \
+        /layer/usr/lib/systemd/system/multi-user.target.wants/systemd-resolved.service
+      ln -sf /usr/lib/systemd/system/sshd.service \
+        /layer/usr/lib/systemd/system/multi-user.target.wants/sshd.service
+      # DHCP on all ethernet interfaces
+      mkdir -p /layer/usr/lib/systemd/network
+      printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
+        > /layer/usr/lib/systemd/network/80-dhcp.network
+      # Allow root login with empty password over SSH (installer is ephemeral)
+      mkdir -p /layer/etc/ssh/sshd_config.d
+      printf 'PermitRootLogin yes\nPermitEmptyPasswords yes\n' \
+        > /layer/etc/ssh/sshd_config.d/installer.conf
 
     # ── Step 2: Wire default.target -> installer.target ─────────────────
     - |
