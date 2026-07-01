@@ -9,7 +9,7 @@ description: |
 
 build-depends:
   - base/base-stack.bst
-  - freedesktop-sdk.bst:components/e2fsprogs.bst
+  - freedesktop-sdk.bst:components/xfsprogs.bst
   - freedesktop-sdk.bst:components/findutils.bst
   - freedesktop-sdk.bst:components/zstd.bst
   - filename: bluefin-server/os-stack.bst
@@ -37,8 +37,8 @@ config:
       done
       echo "Computed root filesystem size: ${ROOT_BYTES} bytes"
 
-      # 25% overhead and 100MB margin for ext4 metadata, journal, and inodes.
-      # ponytail: 25% overhead + 100MB margin for ext4 structures.
+      # 25% overhead and 100MB margin for XFS metadata, journal, and structures.
+      # ponytail: 25% overhead + 100MB margin for XFS.
       TARGET_BYTES=$(( ROOT_BYTES + ROOT_BYTES / 4 + 100 * 1024 * 1024 ))
 
       # Align TARGET_BYTES to 4096-byte boundary (multiple of 512/4096) for sector compatibility
@@ -46,11 +46,11 @@ config:
       TARGET_BYTES=$(( (TARGET_BYTES + 4095) / 4096 * 4096 ))
 
       # Pre-allocate the raw file to the exact target size.
-      # ponytail: mkfs.ext4 ignores block-count arguments on regular files; pre-allocating is the standard way to enforce the target size.
+      # ponytail: pre-allocating is the standard way to enforce the target size of mkfs.xfs.
       truncate -s "${TARGET_BYTES}" "${OUT}/${FNAME}"
 
-      echo "Allocating ext4 image of ${TARGET_BYTES} bytes"
-      mkfs.ext4 -F -L bluefin-roota -d /layer "${OUT}/${FNAME}"
+      echo "Allocating XFS image of ${TARGET_BYTES} bytes"
+      mkfs.xfs -f -L bluefin-root -p /layer "${OUT}/${FNAME}"
 
       zstd --rm -T0 -19 -q "${OUT}/${FNAME}" -o "${OUT}/${FNAME}.zst"
       (

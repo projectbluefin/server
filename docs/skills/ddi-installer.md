@@ -27,7 +27,7 @@ metadata:
 ## Architecture
 
 The installer is **offline and self-contained**. The OS DDI payload
-(`bluefin-server-ddi.bst`) is embedded as an ext4 data partition on the
+(`bluefin-server-ddi.bst`) is embedded as an XFS data partition on the
 installer media at build time. No network access is required at install time.
 
 The installer UI is **knuckle** — a Go TUI interactive installer
@@ -99,8 +99,8 @@ The installer media is a two-partition GPT disk:
 
 | Partition | Type | Size | Contents |
 |---|---|---|---|
-| ESP | vfat | 1G | `installer.efi` + `BOOTX64.EFI` (UKI) |
-| `bluefin-installer-data` | ext4 | 10–16G | `bluefin-server-ddi.raw` (OS filesystem image) |
+| ESP | vfat | 512M | `installer.efi` + `BOOTX64.EFI` (UKI) |
+| `bluefin-installer-data` | XFS | 10–16G | `bluefin-server-ddi.raw` (OS filesystem image) |
 
 At install time, `installer.service` mounts the data partition before knuckle
 runs so `repart.d/20-root-a.conf`'s `CopyBlocks=` finds the DDI at
@@ -183,8 +183,8 @@ CopyBlocks=/bluefin-server-ddi.raw
 2. Strips debug files
 3. Sums up all file sizes across the layered sandbox bind mounts using find & pure bash arithmetic to bypass overlayfs block reporting bugs.
 4. Align filesystem target size to 4096-byte sectors.
-5. Pre-allocates the raw file using `truncate -s` (since mkfs.ext4 ignores block size counts on regular files).
-6. Runs `mkfs.ext4` on the pre-allocated file with 25% overhead and 100MB margin for ext4 structures (no static floor).
+5. Pre-allocates the raw file using `truncate -s` (since mkfs.xfs ignores block size counts on regular files).
+6. Runs `mkfs.xfs` on the pre-allocated file with 25% overhead and 100MB margin for XFS structures (no static floor).
 7. Compresses with `zstd` → `bluefin-server-ddi-@v.raw.zst` + `SHA256SUMS`
 
 **No minimum size floor.** The rootfs is immutable — updates replace the whole DDI,
@@ -224,7 +224,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 | "Hardcode root=/dev/vda2 for QEMU." | Bare metal has different device names. Always use PARTUUID. |
 | "Pull the DDI from the network at install time." | Network failures = broken installs. DDI must be embedded in the installer media. |
 | "Put the DDI in the initrd cpio." | DDI is 2GB+. The initrd cpio step must run BEFORE the DDI is placed in /layer. |
-| "Store DDI in the ESP (FAT32)." | FAT32 has a 4GB per-file limit. Use a separate ext4 partition. |
+| "Store DDI in the ESP (FAT32)." | FAT32 has a 4GB per-file limit. Use a separate XFS partition. |
 | "Add an 8GB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + 10% overhead is enough. |
 | "SuccessAction=poweroff in installer.service." | knuckle drives shutdown. Having both races. Remove from service. |
 
@@ -251,7 +251,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `installer-stack.bst` does NOT include `installer/installer-sysupdate.bst`
 - [ ] `bluefin-server-installer.bst` depends on `oci/bluefin-server-ddi.bst`
 - [ ] DDI decompression step is AFTER the cpio step in `bluefin-server-installer.bst`
-- [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 10% (no hardcoded floor)
+- [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)
 - [ ] Lab build template points at correct repo and installer element
 
 ## Related
