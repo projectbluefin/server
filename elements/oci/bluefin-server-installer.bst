@@ -61,7 +61,7 @@ config:
       set -eu
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl; do
+      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl systemd-sysinstall; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
@@ -155,7 +155,6 @@ config:
     # --secureboot-certificate if keys are injected at CI time.
     - |
       set -eu
-      KVER=$(ls /layer/usr/lib/modules | head -1)
       mkdir -p /layer/boot/efi/EFI/Linux
       ukify build \
         --linux="/layer/boot/vmlinuz" \
