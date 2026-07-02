@@ -163,7 +163,7 @@ config:
       ukify build \
         --linux="/layer/boot/vmlinuz" \
         --initrd=/installer.cpio.zst \
-        --cmdline="systemd.unit=system-install.target console=ttyS0,115200 console=tty0 rw" \
+        --cmdline="systemd.unit=system-install.target systemd.ssh_listen=0.0.0.0:22 console=ttyS0,115200 console=tty0 rw" \
         --output=/layer/boot/efi/EFI/Linux/installer.efi
       mkdir -p /layer/boot/efi/EFI/BOOT
       cp /layer/boot/efi/EFI/Linux/installer.efi /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
