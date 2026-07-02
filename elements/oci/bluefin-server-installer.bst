@@ -21,8 +21,8 @@ description: |
   Build pipeline:
     1. Add /init symlink + mount points
     2. Link default.target -> system-install.target
-    3. Pack rootfs as newc cpio + zstd -> installer.cpio.zst
-    4. ukify build: kernel + cpio.zst -> installer.efi (unsigned UKI)
+    3. Pack rootfs as newc cpio + gzip -> installer.cpio.gz
+    4. ukify build: kernel + cpio.gz -> installer.efi (unsigned UKI)
     5. Decompress DDI payload into /layer for embedding (after cpio, not in initrd)
     6. systemd-repart --empty=create: assemble two-partition GPT disk
        (ESP with UKI + data partition with embedded DDI payload)
@@ -194,8 +194,8 @@ config:
 
       ( cd /layer && find . -print0 \
           | cpio --null --create --format=newc ) \
-        | zstd -T0 -19 -q -o /installer.cpio.zst
-      ls -lh /installer.cpio.zst
+        | gzip -9 -c > /installer.cpio.gz
+      ls -lh /installer.cpio.gz
 
     # ── Step 4: Build the UKI ────────────────────────────────────────────
     # Unsigned UKI — acceptable for USB installer media. Secure Boot
@@ -203,15 +203,13 @@ config:
     # --secureboot-certificate if keys are injected at CI time.
     - |
       set -eu
-      mkdir -p /layer/boot/efi/EFI/Linux
+      mkdir -p /layer/boot/efi/EFI/BOOT
       ukify build \
         --linux="/layer/boot/vmlinuz" \
-        --initrd=/installer.cpio.zst \
+        --initrd=/installer.cpio.gz \
         --cmdline="systemd.unit=system-install.target console=ttyS0,115200 console=tty0 rw" \
-        --output=/layer/boot/efi/EFI/Linux/installer.efi
-      mkdir -p /layer/boot/efi/EFI/BOOT
-      cp /layer/boot/efi/EFI/Linux/installer.efi /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
-      ls -lh /layer/boot/efi/EFI/Linux/installer.efi
+        --output=/layer/boot/efi/EFI/BOOT/BOOTX64.EFI
+      ls -lh /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
 
     # ── Step 5: Decompress DDI payload for embedding ─────────────────────
     # This runs AFTER the initrd cpio is packed (Step 3), so the DDI is NOT
@@ -241,8 +239,8 @@ config:
       Type=esp
       Format=vfat
       CopyFiles=/boot/efi:/
-      SizeMinBytes=768M
-      SizeMaxBytes=768M
+      SizeMinBytes=1024M
+      SizeMaxBytes=1024M
       RCONF
 
       cat > /installer-media-repart.d/20-ddi-data.conf << 'RCONF'
