@@ -61,7 +61,7 @@ config:
       set -eu
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl useradd; do
+      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
@@ -110,6 +110,10 @@ config:
     # ── Step 2: Wire default.target -> system-install.target ────────────
     - |
       set -eu
+      if [ ! -f /layer/usr/lib/systemd/system/system-install.target ]; then
+        echo "ERROR: system-install.target is missing from the staged rootfs! FSDK systemd must be version 261 or later." >&2
+        exit 1
+      fi
       rm -f /layer/usr/lib/systemd/system/default.target
       ln -sf system-install.target \
         /layer/usr/lib/systemd/system/default.target

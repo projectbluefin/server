@@ -25,7 +25,6 @@ depends:
   # systemd full (includes systemd-repart, systemd-firstboot, bootctl)
   - freedesktop-sdk.bst:components/systemd.bst
   - freedesktop-sdk.bst:components/kmod.bst
-  - freedesktop-sdk.bst:components/shadow.bst
 
   # SSH access to live installer environment
   - freedesktop-sdk.bst:components/openssh.bst
