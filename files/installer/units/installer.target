@@ -1,8 +1,0 @@
-[Unit]
-Description=Bluefin Server Installer
-Documentation=https://github.com/projectbluefin/server
-DefaultDependencies=no
-# Pull in basic.target so udev runs and block devices are discoverable.
-Wants=basic.target installer.service
-After=basic.target installer.service
-AllowIsolate=yes
