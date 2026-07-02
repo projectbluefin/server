@@ -219,11 +219,10 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] No `installer-knuckle.bst` or `installer.service` exists in the codebase
 - [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
 - [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, and `xfsprogs` packages
-- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`) at build-time
+- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`) at build-time
 - [ ] `bluefin-server-installer.bst` decompresses DDI AFTER the cpio step
 - [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)
 - [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes` to expand the copied root filesystem
 - [ ] Lab build template points at correct repo and installer element
 - [ ] Target OS stack `os-stack.bst` includes `xfsprogs.bst` for volume expansion at boot
-
 
