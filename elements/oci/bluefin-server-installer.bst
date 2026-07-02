@@ -75,17 +75,17 @@ config:
       # System users for networkd/resolved
       printf 'systemd-network:x:998:998:systemd Network Management:/run/systemd:/usr/sbin/nologin\nsystemd-resolve:x:997:997:systemd Resolver:/run/systemd:/usr/sbin/nologin\n' >> /layer/etc/passwd
       printf 'systemd-network:x:998:\nsystemd-resolve:x:997:\n' >> /layer/etc/group
-      # Enable sysusers, networkd, resolved, sshd at boot
+      # Enable sysusers plus the services needed on the live installer target.
       mkdir -p /layer/usr/lib/systemd/system/sysinit.target.wants
       ln -sf /usr/lib/systemd/system/systemd-sysusers.service \
         /layer/usr/lib/systemd/system/sysinit.target.wants/systemd-sysusers.service
-      mkdir -p /layer/usr/lib/systemd/system/multi-user.target.wants
+      mkdir -p /layer/usr/lib/systemd/system/system-install.target.wants
       ln -sf /usr/lib/systemd/system/systemd-networkd.service \
-        /layer/usr/lib/systemd/system/multi-user.target.wants/systemd-networkd.service
+        /layer/usr/lib/systemd/system/system-install.target.wants/systemd-networkd.service
       ln -sf /usr/lib/systemd/system/systemd-resolved.service \
-        /layer/usr/lib/systemd/system/multi-user.target.wants/systemd-resolved.service
+        /layer/usr/lib/systemd/system/system-install.target.wants/systemd-resolved.service
       ln -sf /usr/lib/systemd/system/sshd.service \
-        /layer/usr/lib/systemd/system/multi-user.target.wants/sshd.service
+        /layer/usr/lib/systemd/system/system-install.target.wants/sshd.service
       # Mask systemd-firstboot to prevent interactive credential blocks on tty1
       mkdir -p /layer/etc/systemd/system
       ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
