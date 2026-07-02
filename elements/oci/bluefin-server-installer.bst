@@ -114,6 +114,10 @@ config:
         echo "ERROR: system-install.target is missing from the staged rootfs! FSDK systemd must be version 261 or later." >&2
         exit 1
       fi
+      if [ ! -L /layer/usr/lib/systemd/system/system-install.target.wants/systemd-sysinstall.service ]; then
+        echo "ERROR: system-install.target.wants/systemd-sysinstall.service is missing from the staged rootfs! FSDK systemd must be built with -Dsysinstall=true." >&2
+        exit 1
+      fi
       rm -f /layer/usr/lib/systemd/system/default.target
       ln -sf system-install.target \
         /layer/usr/lib/systemd/system/default.target
