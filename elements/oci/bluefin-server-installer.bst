@@ -123,7 +123,7 @@ config:
       cat > /layer/etc/systemd/system/systemd-sysinstall.service.d/override.conf << 'EOF'
       [Service]
       ExecStart=
-      ExecStart=systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes
+      ExecStart=/usr/bin/systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes
       EOF
       # DHCP on all ethernet interfaces
       mkdir -p /layer/usr/lib/systemd/network
