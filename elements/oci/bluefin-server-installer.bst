@@ -179,7 +179,7 @@ config:
     # ── Step 6: Assemble installer GPT disk image ────────────────────────
     # Two-partition layout:
     #   10-esp.conf:      ESP (1G) — UKI lives here; boots the installer
-    #   20-ddi-data.conf: Data (ext4) — bluefin-server-ddi.raw copied here block-for-block
+    #   20-ddi-data.conf: Data (XFS) — bluefin-server-ddi.raw copied here block-for-block
     #
     # At install time, installer.service mounts the data partition to
     # /run/installer/ so systemd-repart can find the DDI at the path

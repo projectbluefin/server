@@ -16,31 +16,29 @@ Only load the docs relevant to your task.
 
 ## What this repo is
 
-- **OS image:** `oci/bluefin-server-ddi.bst` — the server OS DDI payload (ext4
+- **OS image:** `oci/bluefin-server-ddi.bst` — the server OS DDI payload (XFS
   image compressed with zstd), deployed by the installer onto the target disk.
 - **Installer media:** `oci/bluefin-server-installer.bst` — a bootable GPT image
   (ESP + embedded DDI data partition). At boot, systemd reaches
-  `installer.target`, which launches **knuckle** — a Go TUI interactive installer.
-  The OS DDI is embedded at build time; no network required at install time.
+  `system-install.target`, which launches **systemd-sysinstall** — the native
+  systemd interactive installer on `/dev/console` (tty0). The OS DDI is embedded
+  at build time; no network required at install time.
   SSH is available on the live installer (`ssh root@<ip>`, no password).
-- **Knuckle installer:** `installer/installer-knuckle.bst` stages the
-  `projectbluefin/knuckle` release binary at `/opt/knuckle`. knuckle prompts for
-  disk, username, password, and SSH key; runs systemd-repart + user provisioning;
-  writes a stable PARTUUID boot entry; then reboots.
+- **No Knuckle.** The installer uses native systemd tooling (`systemd-sysinstall`
+  and `systemd-repart`) to partition the target disk, copy the XFS DDI filesystem
+  payload, register the boot loader via `bootctl`, and reboot.
 - **No shell in the OS image.** The DDI payload is distroless. The installer
-  rootfs carries only what knuckle needs to install the OS.
+  rootfs carries only what systemd-sysinstall needs to install the OS.
 
 ## Hard rules
 
 1. **Compose from `components/*`, never `platform.bst`.** `platform.bst` drags in
    Wayland/Mesa/PipeWire desktop bloat.
 2. **No `x86_64_v3`.** Broad-compatibility baseline only.
-3. **No non-interactive bash installer scripts.** The installer is knuckle.
-   A bash script cannot prompt for username, password, or SSH key on a TTY.
-4. **Installer binary comes from knuckle releases.** Update `installer-knuckle.bst`
-   `ref:` (sha256) when bumping knuckle. Never vendor the binary directly.
+3. **Use systemd-sysinstall as the interactive installer.**
+4. **No knuckle, custom installer scripts, or custom systemd target/service units.**
 5. **PARTUUID boot entries only.** Never hardcode `/dev/vda2` or similar.
-   knuckle uses `lsblk` to find the `PARTLABEL=bluefin-server-root-a` PARTUUID.
+   systemd-sysinstall and bootctl automatically write correct GPT PARTUUID boot loader entries.
 
 ## Build / test commands (verified)
 
