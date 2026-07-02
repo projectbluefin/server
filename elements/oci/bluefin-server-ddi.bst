@@ -29,6 +29,7 @@ config:
       rm -rf /layer/usr/lib/debug
       find /layer -type f -name '*.debug' -delete
 
+
       # Sum up all file sizes across all bind mounts in the bwrap sandbox using pure bash arithmetic (no awk/gawk dependency)
       # ponytail: pure bash loop avoids external tool dependency (like awk) and is 100% robust.
       ROOT_BYTES=0

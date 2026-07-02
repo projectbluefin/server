@@ -31,8 +31,11 @@ description: |
 build-depends:
   # Toolchain for assembly
   - base/base-stack.bst
+  - freedesktop-sdk.bst:components/dracut.bst
   - freedesktop-sdk.bst:components/cpio.bst      # newc cpio archive creation
   - freedesktop-sdk.bst:components/findutils.bst  # find for cpio pipe
+  - freedesktop-sdk.bst:components/grep.bst
+  - freedesktop-sdk.bst:components/sed.bst
   - freedesktop-sdk.bst:components/zstd.bst       # compress initrd + final disk
   # ukify assembles the UKI (kernel + initrd + cmdline -> .efi)
   - freedesktop-sdk.bst:components/systemd-ukify.bst
@@ -48,6 +51,9 @@ build-depends:
   - filename: oci/bluefin-server-ddi.bst
     config:
       location: /ddi
+  - filename: bluefin-server/os-rootfs.bst
+    config:
+      location: /target-root
 
 variables:
   installer-version: "25.08.13"
@@ -61,17 +67,41 @@ config:
       set -eu
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl systemd-sysinstall; do
+      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl systemd-sysinstall sshd; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
         fi
       done
+      if [ ! -f /layer/usr/lib/systemd/system/sshd.service ]; then
+        echo "ERROR: sshd.service is missing from the staged rootfs at /layer!" >&2
+        exit 1
+      fi
 
       # systemd-native initrd: /init -> PID 1
       ln -sf usr/lib/systemd/systemd /layer/init
       # Mount points needed by the installer service
       mkdir -p /layer/efi /layer/mnt/esp /layer/mnt/root /layer/run/installer
+      mkdir -p /layer/usr/lib/bluefin-server
+      mkdir -p /target-root/boot/EFI/Linux /tmp /var/tmp
+      KVER="$(basename "$(find /target-root/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
+      if [ -z "${KVER}" ]; then
+        echo "ERROR: no kernel module tree found under /target-root/usr/lib/modules" >&2
+        exit 1
+      fi
+      depmod -b /target-root "${KVER}"
+      dracut -v --reproducible --no-machineid \
+        --sysroot /target-root \
+        --kernel-image /target-root/boot/vmlinuz \
+        --kver "${KVER}" \
+        --kernel-cmdline "rw console=ttyS0,115200 console=tty0" \
+        /tmp/bluefin-server-target.initramfs
+      ukify build \
+        --linux=/target-root/boot/vmlinuz \
+        --initrd=/tmp/bluefin-server-target.initramfs \
+        --cmdline="rw console=ttyS0,115200 console=tty0" \
+        --output=/target-root/boot/EFI/Linux/bluefin-server.efi
+      cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
       # System users for networkd/resolved
       printf 'systemd-network:x:998:998:systemd Network Management:/run/systemd:/usr/sbin/nologin\nsystemd-resolve:x:997:997:systemd Resolver:/run/systemd:/usr/sbin/nologin\n' >> /layer/etc/passwd
       printf 'systemd-network:x:998:\nsystemd-resolve:x:997:\n' >> /layer/etc/group
@@ -89,6 +119,12 @@ config:
       # Mask systemd-firstboot to prevent interactive credential blocks on tty1
       mkdir -p /layer/etc/systemd/system
       ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
+      mkdir -p /layer/etc/systemd/system/systemd-sysinstall.service.d
+      cat > /layer/etc/systemd/system/systemd-sysinstall.service.d/override.conf << 'EOF'
+      [Service]
+      ExecStart=
+      ExecStart=systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes
+      EOF
       # DHCP on all ethernet interfaces
       mkdir -p /layer/usr/lib/systemd/network
       printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
@@ -116,6 +152,14 @@ config:
       fi
       if [ ! -L /layer/usr/lib/systemd/system/system-install.target.wants/systemd-sysinstall.service ]; then
         echo "ERROR: system-install.target.wants/systemd-sysinstall.service is missing from the staged rootfs! FSDK systemd must be built with -Dsysinstall=true." >&2
+        exit 1
+      fi
+      if [ ! -f /layer/etc/systemd/system/sshd.service.d/10-hostkeys.conf ]; then
+        echo "ERROR: sshd host-key drop-in is missing from the staged rootfs!" >&2
+        exit 1
+      fi
+      if [ ! -f /layer/usr/lib/bluefin-server/bluefin-server.efi ]; then
+        echo "ERROR: target UKI is missing from the staged rootfs!" >&2
         exit 1
       fi
       rm -f /layer/usr/lib/systemd/system/default.target
@@ -163,7 +207,7 @@ config:
       ukify build \
         --linux="/layer/boot/vmlinuz" \
         --initrd=/installer.cpio.zst \
-        --cmdline="systemd.unit=system-install.target systemd.ssh_listen=0.0.0.0:22 console=ttyS0,115200 console=tty0 rw" \
+        --cmdline="systemd.unit=system-install.target console=ttyS0,115200 console=tty0 rw" \
         --output=/layer/boot/efi/EFI/Linux/installer.efi
       mkdir -p /layer/boot/efi/EFI/BOOT
       cp /layer/boot/efi/EFI/Linux/installer.efi /layer/boot/efi/EFI/BOOT/BOOTX64.EFI

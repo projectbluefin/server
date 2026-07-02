@@ -43,14 +43,20 @@ User provisioning is handled on the target system's first boot via `systemd-firs
 
 1. Keep the live media thin: orchestrate install-time flow via native systemd utilities.
 2. The live environment boots with `systemd.unit=system-install.target` as a kernel command-line option.
-3. Systemd isolates `system-install.target` and starts the `systemd-sysinstall.service` which executes `systemd-sysinstall --variables=yes --reboot=yes --mute-console=yes` directly on `/dev/console` (tty0).
-4. `systemd-sysinstall` reads partition recipes from `/usr/lib/repart.d/` (falling back automatically since `/usr/lib/repart.sysinstall.d/` is empty).
-5. The `20-root-a.conf` partition recipe copies the DDI block-for-block from `/dev/disk/by-partlabel/bluefin-installer-data` (which is the embedded DDI partition on the installer media).
-6. Target OS volume expansion: `root-a` and `/var` partitions are resized to fill available space on boot using `systemd-growfs`. This requires the target OS stack (`elements/bluefin-server/os-stack.bst`) to include `freedesktop-sdk.bst:components/xfsprogs.bst` (providing the `xfs_growfs` tool).
+3. Systemd isolates `system-install.target` and starts the `systemd-sysinstall.service` directly on `/dev/console` (tty0).
+4. The live image overrides that service to execute `systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes`, so `bootctl link` installs a target OS UKI instead of the installer UKI.
+5. `bluefin-server-installer.bst` stages a second copy of the target OS rootfs during the installer build, runs `dracut` + `ukify` against it, and places the resulting `bluefin-server.efi` at `/usr/lib/bluefin-server/bluefin-server.efi` inside the live image.
+6. `systemd-sysinstall` reads partition recipes from `/usr/lib/repart.d/` (falling back automatically since `/usr/lib/repart.sysinstall.d/` is empty).
+7. The `20-root-a.conf` partition recipe copies the DDI block-for-block from `/dev/disk/by-partlabel/bluefin-installer-data` (which is the embedded DDI partition on the installer media).
+8. Target OS volume expansion: `root-a` and `/var` partitions are resized to fill available space on boot using `systemd-growfs`. This requires the target OS stack (`elements/bluefin-server/os-stack.bst`) to include `freedesktop-sdk.bst:components/xfsprogs.bst` (providing the `xfs_growfs` tool).
 
 ## SSH access to live installer
 
-The installer live environment runs sshd. Connect headlessly during install:
+The installer live environment runs `sshd.service` on `system-install.target`.
+The live image adds an `sshd.service` drop-in that generates missing
+`/etc/ssh/ssh_host_*` keys on first boot before `sshd` starts, so the service
+can come up cleanly without depending on build-sandbox key generation.
+Connect headlessly during install:
 
 ```
 ssh root@<installer-ip>   # no password required
@@ -87,7 +93,7 @@ systemd PID 1 starts, reaches system-install.target
 systemd-sysinstall.service
      │
      ▼
-systemd-sysinstall --variables=yes --reboot=yes --mute-console=yes
+systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes
      │
      ├─ Interactive TUI: disk selection
      ├─ Interactive TUI: confirm installation summary
@@ -95,7 +101,7 @@ systemd-sysinstall --variables=yes --reboot=yes --mute-console=yes
      ├─ systemd-repart --dry-run=no /dev/TARGET
      │      reads /usr/lib/repart.d/ (10-esp, 20-root-a, 30-var)
      │      20-root-a: CopyBlocks=/dev/disk/by-partlabel/bluefin-installer-data
-     ├─ bootctl link (installs kernel + credentials to ESP)
+     ├─ bootctl link (installs bluefin-server.efi + credentials to ESP)
      ├─ bootctl install (installs systemd-boot to ESP)
      └─ Reboot into installed Bluefin Server
 ```
@@ -218,11 +224,12 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `just validate-installer` resolves the BuildStream graph without errors
 - [ ] No `installer-knuckle.bst` or `installer.service` exists in the codebase
 - [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
-- [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, and `xfsprogs` packages
-- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`) at build-time
+- [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, `xfsprogs`, and `openssh-systemd`
+- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
+- [ ] `bluefin-server-installer.bst` installs an `sshd.service` drop-in that generates missing OpenSSH host keys on boot
+- [ ] `bluefin-server-installer.bst` builds `/usr/lib/bluefin-server/bluefin-server.efi` from a staged target rootfs with dracut + ukify and overrides `systemd-sysinstall.service` to use it
 - [ ] `bluefin-server-installer.bst` decompresses DDI AFTER the cpio step
 - [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)
 - [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes` to expand the copied root filesystem
 - [ ] Lab build template points at correct repo and installer element
 - [ ] Target OS stack `os-stack.bst` includes `xfsprogs.bst` for volume expansion at boot
-
