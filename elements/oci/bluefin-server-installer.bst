@@ -13,10 +13,10 @@ description: |
   correctly when the initrd is a plain rootfs cpio with /init -> systemd.
   This is the approach the systemd project uses for its own test images.
 
-  The installer UI is knuckle (/opt/knuckle --os bluefin-ddi), a Go TUI
-  (Bubble Tea) that presents a full interactive installer. It prompts for
-  disk, username, password, and SSH key — then runs systemd-repart,
-  provisions the user, and installs the bootloader.
+  The installer UI is systemd-sysinstall, a native systemd terminal-based
+  interactive installer. It prompts for the target disk, partitions it using
+  systemd-repart, copies the XFS DDI filesystem, registers the boot loader via
+  bootctl, and reboots.
 
   Build pipeline:
     1. Add /init symlink + mount points
@@ -107,16 +107,12 @@ config:
       chmod 700 /layer/root/.ssh
       chmod 600 /layer/root/.ssh/authorized_keys
 
-    # ── Step 2: Wire default.target -> installer.target ─────────────────
+    # ── Step 2: Wire default.target -> system-install.target ────────────
     - |
       set -eu
       rm -f /layer/usr/lib/systemd/system/default.target
-      ln -sf installer.target \
+      ln -sf system-install.target \
         /layer/usr/lib/systemd/system/default.target
-      # Enable installer.service for the installer.target wants
-      mkdir -p /layer/usr/lib/systemd/system/installer.target.wants
-      ln -sf /usr/lib/systemd/system/installer.service \
-        /layer/usr/lib/systemd/system/installer.target.wants/installer.service
 
     # ── Step 3: Pack initrd cpio ─────────────────────────────────────────
     # find . from /layer gives paths like ./usr/bin/... which is exactly
@@ -160,7 +156,7 @@ config:
       ukify build \
         --linux="/layer/boot/vmlinuz" \
         --initrd=/installer.cpio.zst \
-        --cmdline="systemd.unit=installer.target console=ttyS0,115200 console=tty0 rw" \
+        --cmdline="systemd.unit=system-install.target console=ttyS0,115200 console=tty0 rw" \
         --output=/layer/boot/efi/EFI/Linux/installer.efi
       mkdir -p /layer/boot/efi/EFI/BOOT
       cp /layer/boot/efi/EFI/Linux/installer.efi /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
@@ -181,9 +177,8 @@ config:
     #   10-esp.conf:      ESP (1G) — UKI lives here; boots the installer
     #   20-ddi-data.conf: Data (XFS) — bluefin-server-ddi.raw copied here block-for-block
     #
-    # At install time, installer.service mounts the data partition to
-    # /run/installer/ so systemd-repart can find the DDI at the path
-    # expected by repart.d/20-root-a.conf (CopyBlocks=).
+    # At install time, systemd-sysinstall mounts the data partition to
+    # locate the DDI at the path expected by repart.d/20-root-a.conf (CopyBlocks=).
     - |
       set -eu
       OUT="%{install-root}"
