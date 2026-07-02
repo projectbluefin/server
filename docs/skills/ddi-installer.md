@@ -199,6 +199,20 @@ just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
 just show-me-the-future    # end-to-end QEMU test
 ```
 
+## Flashing the Installer Media
+
+When flashing the exported `.raw.zst` installer image to a physical USB drive (block devices like `/dev/sda`), do **not** use uncached, buffered `dd` writes.
+
+### Dirty Page Cache Warning (USB Write Stalls)
+By default, Linux's page cache buffers writes in host RAM. On slow USB media, this can dirty gigabytes of system memory, causing severe system-wide hangs and freezing your desktop environment while the kernel tries to flush the dirty buffer to the flash chips.
+
+### The Fix (Direct I/O)
+Bypass the kernel page cache entirely using **`oflag=direct`**. This writes blocks directly to the USB drive, keeping the desktop window and the system completely responsive:
+
+```bash
+sudo sh -c 'zstd -dc dist/bluefin-server-installer-*.raw.zst | dd of=/dev/sda bs=4M oflag=direct status=progress'
+```
+
 ## Release
 
 `.github/workflows/release-installer.yml` fires on `installer-v*` tags.
