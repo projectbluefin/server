@@ -1,6 +1,6 @@
 ---
 name: ddi-installer
-description: "Use when building or debugging the Bluefin Server DDI live installer, updating the knuckle installer binary, or working on the lab GitOps build hook."
+description: "Use when building or debugging the Bluefin Server DDI live installer, or managing the systemd-sysinstall recipes or target boot configurations."
 metadata:
   context7-sources:
     - /systemd/systemd
@@ -12,10 +12,9 @@ metadata:
 ## When to Use
 
 - Building or debugging the Bluefin Server live installer media
-- Bumping the knuckle installer binary version
-- Wiring `systemd-repart`, `bootctl`, or `ukify`
+- Writing or refining `systemd-repart`, `bootctl`, or `ukify` configurations
 - Packaging or publishing DDI assets to GitHub Releases
-- Updating the Argo/GitOps build hook in the lab
+- Managing partition recipes for the target disk layout (`10-esp.conf`, `20-root-a.conf`, `30-var.conf`)
 
 ## When NOT to Use
 
@@ -26,54 +25,28 @@ metadata:
 
 ## Architecture
 
-The installer is **offline and self-contained**. The OS DDI payload
-(`bluefin-server-ddi.bst`) is embedded as an XFS data partition on the
-installer media at build time. No network access is required at install time.
+The installer is **offline, self-contained, and systemd-native**. The OS DDI payload (`bluefin-server-ddi.bst`) is embedded as a data partition on the installer media at build time. No network access is required at install time.
 
-The installer UI is **knuckle** — a Go TUI interactive installer
-(`projectbluefin/knuckle`) that prompts the user for:
+The installer UI is systemd's built-in **systemd-sysinstall** (introduced in systemd 261) which provides a clean, terminal-based interactive installation:
 
-- Target disk (detected via `lsblk`)
-- Username, password (bcrypt-hashed), SSH key
-- Confirmation before writing
+- Prompts the user for target disk (selected interactively or on CLI)
+- Validates target disk size and suitability
+- Offers to erase the target disk or install alongside existing partitions
+- Copies the OS filesystem DDI block-for-block using `systemd-repart` and partition recipes (`CopyBlocks=`)
+- Registers the bootloader (`systemd-boot`) and the Unified Kernel Image (UKI) using `bootctl`
+- Securely encrypts and propagates installer environment credentials (locale, keymap, timezone) to the target OS
+- Reboots into the installed system
 
-Then it runs `systemd-repart`, provisions the user, writes a stable
-`PARTUUID`-based boot entry via `bootctl`, and reboots.
-
-**Why knuckle and not systemd-sysinstall?**
-`systemd-sysinstall` requires systemd ≥261 (released June 2026) and does NOT
-prompt for username/password — it defers to `systemd-firstboot` on first boot.
-knuckle is already used for Flatcar/FCOS installs in this org, is tested, and
-provides full user provisioning during install.
+User provisioning is handled on the target system's first boot via `systemd-firstboot` or other firstboot configurations, maintaining clean statelessness.
 
 ## Core Process
 
-1. Keep the live media thin: orchestrate install-time flow via knuckle, not a second distro.
-2. knuckle binary lives at `/opt/knuckle` in the installer rootfs — staged by `installer/installer-knuckle.bst`.
-3. `installer.service` waits for the raw partition device to be ready, then runs `/opt/knuckle --os bluefin-ddi` on `tty1`.
-4. knuckle uses `PARTLABEL=bluefin-server-root-a` to find its root partition — never hardcode `/dev/vda2`.
-5. Publish installer media as a single versioned release asset with matching checksum.
-6. The lab GitOps pipeline clones the server repo and builds the installer element.
-7. Use `just show-me-the-future` as the end-to-end VM test: boot installer, install to a second disk, reboot into installed system.
-
-## Bumping the knuckle version
-
-When a new knuckle release is cut:
-
-```bash
-# 1. Get the SHA256 of the new binary
-SHA=$(curl -sL https://github.com/projectbluefin/knuckle/releases/download/vX.Y.Z/knuckle-linux-amd64 | sha256sum | awk '{print $1}')
-
-# 2. Update elements/installer/installer-knuckle.bst
-#    Change both `url:` (version in path) and `ref:` (sha256)
-```
-
-`installer-knuckle.bst` uses `kind: manual` with a `kind: remote` source
-(BST verifies the sha256 on fetch). The script stages the binary at
-`/opt/knuckle` with mode 755.
-
-**Current version:** knuckle v0.9.1
-**SHA256:** `b2d80d7d6ccb4b552b9640ff5f3eeb36d6fd995e41d2e8ac975a127f603a1a41`
+1. Keep the live media thin: orchestrate install-time flow via native systemd utilities.
+2. The live environment boots with `systemd.unit=system-install.target` as a kernel command-line option.
+3. Systemd isolates `system-install.target` and starts the `systemd-sysinstall.service` which executes `systemd-sysinstall --variables=yes --reboot=yes --mute-console=yes` directly on `/dev/console` (tty0).
+4. `systemd-sysinstall` reads partition recipes from `/usr/lib/repart.d/` (falling back automatically since `/usr/lib/repart.sysinstall.d/` is empty).
+5. The `20-root-a.conf` partition recipe copies the DDI block-for-block from `/dev/disk/by-partlabel/bluefin-installer-data` (which is the embedded DDI partition on the installer media).
+6. Target OS volume expansion: `root-a` and `/var` partitions are resized to fill available space on boot using `systemd-growfs`. This requires the target OS stack (`elements/bluefin-server/os-stack.bst`) to include `freedesktop-sdk.bst:components/xfsprogs.bst` (providing the `xfs_growfs` tool).
 
 ## SSH access to live installer
 
@@ -89,11 +62,9 @@ PermitRootLogin yes
 PermitEmptyPasswords yes
 ```
 
-Root has no password in the installer rootfs. Network comes up via DHCP
-on all `en*/eth*/ens*/enp*` interfaces. Find the IP from the console or
-your DHCP server's lease table.
+Root has no password in the installer rootfs. Network comes up via DHCP on all `en*/eth*/ens*/enp*` interfaces. Find the IP from the console or your DHCP server's lease table.
 
-
+## Partition Layout
 
 The installer media is a two-partition GPT disk:
 
@@ -104,43 +75,42 @@ The installer media is a two-partition GPT disk:
 
 At install time, target partition `20-root-a.conf`'s `CopyBlocks=` copies blocks directly from `/dev/disk/by-partlabel/bluefin-installer-data`.
 
-## Installer boot flow
+## Installer Boot Flow
 
 ```
 UEFI reads ESP → BOOTX64.EFI → installer.efi (UKI)
      │
      ▼
-systemd PID 1 starts, reaches installer.target
+systemd PID 1 starts, reaches system-install.target
      │
      ▼
-installer.service
-  ExecStartPre: modprobe nvme + udevadm settle
+systemd-sysinstall.service
      │
      ▼
-/opt/knuckle --os bluefin-ddi
+systemd-sysinstall --variables=yes --reboot=yes --mute-console=yes
      │
-     ├─ TUI: disk selection (lsblk detects candidates)
-     ├─ TUI: username / password / SSH key
+     ├─ Interactive TUI: disk selection
+     ├─ Interactive TUI: confirm installation summary
+     ├─ Propagate locale, keymap, and timezone via systemd-creds
      ├─ systemd-repart --dry-run=no /dev/TARGET
      │      reads /usr/lib/repart.d/ (10-esp, 20-root-a, 30-var)
      │      20-root-a: CopyBlocks=/dev/disk/by-partlabel/bluefin-installer-data
-     ├─ User provisioning (useradd + authorized_keys + sudoers)
-     ├─ bootctl install (PARTUUID boot entry)
+     ├─ bootctl link (installs kernel + credentials to ESP)
+     ├─ bootctl install (installs systemd-boot to ESP)
      └─ Reboot into installed Bluefin Server
 ```
 
-## Initrd assembly (cpio-native)
+## Initrd Assembly (cpio-native)
 
 `bluefin-server-installer.bst` builds the installer media inline.
-**Key constraint**: the DDI is decompressed into `/layer` AFTER the cpio step
-so it is not packed into the initrd (which would make it 8GB+).
+**Key constraint**: the DDI is decompressed into `/layer` AFTER the cpio step so it is not packed into the initrd (which would make it 8GB+).
 
 ```bash
 # 1. /init symlink (Linux initrd protocol)
 ln -sf usr/lib/systemd/systemd /layer/init
 
-# 2. Link default.target -> installer.target
-ln -sf installer.target /layer/usr/lib/systemd/system/default.target
+# 2. Link default.target -> system-install.target
+ln -sf system-install.target /layer/usr/lib/systemd/system/default.target
 
 # 3. Pack rootfs as newc cpio + zstd (DDI not yet in /layer)
 ( cd /layer && find . -print0 | cpio --null --create --format=newc ) \
@@ -148,7 +118,7 @@ ln -sf installer.target /layer/usr/lib/systemd/system/default.target
 
 # 4. Build UKI
 ukify build --linux="/layer/boot/vmlinuz" --initrd=/installer.cpio.zst \
-  --cmdline="systemd.unit=installer.target console=ttyS0,115200 rw" \
+  --cmdline="systemd.unit=system-install.target console=ttyS0,115200 rw" \
   --output=/layer/boot/efi/EFI/Linux/installer.efi
 
 # 5. Decompress DDI into /layer AFTER cpio (won't be in initrd)
@@ -164,7 +134,7 @@ systemd-repart --empty=create --size=auto --dry-run=no \
 rm -f /layer/bluefin-server-ddi.raw
 ```
 
-The data partition repart config:
+The installer media data partition repart config:
 
 ```ini
 [Partition]
@@ -173,10 +143,10 @@ Label=bluefin-installer-data
 CopyBlocks=/bluefin-server-ddi.raw
 ```
 
-## OS DDI payload
+## OS DDI Payload
 
 `oci/bluefin-server-ddi.bst` builds the OS DDI payload:
-1. Depends on `bluefin-server/os-stack.bst`
+1. Depends on `bluefin-server/os-stack.bst` (must include `freedesktop-sdk.bst:components/xfsprogs.bst` for Target XFS expansion).
 2. Strips debug files
 3. Sums up all file sizes across the layered sandbox bind mounts using find & pure bash arithmetic to bypass overlayfs block reporting bugs.
 4. Align filesystem target size to 4096-byte sectors.
@@ -184,11 +154,9 @@ CopyBlocks=/bluefin-server-ddi.raw
 6. Runs `mkfs.xfs` on the pre-allocated file with 25% overhead and 100MB margin for XFS structures (no static floor).
 7. Compresses with `zstd` → `bluefin-server-ddi-@v.raw.zst` + `SHA256SUMS`
 
-**No minimum size floor.** The rootfs is immutable — updates replace the whole DDI,
-it never grows in-place. A typical server rootfs (~2GB content) produces a ~2.2GB
-DDI. Do not add a `SizeMinBytes` floor "for future growth" — that headroom is wasted.
+**No minimum size floor.** The rootfs is immutable — updates replace the whole DDI, it never grows in-place. A typical server rootfs (~2GB content) produces a ~2.2GB DDI. Do not add a `SizeMinBytes` floor "for future growth" — that headroom is wasted.
 
-## Justfile commands
+## Justfile Commands
 
 ```
 just validate-installer    # resolve element graph
@@ -207,18 +175,16 @@ When flashing the exported `.raw.zst` installer image to a physical USB drive (b
 By default, Linux's page cache buffers writes in host RAM. On slow USB media, this can dirty gigabytes of system memory, causing severe system-wide hangs and freezing your desktop environment while the kernel tries to flush the dirty buffer to the flash chips.
 
 ### The Fix (Direct I/O)
-Bypass the kernel page cache entirely using **`oflag=direct`**. This writes blocks directly to the USB drive, keeping the desktop window and the system completely responsive:
+Bypass the kernel page cache entirely using **`oflag=direct`**. This writes blocks directly to the USB drive, keeping the desktop window and the system completely responsive. Ensure **`iflag=fullblock`** is used to avoid pipe alignment issues:
 
 ```bash
-sudo sh -c 'zstd -dc dist/bluefin-server-installer-*.raw.zst | dd of=/dev/sda bs=4M oflag=direct status=progress'
+sudo sh -c 'zstd -dc dist/bluefin-server-installer-*.raw.zst | dd of=/dev/sda bs=4M iflag=fullblock oflag=direct status=progress'
 ```
 
 ## Release
 
 `.github/workflows/release-installer.yml` fires on `installer-v*` tags.
-**GitHub is the control plane only** — the workflow resolves the tag ref,
-runs `just validate-installer`, then publishes an `installer-build/<tag>`
-GitOps signal tag. The lab consumes that tag, builds, and uploads artifacts.
+**GitHub is the control plane only** — the workflow resolves the tag ref, runs `just validate-installer`, then publishes an `installer-build/<tag>` GitOps signal tag. The lab consumes that tag, builds, and uploads artifacts.
 
 ```bash
 git tag installer-v0.1.0 && git push origin installer-v0.1.0
@@ -230,24 +196,18 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 
 | Rationalization | Reality |
 |---|---|
-| "A bash script is simpler." | A bash script cannot prompt for username/password/SSH key. |
-| "Use systemd-sysinstall instead." | Requires systemd ≥261 AND doesn't set username/password. knuckle is prod-tested. |
+| "A bash script is simpler." | A bash script cannot prompt for credentials on a TTY. Use `systemd-sysinstall` natively. |
+| "Use knuckle instead." | knuckle is deprecated in favor of native systemd-sysinstall (systemd v261+). |
 | "Hardcode root=/dev/vda2 for QEMU." | Bare metal has different device names. Always use PARTUUID. |
 | "Pull the DDI from the network at install time." | Network failures = broken installs. DDI must be embedded in the installer media. |
 | "Put the DDI in the initrd cpio." | DDI is 2GB+. The initrd cpio step must run BEFORE the DDI is placed in /layer. |
 | "Store DDI in the ESP (FAT32)." | FAT32 has a 4GB per-file limit. Use a separate XFS partition. |
 | "Add an 8GB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + 10% overhead is enough. |
-| "SuccessAction=poweroff in installer.service." | knuckle drives shutdown. Having both races. Remove from service. |
 
 ## Red Flags
 
-- `installer.service` has `SuccessAction=poweroff` (knuckle handles this)
-- `installer.service` `ExecStart` points at a bash script instead of `/opt/knuckle`
-- `installer-knuckle.bst` `ref:` is a placeholder (`PLACEHOLDER_*`)
+- `systemd-sysinstall.service` is missing from system-install target wants
 - Boot cmdline has `root=/dev/vda2` (hardcoded device path)
-- knuckle binary is vendored in the repo instead of fetched from releases
-- `installer-stack.bst` missing `installer/installer-knuckle.bst` dependency
-- `installer-sysupdate.bst` present in `installer-stack.bst` (removed; DDI is embedded)
 - DDI decompression step placed BEFORE the cpio step (DDI ends up in the initrd)
 - Data partition uses FAT32/vfat (4GB file limit — DDI won't fit)
 - `files/installer/repart.d/20-root-a.conf` missing `GrowFileSystem=yes` (causes filesystem capacity/sizing mismatches on larger disks)
@@ -256,23 +216,14 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 ## Verification
 
 - [ ] `just validate-installer` resolves the BuildStream graph without errors
-- [ ] `installer-knuckle.bst` `ref:` matches `sha256sum` of the release binary
-- [ ] `installer.service` `ExecStart=/opt/knuckle --os bluefin-ddi`
-- [ ] `installer.service` waits for `/dev/disk/by-partlabel/bluefin-installer-data` to appear before executing knuckle
-- [ ] `installer.service` has NO `SuccessAction=poweroff`
-- [ ] `installer-stack.bst` includes `installer/installer-knuckle.bst`
-- [ ] `installer-stack.bst` does NOT include `installer/installer-sysupdate.bst`
-- [ ] `bluefin-server-installer.bst` depends on `oci/bluefin-server-ddi.bst`
-- [ ] DDI decompression step is AFTER the cpio step in `bluefin-server-installer.bst`
+- [ ] No `installer-knuckle.bst` or `installer.service` exists in the codebase
+- [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
+- [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, and `xfsprogs` packages
+- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `useradd`) at build-time
+- [ ] `bluefin-server-installer.bst` decompresses DDI AFTER the cpio step
 - [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)
 - [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes` to expand the copied root filesystem
 - [ ] Lab build template points at correct repo and installer element
-- [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, and `grep` packages
-- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `useradd`) at build-time
+- [ ] Target OS stack `os-stack.bst` includes `xfsprogs.bst` for volume expansion at boot
 
-## Related
-
-- `projectbluefin/knuckle` — TUI installer source; `internal/install/ddi.go`
-- `docs/skills/nspawn-machine-image.md` — tarball artifact pattern
-- FSDK `elements/vm/minimal-secure/` — repart + ukify toolchain reference
 
