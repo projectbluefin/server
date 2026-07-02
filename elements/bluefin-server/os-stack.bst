@@ -18,5 +18,8 @@ depends:
   - freedesktop-sdk.bst:components/linux.bst
   - bluefin-server/linux-firmware-split.bst
 
+  # Filesystem resizing support for growing root/var on first boot
+  - freedesktop-sdk.bst:components/xfsprogs.bst
+
   # Sysext Compatibility Identity
   - bluefin-server/os-release-flatcar.bst
