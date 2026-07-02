@@ -16,7 +16,6 @@ rules, then load the focused skill for your task.
 | If your task is... | Load |
 | ------------------ | ---- |
 | Build or debug the DDI live installer | [ddi-installer.md](ddi-installer.md) |
-| Bump knuckle installer version | [ddi-installer.md](ddi-installer.md) |
 | SSH into the live installer | [ddi-installer.md](ddi-installer.md) |
 | Add a non-distroless nspawn machine image (dev env, tarball) | [nspawn-machine-image.md](nspawn-machine-image.md) |
 | Make an image smaller / apply the SLIM recipe | [slim-an-image.md](slim-an-image.md) |
@@ -37,8 +36,7 @@ Workflow knowledge and operational runbooks any agent needs to work in this repo
 - BuildStream runs in the FSDK `bst2` container via `just bst`. Nothing to install
   but `podman` + `just`.
 - Compose from FSDK `components/*`, never `platform.bst`.
-- The interactive installer is **knuckle** (`/opt/knuckle` in the installer rootfs).
-  Do not write bash installer scripts — they cannot prompt for username/password/SSH key.
+- The interactive installer is **systemd-sysinstall** (introduced in systemd 261).
 - The installer is **offline** — DDI embedded as a data partition. No network pull at install time.
 - SSH available in live installer: `ssh root@<ip>` (no password; DHCP on all eth interfaces).
 - `just validate-installer` is the merge contract for installer changes.

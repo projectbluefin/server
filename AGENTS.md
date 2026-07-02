@@ -10,7 +10,7 @@ Load **[docs/skills/README.md](docs/skills/README.md)** for the skill routing ta
 Only load the docs relevant to your task.
 
 > **Before using any tool or library: look up its docs via Context7 first. Always.**
-> BuildStream, knuckle, podman, GitHub Actions, systemd (repart/ukify) —
+> BuildStream, podman, GitHub Actions, systemd (repart/ukify/sysinstall) —
 > every tool has live, authoritative docs. Pattern: `resolve-library-id` →
 > `get-library-docs` → implement → cite the section. Guessing is banned.
 
@@ -64,9 +64,6 @@ The version axis is the **FSDK release**, parsed from the pinned junction ref in
 `elements/freedesktop-sdk.bst`. The installer and DDI assets carry matching
 version strings from the same FSDK pin. Follow the FSDK lifecycle — see
 [docs/skills/bump-fsdk-version.md](docs/skills/bump-fsdk-version.md).
-
-Knuckle is versioned independently. Current: **v0.9.1**. Update
-`elements/installer/installer-knuckle.bst` (`url:` + `ref:`) when bumping.
 
 ## The self-improvement loop
 

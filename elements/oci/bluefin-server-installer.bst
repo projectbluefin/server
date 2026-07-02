@@ -20,7 +20,7 @@ description: |
 
   Build pipeline:
     1. Add /init symlink + mount points
-    2. Link default.target -> installer.target
+    2. Link default.target -> system-install.target
     3. Pack rootfs as newc cpio + zstd -> installer.cpio.zst
     4. ukify build: kernel + cpio.zst -> installer.efi (unsigned UKI)
     5. Decompress DDI payload into /layer for embedding (after cpio, not in initrd)
