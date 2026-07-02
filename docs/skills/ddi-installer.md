@@ -236,6 +236,8 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - `installer-sysupdate.bst` present in `installer-stack.bst` (removed; DDI is embedded)
 - DDI decompression step placed BEFORE the cpio step (DDI ends up in the initrd)
 - Data partition uses FAT32/vfat (4GB file limit — DDI won't fit)
+- `files/installer/repart.d/20-root-a.conf` missing `GrowFileSystem=yes` (causes filesystem capacity/sizing mismatches on larger disks)
+- VM target disk in test script (`Justfile`) uses a static capacity (e.g., hardcoded `16G`), hiding dynamic resizing/repart crashes.
 
 ## Verification
 
@@ -249,6 +251,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `bluefin-server-installer.bst` depends on `oci/bluefin-server-ddi.bst`
 - [ ] DDI decompression step is AFTER the cpio step in `bluefin-server-installer.bst`
 - [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)
+- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes` to expand the copied root filesystem
 - [ ] Lab build template points at correct repo and installer element
 - [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, and `grep` packages
 - [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `useradd`) at build-time
