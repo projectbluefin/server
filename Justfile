@@ -34,6 +34,11 @@ bst *ARGS:
         "{{bst2_image}}" \
         bash -c 'bst --colors "$@"' -- --no-interactive ${BST_FLAGS:-} {{ARGS}}
 
+# Print the FSDK-derived point release used for asset versioning.
+[group('info')]
+version:
+    @echo "{{fsdk_version}}"
+
 # Print the tag set derived from the FSDK release: latest, minor line, point release.
 [group('info')]
 tags:
@@ -156,39 +161,39 @@ show-me-the-future:
     TARGET_SIZE="${SHOW_ME_THE_FUTURE_DISK_SIZE:-16G}"
     truncate -s "${TARGET_SIZE}" "$WORKDIR/target.raw"
 
-    OVMF_CODE=""
-    for candidate in \
-        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-code.fd \
-        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-secure-code.fd \
-        /usr/share/edk2/ovmf/OVMF_CODE.fd \
-        /usr/share/OVMF/OVMF_CODE.fd \
-        /usr/share/OVMF/OVMF_CODE_4M.fd \
-        /usr/share/edk2/x64/OVMF_CODE.4m.fd \
-        /usr/share/qemu/OVMF_CODE.fd; do
+    # Return the first existing file from a list of candidates.
+    first_existing() {
+      for candidate in "$@"; do
         if [ -f "$candidate" ]; then
-            OVMF_CODE="$candidate"
-            break
+          echo "$candidate"
+          return 0
         fi
-    done
-    [ -n "$OVMF_CODE" ] || { echo "ERROR: OVMF_CODE not found"; exit 1; }
+      done
+      return 1
+    }
 
-    OVMF_VARS=""
-    for candidate in \
-        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-vars.fd \
-        /usr/share/edk2/ovmf/OVMF_VARS.fd \
-        /usr/share/OVMF/OVMF_VARS.fd \
-        /usr/share/OVMF/OVMF_VARS_4M.fd \
-        /usr/share/edk2/x64/OVMF_VARS.4m.fd \
-        /usr/share/qemu/OVMF_VARS.fd; do
-        if [ -f "$candidate" ]; then
-            OVMF_VARS="$candidate"
-            break
-        fi
-    done
+    OVMF_CODE=$(first_existing \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-code.fd \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-secure-code.fd \
+      /usr/share/edk2/ovmf/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE_4M.fd \
+      /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+      /usr/share/qemu/OVMF_CODE.fd) \
+      || { echo "ERROR: OVMF_CODE not found"; exit 1; }
+
+    OVMF_VARS=$(first_existing \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-vars.fd \
+      /usr/share/edk2/ovmf/OVMF_VARS.fd \
+      /usr/share/OVMF/OVMF_VARS.fd \
+      /usr/share/OVMF/OVMF_VARS_4M.fd \
+      /usr/share/edk2/x64/OVMF_VARS.4m.fd \
+      /usr/share/qemu/OVMF_VARS.fd) \
+      || true
     if [ -n "$OVMF_VARS" ]; then
-        cp "$OVMF_VARS" "$WORKDIR/ovmf-vars.fd"
+      cp "$OVMF_VARS" "$WORKDIR/ovmf-vars.fd"
     else
-        truncate -s "$(stat -c '%s' "$OVMF_CODE")" "$WORKDIR/ovmf-vars.fd"
+      truncate -s "$(stat -c '%s' "$OVMF_CODE")" "$WORKDIR/ovmf-vars.fd"
     fi
 
     echo "==> Booting installer media in QEMU..."

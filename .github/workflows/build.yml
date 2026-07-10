@@ -77,7 +77,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          V=$(grep -oE 'freedesktop-sdk-[0-9]+\.[0-9]+\.[0-9]+' elements/freedesktop-sdk.bst | head -1 | sed 's/freedesktop-sdk-//')
+          V=$(just version)
           TAG="installer-v${V}"
           echo "Uploading release assets for tag: ${TAG}"
           gh release create "${TAG}" --title "Bluefin Server v${V}" --notes "Automated release triggered by Renovate dependency update on main" --prerelease=false || true
