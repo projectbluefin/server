@@ -46,8 +46,9 @@ This document outlines the gap analysis comparing Bluefin Server to Ubuntu Serve
 ### 1. OS Update Delivery & Rollbacks (A/B via systemd-sysupdate)
 To maintain our systemd-native philosophy and avoid custom agents, Bluefin Server utilizes **`systemd-sysupdate`** for atomic over-the-air (OTA) updates:
 - **Delivery Vehicle:** Public GitHub Releases.
+- **Signature Verification:** SHA256SUMS manifests are signed in CI with a project GPG key. The public keyring ships in `/usr/lib/systemd/import-pubring.pgp` and `systemd-sysupdate` verifies detached `SHA256SUMS.gpg` signatures by default (`Verify=yes`).
 - **Client Configuration:** Dual-slot configuration (`root-a`/`root-b` on target disk) and matching ESP UKI slots (`uki-a`/`uki-b`).
-- **Mechanism:** `systemd-sysupdate` running on the client pulls the latest target UKI (`bluefin-server-@v.efi`) and compressed DDI (`bluefin-server-ddi-@v.raw.xz`) from GitHub Releases, flashes them block-for-block to the inactive slots, and marks `/run/reboot-required`.
+- **Mechanism:** `systemd-sysupdate` running on the client pulls the latest target UKI (`bluefin-server-@v.efi`) and compressed DDI (`bluefin-server-ddi-@v.raw.xz`) from GitHub Releases, verifies the manifest signatures and file hashes, flashes them block-for-block to the inactive slots, and marks `/run/reboot-required`.
 
 ### 2. First-Boot Provisioning Engine (systemd-creds)
 Declarative system setups (users, network links, SSH keys) are handled natively using **systemd credentials**:
@@ -86,6 +87,9 @@ Rolling updates across Kubernetes nodes must not impact cluster availability:
 
 ## Verification
 
+- [ ] `systemd-sysupdate` transfer files do not disable verification (`Verify=no`).
+- [ ] The OS image ships the public keyring at `/usr/lib/systemd/import-pubring.pgp`.
+- [ ] CI signs `SHA256SUMS` manifests and uploads matching `.gpg` detached signatures.
 - [ ] New system configurations align with `systemd-creds` specs.
 - [ ] Extension images verify compatibility against `ID=flatcar` and match target Flatcar board architecture.
 - [ ] Update staging writes cleanly to `/run/reboot-required` to trigger Kured.

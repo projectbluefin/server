@@ -27,6 +27,9 @@ depends:
   # A/B System Update Configurations
   - bluefin-server/os-sysupdate.bst
 
+  # Public keyring for verifying SHA256SUMS manifests from GitHub Releases
+  - bluefin-server/os-sysupdate-keys.bst
+
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
 
