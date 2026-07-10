@@ -220,12 +220,32 @@ Then run `just build` or `just build-installer`. This pulls pre-built layers fro
 
 ## Flashing the Installer Media
 
+Modern systemd installer design (UAPI and systemd-repart) strongly deprecates traditional ISO files (which are optical media relics requiring complex El Torito/HFS+ isohybrid hacks). Instead, it recommends **UEFI-bootable raw GPT disk images** (`.raw`). These can be written directly to any USB drive and boot natively under UEFI.
+
+Bluefin Server conforms to this standard. To burn the installer, we provide both a safe automated wrapper command and manual `dd` instructions.
+
+### Method 1: Automated Flashing (Recommended)
+
+Run our native flashing target with your USB block device. It will automatically check for available disks, verify write access, validate your file, display safe confirmation warnings, and write using the optimized pipeline:
+
+```bash
+just flash-installer /dev/sdX
+```
+
+If you do not specify a device, it lists all available writable drives with their capacities:
+
+```bash
+just flash-installer
+```
+
+### Method 2: Manual dd Flashing
+
 When flashing the exported `.raw.zst` installer image to a physical USB drive (block devices like `/dev/sda`), do **not** use uncached, buffered `dd` writes.
 
-### Dirty Page Cache Warning (USB Write Stalls)
+#### Dirty Page Cache Warning (USB Write Stalls)
 By default, Linux's page cache buffers writes in host RAM. On slow USB media, this can dirty gigabytes of system memory, causing severe system-wide hangs and freezing your desktop environment while the kernel tries to flush the dirty buffer to the flash chips.
 
-### The Fix (Direct I/O)
+#### The Fix (Direct I/O)
 Bypass the kernel page cache entirely using **`oflag=direct`**. This writes blocks directly to the USB drive, keeping the desktop window and the system completely responsive. Ensure **`iflag=fullblock`** is used to avoid pipe alignment issues:
 
 ```bash

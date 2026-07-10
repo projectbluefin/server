@@ -90,6 +90,8 @@ config:
         exit 1
       fi
       depmod -b /target-root "${KVER}"
+      # Regenerate dynamic linker cache inside the build container so dracut-install can find system libraries (e.g. libc.so.6, libgcc_s.so.1)
+      ldconfig
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS and VirtIO block/scsi storage drivers.
       # Since we build inside a container sandbox, dracut won't detect the VM virtual disks automatically
       # and will produce an unbootable/panicking host-only initrd unless forced.
@@ -184,11 +186,13 @@ config:
 
       mkdir -p /layer/etc/systemd/system/systemd-sysinstall.service.d
       cat > /layer/etc/systemd/system/systemd-sysinstall.service.d/override.conf << 'EOF'
+      [Unit]
+      SuccessAction=poweroff
+      FailureAction=poweroff
+
       [Service]
       ExecStart=
       ExecStart=/usr/bin/bluefin-sysinstall
-      SuccessAction=poweroff
-      FailureAction=poweroff
       EOF
       # DHCP on all ethernet interfaces
       mkdir -p /layer/usr/lib/systemd/network

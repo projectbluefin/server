@@ -119,6 +119,40 @@ export-installer: build-installer
     just bst artifact checkout oci/bluefin-server-installer.bst --directory dist
     @echo "==> wrote:" && ls -lh dist/
 
+# Write the raw GPT installer image to a physical USB drive.
+[group('installer')]
+flash-installer DEVICE="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "{{DEVICE}}" ]; then
+        echo "ERROR: Must specify a target block device. Example: just flash-installer /dev/sdX" >&2
+        echo "Available writable disk devices:" >&2
+        lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b | awk '$2 == "disk" && $3 == "0" && $4 > 0 {printf "  %-15s (%0.1f GB)\n", $1, $4 / 1073741824}' >&2
+        exit 1
+    fi
+    if [ ! -b "{{DEVICE}}" ]; then
+        echo "ERROR: {{DEVICE}} is not a valid block device!" >&2
+        exit 1
+    fi
+    IMG=$(find dist/ -type f -name 'bluefin-server-installer-*.raw.zst' | head -n1)
+    if [ -z "${IMG}" ]; then
+        echo "ERROR: No exported installer found in dist/." >&2
+        echo "Please run: just build-installer && just export-installer" >&2
+        exit 1
+    fi
+    echo "WARNING: All data on {{DEVICE}} will be COMPLETELY DESTROYED!"
+    echo "Double-checking device information:"
+    lsblk -p "{{DEVICE}}"
+    echo
+    read -p "Are you absolutely sure you want to write to {{DEVICE}}? [y/N] " -r CONFIRM
+    if [[ ! "${CONFIRM}" =~ ^[yY](es)?$ ]]; then
+        echo "Aborted."
+        exit 1
+    fi
+    echo "Writing ${IMG} to {{DEVICE}}..."
+    sudo sh -c "zstd -dc ${IMG} | dd of={{DEVICE}} bs=4M iflag=fullblock oflag=direct status=progress conv=fsync"
+    echo "Successfully flashed the Bluefin Server installer to {{DEVICE}}!"
+
 # Build, install, and reboot the server in QEMU using the raw installer disk.
 [group('test')]
 show-me-the-future:
