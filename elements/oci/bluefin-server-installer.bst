@@ -67,7 +67,7 @@ config:
       set -eu
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in awk gawk sed grep udevadm lsblk systemd-repart bootctl systemd-sysinstall sshd; do
+      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall sshd; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
@@ -143,15 +143,25 @@ config:
 
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
       TARGET_DISK=""
-      for disk in $(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b | awk '$2 == "disk" && $3 == "0" && $4 > 0 {print $1}'); do
-        if ! lsblk -n -o LABEL "$disk" 2>/dev/null | grep -q "bluefin-installer-data"; then
-          TARGET_DISK="$disk"
-          break
+      INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"
+
+      while read -r name type ro size; do
+        [ "${type}" = "disk" ] || continue
+        [ "${ro}" = "0" ] || continue
+        [ "${size}" -gt 0 ] || continue
+
+        # Skip the disk containing the installer partition
+        if [ -n "${INSTALLER_PART}" ] && [[ "${INSTALLER_PART}" == "${name}"* ]]; then
+          continue
         fi
-      done
+
+        TARGET_DISK="${name}"
+        break
+      done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
 
       # Check for unattended in kernel command line
-      if grep -q -w "unattended" /proc/cmdline; then
+      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
+      if [[ " ${CMDLINE} " == *" unattended "* ]]; then
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then
           echo "==> Auto-detected target disk: ${TARGET_DISK}"
