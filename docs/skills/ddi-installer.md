@@ -247,7 +247,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
 - [ ] `bluefin-server-installer.bst` writes a secure pre-hashed root password (`/etc/root_hash`) and installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles TPM detection, explicit locale/keymap/timezone copy flags, and unattended mode triggering with disk auto-discovery filtering (type "disk", read-only=0, size>0) to ignore empty or optical drives
 - [ ] `bluefin-server-installer.bst` installs an `sshd.service` drop-in that generates missing OpenSSH host keys on boot
-- [ ] `bluefin-server-installer.bst` builds `/usr/lib/bluefin-server/bluefin-server.efi` from a staged target rootfs with dracut + ukify and overrides `systemd-sysinstall.service` to use it
+- [ ] `bluefin-server-installer.bst` builds `/usr/lib/bluefin-server/bluefin-server.efi` from a staged target rootfs with dracut + ukify and overrides `systemd-sysinstall.service` to use it (configuring SuccessAction=poweroff and FailureAction=poweroff to ensure clean ACPI motherboard shutdown of the guest VM upon install completion, allowing test wrappers to proceed automatically)
 - [ ] `bluefin-server-installer.bst` decompresses DDI AFTER the cpio step
 - [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)
 - [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes` to expand the copied root filesystem
