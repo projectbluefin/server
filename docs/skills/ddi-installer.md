@@ -288,8 +288,8 @@ The release process is fully automated on GitHub via `.github/workflows/build.ym
 - [ ] No `installer-knuckle.bst` or `installer.service` exists in the codebase
 - [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
 - [ ] Serial console `console=ttyS0,115200` is the final console argument in UKI cmdline to ensure primary interactive `/dev/console` output redirects cleanly over headless QEMU serial (e.g. `mon:stdio` with `-nographic`), avoiding graphic-mode VGA curses limitations
-- [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, `xfsprogs`, and `openssh-systemd`
-- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
+- [ ] `installer-stack.bst` explicitly includes `xfsprogs` and `openssh-systemd`
+- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
 - [ ] `bluefin-server-installer.bst` writes a secure pre-hashed root password (`/etc/root_hash`) and installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles TPM detection, explicit locale/keymap/timezone copy flags, and unattended mode triggering with disk auto-discovery filtering (type "disk", read-only=0, size>0) to ignore empty or optical drives
 - [ ] `bluefin-server-installer.bst` installs an `sshd.service` drop-in that generates missing OpenSSH host keys on boot
 - [ ] `bluefin-server-installer.bst` builds `/usr/lib/bluefin-server/bluefin-server.efi` from a staged target rootfs with dracut + ukify and overrides `systemd-sysinstall.service` to use it (configuring SuccessAction=poweroff and FailureAction=poweroff to ensure clean ACPI motherboard shutdown of the guest VM upon install completion, allowing test wrappers to proceed automatically)

@@ -1,6 +1,6 @@
 ---
 name: skill-improvement
-description: "The skill-improvement mandate for fsdk-containers. Every session produces work + a skill update. Use when finishing any task, deciding whether a learning belongs in docs/skills, or verifying the work+learning loop before handoff."
+description: "The skill-improvement mandate for projectbluefin repos. Every session produces work + a skill update. Use when finishing any task, deciding whether a learning belongs in docs/skills, or verifying the work+learning loop before handoff."
 metadata:
   type: procedure
 ---
@@ -16,7 +16,7 @@ Output 1 without Output 2 leaves the project no smarter.
 
 ## When to Use
 
-Use when finishing any fsdk-containers task, deciding whether a discovery belongs
+Use when finishing any projectbluefin task, deciding whether a discovery belongs
 in `docs/skills/`, or reviewing a branch before handoff.
 
 ## What counts as a learning worth writing down
