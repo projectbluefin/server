@@ -122,6 +122,7 @@ config:
 
       # Write root hash file
       echo -n '$6$ZbsnFo0smWIQ40GX$ei//Njn0kIsfUrXY9Ty7.jJt2tTgmHlpoZ/amNdKlArtqWYXyup/kScL3O5t.JTP2taesR0.9QktIJiuQvuEI/' > /layer/etc/root_hash
+      chmod 600 /layer/etc/root_hash
 
       # Write the installer wrapper script
       cat > /layer/usr/bin/bluefin-sysinstall << 'EOF'
@@ -134,7 +135,7 @@ config:
       fi
 
       # Check for unattended in kernel command line
-      if grep -q "unattended" /proc/cmdline; then
+      if grep -q -w "unattended" /proc/cmdline; then
         echo "==> Running in UNATTENDED mode..."
         exec /usr/bin/systemd-sysinstall \
           --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
@@ -170,9 +171,9 @@ config:
       mkdir -p /layer/usr/lib/systemd/network
       printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
         > /layer/usr/lib/systemd/network/80-dhcp.network
-      # Allow root login with empty password over SSH (installer is ephemeral)
+      # Allow root login via key-based authentication only over SSH (installer is ephemeral)
       mkdir -p /layer/etc/ssh/sshd_config.d
-      printf 'PermitRootLogin yes\nPermitEmptyPasswords yes\n' \
+      printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\n' \
         > /layer/etc/ssh/sshd_config.d/installer.conf
 
       # Bake SSH keys into the root user's authorized_keys in the live environment
