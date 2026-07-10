@@ -163,6 +163,9 @@ show-me-the-future:
     fi
 
     echo "==> Booting installer media in QEMU..."
+    # ponytail: we want QEMU to exit cleanly after install. Since QEMU's -no-reboot
+    # suspends/halts on reboot signals, we override systemd-sysinstall.service SuccessAction/FailureAction
+    # to poweroff. When the installer triggers poweroff, QEMU terminates, and we boot into the newly installed OS.
     qemu-system-x86_64 \
         -enable-kvm \
         -m 4096 \
@@ -170,12 +173,11 @@ show-me-the-future:
         -smp 2 \
         -drive file="$WORKDIR/installer.raw",format=raw,if=virtio,readonly=on \
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
-        -netdev user,id=n1,hostname=bluefin-installer,hostfwd=tcp::2222-:22 \
-        -device virtio-net-pci,netdev=n1 \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
         -nographic \
-        -serial mon:stdio
+        -serial mon:stdio \
+        -no-reboot
 
     echo "==> Rebooting into the installed server..."
     qemu-system-x86_64 \
