@@ -174,7 +174,8 @@ show-me-the-future:
         -device virtio-net-pci,netdev=n1 \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
-        -display curses
+        -nographic \
+        -serial mon:stdio
 
     echo "==> Rebooting into the installed server..."
     qemu-system-x86_64 \
@@ -185,4 +186,5 @@ show-me-the-future:
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
-        -display curses
+        -nographic \
+        -serial mon:stdio
