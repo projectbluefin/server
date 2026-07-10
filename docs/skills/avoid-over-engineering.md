@@ -51,6 +51,7 @@ existing repo convention already does the job.
 | "This build-depend might be useful later." | Unused dependencies slow resolves and create false confidence. Add it when you need it. |
 | "A forwarding recipe is harmless." | It duplicates the command surface and rots when the real recipe changes. |
 | "I don't need to re-validate after a tiny cut." | `just validate` is the merge contract. Run it every time. |
+| "This build dep isn't named in the commands, so it's unused." | `manual`/`script` element commands run in a sandbox that still needs `/bin/sh` and coreutils. Cutting the dep that supplies them breaks the build even if `make` itself is never called. |
 
 ## Red Flags
 
@@ -67,6 +68,7 @@ existing repo convention already does the job.
 - [ ] No hardcoded version duplicates remain; `release-version` in `project.conf`
       is the single source of truth.
 - [ ] Removed build dependencies are not used by any command in the element.
+- [ ] For `manual`/`script` elements, the sandbox still has `/bin/sh` and any coreutils the commands need after a dep cut; prefer `just bst build <element>` to verify.
 - [ ] Justfile has no forwarding aliases or duplicate validation targets.
 - [ ] Docs and skill files no longer reference deleted targets or dependencies.
 
