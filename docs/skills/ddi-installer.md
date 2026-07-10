@@ -35,6 +35,7 @@ The installer UI is systemd's built-in **systemd-sysinstall** (introduced in sys
 - Copies the OS filesystem DDI block-for-block using `systemd-repart` and partition recipes (`CopyBlocks=`)
 - Registers the bootloader (`systemd-boot`) and the Unified Kernel Image (UKI) using `bootctl`
 - Propagates installer environment settings (locale, keymap, timezone) to the target OS
+- Displays the FSDK-derived `Bluefin Server YY.MM.PP` welcome banner from `/usr/lib/os-release`
 - Reboots into the installed system
 
 User provisioning is handled on the target system's first boot via `systemd-firstboot` or other firstboot configurations, maintaining clean statelessness.

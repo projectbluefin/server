@@ -46,6 +46,10 @@ export so every image self-declares its base.
    just verify
    ```
 
+   `elements/bluefin-server/os-release-flatcar.bst` reads the FSDK point release
+   directly from `elements/freedesktop-sdk.bst`, so `NAME`, `PRETTY_NAME`, and
+   `IMAGE_VERSION` update automatically.
+
 5. Follow the FSDK **lifecycle**: track the active minor line; when FSDK EOLs a
    line, move `:latest` to the next supported minor. Don't pin to an EOL line.
 
