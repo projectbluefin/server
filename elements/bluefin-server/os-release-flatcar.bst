@@ -1,6 +1,10 @@
 kind: manual
 description: Create custom Flatcar-compatible os-release metadata to support Flatcar system extensions (sysext).
 
+build-depends:
+  # Needed so the manual-element sandbox provides /bin/sh and coreutils (cat, ln, mkdir).
+  - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
+
 variables:
   strip-binaries: ""
 
