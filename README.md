@@ -10,7 +10,7 @@ The difference is this is [DDI first](https://0pointer.net/blog/fitting-everythi
 
 - FSDK-first server OS work in progress
 - Image-based updates and atomic rollbacks
-- Fully automated GitOps-driven builds on GitHub
+- Fully automated GitOps-driven builds
 - Pure DDI, follows modern linux patterns
 
 ## Build model
