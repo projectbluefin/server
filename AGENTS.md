@@ -46,7 +46,7 @@ BuildStream runs inside the FSDK `bst2` container via the `just bst` wrapper —
 nothing to install but `podman` + [`just`](https://github.com/casey/just).
 
 ```
-just validate-installer   # resolve installer element graph (no build)
+just validate             # resolve element graph (no build)
 just cluster-build        # submit build to the cluster via Argo (recommended, zero local resource usage)
 just build-installer      # full local build: cpio + ukify + systemd-repart
 just export-installer     # export .raw.zst + SHA256SUMS to dist/
@@ -56,7 +56,7 @@ just tags                 # show FSDK-derived version tags
 ```
 
 There is no `just verify` gate for the server repo (that is fsdk-containers).
-The contract here is: element graph resolves (`just validate-installer`) and the
+The contract here is: element graph resolves (`just validate`) and the
 lab build completes without error.
 
 ## Versioning

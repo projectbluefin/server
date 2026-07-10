@@ -1,9 +1,6 @@
 kind: manual
 description: Create custom Flatcar-compatible os-release metadata to support Flatcar system extensions (sysext).
 
-build-depends:
-  - freedesktop-sdk.bst:components/make.bst
-
 variables:
   strip-binaries: ""
 

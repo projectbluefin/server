@@ -17,7 +17,7 @@ build-depends:
       location: /layer
 
 variables:
-  ddi-version: "25.08.13"
+  ddi-version: "%{release-version}"
 
 config:
   commands:
@@ -30,12 +30,8 @@ config:
       find /layer -type f -name '*.debug' -delete
 
 
-      # Sum up all file sizes across all bind mounts in the bwrap sandbox using pure bash arithmetic (no awk/gawk dependency)
-      # ponytail: pure bash loop avoids external tool dependency (like awk) and is 100% robust.
-      ROOT_BYTES=0
-      for size in $(find /layer -type f -printf "%s\n"); do
-        ROOT_BYTES=$(( ROOT_BYTES + size ))
-      done
+      # Sum actual file sizes across bind mounts (du -sb reports content bytes, not overlay blocks).
+      ROOT_BYTES=$(du -sb /layer | cut -f1)
       echo "Computed root filesystem size: ${ROOT_BYTES} bytes"
 
       # 25% overhead and 100MB margin for XFS metadata, journal, and structures.

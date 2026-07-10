@@ -61,14 +61,10 @@ validate:
 # Build and export the installer (DDI is embedded; built as a dependency).
 [group('build')]
 build:
-    just build-installer
     just export-installer
 
 # ── Export ────────────────────────────────────────────────────────────
 # Export installer disk image to dist/.
-[group('build')]
-export:
-    just export-installer
 
 # -- DDI live installer -------------------------------------------------------
 # Produces a bootable GPT disk image that runs systemd-repart to install
@@ -91,11 +87,6 @@ export-ddi: build-ddi
     mkdir -p dist/ddi
     just bst artifact checkout oci/bluefin-server-ddi.bst --directory /src/dist/ddi
     @echo "==> wrote DDI payload:" && ls -lh dist/ddi/
-
-# Validate the installer element graph without building.
-[group('installer')]
-validate-installer:
-    just bst show --deps all oci/bluefin-server-installer.bst
 
 # Build the installer disk image locally.
 [group('installer')]

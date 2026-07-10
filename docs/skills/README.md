@@ -42,4 +42,4 @@ Workflow knowledge and operational runbooks any agent needs to work in this repo
 - The interactive installer is **systemd-sysinstall** (introduced in systemd 261).
 - The installer is **offline** — DDI embedded as a data partition. No network pull at install time.
 - SSH in the live installer is exposed by `sshd.service`; the image pre-generates host keys so `ssh root@<ip>` works as soon as networking comes up.
-- `just validate-installer` is the merge contract for installer changes.
+- `just validate` is the merge contract for element graph changes.

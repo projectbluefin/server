@@ -182,7 +182,7 @@ CopyBlocks=/bluefin-server-ddi.raw
 ## Justfile Commands
 
 ```
-just validate-installer    # resolve element graph
+just validate              # resolve element graph
 just cluster-build         # submit build to the cluster using Argo (no workstation CPU/MEM usage)
 just build-installer       # build installer locally (uses remote cache if configured)
 just export-installer      # export .raw.zst + SHA256SUMS to dist/
@@ -284,7 +284,7 @@ The release process is fully automated on GitHub via `.github/workflows/build.ym
 
 ## Verification
 
-- [ ] `just validate-installer` resolves the BuildStream graph without errors
+- [ ] `just validate` resolves the BuildStream graph without errors
 - [ ] No `installer-knuckle.bst` or `installer.service` exists in the codebase
 - [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
 - [ ] Serial console `console=ttyS0,115200` is the final console argument in UKI cmdline to ensure primary interactive `/dev/console` output redirects cleanly over headless QEMU serial (e.g. `mon:stdio` with `-nographic`), avoiding graphic-mode VGA curses limitations

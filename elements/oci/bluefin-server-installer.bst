@@ -56,7 +56,7 @@ build-depends:
       location: /target-root
 
 variables:
-  installer-version: "25.08.13"
+  installer-version: "%{release-version}"
 
 config:
   commands:
