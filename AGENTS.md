@@ -47,7 +47,8 @@ nothing to install but `podman` + [`just`](https://github.com/casey/just).
 
 ```
 just validate-installer   # resolve installer element graph (no build)
-just build-installer      # full build: cpio + ukify + systemd-repart
+just cluster-build        # submit build to the cluster via Argo (recommended, zero local resource usage)
+just build-installer      # full local build: cpio + ukify + systemd-repart
 just export-installer     # export .raw.zst + SHA256SUMS to dist/
 just build-ddi            # build OS DDI filesystem payload
 just export-ddi           # export DDI + SHA256SUMS to dist/ddi/

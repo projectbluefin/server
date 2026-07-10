@@ -183,12 +183,40 @@ CopyBlocks=/bluefin-server-ddi.raw
 
 ```
 just validate-installer    # resolve element graph
-just build-installer       # full build: cpio + ukify + systemd-repart (includes DDI)
+just cluster-build         # submit build to the cluster using Argo (no workstation CPU/MEM usage)
+just build-installer       # build installer locally (uses remote cache if configured)
 just export-installer      # export .raw.zst + SHA256SUMS to dist/
 just build-ddi             # build DDI standalone (for release publishing)
 just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
 just show-me-the-future    # end-to-end QEMU test
 ```
+
+### Building on the Cluster (Preferred)
+
+To prevent resource starvation on your local workstation, delegate heavy BuildStream builds to the cluster. Run:
+
+```bash
+just cluster-build
+```
+
+This submits an Argo workflow `bluefin-server-build-pipeline` to the cluster to build and publish the latest installer/DDI to the local registry.
+
+### Local Builds with Remote Cache (Alternative)
+
+If you must run a local build, configure the BuildStream remote cache on `ghost` using the local tunnel. Create `~/.config/buildstream.conf` on your workstation:
+
+```yaml
+projects:
+  bluefin-server:
+    artifacts:
+      override-project-caches: false
+      servers:
+      - url: grpc://127.0.0.1:8980
+        push: true
+```
+
+Then run `just build` or `just build-installer`. This pulls pre-built layers from the cluster's Buildbarn CAS cache over localhost port 8980, accelerating builds to under 10 minutes.
+
 
 ## Flashing the Installer Media
 
