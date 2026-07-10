@@ -96,7 +96,7 @@ config:
       dracut -v --reproducible --no-machineid --no-hostonly \
         --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs" \
         --filesystems "xfs vfat" \
-        --sysroot /target-root \
+        --kmoddir "/target-root/usr/lib/modules/${KVER}" \
         --kernel-image /target-root/boot/vmlinuz \
         --kver "${KVER}" \
         --kernel-cmdline "rw console=ttyS0,115200 console=tty0" \

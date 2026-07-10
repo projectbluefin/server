@@ -102,6 +102,16 @@ validate-installer:
 build-installer:
     just bst build oci/bluefin-server-installer.bst
 
+# Submit the build to the cluster using Argo workflows.
+[group('build')]
+cluster-build REF="main":
+    argo submit --from wftmpl/bluefin-server-build-pipeline \
+        --parameter ref={{REF}} \
+        --parameter repo=https://github.com/projectbluefin/server.git \
+        --parameter registry=registry.testing-lab.internal:30500 \
+        -n argo \
+        --watch
+
 # Export the installer disk image + SHA256SUMS to dist/.
 [group('installer')]
 export-installer: build-installer
@@ -177,7 +187,7 @@ show-me-the-future:
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
         -nographic \
         -serial mon:stdio \
-        -no-reboot
+        -no-reboot < /dev/null
 
     echo "==> Rebooting into the installed server..."
     qemu-system-x86_64 \
