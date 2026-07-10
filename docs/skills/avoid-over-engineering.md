@@ -1,73 +1,74 @@
 ---
 name: avoid-over-engineering
-description: "Patterns to keep Bluefin Server simple. Use when reviewing for bloat, auditing for cuts, or before adding a new dependency/target/variable."
+description: "Use when reviewing for bloat, auditing for cuts, or before adding a new dependency, Justfile recipe, or BuildStream variable. Keeps Bluefin Server lean by preferring standard tools, single sources of truth, and minimal targets."
 metadata:
   type: guide
 ---
 
 # Avoid Over-Engineering
 
-This repo favors the smallest thing that works. Before adding code, dependencies,
-or abstraction, check whether the platform, standard library, or an existing tool
-already does the job.
+Bluefin Server favors the smallest thing that works. Before adding code,
+dependencies, or abstraction, check whether the platform, a standard tool, or an
+existing repo convention already does the job.
 
-## Common cuts in this repo
+## When to Use
 
-### Prefer standard tools over hand-rolled loops
+- Running a ponytail-style audit on the repo.
+- Adding a new BuildStack dependency, Justfile recipe, or project variable.
+- Reviewing a PR that introduces new tools, wrappers, or config flags.
+- Refactoring an element or script and wondering what can be deleted.
 
-- Use `du -sb /path | cut -f1` instead of a `find` + bash arithmetic loop to sum
-  file sizes. It is shorter, faster, and handles bind mounts correctly.
-- Use `readlink -f`, `lsblk`, and bash pattern matching instead of pulling in
-  `awk`, `grep`, or `sed` for simple disk discovery.
+## When NOT to Use
 
-### Single source of truth for versions
+- Correctness, security, or performance reviews — route those to a normal review.
+- Adding a genuinely new capability with no existing equivalent.
+- Refactoring for readability alone when the current form is already minimal.
 
-Asset version strings (installer, DDI, release tags) must follow the FSDK point
-release. Define one project variable in `project.conf` and reference it from
-elements instead of hardcoding the same value in multiple files.
+## Core Process
 
-```yaml
-# project.conf
-variables:
-  release-version: "25.08.13"
-```
+1. **Establish a green baseline.** Run `just validate` before changing anything.
+2. **Identify the cut.** Look for:
+   - Hand-rolled loops where a standard tool exists.
+   - The same value hardcoded in more than one file.
+   - Build dependencies declared but not used by the element.
+   - Justfile recipes that only forward to another recipe.
+   - Duplicate validation targets.
+3. **Apply the smallest change.** Remove the dependency, collapse the target, or
+   replace the loop with the standard tool.
+4. **Re-validate.** Run `just validate`. For installer or DDI pipeline cuts,
+   prefer a full `just build-installer` or cluster build before claiming safety.
+5. **Update docs.** Remove or rewrite any skill file, AGENTS.md, or README line
+   that references the deleted target, dependency, or command.
+6. **Write the learning.** If the cut reveals a reusable pattern, update this
+   skill file or add a new one and link it in `docs/skills/README.md`.
 
-```yaml
-# elements/oci/bluefin-server-ddi.bst
-variables:
-  ddi-version: "%{release-version}"
-```
+## Common Rationalizations
 
-### Do not add unused build dependencies
+| Rationalization | Reality |
+|---|---|
+| "A bash loop is more portable than `du`." | `du -sb` is POSIX and far faster; the loop is harder to read and easier to break. |
+| "I'll hardcode the version here just this once." | The next FSDK bump will force someone to hunt down every copy. Use `project.conf`. |
+| "This build-depend might be useful later." | Unused dependencies slow resolves and create false confidence. Add it when you need it. |
+| "A forwarding recipe is harmless." | It duplicates the command surface and rots when the real recipe changes. |
+| "I don't need to re-validate after a tiny cut." | `just validate` is the merge contract. Run it every time. |
 
-- `compose` and `stack` elements with no commands should not declare tool-only
-  build-depends such as `dracut.bst` or `make.bst`.
-- Before removing a declared dependency, run `just validate` to confirm the graph
-  still resolves, then build or run the relevant target if the dependency might
-  be used at build time.
+## Red Flags
 
-### Keep Justfile targets minimal
+- `for size in $(find ...)` loops summing bytes.
+- The same version string in more than one `.bst` file.
+- `build-depends` on tools in `compose`/`stack` elements with no commands.
+- Justfile recipes whose entire body is `just <other-recipe>`.
+- Multiple validation targets (`validate`, `validate-installer`, etc.).
+- A recipe calling a dependency that another recipe already depends on.
 
-- Avoid aliases that just forward to another recipe (e.g. `export:` calling
-  `just export-installer`).
-- Avoid redundant validation targets; one `validate` target that resolves the
-  whole graph is enough.
-- Do not double-declare dependencies: if `export-installer` already depends on
-  `build-installer`, `build:` should call `export-installer`, not both.
+## Verification
 
-### Verify before and after cuts
-
-The merge contract is `just validate`. Run it after removing dependencies or
-simplifying commands. If a cut touches the installer or DDI pipeline, prefer a
-full local build or cluster build before claiming the change is safe.
-
-## What to do when auditing
-
-1. Run `just validate` to establish a green baseline.
-2. Apply the cut.
-3. Run `just validate` again.
-4. Update any docs or skill files that mention the removed target, dependency,
-   or command.
+- [ ] `just validate` passes before and after the change.
+- [ ] No hardcoded version duplicates remain; `release-version` in `project.conf`
+      is the single source of truth.
+- [ ] Removed build dependencies are not used by any command in the element.
+- [ ] Justfile has no forwarding aliases or duplicate validation targets.
+- [ ] Docs and skill files no longer reference deleted targets or dependencies.
 
 ## See also
 
