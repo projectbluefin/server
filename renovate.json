@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^elements/.*\\.bst$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?:\\s+versioning=(?<versioning>[^\\s]+))?\\n\\s*ref:\\s*['\"]?(?<currentValue>[^'\"\\s]+)['\"]?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["git-refs"],
+      "matchPackageNames": ["https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git"],
+      "extractVersion": "^freedesktop-sdk-(?<version>25\\.08\\.[0-9]+)$",
+      "versioning": "semver"
+    },
+    {
+      "matchDatasources": ["git-refs"],
+      "matchPackageNames": ["https://gitlab.gnome.org/GNOME/gnome-build-meta.git"],
+      "extractVersion": "^(?<version>50\\.[0-9]+)$",
+      "versioning": "semver"
+    }
+  ]
+}

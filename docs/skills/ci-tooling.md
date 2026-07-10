@@ -65,40 +65,23 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 - Personal Access Tokens (PATs) are banned.
 - GitHub App token plumbing is not used for build handoff.
 - `repository_dispatch` is not used for build handoff.
-- Build/release handoff is done by publishing immutable Git signal tags:
-  - `lab-build/<sha>`
-  - `installer-build/<installer-tag>`
+- Build/release triggers are driven cleanly by Renovate PR merges or manual dispatches.
 
 ## Workflow Structure
 
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
-| `validate` | `build.yml` | `pull_request` only | `just validate` — element graph resolution, no build |
-| `trigger-lab` | `build.yml` | `push/main`, `workflow_dispatch` | Resolves HEAD SHA and pushes `lab-build/<sha>` tag |
-| `dispatch-lab-build` | `lab-release.yml` | Daily 04:00 UTC schedule, `workflow_dispatch` | Resolves selected ref and pushes `lab-build/<sha>` tag |
-| `dispatch-lab-installer-build` | `release-installer.yml` | `push` on `installer-v*`, `workflow_dispatch` | Resolves installer tag/SHA and pushes `installer-build/<installer-tag>` tag |
+| `build-and-release` | `build.yml` | `pull_request` on all, `push/main`, `workflow_dispatch` | Validates element graph, resolves and tracks Renovate refs, builds full images on GitHub, and uploads artifacts to GitHub Releases on push to main. |
 
-GitHub is the **control plane only** — no build compute runs here.
+GitHub Actions runs the **complete BuildStream compilation pipeline** natively using the 74GB SSD at `/mnt` for storage and caching, with final output uploaded to GitHub Releases.
 
 ## Core Process
 
-1. Keep workflow triggers explicit (`pull_request` validate vs push/dispatch delegation).
-2. Resolve immutable refs (SHA/tag) in GitHub workflow.
-3. Publish Git signal tags (`lab-build/*`, `installer-build/*`) for downstream lab automation.
-4. Keep actions SHA-pinned and remove PAT/App-token/repository_dispatch handoff logic.
-5. Validate graph-only checks in GitHub and keep heavy build/push logic in lab.
+1. **Renovate tracking**: `renovate.json` is configured with a custom regex manager to scan BuildStream junction files (`freedesktop-sdk.bst` and `gnome-build-meta.bst`) using `git-refs` datasource.
+2. **Auto-resolution**: On Renovate PRs, GitHub Actions automatically executes `just bst source track` to resolve raw tags to full `git-describe` refs and commits them back.
+3. **Full Compilation**: Builds standalone DDI OS and installer images on every pull request (validation) and push to `main`.
+4. **Automated Publishing**: For pushes to `main` (like Renovate PR merges), GitHub Actions automatically generates a GitHub Release based on the current FSDK version and uploads all compiled binaries.
 
-### Daily schedule and manual trigger
-
-`lab-release.yml` runs on a `schedule` cron (`0 4 * * *`, 04:00 UTC) and on
-`workflow_dispatch`. Manual runs accept one optional input:
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `ref` | `main` | Git ref to build (branch, tag, or SHA) |
-
-The `concurrency.cancel-in-progress: false` guard on `lab-release` ensures an
-in-flight release dispatch is never cancelled by a subsequent trigger.
 
 ## Common Rationalizations
 
