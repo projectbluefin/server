@@ -1,0 +1,12 @@
+[Transfer]
+Verify=no
+
+[Source]
+Type=url-file
+Path=https://github.com/projectbluefin/server/releases/download/@v/
+MatchPattern=bluefin-server-@v.efi
+
+[Target]
+Type=file
+Path=/efi/EFI/Linux
+MatchPattern=bluefin-server-@v.efi

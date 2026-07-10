@@ -23,3 +23,12 @@ depends:
 
   # Sysext Compatibility Identity
   - bluefin-server/os-release-flatcar.bst
+
+  # A/B System Update Configurations
+  - bluefin-server/os-sysupdate.bst
+
+  # First-Boot Credentials Provisioning
+  - bluefin-server/os-creds-prov.bst
+
+  # Reboot Coordination for Kured
+  - bluefin-server/os-kured-hook.bst

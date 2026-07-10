@@ -159,10 +159,10 @@ config:
             --confirm=no \
             --summary=no \
             --variables=yes \
-            --reboot=yes \
+            --reboot=no \
             --mute-console=yes \
             --load-credential=passwd.hashed-password.root:/etc/root_hash \
-            "${TARGET_DISK}"
+            "${TARGET_DISK}" < /dev/null
         else
           echo "ERROR: No suitable target disk found for unattended installation!" >&2
           exit 1
