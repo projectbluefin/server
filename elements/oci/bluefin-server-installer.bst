@@ -182,6 +182,8 @@ config:
       [Service]
       ExecStart=
       ExecStart=/usr/bin/bluefin-sysinstall
+      SuccessAction=poweroff
+      FailureAction=poweroff
       EOF
       # DHCP on all ethernet interfaces
       mkdir -p /layer/usr/lib/systemd/network
