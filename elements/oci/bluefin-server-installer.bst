@@ -90,7 +90,12 @@ config:
         exit 1
       fi
       depmod -b /target-root "${KVER}"
-      dracut -v --reproducible --no-machineid \
+      # Run dracut in generic (non-hostonly) mode and explicitly add XFS and VirtIO block/scsi storage drivers.
+      # Since we build inside a container sandbox, dracut won't detect the VM virtual disks automatically
+      # and will produce an unbootable/panicking host-only initrd unless forced.
+      dracut -v --reproducible --no-machineid --no-hostonly \
+        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs" \
+        --filesystems "xfs vfat" \
         --sysroot /target-root \
         --kernel-image /target-root/boot/vmlinuz \
         --kver "${KVER}" \
