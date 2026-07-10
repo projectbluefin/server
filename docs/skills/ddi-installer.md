@@ -235,6 +235,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - Data partition uses FAT32/vfat (4GB file limit — DDI won't fit)
 - `files/installer/repart.d/20-root-a.conf` missing `GrowFileSystem=yes` (causes filesystem capacity/sizing mismatches on larger disks)
 - VM target disk in test script (`Justfile`) uses a static capacity (e.g., hardcoded `16G`), hiding dynamic resizing/repart crashes.
+- Unattended target-disk discovery is unfiltered, allowing empty or read-only devices like `/dev/sr0` (optical drives) to be incorrectly chosen, leading to installation failure.
 
 ## Verification
 
@@ -244,7 +245,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] Serial console `console=ttyS0,115200` is the final console argument in UKI cmdline to ensure primary interactive `/dev/console` output redirects cleanly over headless QEMU serial (e.g. `mon:stdio` with `-nographic`), avoiding graphic-mode VGA curses limitations
 - [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, `xfsprogs`, and `openssh-systemd`
 - [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
-- [ ] `bluefin-server-installer.bst` writes a secure pre-hashed root password (`/etc/root_hash`) and installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles TPM detection, explicit locale/keymap/timezone copy flags, and unattended mode triggering
+- [ ] `bluefin-server-installer.bst` writes a secure pre-hashed root password (`/etc/root_hash`) and installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles TPM detection, explicit locale/keymap/timezone copy flags, and unattended mode triggering with disk auto-discovery filtering (type "disk", read-only=0, size>0) to ignore empty or optical drives
 - [ ] `bluefin-server-installer.bst` installs an `sshd.service` drop-in that generates missing OpenSSH host keys on boot
 - [ ] `bluefin-server-installer.bst` builds `/usr/lib/bluefin-server/bluefin-server.efi` from a staged target rootfs with dracut + ukify and overrides `systemd-sysinstall.service` to use it
 - [ ] `bluefin-server-installer.bst` decompresses DDI AFTER the cpio step
