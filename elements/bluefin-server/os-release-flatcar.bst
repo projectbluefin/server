@@ -5,6 +5,8 @@ build-depends:
   # Needed so the manual-element sandbox provides /bin/sh and coreutils (cat, ln, mkdir).
   - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
 
+# Disable binary stripping; this element only creates text files and the
+# runtime-minimal sandbox does not include the stripper toolchain.
 variables:
   strip-binaries: ""
 

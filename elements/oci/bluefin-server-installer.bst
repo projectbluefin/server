@@ -34,6 +34,7 @@ build-depends:
   - freedesktop-sdk.bst:components/dracut.bst
   - freedesktop-sdk.bst:components/cpio.bst      # newc cpio archive creation
   - freedesktop-sdk.bst:components/findutils.bst  # find for cpio pipe
+  # grep/sed are required by dracut/dracut-install even though our commands don't name them.
   - freedesktop-sdk.bst:components/grep.bst
   - freedesktop-sdk.bst:components/sed.bst
   - freedesktop-sdk.bst:components/zstd.bst       # compress initrd + final disk

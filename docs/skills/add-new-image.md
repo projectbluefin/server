@@ -60,7 +60,7 @@ Document the prune list and *why each entry is safe* in this skill when you add 
 
 ## Wire it up
 
-- Add a `build-<name>` target or parameterize the Justfile (`image_name`).
+- Add a `build-<name>` target to the Justfile.
 - Add the image row to `README.md`.
 - `just validate && just build && just verify`.
 

@@ -52,6 +52,7 @@ existing repo convention already does the job.
 | "A forwarding recipe is harmless." | It duplicates the command surface and rots when the real recipe changes. |
 | "I don't need to re-validate after a tiny cut." | `just validate` is the merge contract. Run it every time. |
 | "This build dep isn't named in the commands, so it's unused." | `manual`/`script` element commands run in a sandbox that still needs `/bin/sh` and coreutils. Cutting the dep that supplies them breaks the build even if `make` itself is never called. |
+| "The tool I depend on doesn't need grep/sed/etc." | Build tools like `dracut` invoke `grep`, `sed`, and `ldconfig` internally. If the sandbox doesn't have them, the tool fails with opaque "command not found" or missing-library errors. |
 
 ## Red Flags
 
@@ -68,7 +69,8 @@ existing repo convention already does the job.
 - [ ] No hardcoded version duplicates remain; `release-version` in `project.conf`
       is the single source of truth.
 - [ ] Removed build dependencies are not used by any command in the element.
-- [ ] For `manual`/`script` elements, the sandbox still has `/bin/sh` and any coreutils the commands need after a dep cut; prefer `just bst build <element>` to verify.
+- [ ] For `manual`/`script` elements, the sandbox still has `/bin/sh` and any coreutils the commands need after a dep cut.
+- [ ] For `script` elements, build the element with `just bst build <element>`; transitive tools (`dracut`, `ukify`, etc.) may fail silently if their own runtime deps are missing from the sandbox.
 - [ ] Justfile has no forwarding aliases or duplicate validation targets.
 - [ ] Docs and skill files no longer reference deleted targets or dependencies.
 

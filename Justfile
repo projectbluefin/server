@@ -3,16 +3,8 @@
 default:
     @just --list
 
-# -- Configuration ---------------------------------------------------------
-export image_name := env("BUILD_IMAGE_NAME", "bluefin-server-installer")
-export image_registry := env("BUILD_IMAGE_REGISTRY", "ghcr.io/projectbluefin")
-
 # Same bst2 container image FSDK/dakota CI uses -- pinned by SHA.
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:64eb0b4930d57a92710822898fb73af6cc1ae35d")
-
-# OCI metadata (dynamic labels), injected at export time.
-export OCI_IMAGE_CREATED := env("OCI_IMAGE_CREATED", "")
-export OCI_IMAGE_REVISION := env("OCI_IMAGE_REVISION", "")
 
 # Prefix for podman calls: empty when rootless podman works, "sudo" otherwise.
 sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } else { "sudo" }
@@ -161,7 +153,8 @@ show-me-the-future:
 
     cp dist/bluefin-server-installer-*.raw.zst "$WORKDIR/installer.raw.zst"
     zstd -d "$WORKDIR/installer.raw.zst" -o "$WORKDIR/installer.raw"
-    truncate -s 16G "$WORKDIR/target.raw"
+    TARGET_SIZE="${SHOW_ME_THE_FUTURE_DISK_SIZE:-16G}"
+    truncate -s "${TARGET_SIZE}" "$WORKDIR/target.raw"
 
     OVMF_CODE=""
     for candidate in \
