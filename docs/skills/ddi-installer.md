@@ -238,7 +238,7 @@ sudo sh -c 'zstd -dc dist/bluefin-server-installer-*.raw.zst | dd of=/dev/sda bs
 **GitHub is the control plane only** — the workflow resolves the tag ref, runs `just validate-installer`, then publishes an `installer-build/<tag>` GitOps signal tag. The lab consumes that tag, builds, and uploads artifacts.
 
 ```bash
-git tag installer-v0.1.0 && git push origin installer-v0.1.0
+git tag installer-v25.08.13 && git push origin installer-v25.08.13
 ```
 
 > No BST build compute runs on GitHub-hosted runners.

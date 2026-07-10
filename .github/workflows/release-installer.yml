@@ -3,7 +3,7 @@ name: Release DDI installer
 # Publishes a GitOps installer-build signal tag for lab automation to consume.
 # Actual BST build and GitHub Release upload happen in the lab.
 #
-# Tag format: installer-v<semver>  e.g. installer-v0.1.0
+# Tag format: installer-v<fsdk-version>  e.g. installer-v25.08.13
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. installer-v0.1.0)'
+        description: 'Release tag (e.g. installer-v25.08.13)'
         required: true
 
 concurrency:
