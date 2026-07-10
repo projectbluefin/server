@@ -93,17 +93,34 @@ systemd PID 1 starts, reaches system-install.target
 systemd-sysinstall.service
      │
      ▼
-systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes
+bluefin-sysinstall (wrapper script)
+     ├─ Warn if TPM is absent (prevents insecure credential sealing fallback)
+     ├─ Read /proc/cmdline for "unattended"
      │
-     ├─ Interactive TUI: disk selection
-     ├─ Interactive TUI: confirm installation summary
-     ├─ Propagate locale, keymap, and timezone via systemd-creds
-     ├─ systemd-repart --dry-run=no /dev/TARGET
-     │      reads /usr/lib/repart.d/ (10-esp, 20-root-a, 30-var)
-     │      20-root-a: CopyBlocks=/dev/disk/by-partlabel/bluefin-installer-data
-     ├─ bootctl link (installs bluefin-server.efi + credentials to ESP)
-     ├─ bootctl install (installs systemd-boot to ESP)
-     └─ Reboot into installed Bluefin Server
+     ├─► [INTERACTIVE Mode]
+     │     systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes --copy-locale=yes --copy-keymap=yes --copy-timezone=yes --load-credential=passwd.hashed-password.root:/etc/root_hash
+     │       ├─ Interactive TUI: disk selection
+     │       ├─ Interactive TUI: confirm installation summary
+     │       ├─ Propagate locale, keymap, and timezone via systemd-creds
+     │
+     └─► [UNATTENDED Mode]
+           systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes --erase=yes --confirm=no --summary=no --load-credential=passwd.hashed-password.root:/etc/root_hash
+             ├─ Automated disk selection and partitioning
+             └─ No prompts or summary screens
+     │
+     ▼
+systemd-repart --dry-run=no /dev/TARGET
+     reads /usr/lib/repart.d/ (10-esp, 20-root-a, 30-var)
+     20-root-a: CopyBlocks=/dev/disk/by-partlabel/bluefin-installer-data
+     │
+     ▼
+bootctl link (installs bluefin-server.efi + secure hashed root credentials to ESP)
+     │
+     ▼
+bootctl install (installs systemd-boot to ESP)
+     │
+     ▼
+Reboot into installed Bluefin Server
 ```
 
 ## Initrd Assembly (cpio-native)
@@ -226,6 +243,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
 - [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, `xfsprogs`, and `openssh-systemd`
 - [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
+- [ ] `bluefin-server-installer.bst` writes a secure pre-hashed root password (`/etc/root_hash`) and installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles TPM detection, explicit locale/keymap/timezone copy flags, and unattended mode triggering
 - [ ] `bluefin-server-installer.bst` installs an `sshd.service` drop-in that generates missing OpenSSH host keys on boot
 - [ ] `bluefin-server-installer.bst` builds `/usr/lib/bluefin-server/bluefin-server.efi` from a staged target rootfs with dracut + ukify and overrides `systemd-sysinstall.service` to use it
 - [ ] `bluefin-server-installer.bst` decompresses DDI AFTER the cpio step

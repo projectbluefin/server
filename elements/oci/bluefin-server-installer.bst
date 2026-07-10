@@ -119,11 +119,52 @@ config:
       # Mask systemd-firstboot to prevent interactive credential blocks on tty1
       mkdir -p /layer/etc/systemd/system
       ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
+
+      # Write root hash file
+      echo -n '$6$ZbsnFo0smWIQ40GX$ei//Njn0kIsfUrXY9Ty7.jJt2tTgmHlpoZ/amNdKlArtqWYXyup/kScL3O5t.JTP2taesR0.9QktIJiuQvuEI/' > /layer/etc/root_hash
+
+      # Write the installer wrapper script
+      cat > /layer/usr/bin/bluefin-sysinstall << 'EOF'
+      #!/bin/bash
+      set -euo pipefail
+
+      # Check for TPM presence and warn/fail
+      if [ ! -e /sys/class/tpm/tpm0 ] && [ ! -e /sys/class/tpm/tpm_bios ]; then
+        echo "WARNING: No TPM2 device detected. System credentials will NOT be cryptographically protected." >&2
+      fi
+
+      # Check for unattended in kernel command line
+      if grep -q "unattended" /proc/cmdline; then
+        echo "==> Running in UNATTENDED mode..."
+        exec /usr/bin/systemd-sysinstall \
+          --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
+          --erase=yes \
+          --confirm=no \
+          --summary=no \
+          --variables=yes \
+          --reboot=yes \
+          --mute-console=yes \
+          --load-credential=passwd.hashed-password.root:/etc/root_hash
+      else
+        echo "==> Running in INTERACTIVE mode..."
+        exec /usr/bin/systemd-sysinstall \
+          --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
+          --variables=yes \
+          --reboot=yes \
+          --mute-console=yes \
+          --copy-locale=yes \
+          --copy-keymap=yes \
+          --copy-timezone=yes \
+          --load-credential=passwd.hashed-password.root:/etc/root_hash
+      fi
+      EOF
+      chmod +x /layer/usr/bin/bluefin-sysinstall
+
       mkdir -p /layer/etc/systemd/system/systemd-sysinstall.service.d
       cat > /layer/etc/systemd/system/systemd-sysinstall.service.d/override.conf << 'EOF'
       [Service]
       ExecStart=
-      ExecStart=/usr/bin/systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes
+      ExecStart=/usr/bin/bluefin-sysinstall
       EOF
       # DHCP on all ethernet interfaces
       mkdir -p /layer/usr/lib/systemd/network
