@@ -115,7 +115,8 @@ cluster-build REF="main":
 # Export the installer disk image + SHA256SUMS to dist/.
 [group('installer')]
 export-installer: build-installer
-    rm -rf dist
+    mkdir -p dist
+    rm -f dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/SHA256SUMS
     just bst artifact checkout oci/bluefin-server-installer.bst --directory dist
     @echo "==> wrote:" && ls -lh dist/
 
