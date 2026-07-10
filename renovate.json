@@ -6,7 +6,9 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^elements/.*\\.bst$"],
+      "managerFilePatterns": [
+        "/^elements/.*\\.bst$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?:\\s+versioning=(?<versioning>[^\\s]+))?\\n\\s*ref:\\s*['\"]?(?<currentValue>[^'\"\\s]+)['\"]?"
       ]
