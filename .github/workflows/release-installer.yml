@@ -23,9 +23,9 @@ permissions:
   contents: write
 
 jobs:
-  dispatch-lab-installer-build:
+  build-and-release:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -35,33 +35,46 @@ jobs:
         with:
           tool: just
 
-      - name: Resolve installer tag and SHA
-        id: resolve
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      - name: Set up runner disk space
         run: |
-          TAG="${INPUT_TAG#refs/tags/}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          sudo mkdir -p /mnt/podman /mnt/buildstream
+          sudo chown -R $USER:$USER /mnt/podman /mnt/buildstream
+          # Redirect podman storage to /mnt/podman (74GB SSD)
+          mkdir -p ~/.config/containers
+          cat > ~/.config/containers/storage.conf <<EOF
+          [storage]
+          driver = "overlay"
+          runroot = "/run/user/1001"
+          graphroot = "/mnt/podman"
+          EOF
+          # Redirect BuildStream cache to /mnt/buildstream
+          mkdir -p ~/.cache
+          ln -s /mnt/buildstream ~/.cache/buildstream
 
-      - name: Validate installer element graph (pre-flight)
-        run: just validate-installer
+      - name: Build and export DDI OS image
+        run: |
+          just build-ddi
+          just export-ddi
 
-      - name: Publish GitOps installer-build tag
+      - name: Build and export live installer & target UKI
+        run: |
+          just build-installer
+          just export-installer
+
+      - name: Upload assets to GitHub Release
         env:
-          INSTALLER_TAG: ${{ steps.resolve.outputs.tag }}
-          BUILD_SHA: ${{ steps.resolve.outputs.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          SIGNAL_TAG="installer-build/${INSTALLER_TAG}"
-          if REMOTE_REF="$(git ls-remote --tags origin "refs/tags/${SIGNAL_TAG}" | awk '{print $1}' | head -n1)" && [ -n "${REMOTE_REF}" ]; then
-            if [ "${REMOTE_REF}" = "${BUILD_SHA}" ]; then
-              echo "==> ${SIGNAL_TAG} already exists at expected SHA; skipping"
-              exit 0
-            fi
-            echo "ERROR: ${SIGNAL_TAG} exists but points to ${REMOTE_REF}, expected ${BUILD_SHA}" >&2
-            exit 1
-          fi
-          git tag "${SIGNAL_TAG}" "${BUILD_SHA}"
-          git push origin "${SIGNAL_TAG}"
-          echo "==> Published ${SIGNAL_TAG} -> ${BUILD_SHA}"
+          CLEAN_TAG="${TAG#refs/tags/}"
+          echo "Uploading release assets for tag: ${CLEAN_TAG}"
+          # Ensure the release exists on GitHub before uploading
+          gh release create "${CLEAN_TAG}" --title "Bluefin Server v${CLEAN_TAG#installer-v}" --notes "Release ${CLEAN_TAG}" || true
+          gh release upload "${CLEAN_TAG}" \
+            dist/bluefin-server-installer-*.raw.zst \
+            dist/bluefin-server-*.efi \
+            dist/SHA256SUMS \
+            dist/ddi/bluefin-server-ddi-*.raw.zst \
+            dist/ddi/SHA256SUMS \
+            --clobber
