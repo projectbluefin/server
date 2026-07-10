@@ -23,7 +23,6 @@ Only load the docs relevant to your task.
   `system-install.target`, which launches **systemd-sysinstall** — the native
   systemd interactive installer on `/dev/console` (tty0). The OS DDI is embedded
   at build time; no network required at install time.
-  SSH is available on the live installer (`ssh root@<ip>`, no password).
 - **No Knuckle.** The installer uses native systemd tooling (`systemd-sysinstall`
   and `systemd-repart`) to partition the target disk, copy the XFS DDI filesystem
   payload, register the boot loader via `bootctl`, and reboot.

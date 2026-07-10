@@ -34,7 +34,7 @@ The installer UI is systemd's built-in **systemd-sysinstall** (introduced in sys
 - Offers to erase the target disk or install alongside existing partitions
 - Copies the OS filesystem DDI block-for-block using `systemd-repart` and partition recipes (`CopyBlocks=`)
 - Registers the bootloader (`systemd-boot`) and the Unified Kernel Image (UKI) using `bootctl`
-- Securely encrypts and propagates installer environment credentials (locale, keymap, timezone) to the target OS
+- Propagates installer environment settings (locale, keymap, timezone) to the target OS
 - Reboots into the installed system
 
 User provisioning is handled on the target system's first boot via `systemd-firstboot` or other firstboot configurations, maintaining clean statelessness.
@@ -49,26 +49,6 @@ User provisioning is handled on the target system's first boot via `systemd-firs
 6. `systemd-sysinstall` reads partition recipes from `/usr/lib/repart.d/` (falling back automatically since `/usr/lib/repart.sysinstall.d/` is empty).
 7. The `20-root-a.conf` partition recipe copies the DDI block-for-block from `/dev/disk/by-partlabel/bluefin-installer-data` (which is the embedded DDI partition on the installer media).
 8. Target OS volume expansion: `root-a` and `/var` partitions are resized to fill available space on boot using `systemd-growfs`. This requires the target OS stack (`elements/bluefin-server/os-stack.bst`) to include `freedesktop-sdk.bst:components/xfsprogs.bst` (providing the `xfs_growfs` tool).
-
-## SSH access to live installer
-
-The installer live environment runs `sshd.service` on `system-install.target`.
-The live image adds an `sshd.service` drop-in that generates missing
-`/etc/ssh/ssh_host_*` keys on first boot before `sshd` starts, so the service
-can come up cleanly without depending on build-sandbox key generation.
-Connect headlessly during install:
-
-```
-ssh root@<installer-ip>   # no password required
-```
-
-sshd config drop-in (`/etc/ssh/sshd_config.d/installer.conf`):
-```
-PermitRootLogin yes
-PermitEmptyPasswords yes
-```
-
-Root has no password in the installer rootfs. Network comes up via DHCP on all `en*/eth*/ens*/enp*` interfaces. Find the IP from the console or your DHCP server's lease table.
 
 ## Partition Layout
 
@@ -94,17 +74,16 @@ systemd-sysinstall.service
      │
      ▼
 bluefin-sysinstall (wrapper script)
-     ├─ Warn if TPM is absent (prevents insecure credential sealing fallback)
      ├─ Read /proc/cmdline for "unattended"
      │
      ├─► [INTERACTIVE Mode]
-     │     systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes --copy-locale=yes --copy-keymap=yes --copy-timezone=yes --load-credential=passwd.hashed-password.root:/etc/root_hash
+     │     systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes --copy-locale=yes --copy-keymap=yes --copy-timezone=yes
      │       ├─ Interactive TUI: disk selection
      │       ├─ Interactive TUI: confirm installation summary
-     │       ├─ Propagate locale, keymap, and timezone via systemd-creds
+     │       └─ Propagate locale, keymap, and timezone via systemd-creds
      │
      └─► [UNATTENDED Mode]
-           systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes --erase=yes --confirm=no --summary=no --load-credential=passwd.hashed-password.root:/etc/root_hash
+           systemd-sysinstall --kernel=/usr/lib/bluefin-server/bluefin-server.efi --variables=yes --reboot=yes --mute-console=yes --erase=yes --confirm=no --summary=no
              ├─ Automated disk selection and partitioning
              └─ No prompts or summary screens
      │
@@ -114,7 +93,7 @@ systemd-repart --dry-run=no /dev/TARGET
      20-root-a: CopyBlocks=/dev/disk/by-partlabel/bluefin-installer-data
      │
      ▼
-bootctl link (installs bluefin-server.efi + secure hashed root credentials to ESP)
+bootctl link (installs bluefin-server.efi to ESP)
      │
      ▼
 bootctl install (installs systemd-boot to ESP)
@@ -288,10 +267,10 @@ The release process is fully automated on GitHub via `.github/workflows/build.ym
 - [ ] No `installer-knuckle.bst` or `installer.service` exists in the codebase
 - [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
 - [ ] Serial console `console=ttyS0,115200` is the final console argument in UKI cmdline to ensure primary interactive `/dev/console` output redirects cleanly over headless QEMU serial (e.g. `mon:stdio` with `-nographic`), avoiding graphic-mode VGA curses limitations
-- [ ] `installer-stack.bst` explicitly includes `xfsprogs` and `openssh-systemd`
-- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
-- [ ] `bluefin-server-installer.bst` writes a secure pre-hashed root password (`/etc/root_hash`) and installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles TPM detection, explicit locale/keymap/timezone copy flags, and unattended mode triggering with disk auto-discovery filtering (type "disk", read-only=0, size>0) to ignore empty or optical drives
-- [ ] `bluefin-server-installer.bst` installs an `sshd.service` drop-in that generates missing OpenSSH host keys on boot
+- [ ] `installer-stack.bst` explicitly includes `xfsprogs`
+- [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`) at build-time
+- [ ] `bluefin-server-installer.bst` installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles explicit locale/keymap/timezone copy flags and unattended mode triggering with disk auto-discovery filtering (type "disk", read-only=0, size>0) to ignore empty or optical drives
+- [ ] The live installer does not bake hardcoded SSH keys or pre-hashed root passwords
 - [ ] `bluefin-server-installer.bst` builds `/usr/lib/bluefin-server/bluefin-server.efi` from a staged target rootfs with dracut + ukify and overrides `systemd-sysinstall.service` to use it (configuring SuccessAction=poweroff and FailureAction=poweroff to ensure clean ACPI motherboard shutdown of the guest VM upon install completion, allowing test wrappers to proceed automatically)
 - [ ] `bluefin-server-installer.bst` decompresses DDI AFTER the cpio step
 - [ ] `bluefin-server-ddi.bst` sizes filesystem at content + 25% (no hardcoded floor)

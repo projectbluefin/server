@@ -42,5 +42,5 @@ Workflow knowledge and operational runbooks any agent needs to work in this repo
 - Compose from FSDK `components/*`, never `platform.bst`.
 - The interactive installer is **systemd-sysinstall** (introduced in systemd 261).
 - The installer is **offline** — DDI embedded as a data partition. No network pull at install time.
-- SSH in the live installer is exposed by `sshd.service`; the image pre-generates host keys so `ssh root@<ip>` works as soon as networking comes up.
+- The live installer has no SSH server and no baked-in root credentials; all interaction happens on `/dev/console`.
 - `just validate` is the merge contract for element graph changes.

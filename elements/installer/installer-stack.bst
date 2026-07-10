@@ -23,10 +23,6 @@ depends:
   - freedesktop-sdk.bst:components/systemd.bst
   - freedesktop-sdk.bst:components/kmod.bst
 
-  # SSH access to live installer environment
-  - freedesktop-sdk.bst:components/openssh.bst
-  - freedesktop-sdk.bst:components/openssh-systemd.bst
-
   # Disk setup: LUKS partition support during install
   - freedesktop-sdk.bst:components/cryptsetup.bst
   - freedesktop-sdk.bst:components/xfsprogs.bst
@@ -37,4 +33,3 @@ depends:
 
   # repart.d configs describing the TARGET disk layout
   - installer/installer-repart.bst
-  - installer/installer-sshd-dropins.bst

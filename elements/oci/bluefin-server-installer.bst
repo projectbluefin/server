@@ -68,16 +68,12 @@ config:
       set -eu
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall sshd; do
+      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
         fi
       done
-      if [ ! -f /layer/usr/lib/systemd/system/sshd.service ]; then
-        echo "ERROR: sshd.service is missing from the staged rootfs at /layer!" >&2
-        exit 1
-      fi
 
       # systemd-native initrd: /init -> PID 1
       ln -sf usr/lib/systemd/systemd /layer/init
@@ -122,25 +118,14 @@ config:
         /layer/usr/lib/systemd/system/system-install.target.wants/systemd-networkd.service
       ln -sf /usr/lib/systemd/system/systemd-resolved.service \
         /layer/usr/lib/systemd/system/system-install.target.wants/systemd-resolved.service
-      ln -sf /usr/lib/systemd/system/sshd.service \
-        /layer/usr/lib/systemd/system/system-install.target.wants/sshd.service
       # Mask systemd-firstboot to prevent interactive credential blocks on tty1
       mkdir -p /layer/etc/systemd/system
       ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
-
-      # Write root hash file
-      echo -n '$6$ZbsnFo0smWIQ40GX$ei//Njn0kIsfUrXY9Ty7.jJt2tTgmHlpoZ/amNdKlArtqWYXyup/kScL3O5t.JTP2taesR0.9QktIJiuQvuEI/' > /layer/etc/root_hash
-      chmod 600 /layer/etc/root_hash
 
       # Write the installer wrapper script
       cat > /layer/usr/bin/bluefin-sysinstall << 'EOF'
       #!/bin/bash
       set -euo pipefail
-
-      # Check for TPM presence and warn/fail
-      if [ ! -e /sys/class/tpm/tpm0 ] && [ ! -e /sys/class/tpm/tpm_bios ]; then
-        echo "WARNING: No TPM2 device detected. System credentials will NOT be cryptographically protected." >&2
-      fi
 
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
       TARGET_DISK=""
@@ -174,7 +159,6 @@ config:
             --variables=yes \
             --reboot=no \
             --mute-console=yes \
-            --load-credential=passwd.hashed-password.root:/etc/root_hash \
             "${TARGET_DISK}" < /dev/null
         else
           echo "ERROR: No suitable target disk found for unattended installation!" >&2
@@ -189,8 +173,7 @@ config:
           --mute-console=yes \
           --copy-locale=yes \
           --copy-keymap=yes \
-          --copy-timezone=yes \
-          --load-credential=passwd.hashed-password.root:/etc/root_hash
+          --copy-timezone=yes
       fi
       EOF
       chmod +x /layer/usr/bin/bluefin-sysinstall
@@ -209,20 +192,6 @@ config:
       mkdir -p /layer/usr/lib/systemd/network
       printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
         > /layer/usr/lib/systemd/network/80-dhcp.network
-      # Allow root login via key-based authentication only over SSH (installer is ephemeral)
-      mkdir -p /layer/etc/ssh/sshd_config.d
-      printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\n' \
-        > /layer/etc/ssh/sshd_config.d/installer.conf
-
-      # Bake SSH keys into the root user's authorized_keys in the live environment
-      mkdir -p /layer/root/.ssh
-      cat > /layer/root/.ssh/authorized_keys << 'SSHKEY'
-      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPTn9YbnzdPkWSHjfaM8cs3oTmPN5KNqQxF28qIQmoYW jorge.castro@gmail.com
-      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzkpPRSOzDwEUwkTxS257lewEBz8za8vMuwUWsFO1sp jorge.castro@gmail.com
-      SSHKEY
-      chmod 700 /layer/root/.ssh
-      chmod 600 /layer/root/.ssh/authorized_keys
-
     # ── Step 2: Wire default.target -> system-install.target ────────────
     - |
       set -eu
@@ -232,10 +201,6 @@ config:
       fi
       if [ ! -L /layer/usr/lib/systemd/system/system-install.target.wants/systemd-sysinstall.service ]; then
         echo "ERROR: system-install.target.wants/systemd-sysinstall.service is missing from the staged rootfs! FSDK systemd must be built with -Dsysinstall=true." >&2
-        exit 1
-      fi
-      if [ ! -f /layer/etc/systemd/system/sshd.service.d/10-hostkeys.conf ]; then
-        echo "ERROR: sshd host-key drop-in is missing from the staged rootfs!" >&2
         exit 1
       fi
       if [ ! -f /layer/usr/lib/bluefin-server/bluefin-server.efi ]; then
