@@ -141,7 +141,7 @@ ln -sf system-install.target /layer/usr/lib/systemd/system/default.target
 
 # 4. Build UKI
 ukify build --linux="/layer/boot/vmlinuz" --initrd=/installer.cpio.zst \
-  --cmdline="systemd.unit=system-install.target console=ttyS0,115200 rw" \
+  --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw" \
   --output=/layer/boot/efi/EFI/Linux/installer.efi
 
 # 5. Decompress DDI into /layer AFTER cpio (won't be in initrd)
@@ -241,6 +241,7 @@ git tag installer-v0.1.0 && git push origin installer-v0.1.0
 - [ ] `just validate-installer` resolves the BuildStream graph without errors
 - [ ] No `installer-knuckle.bst` or `installer.service` exists in the codebase
 - [ ] UKI boot cmdline points to `systemd.unit=system-install.target`
+- [ ] Serial console `console=ttyS0,115200` is the final console argument in UKI cmdline to ensure primary interactive `/dev/console` output redirects cleanly over headless QEMU serial (e.g. `mon:stdio` with `-nographic`), avoiding graphic-mode VGA curses limitations
 - [ ] `installer-stack.bst` explicitly includes `gawk`, `sed`, `grep`, `xfsprogs`, and `openssh-systemd`
 - [ ] `bluefin-server-installer.bst` asserts the existence of critical tools (`awk`, `gawk`, `sed`, `grep`, `udevadm`, `lsblk`, `systemd-repart`, `bootctl`, `systemd-sysinstall`, `sshd`) and `sshd.service` at build-time
 - [ ] `bluefin-server-installer.bst` writes a secure pre-hashed root password (`/etc/root_hash`) and installs a centralized `/usr/bin/bluefin-sysinstall` wrapper script that handles TPM detection, explicit locale/keymap/timezone copy flags, and unattended mode triggering
