@@ -80,7 +80,9 @@ GitHub Actions runs the **complete BuildStream compilation pipeline** natively u
 1. **Renovate tracking**: `renovate.json` is configured with a custom regex manager to scan BuildStream junction files (`freedesktop-sdk.bst` and `gnome-build-meta.bst`) using `git-refs` datasource.
 2. **Auto-resolution**: On Renovate PRs, GitHub Actions automatically executes `just bst source track` to resolve raw tags to full `git-describe` refs and commits them back.
 3. **Full Compilation**: Builds standalone DDI OS and installer images on every pull request (validation) and push to `main`.
-4. **Automated Publishing**: For pushes to `main` (like Renovate PR merges), GitHub Actions automatically generates a GitHub Release based on the current FSDK version and uploads all compiled binaries.
+4. **Version Derivation**: The release tag is derived with `just version`, which parses the pinned FSDK point release from `elements/freedesktop-sdk.bst`.
+5. **Automated Publishing**: For pushes to `main` (like Renovate PR merges), GitHub Actions automatically generates a GitHub Release based on the current FSDK version and uploads all compiled binaries.
+6. **Release Signing**: SHA256SUMS manifests are signed with the project GPG key stored in the `SYSUPDATE_SIGNING_KEY` repository secret. Detached `.gpg` signatures are uploaded alongside the manifests so `systemd-sysupdate` can verify them.
 
 
 ## Common Rationalizations
@@ -101,3 +103,5 @@ GitHub Actions runs the **complete BuildStream compilation pipeline** natively u
 - [ ] Every `uses:` line has a full 40-char SHA and a `# vX` comment
 - [ ] `just verify` passes locally (or in CI) after workflow changes
 - [ ] No new mutable action refs introduced
+- [ ] Release signing step uploads detached `.gpg` signatures for every `SHA256SUMS` manifest
+- [ ] The signing secret name matches the one documented in `docs/skills/systemd-sysupdate-verification.md`
