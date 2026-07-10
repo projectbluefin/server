@@ -134,18 +134,34 @@ config:
         echo "WARNING: No TPM2 device detected. System credentials will NOT be cryptographically protected." >&2
       fi
 
+      # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
+      TARGET_DISK=""
+      for disk in $(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b | awk '$2 == "disk" && $3 == "0" && $4 > 0 {print $1}'); do
+        if ! lsblk -n -o LABEL "$disk" 2>/dev/null | grep -q "bluefin-installer-data"; then
+          TARGET_DISK="$disk"
+          break
+        fi
+      done
+
       # Check for unattended in kernel command line
       if grep -q -w "unattended" /proc/cmdline; then
         echo "==> Running in UNATTENDED mode..."
-        exec /usr/bin/systemd-sysinstall \
-          --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
-          --erase=yes \
-          --confirm=no \
-          --summary=no \
-          --variables=yes \
-          --reboot=yes \
-          --mute-console=yes \
-          --load-credential=passwd.hashed-password.root:/etc/root_hash
+        if [ -n "${TARGET_DISK}" ]; then
+          echo "==> Auto-detected target disk: ${TARGET_DISK}"
+          exec /usr/bin/systemd-sysinstall \
+            --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
+            --erase=yes \
+            --confirm=no \
+            --summary=no \
+            --variables=yes \
+            --reboot=yes \
+            --mute-console=yes \
+            --load-credential=passwd.hashed-password.root:/etc/root_hash \
+            "${TARGET_DISK}"
+        else
+          echo "ERROR: No suitable target disk found for unattended installation!" >&2
+          exit 1
+        fi
       else
         echo "==> Running in INTERACTIVE mode..."
         exec /usr/bin/systemd-sysinstall \
@@ -249,7 +265,7 @@ config:
       ukify build \
         --linux="/layer/boot/vmlinuz" \
         --initrd=/installer.cpio.gz \
-        --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw" \
+        --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended" \
         --output=/layer/boot/efi/EFI/BOOT/BOOTX64.EFI
       ls -lh /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
 
