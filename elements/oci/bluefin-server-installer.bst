@@ -337,5 +337,10 @@ config:
       cd "%{install-root}"
       FNAME="bluefin-server-installer-%{installer-version}.raw"
       zstd --rm -T0 -19 -q "${FNAME}" -o "${FNAME}.zst"
+
+      # Also export the target UKI (.efi) for GitHub Releases and systemd-sysupdate
+      cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{installer-version}.efi"
+
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS
+      sha256sum --binary "bluefin-server-%{installer-version}.efi" >> SHA256SUMS
       ls -lh
