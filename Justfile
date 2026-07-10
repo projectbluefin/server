@@ -75,8 +75,8 @@ export:
 # Bluefin Server onto a target disk (see docs/skills/ddi-installer.md).
 # The DDI payload is embedded as a data partition; no network required.
 # NOTE: build-installer/export-installer are local development commands.
-# Release publication is delegated to testing-lab by
-# .github/workflows/release-installer.yml.
+# Release publication is fully automated on GitHub via
+# .github/workflows/build.yml and Renovate.
 
 # Build the OS DDI payload filesystem image (implicit dep of build-installer;
 # useful when you need the standalone artifact for release publishing).

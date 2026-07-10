@@ -77,8 +77,9 @@ Before merging a bump:
 
 ## Automated Point-Release Bumps
 
-Point releases are fully automated via the `.github/workflows/auto-update-fsdk.yml` GHA workflow.
-- **Trigger:** Daily cron schedule at `03:00 UTC` and manual `workflow_dispatch`.
-- **Mechanism:** Runs `just bst source track freedesktop-sdk.bst` to check for newer refs on the tracking line. If changed, validates the element graph and commits/pushes the new junction ref directly to `main`.
-- **Build Loop:** The push trigger on `main` kicks off the standard multi-arch build and publish workflow, which rebuilds, verifies, and publishes the new point-release tag and manifests.
+Point releases are fully automated via Renovate and GitHub Actions.
+- **Trigger:** Renovate bot scans `elements/freedesktop-sdk.bst` using a custom regex manager. When a new upstream point release is published, Renovate creates a Pull Request.
+- **Mechanism:** On the Renovate PR, a GHA job in `build.yml` automatically runs `just bst source track freedesktop-sdk.bst` to track and resolve the raw tag to the full `git-describe` ref, then commits and pushes it back to the PR branch.
+- **Build Loop:** When the PR is merged to `main`, GitHub Actions automatically compiles the standalone DDI OS and installer images, and publishes them directly to GitHub Releases under the new FSDK point-release version.
+
 

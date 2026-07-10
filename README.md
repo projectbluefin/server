@@ -10,7 +10,7 @@ The difference is this is [DDI first](https://0pointer.net/blog/fitting-everythi
 
 - FSDK-first server OS work in progress
 - Image-based updates and atomic rollbacks
-- GitOps-driven builds in the lab 
+- Fully automated GitOps-driven builds on GitHub
 - Pure DDI, follows modern linux patterns
 
 ## Build model
@@ -47,19 +47,14 @@ inside the FSDK `bst2` container -- nothing to install.
 
 ## CI / Release pipeline
 
-GitHub is the **control plane only** — it emits immutable Git refs/tags as build signals.
-All build compute and registry pushes happen inside the testing lab.
+GitHub Actions compiles the entire project (Standalone OS DDI and bootable installer) and handles publishing automatically. Automated Renovate manages updates to core platform dependencies.
 
 | Trigger | Workflow / Job | What happens |
 |---------|---------------|--------------|
-| Pull request | `build.yml` → `validate` | `just validate` resolves the element graph — no build, no push |
-| Push to `main`, `workflow_dispatch` | `build.yml` → `trigger-lab` | Resolves HEAD SHA and publishes `lab-build/<sha>` tag |
-| Daily **04:00 UTC** schedule | `lab-release.yml` → `dispatch-lab-build` | Resolves selected ref and publishes `lab-build/<sha>` tag |
-| `workflow_dispatch` on `lab-release.yml` | `lab-release.yml` → `dispatch-lab-build` | Same as above; accepts optional `ref` input |
-| Push tag `installer-v*` | `release-installer.yml` → `dispatch-lab-installer-build` | Resolves tag/SHA and publishes `installer-build/<installer-tag>` tag |
-| `lab-build/*` and `installer-build/*` in testing-lab | testing-lab workflows | Lab builds artifacts and publishes to registry/releases |
+| Pull request | `build.yml` | Resolves element graph (`just validate`) and executes raw BuildStream compilation to verify stability. Resolves/tracks Renovate refs automatically if opened by Renovate. |
+| Push to `main`, `workflow_dispatch` | `build.yml` | Builds stand-alone DDI OS, live installer, and target UKI using `/mnt` SSD storage on GHA hosted runners, then creates/updates the corresponding GitHub Release and uploads all compiled assets. |
 
-No PATs/App tokens/repository_dispatch are used for build handoff; Git refs are the signal.
+No PATs/App tokens/repository_dispatch are used; Renovate is the control driver.
 See [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for conventions.
 
 ## License

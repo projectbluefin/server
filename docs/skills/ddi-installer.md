@@ -254,14 +254,11 @@ sudo sh -c 'zstd -dc dist/bluefin-server-installer-*.raw.zst | dd of=/dev/sda bs
 
 ## Release
 
-`.github/workflows/release-installer.yml` fires on `installer-v*` tags.
-**GitHub is the control plane only** — the workflow resolves the tag ref, runs `just validate-installer`, then publishes an `installer-build/<tag>` GitOps signal tag. The lab consumes that tag, builds, and uploads artifacts.
+The release process is fully automated on GitHub via `.github/workflows/build.yml` and Renovate:
+- When Renovate merges a point-release update to `main` (or a push is made directly to `main`), GitHub Actions automatically triggers a full compilation.
+- GHA builds the standalone DDI OS image, live installer, and target UKI using `/mnt` SSD storage, then automatically creates a new GitHub Release with the versioned tag `installer-v<fsdk_version>` (e.g., `installer-v25.08.13`).
+- All compiled binaries (zstd-compressed installer raw images, standalone DDI payloads, EFI binaries, and SHA256 checksums) are uploaded directly to the GitHub Release.
 
-```bash
-git tag installer-v25.08.13 && git push origin installer-v25.08.13
-```
-
-> No BST build compute runs on GitHub-hosted runners.
 
 ## Common Rationalizations
 
