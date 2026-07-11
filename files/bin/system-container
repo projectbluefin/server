@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-help}"
+name="${2:-}"
+
+case "$cmd" in
+  start)
+    [ -n "$name" ] || { echo "usage: system-container start <name>" >&2; exit 1; }
+    sudo machinectl start "$name"
+    ;;
+  stop)
+    [ -n "$name" ] || { echo "usage: system-container stop <name>" >&2; exit 1; }
+    sudo machinectl poweroff "$name"
+    ;;
+  enter)
+    [ -n "$name" ] || { echo "usage: system-container enter <name>" >&2; exit 1; }
+    sudo machinectl shell "$name"
+    ;;
+  reset)
+    [ -n "$name" ] || { echo "usage: system-container reset <name>" >&2; exit 1; }
+    sudo machinectl remove "$name"
+    ;;
+  *)
+    echo "usage: system-container {start|stop|enter|reset} <name>" >&2
+    exit 1
+    ;;
+esac
