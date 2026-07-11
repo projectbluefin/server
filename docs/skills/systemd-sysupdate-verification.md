@@ -100,6 +100,16 @@ Key facts from `sysupdate.d(5)`:
   `just export-ddi`, and `just export-sysext` each write a `SHA256SUMS` in
   `dist/`, `dist/ddi/`, and `dist/sysext/` for local verification. Only the
   combined `dist/release/SHA256SUMS` is uploaded and used by `systemd-sysupdate`.
+- **`Verify=` belongs to `[Transfer]`, not `[Source]`.** Use it only in local
+  scratch copies for structural testing.
+- **Testing the trust chain locally.** In a Fedora container
+  (`dnf install systemd-udev systemd-container` — the `systemd-pull` helper
+  lives in `systemd-container`), copy
+  `files/os/sysupdate-keys/import-pubring.pgp` to
+  `/usr/lib/systemd/import-pubring.pgp`, point `--definitions=` at a scratch
+  copy of a transfer with only `[Target] Path=` rewritten, and run `list` and
+  `update`. The live release must yield "Signature verification succeeded";
+  gpg's "WARNING: Using untrusted key!" is expected ownertrust noise.
 
 ## Verification
 

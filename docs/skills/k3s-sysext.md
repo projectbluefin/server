@@ -197,6 +197,59 @@ can override a value by editing the file in `/etc` or by providing their own
   does not depend on `k3s-sysext.bst`. k3s is delivered OTA or dropped into
   `/var/lib/extensions/` by provisioning.
 
+## Runtime Testing Without a Lab VM
+
+Both halves of the delivery path can be exercised on a workstation with podman;
+neither requires touching the host OS.
+
+### OTA discovery and download (systemd-sysupdate)
+
+Copy `files/os/sysupdate.d/70-k3s.transfer` into a scratch `sysupdate.d/`,
+rewrite only the `[Target] Path=` to a scratch directory, then run inside a
+Fedora container:
+
+```bash
+podman run --rm -v "$SCRATCH:/scratch:z" quay.io/fedora/fedora:latest bash -c '
+  dnf -yq install systemd-udev systemd-container >/dev/null
+  /usr/lib/systemd/systemd-sysupdate --definitions=/scratch/sysupdate.d list
+  /usr/lib/systemd/systemd-sysupdate --definitions=/scratch/sysupdate.d update'
+```
+
+- `systemd-sysupdate` is in `systemd-udev`; the `systemd-pull` helper needed
+  for `url-file` sources is in `systemd-container`. Both are required.
+- To test the full trust chain, copy `files/os/sysupdate-keys/import-pubring.pgp`
+  to `/usr/lib/systemd/import-pubring.pgp` in the container; the live release
+  `SHA256SUMS.gpg` must verify. Only use `Verify=no` (a `[Transfer]` option)
+  for structural tests, never in shipped transfers.
+
+### Sysext merge and unit checks
+
+Run a privileged systemd container, place the decompressed image, and merge:
+
+```bash
+podman run -d --name sysext-test --privileged --cgroupns=host \
+  -v "$SCRATCH:/test:z" quay.io/fedora/fedora:latest \
+  bash -c 'dnf install -y systemd erofs-utils && exec /usr/sbin/init'
+podman exec sysext-test bash -c '
+  mount --make-shared /usr && mount --make-shared /opt
+  erofsfuse /test/k3s.raw /mnt && cp -a /mnt/. /var/lib/extensions/k3s/
+  systemd-sysext merge && systemd-sysext status
+  k3s --version
+  systemd-tmpfiles --create
+  cat /etc/rancher/k3s/config.yaml.d/50-bluefin-tuning.yaml
+  systemctl list-unit-files | grep k3s'
+```
+
+- Rootless podman cannot loop-mount the `.raw` directly (`Permission denied`
+  reading image metadata); extract via `erofsfuse` into a
+  `/var/lib/extensions/<name>/` directory instead. This is a test-environment
+  limitation, not an image defect.
+- `systemd-sysext merge` requires `/usr` and `/opt` to be shared mount points
+  inside the container (`mount --make-shared`).
+- `systemctl start k3s` will fail in a nested container on modprobe and
+  overlayfs snapshotter errors. That is environmental; full k3s startup
+  verification needs a real VM or bare metal.
+
 ## Verification
 
 - [ ] `elements/k3s/k3s-bin.bst` uses a real upstream k3s release URL and a
