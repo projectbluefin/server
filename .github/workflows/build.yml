@@ -71,18 +71,29 @@ jobs:
           just build-installer
           just export-installer
 
-      - name: Sign release SHA256SUMS manifests
+      - name: Build and export k3s systemd-sysext
+        run: |
+          just build-sysext
+          just export-sysext
+
+      - name: Sign release SHA256SUMS manifest
         if: github.ref == 'refs/heads/main'
         env:
           SYSUPDATE_SIGNING_KEY: ${{ secrets.SYSUPDATE_SIGNING_KEY }}
         run: |
           set -euo pipefail
+          # systemd-sysupdate fetches <Path>/SHA256SUMS as the version
+          # manifest, so all release assets must share one combined,
+          # flat manifest at the release root.
+          mkdir -p dist/release
+          cp dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/release/
+          cp dist/ddi/bluefin-server-ddi-*.raw.zst dist/release/
+          cp dist/sysext/k3s-*.raw.zst dist/release/
+          (cd dist/release && sha256sum --binary -- * > SHA256SUMS)
           export GNUPGHOME=$(mktemp -d)
           trap 'rm -rf "$GNUPGHOME"' EXIT
           echo "$SYSUPDATE_SIGNING_KEY" | gpg --batch --import
-          for f in dist/SHA256SUMS dist/ddi/SHA256SUMS; do
-            gpg --batch --yes --detach-sign --armor -o "${f}.gpg" "$f"
-          done
+          gpg --batch --yes --detach-sign --armor -o dist/release/SHA256SUMS.gpg dist/release/SHA256SUMS
 
       - name: Upload assets to GitHub Release
         if: github.ref == 'refs/heads/main'
@@ -95,12 +106,6 @@ jobs:
           echo "Uploading release assets for tag: ${TAG}"
           gh release create "${TAG}" --title "Bluefin Server v${V}" --notes "Automated release triggered by Renovate dependency update on main" --prerelease=false || true
           gh release upload "${TAG}" \
-            dist/bluefin-server-installer-*.raw.zst \
-            dist/bluefin-server-*.efi \
-            dist/SHA256SUMS \
-            dist/SHA256SUMS.gpg \
-            dist/ddi/bluefin-server-ddi-*.raw.zst \
-            dist/ddi/SHA256SUMS \
-            dist/ddi/SHA256SUMS.gpg \
+            dist/release/* \
             --clobber
 

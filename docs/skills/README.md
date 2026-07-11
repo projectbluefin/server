@@ -28,6 +28,7 @@ rules, then load the focused skill for your task.
 | Finishing a task (always) | [skill-improvement.md](skill-improvement.md) |
 | Securing Provisioning Credentials (TPM2 Sealing) | [tpm2-credential-sealing.md](tpm2-credential-sealing.md) |
 | Extensibility via systemd-sysext and Bakery | [systemd-sysext-extensions.md](systemd-sysext-extensions.md) |
+| Build, ship, or enable the k3s systemd-sysext | [k3s-sysext.md](k3s-sysext.md) |
 | Avoiding over-engineering / auditing for cuts | [avoid-over-engineering.md](avoid-over-engineering.md) |
 
 ## What belongs here

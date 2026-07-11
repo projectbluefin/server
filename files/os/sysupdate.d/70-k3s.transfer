@@ -1,0 +1,12 @@
+[Transfer]
+
+[Source]
+Type=url-file
+Path=https://github.com/projectbluefin/server/releases/latest/download/
+MatchPattern=k3s-@v.raw.zst
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions
+MatchPattern=k3s-@v.raw
+CurrentSymlink=k3s.raw

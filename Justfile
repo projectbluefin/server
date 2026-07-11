@@ -53,6 +53,7 @@ tags:
 validate:
     just bst show --deps all oci/bluefin-server-ddi.bst
     just bst show --deps all oci/bluefin-server-installer.bst
+    just bst show --deps all oci/k3s-sysext.bst
 
 # ── Build ─────────────────────────────────────────────────────────────
 # Build and export the installer (DDI is embedded; built as a dependency).
@@ -107,6 +108,27 @@ export-installer: build-installer
     rm -f dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/SHA256SUMS
     just bst artifact checkout oci/bluefin-server-installer.bst --directory dist
     @echo "==> wrote:" && ls -lh dist/
+
+# -- k3s systemd-sysext -------------------------------------------------------
+# Produces a systemd-sysext extension image for k3s.
+
+# Build the k3s systemd-sysext image.
+[group('sysext')]
+build-sysext:
+    just bst build oci/k3s-sysext.bst
+
+# Export the k3s systemd-sysext image + SHA256SUMS to dist/sysext/.
+# The artifact checkout also emits an uncompressed .raw; only the
+# versioned .raw.zst release asset and its SHA256SUMS are published.
+[group('sysext')]
+export-sysext: build-sysext
+    rm -rf dist/sysext dist/sysext-checkout
+    mkdir -p dist/sysext-checkout dist/sysext
+    just bst artifact checkout oci/k3s-sysext.bst --directory /src/dist/sysext-checkout
+    cp dist/sysext-checkout/k3s-*.raw.zst dist/sysext/
+    cp dist/sysext-checkout/SHA256SUMS dist/sysext/
+    rm -rf dist/sysext-checkout
+    @echo "==> wrote k3s sysext:" && ls -lh dist/sysext/
 
 # Write the raw GPT installer image to a physical USB drive.
 [group('installer')]

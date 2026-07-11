@@ -2,7 +2,7 @@
 
 [Source]
 Type=url-file
-Path=https://github.com/projectbluefin/server/releases/download/@v/
+Path=https://github.com/projectbluefin/server/releases/latest/download/
 MatchPattern=bluefin-server-ddi-@v.raw.zst
 
 [Target]

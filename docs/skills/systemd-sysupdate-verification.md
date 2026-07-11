@@ -25,15 +25,20 @@ the OS image.
 
 ## How It Works
 
-`systemd-sysupdate` downloads `SHA256SUMS` manifests from the URL configured in
-each transfer's `[Source]` section. By default it also downloads the detached
-signature `SHA256SUMS.gpg` and verifies it against the public keyring before
-using the manifest.
+`systemd-sysupdate` discovers available versions by fetching a `SHA256SUMS`
+manifest from the static `Path=` configured in each transfer's `[Source]`
+section. By default it also downloads the detached signature `SHA256SUMS.gpg`
+and verifies it against the public keyring before using the manifest.
 
 Key facts from `sysupdate.d(5)`:
 
+- `Path=` in `[Source]` is static. It is **not** expanded with `@v` or any
+  other placeholder.
+- `@v` belongs only in `MatchPattern=`. `systemd-sysupdate` parses versions
+  out of filenames that match the pattern after reading the flat manifest at
+  `<Path>/SHA256SUMS`.
 - `Verify=` in `[Transfer]` is a boolean and defaults to `yes`.
-- When enabled, `systemd-sysupdate` validates the GPG signature of each
+- When enabled, `systemd-sysupdate` validates the GPG signature of the
   downloaded `SHA256SUMS` manifest.
 - The public keyring is read from `/usr/lib/systemd/import-pubring.pgp` or
   `/etc/systemd/import-pubring.pgp`.
@@ -43,9 +48,14 @@ Key facts from `sysupdate.d(5)`:
 - `files/os/sysupdate-keys/import-pubring.pgp` — public OpenPGP keyring (binary
   format). Shipped to `/usr/lib/systemd/import-pubring.pgp` by
   `elements/bluefin-server/os-sysupdate-keys.bst`.
-- `.github/workflows/build.yml` — signs both `dist/SHA256SUMS` and
-  `dist/ddi/SHA256SUMS` during release using the `SYSUPDATE_SIGNING_KEY`
-  repository secret and uploads the `.gpg` detached signatures.
+- `.github/workflows/build.yml` — assembles all release assets under
+  `dist/release/`, generates a single combined `dist/release/SHA256SUMS`,
+  signs it with the `SYSUPDATE_SIGNING_KEY` repository secret, producing
+  `dist/release/SHA256SUMS.gpg`, and uploads `dist/release/*` to the GitHub
+  Release.
+- `files/os/sysupdate.d/*.transfer` — each transfer points its static `Path=`
+  at `https://github.com/projectbluefin/server/releases/latest/download/` so
+  all transfers share the same signed manifest.
 
 ## Rotating the Signing Key
 
@@ -75,6 +85,22 @@ Key facts from `sysupdate.d(5)`:
 3. Rebuild and publish a release. Existing hosts will only trust updates signed
    by the new key, so plan the rotation around a release boundary.
 
+## Common Gotchas
+
+- **Do not put `@v` in `[Source] Path=`.** `Path=` must be a static base URL.
+  `systemd-sysupdate` fetches `<Path>/SHA256SUMS` (+ `.gpg`) as the version
+  manifest, then matches filenames containing `@v` through `MatchPattern=`.
+  A path like `.../releases/download/@v/` will produce a 404 and break version
+  discovery for every transfer.
+- **One combined manifest per release.** All transfers share the same `Path=`
+  and therefore the same `SHA256SUMS` file. Signing separate manifests per
+  asset type and uploading them all as `SHA256SUMS` causes collisions on the
+  release page and breaks sysupdate.
+- **Local export manifests are not release manifests.** `just export-installer`,
+  `just export-ddi`, and `just export-sysext` each write a `SHA256SUMS` in
+  `dist/`, `dist/ddi/`, and `dist/sysext/` for local verification. Only the
+  combined `dist/release/SHA256SUMS` is uploaded and used by `systemd-sysupdate`.
+
 ## Verification
 
 - [ ] `files/os/sysupdate.d/*.transfer` does not contain `Verify=no`.
@@ -82,5 +108,10 @@ Key facts from `sysupdate.d(5)`:
       `bluefin-server/os-sysupdate-keys.bst`.
 - [ ] `files/os/sysupdate-keys/import-pubring.pgp` exists and contains the
       public half of the key used to sign releases.
-- [ ] CI signs `dist/SHA256SUMS` and `dist/ddi/SHA256SUMS` and uploads the
-      matching `.gpg` files.
+- [ ] CI assembles all release assets under `dist/release/`.
+- [ ] CI generates and signs exactly one combined `dist/release/SHA256SUMS`
+      manifest, producing `dist/release/SHA256SUMS.gpg`.
+- [ ] CI uploads `dist/release/*` to the GitHub Release.
+- [ ] Every transfer in `files/os/sysupdate.d/*.transfer` uses a static `Path=`
+      with no `@v` placeholder.
+- [ ] Every transfer uses `@v` only inside `MatchPattern=`.
