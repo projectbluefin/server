@@ -45,6 +45,45 @@ inside the FSDK `bst2` container -- nothing to install.
     just verify          # assert distroless + certs + tzdata
     just tags            # show derived tags
 
+## System containers
+
+Bluefin Server can expose transparent system containers as first-class systemd machines. The first system containers are:
+
+- `homebrew` for a Homebrew toolbox experience; this is the default-on system container
+- `ubuntu` for an Ubuntu-style server environment
+
+### Turn the Homebrew system container on
+
+```sh
+sudo machinectl import-tar https://example.invalid/homebrew.tar.zst homebrew
+sudo system-container start homebrew
+sudo system-container enter homebrew
+```
+
+### Turn Ubuntu on
+
+```sh
+sudo machinectl import-tar https://example.invalid/ubuntu.tar.zst ubuntu
+sudo system-container start ubuntu
+sudo system-container enter ubuntu
+```
+
+### Turn one off
+
+```sh
+sudo system-container stop homebrew
+```
+
+### Reset one
+
+```sh
+sudo system-container reset homebrew
+sudo machinectl import-tar https://example.invalid/homebrew.tar.zst homebrew
+sudo system-container start homebrew
+```
+
+The Homebrew system container uses `/home/linuxbrew` as the writable prefix and defaults to `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_INSTALL_CLEANUP=1` so it behaves like a real Linux Homebrew environment.
+
 ## CI / Release pipeline
 
 GitHub Actions compiles the entire project (Standalone OS DDI and bootable installer) and handles publishing automatically. Automated Renovate manages updates to core platform dependencies.
