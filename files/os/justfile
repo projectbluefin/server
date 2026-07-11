@@ -1,0 +1,51 @@
+# System-wide justfile for Bluefin Server management
+
+default:
+    @just --list
+
+# Enable k3s Kubernetes server or agent on this host
+k8s ROLE="server" TOKEN="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    # 1. Trigger systemd-sysupdate to pull the k3s systemd-sysext if missing
+    if [ ! -f /var/lib/extensions/k3s.raw ]; then
+        echo "==> k3s system extension raw image not found in /var/lib/extensions/"
+        echo "==> Running systemd-sysupdate to fetch and install the k3s sysext OTA..."
+        # Ignore errors if systemd-sysupdate can't connect (e.g. offline dev test)
+        systemd-sysupdate update || true
+    fi
+
+    # 2. Setup Rancher configuration directory
+    mkdir -p /etc/rancher/k3s
+
+    # 3. Create config.yaml if it does not exist
+    if [ ! -f /etc/rancher/k3s/config.yaml ]; then
+        echo "==> Seeding neutral defaults for k3s role: {{ROLE}}"
+        cat <<EOF > /etc/rancher/k3s/config.yaml
+# Seeded by just k8s
+write-kubeconfig-mode: "0644"
+EOF
+        if [ -n "{{TOKEN}}" ]; then
+            echo "token: \"{{TOKEN}}\"" >> /etc/rancher/k3s/config.yaml
+        fi
+    fi
+
+    # 4. Trigger systemd-sysext to merge extensions into /usr immediately
+    echo "==> Merging k3s system extension..."
+    systemctl enable --now systemd-sysext.service || true
+    systemd-sysext merge || true
+
+    # 5. Enable and start the selected systemd service
+    if [ "{{ROLE}}" = "server" ]; then
+        echo "==> Enabling and starting k3s server service..."
+        systemctl enable --now k3s.service
+    elif [ "{{ROLE}}" = "agent" ]; then
+        echo "==> Enabling and starting k3s agent service..."
+        systemctl enable --now k3s-agent.service
+    else
+        echo "ERROR: Invalid role '{{ROLE}}'. Supported: server, agent" >&2
+        exit 1
+    fi
+
+    echo "==> k3s Kubernetes has been successfully configured and started!"

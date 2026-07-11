@@ -35,3 +35,9 @@ depends:
 
   # Reboot Coordination for Kured
   - bluefin-server/os-kured-hook.bst
+
+  # Container Runtime support
+  - freedesktop-sdk.bst:components/podman.bst
+
+  # System Management Justfile
+  - bluefin-server/os-justfile.bst
