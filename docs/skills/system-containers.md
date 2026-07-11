@@ -28,6 +28,6 @@ Use this skill when adding or documenting system containers that should behave l
 
 ## Examples
 
-- Homebrew is the default-on convenience toolbox experience.
+- Homebrew is the default-on convenience toolbox experience once imported and started.
 - Ubuntu is the second built-in example for a more familiar server shell.
 - Debian is another transparent example for users who want a Debian-style toolbox.

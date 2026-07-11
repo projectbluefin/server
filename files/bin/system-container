@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo "$0" "$@"
+fi
+
 cmd="${1:-help}"
 name="${2:-}"
 
 case "$cmd" in
   start)
     [ -n "$name" ] || { echo "usage: system-container start <name>" >&2; exit 1; }
-    sudo machinectl start "$name"
+    machinectl start "$name"
     ;;
   stop)
     [ -n "$name" ] || { echo "usage: system-container stop <name>" >&2; exit 1; }
-    sudo machinectl poweroff "$name"
+    machinectl poweroff "$name"
     ;;
   enter)
     [ -n "$name" ] || { echo "usage: system-container enter <name>" >&2; exit 1; }
-    sudo machinectl shell "$name"
+    machinectl shell "$name"
     ;;
   reset)
     [ -n "$name" ] || { echo "usage: system-container reset <name>" >&2; exit 1; }
-    sudo machinectl remove "$name"
+    machinectl remove "$name"
     ;;
   *)
     echo "usage: system-container {start|stop|enter|reset} <name>" >&2

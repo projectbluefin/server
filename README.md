@@ -54,8 +54,10 @@ Bluefin Server can expose transparent system containers as first-class systemd m
 
 ### Turn the Homebrew system container on
 
+Replace the placeholder image URL below with the published Homebrew system container image you want to import.
+
 ```sh
-sudo machinectl import-tar https://example.invalid/homebrew.tar.zst homebrew
+sudo machinectl import-tar <homebrew-image-url> homebrew
 sudo system-container start homebrew
 sudo system-container enter homebrew
 ```
@@ -63,9 +65,17 @@ sudo system-container enter homebrew
 ### Turn Ubuntu on
 
 ```sh
-sudo machinectl import-tar https://example.invalid/ubuntu.tar.zst ubuntu
+sudo machinectl import-tar <ubuntu-image-url> ubuntu
 sudo system-container start ubuntu
 sudo system-container enter ubuntu
+```
+
+### Turn Debian on
+
+```sh
+sudo machinectl import-tar <debian-image-url> debian
+sudo system-container start debian
+sudo system-container enter debian
 ```
 
 ### Turn one off
@@ -82,7 +92,7 @@ sudo machinectl import-tar https://example.invalid/homebrew.tar.zst homebrew
 sudo system-container start homebrew
 ```
 
-The Homebrew system container uses `/home/linuxbrew` as the writable prefix and defaults to `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_INSTALL_CLEANUP=1` so it behaves like a real Linux Homebrew environment.
+The Homebrew system container uses `/home/linuxbrew` as the writable prefix and defaults to `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_INSTALL_CLEANUP=1` so it behaves like a real Linux Homebrew environment. In this documentation, Homebrew is the default-on convenience toolbox experience once imported and started, but you still import and start it explicitly the first time. This is a convenience wrapper for daily use, not a security boundary.
 
 ## CI / Release pipeline
 
