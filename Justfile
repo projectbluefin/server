@@ -102,11 +102,17 @@ cluster-build REF="main":
         --watch
 
 # Export the installer disk image + SHA256SUMS to dist/.
+# bst artifact checkout requires an empty destination, and dist/ may
+# already hold dist/ddi/ or dist/sysext/ from earlier export steps, so
+# check out into a clean staging directory and move the files over.
 [group('installer')]
 export-installer: build-installer
-    mkdir -p dist
+    rm -rf dist/installer-checkout
+    mkdir -p dist dist/installer-checkout
     rm -f dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/SHA256SUMS
-    just bst artifact checkout oci/bluefin-server-installer.bst --directory dist
+    just bst artifact checkout oci/bluefin-server-installer.bst --directory /src/dist/installer-checkout
+    mv dist/installer-checkout/* dist/
+    rm -rf dist/installer-checkout
     @echo "==> wrote:" && ls -lh dist/
 
 # -- k3s systemd-sysext -------------------------------------------------------
