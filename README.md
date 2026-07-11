@@ -47,14 +47,17 @@ inside the FSDK `bst2` container -- nothing to install.
 
 ## System containers
 
-Bluefin Server can expose transparent system containers as first-class systemd machines. The first system containers are:
+System containers are transparent, systemd-managed toolboxes you can turn on when you need them. They are meant to feel like part of the host, not like a separate app stack.
 
-- `homebrew` for a Homebrew toolbox experience; this is the default-on system container
-- `ubuntu` for an Ubuntu-style server environment
+The first built-in examples are:
 
-### Turn the Homebrew system container on
+- `homebrew` for a Homebrew-based toolbox experience
+- `ubuntu` for an Ubuntu-style server shell
+- `debian` for a Debian-style toolbox
 
-Replace the placeholder image URL below with the published Homebrew system container image you want to import.
+### First-time setup
+
+Replace the placeholder image URL below with the published image you want to import.
 
 ```sh
 sudo machinectl import-tar <homebrew-image-url> homebrew
@@ -62,7 +65,38 @@ sudo system-container start homebrew
 sudo system-container enter homebrew
 ```
 
-### Turn Ubuntu on
+When you are done inside the container, leave it with `exit` and stop it again when you do not need it:
+
+```sh
+exit
+sudo system-container stop homebrew
+```
+
+### Daily use
+
+Use the same commands every day:
+
+```sh
+sudo system-container start homebrew
+sudo system-container enter homebrew
+```
+
+To stop it later:
+
+```sh
+sudo system-container stop homebrew
+```
+
+If you want to see what is available on the host:
+
+```sh
+machinectl list
+machinectl list-images
+```
+
+### Other containers
+
+Ubuntu:
 
 ```sh
 sudo machinectl import-tar <ubuntu-image-url> ubuntu
@@ -70,7 +104,7 @@ sudo system-container start ubuntu
 sudo system-container enter ubuntu
 ```
 
-### Turn Debian on
+Debian:
 
 ```sh
 sudo machinectl import-tar <debian-image-url> debian
@@ -78,21 +112,17 @@ sudo system-container start debian
 sudo system-container enter debian
 ```
 
-### Turn one off
+### Reset a container
 
-```sh
-sudo system-container stop homebrew
-```
-
-### Reset one
+Resetting removes the machine and starts over from a fresh import:
 
 ```sh
 sudo system-container reset homebrew
-sudo machinectl import-tar https://example.invalid/homebrew.tar.zst homebrew
+sudo machinectl import-tar <homebrew-image-url> homebrew
 sudo system-container start homebrew
 ```
 
-The Homebrew system container uses `/home/linuxbrew` as the writable prefix and defaults to `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_INSTALL_CLEANUP=1` so it behaves like a real Linux Homebrew environment. In this documentation, Homebrew is the default-on convenience toolbox experience once imported and started, but you still import and start it explicitly the first time. This is a convenience wrapper for daily use, not a security boundary.
+Homebrew uses `/home/linuxbrew` as the writable prefix and defaults to `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_INSTALL_CLEANUP=1` so it behaves like a real Linux Homebrew environment. This is a convenience wrapper for daily use, not a security boundary.
 
 ## CI / Release pipeline
 
