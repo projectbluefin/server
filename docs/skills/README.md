@@ -19,6 +19,7 @@ rules, then load the focused skill for your task.
 | SSH into the live installer | [ddi-installer.md](ddi-installer.md) |
 | Review gap analysis or architectural roadmap | [gap-analysis-architecture.md](gap-analysis-architecture.md) |
 | Add a non-distroless nspawn machine image (dev env, tarball) | [nspawn-machine-image.md](nspawn-machine-image.md) |
+| Add or document system containers (machinectl, systemd machines) | [system-containers.md](system-containers.md) |
 | Make an image smaller / apply the SLIM recipe | [slim-an-image.md](slim-an-image.md) |
 | Move to a new FSDK release / retag | [bump-fsdk-version.md](bump-fsdk-version.md) |
 | Prove an image is still distroless | [verify-distroless.md](verify-distroless.md) |
