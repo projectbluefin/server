@@ -1,427 +1,350 @@
 # Documentation Overhaul Plan — Bluefin Server
 
-> Artifact type: plan (BMAD Decision + Action document).
->
-> Scope: overhaul every agent-facing documentation file in this repository so AI
-> agents can discover, load, and act on it with minimal token usage. Human
-> readability is a by-product; agent-first structure is the goal.
->
-> Status: plan ready for execution. Source standards are cited in §2.
-
----
+> **Status:** Living plan.  
+> **Scope:** agent-first repository documentation: root `AGENTS.md`, `docs/skills/`, and all supporting human-facing docs. Code changes are out of scope unless a doc requires a snippet to stay correct.
 
 ## 1. Executive Summary
 
-This repository already has a usable `docs/skills/` skill set and a short
-`AGENTS.md`. The overhaul makes three changes:
+Bluefin Server's documentation is already split into agent-facing skills (`docs/skills/`) and a root `AGENTS.md`, but the structure has drifted: the skill index uses custom front-matter, several files carry *draft/deprecated* flags, facts are duplicated across `README.md` and `AGENTS.md`, and line-count discipline is inconsistent. This plan makes the repo follow the best-documented agent-skill conventions available today:
 
-1. **Standardize on AAIF `AGENTS.md`** (root entry point, no proprietary
-   extensions).
-2. **Turn `docs/skills/` into a lazy-load skill library** with a tiny index,
-   consistent front matter, cross-references, and strict size/duplication rules.
-3. **Genericize prose** so downstream maintainers, external evaluators, and end
-   users can read it without learning internal codenames, while preserving every
-   actionable command and file path.
+- **Anthropic Skills** (`/anthropics/skills` via Context7) for skill file front-matter, naming, and three-level progressive loading.
+- **Vercel Labs Skills** (`/vercel-labs/skills` via Context7) for discovery paths and `docs/skills/` layout conventions.
+- **Toss Technical Writing** (`/toss/technical-writing` via Context7) for heading clarity and index-driven site structure.
+- **AAIF-aligned root agent entry point** pattern, because Context7 has no AAIF-specific source. The existing `AGENTS.md` already matches the widely adopted root-agent shape (purpose, hard rules, build commands, skill routing, boundaries), so the plan hardens that rather than inventing a new format.
 
-Execution is file-by-file; no new tooling is required beyond a Markdown linter
-and a small schema checker (both can be added to CI later).
+The result is one canonical doc per fact, lazy-loadable skills, enforced size budgets, and CI checks that keep the docs honest.
 
 ---
 
-## 2. Standards Consulted
+## 2. Research Summary & Sources
 
-| Standard | Source | What it says (relevant to this plan) |
-|----------|--------|--------------------------------------|
-| **AAIF `AGENTS.md`** | `https://agents.md/` | `AGENTS.md` is a repo-root Markdown file for AI coding agents. No required fields. Reccommended coverage: overview, build/test commands, style, testing, security. Large monorepos may nest additional `AGENTS.md` files by package. |
-| **MCP Specification 2025-03-26** | `https://modelcontextprotocol.io/specification/2025-03-26` | MCP standardizes the protocol between AI applications and external systems (tools, resources, prompts). It does **not** standardize repo-level `docs/skills/` layout; that convention comes from the broader agent-tooling community. |
-| **MCP documentation index** | `https://modelcontextprotocol.io/llms.txt` | Confirms `/llms.txt` as an LLM-oriented documentation index. We mirror the idea with the `docs/skills/INDEX.md` manifest. |
-| **OpenAI `codex` `AGENTS.md`** | `https://raw.githubusercontent.com/openai/codex/main/AGENTS.md` | Concrete example of an effective agent file: concise project framing, explicit `just` / `cargo` commands, file-size boundaries, and per-area routing. |
+### Sources consulted via Context7
 
-**Note on Context7:** The local toolset does not expose a Context7 MCP server, so
-`resolve-library-id` / `query-docs` could not be run. The fallback sources above
-are the public specifications the Context7 searches would have returned. Any
-convention below that is not covered by those sources is marked **UNVERIFIED**
-and justified by widely adopted community practice.
+| Library ID | Relevance | Key guidance used |
+|---|---|---|
+| `/anthropics/skills` | High | SKILL.md **front-matter**: required `name` (kebab-case, ≤64 chars) and `description` (≤1024 chars); allowed top-level keys are `name`, `description`, `license`, `allowed-tools`, `metadata`, `compatibility`. **Three-level progressive loading**: metadata (~100 words) always in context; `SKILL.md` body loads when triggered, ideally <500 lines; bundled resources (scripts/references/assets) load on demand. References >300 lines should include a TOC. |
+| `/vercel-labs/skills` | Medium | Skill discovery paths include `SKILL.md` at repo root, plus `skills/`, `skills/.curated/`, `skills/.experimental/`, `skills/.system/`, and agent-specific paths such as `.agents/skills/`. A root index/manifest file is the standard entry point for agents to list and route to skills. |
+| `/toss/technical-writing` | Medium | Documentation sites benefit from an `INDEX.md` master navigation, clear page titles, and headings that immediately convey purpose. Use hierarchical structure with links to related pages. |
+| Model Context Protocol spec (modelcontextprotocol.io) | Low for skill layout | Confirmed MCP is a JSON-RPC protocol for server/client context exchange. It does **not** define repository skill-file conventions, so this plan treats the Anthropic/Vercel skill conventions as the community pattern for agent skill files and notes the gap explicitly. |
+
+### Gaps & tradeoffs
+
+- **AAIF not in Context7.** No Context7 library returned for “AAIF agents.md standard” (only an unrelated payment-system match). The plan therefore treats the existing `AGENTS.md` shape as the AAIF-aligned community pattern and documents that choice. If an official AAIF spec is published later, `AGENTS.md` should be reconciled in one PR.
+- **Token budgets.** Anthropic’s “<500 lines” skill body and “>300 lines needs TOC” are adopted as hard budgets. No Context7 source gave exact token limits, so these line budgets are the proxy.
+- **Skill front-matter.** The current `docs/skills/INDEX.md` uses non-standard fields (`skills[].trigger`, `metadata.type: index`). The plan keeps a machine-readable routing table but renames the index schema to match Anthropic’s allowed keys where possible and reserves `metadata.type` for file classification.
 
 ---
 
 ## 3. Repository Audit
 
-Existing docs inventory and classification.
+Audit scope: all `*.md` files under `/var/home/jorge/src/server`, excluding `.bst/staged-junctions/` and `node_modules/`.
 
-| File | Lines | Class | Rationale |
-|------|-------|-------|-----------|
-| `README.md` | 124 | **rewrite** | Contains useful public-facing copy but mixes human onboarding with agent commands. The agent-critical material (build commands, constraints, factory role) should be moved/cross-referenced from `AGENTS.md` and `docs/skills/`, while the README focuses on release trust and quick-start for humans. |
-| `CONTRIBUTING.md` | 64 | **keep / minor rewrite** | Already concise and correct. Update it to point to `AGENTS.md` instead of duplicating build commands, and reference `docs/skills/INDEX.md` for task routing. |
-| `AGENTS.md` | 80 | **rewrite** | Current file is good but is not structured as an AAIF entry point. Rewrite per AAIF guidance, add explicit “load this skill next” routing, and remove internal-only references. |
-| `docs/skills/INDEX.md` | 57 | **keep / refine** | Already acts as the lazy-load manifest. Add a `skills:` manifest block in front matter so agents can parse it without reading the prose. Reduce embedded duplication. |
-| `docs/skills/factory-integration.md` | 126 | **rewrite** | Stale/internal framing: uses `projectbluejin/lab`, `ghost`/`exo-1`, and product names. The architecture facts are canonical; genericize the framing and keep the comparison table. |
-| `docs/skills/ddi-installer.md` | 393 | **rewrite** | The canonical installer reference, but too large for one skill chunk. Split into a parent skill plus child sections, or add an in-file `toc`/`skip-to` metadata block so agents can load only the relevant heading cluster. Remove duplicated build commands once they live in `AGENTS.md`. |
-| `docs/skills/tpm2-credential-sealing.md` | 67 | **keep** | Sized and scoped correctly; just harmonize front matter. |
-| `docs/skills/systemd-sysext-extensions.md` | 107 | **keep** | Good shape; add canonical cross-references to `k3s-sysext.md`. |
-| `docs/skills/system-containers.md` | 104 | **keep** | Good shape; verify it does not duplicate `README.md` system-container section. |
-| `docs/skills/skill-improvement.md` | 48 | **keep** | Becomes the meta-skill for adding and refactoring skills. Add a short schema definition and a “how to add a skill” checklist. |
-| `docs/skills/gap-analysis-architecture.md` | 100 | **merge / rewrite** | Mixes implemented facts with future roadmap. Split: move verified design rules into the appropriate skills (`systemd-sysupdate-verification.md`, `tpm2-credential-sealing.md`, `systemd-sysext-extensions.md`), and move the remaining roadmap into a new `docs/skills/architecture-roadmap.md` (clearly marked `status: draft`). |
-| `docs/skills/ci-tooling.md` | 136 | **keep / trim** | Remove duplicated `just` commands once `AGENTS.md` owns them; keep CI-specific conventions and SHA-pinning rules. |
-| `docs/skills/bump-fsdk-version.md` | 93 | **keep / trim** | Remove the “Dakota” sibling-project note (internal-specific) or reframe it as generic guidance about stripping unused junction overrides. Keep the Renovate/GHA workflow facts. |
-| `docs/skills/k3s-sysext.md` | 276 | **rewrite** | Second-longest skill. Keep architecture and build facts; pull the verbose runtime-testing sections into a collapsed “reference” block or child file so the main skill stays under 200 lines. Add cross-links to `systemd-sysext-extensions.md`. |
-| `docs/skills/systemd-sysupdate-verification.md` | 131 | **keep / trim** | Canonical; reduce duplication with `ddi-installer.md` release section and `k3s-sysext.md` release section by linking to this file as the single source of truth for OTA signing. |
-| `docs/skills/avoid-over-engineering.md` | 84 | **keep** | Already concise; add cross-links to the skill-improvement meta-skill. |
+| File | Lines | Classification | Notes / Action |
+|---|---|---|---|
+| `AGENTS.md` | 88 | **Rewrite** | Good AAIF shape, but duplicates README/what-is content and still lists “no shell” without the temporary-SSH exception context. |
+| `README.md` | 173 | **Rewrite** | Human-facing entry point. Repeats build commands and factory role that should live only in skills. Tighten to trust/quick-start plus links. |
+| `CONTRIBUTING.md` | 43 | **Rewrite** | Too terse. Point to `AGENTS.md` → `docs/skills/INDEX.md`, list the build contract, and link to the skill-improvement skill. |
+| `docs/DOCUMENTATION_OVERHAUL_PLAN.md` | — | **Keep / update** | This file. Becomes the canonical execution plan. |
+| `docs/MVP_1_0_READINESS.md` | 121 | **Keep / rewrite** | Valuable for release trust, but contains phase labels like “Phase A/B/C/D” that should be issue-tracker issues, not doc headings. Keep as release-readiness checklist. |
+| `docs/skills/INDEX.md` | 105 | **Rewrite** | Convert to Anthropic-aligned manifest: kebab names, ≤1024-char descriptions, routing table, no narrative duplication. |
+| `docs/skills/avoid-over-engineering.md` | 83 | **Keep** | Focused skill; under budget. |
+| `docs/skills/architecture-roadmap.md` | 44 | **Keep** | Roadmap stub; acceptable as reference. |
+| `docs/skills/bump-fsdk-version.md` | 89 | **Keep** | Focused how-to; under budget. |
+| `docs/skills/ci-tooling.md` | 135 | **Keep / rewrite** | Contains useful workflow conventions but may duplicate `AGENTS.md` verification step. Cross-link instead. |
+| `docs/skills/ddi-installer-build.md` | 131 | **Keep** | Build-specific installer reference; under budget. |
+| `docs/skills/ddi-installer.md` | 171 | **Keep / trim** | Architecture explanation. If it grows past 300 lines, split into `ddi-installer.md` + `ddi-installer-reference.md`. |
+| `docs/skills/factory-integration.md` | 113 | **Keep / update** | Should reference the new `bluefin-server-boot-test` Argo workflow in `projectbluefin/lab`. |
+| `docs/skills/gap-analysis-architecture.md` | 26 | **Delete** | Already deprecated; content relocated. Remove from `INDEX.md`. |
+| `docs/skills/gap-analysis-distros.md` | 201 | **Keep / update** | Source-verified comparison is useful for evaluators. Remove “draft” prose, mark stable, keep <=300 lines. |
+| `docs/skills/k3s-sysext.md` | 121 | **Keep / trim** | Operating the sysext; check for duplication with `k3s-sysext-ops.md`. |
+| `docs/skills/k3s-sysext-ops.md` | 120 | **Keep / trim** | Building the sysext. Reconcile overlap with `k3s-sysext.md`. |
+| `docs/skills/skill-improvement.md` | 106 | **Rewrite** | Make this the canonical meta-skill per Anthropic conventions. Document how to add/split/refactor skills and maintain the index. |
+| `docs/skills/system-containers.md` | 103 | **Keep** | Focused; under budget. |
+| `docs/skills/systemd-sysext-extensions.md` | 112 | **Keep** | Focused; under budget. |
+| `docs/skills/systemd-sysupdate-verification.md` | 134 | **Keep / rewrite** | Source-verified; cross-link with `factory-integration.md` and MVP readiness doc. |
+| `docs/skills/tpm2-credential-sealing.md` | 73 | **Keep / update** | Marked with TODO flags; resolve them or split into issue tracker, then remove flags. |
+| `.pytest_cache/README.md` | 8 | **Delete** | Generated cache file; not source docs. |
 
-**Files to delete:** none. No file is fully obsolete; stale content is inside
-otherwise-good files and should be edited in place.
+### Stale / contradictory / internal-only content to remove
+
+1. **“No shell in the running OS DDI image” hard rule** — now a temporary exception because SSH is enabled for bring-up. `AGENTS.md` and `README.md` must state the exception and link to `factory-integration.md`.
+2. **Duplicate build command lists** — they currently appear in `README.md`, `AGENTS.md`, and `ci-tooling.md`. Canonical list lives in `AGENTS.md`; everything else links.
+3. **`gap-analysis-architecture.md`** — deprecated wrapper; delete.
+4. **TODO/FIXME/draft flags in `.md` files** — `gap-analysis-distros.md`, `architecture-roadmap.md`, `INDEX.md`, `skill-improvement.md`, `tpm2-credential-sealing.md`. Resolve or move to issues; docs ship without TODO marks.
+5. **Any “we”, “our”, or internal-only hostnames / infra names** — not currently present outside skill loading examples, but scan again during rewrite.
 
 ---
 
 ## 4. Target Structure
 
 ```text
-REPO ROOT
-├── AGENTS.md                       # AAIF entry point (agent-first, 100–150 lines)
-├── README.md                       # Human-facing quick-start + trust signals
-├── CONTRIBUTING.md                 # Human contributor guide; links to AGENTS.md
-├── LICENSE                         # unchanged
+/var/home/jorge/src/server
+├── AGENTS.md                          # Root AAIF-aligned agent entry point (≤200 lines)
+├── README.md                          # Human trust/quick-start + badges (≤200 lines)
+├── CONTRIBUTING.md                    # Contributor checklist + learning loop (≤100 lines)
+├── LICENSE                            # Existing license
+│
 ├── docs/
-│   ├── INDEX.md                    # (optional) high-level map for humans browsing docs/
-│   ├── DOCUMENTATION_OVERHAUL_PLAN.md  # this file
+│   ├── DOCUMENTATION_OVERHAUL_PLAN.md   # This plan (auditable, versioned)
+│   ├── MVP_1_0_READINESS.md             # Release-readiness audit (≤150 lines)
+│   │
 │   └── skills/
-│       ├── INDEX.md                # lazy-load manifest (<= 100 lines + YAML front matter)
-│       ├── skill-improvement.md    # meta-skill: how to add/refactor skills
-│       ├── architecture-roadmap.md # formerly gap-analysis; status:draft roadmap only
+│       ├── INDEX.md                     # Lazy-load manifest (≤150 lines)
+│       ├── skill-improvement.md         # Meta-skill: how to maintain skills
+│       │
 │       ├── avoid-over-engineering.md
+│       ├── architecture-roadmap.md
 │       ├── bump-fsdk-version.md
 │       ├── ci-tooling.md
-│       ├── ddi-installer.md        # trimmed; child anchors if needed
-│       ├── factory-integration.md  # genericized
-│       ├── k3s-sysext.md           # trimmed
-│       ├── systemd-sysupdate-verification.md
-│       ├── systemd-sysext-extensions.md
+│       ├── ddi-installer.md
+│       ├── ddi-installer-build.md
+│       ├── factory-integration.md
+│       ├── gap-analysis-distros.md
+│       ├── k3s-sysext.md
+│       ├── k3s-sysext-ops.md
 │       ├── system-containers.md
+│       ├── systemd-sysext-extensions.md
+│       ├── systemd-sysupdate-verification.md
 │       └── tpm2-credential-sealing.md
+│
+└── .github/
+    └── workflows/
+        └── docs-checks.yml              # Optional: front-matter, link, budget CI
 ```
 
-Rationale for top-level files:
+### Rationale by top-level item
 
-- `AGENTS.md`: Required by AAIF; the only file an agent is guaranteed to load
-  first. Keep it self-contained for bootstrap; every non-trivial detail links to
-  `docs/skills/`.
-- `README.md`: Human-first, but mirrors `AGENTS.md` hard rules and links to the
-  skill index so agents can also use it safely.
-- `CONTRIBUTING.md`: Human workflow. Must not duplicate commands that live in
-  `AGENTS.md`.
-- `docs/skills/INDEX.md`: Machine-readable routing table with front-matter
-  manifest and human-readable fast path.
-- `docs/skills/skill-improvement.md`: The meta-skill that prevents documentation
-  rot by making every session output “work + learning.”
-
-**UNVERIFIED convention:** The `docs/skills/` directory name and the use of
-root `AGENTS.md` are community conventions, not MCP spec requirements. The MCP
-spec defines the protocol wire format; it does not constrain how a repository
-organizes agent guidance.
+- **`AGENTS.md`** — Mandatory root entry point per AAIF community pattern. Must load in a single context read.
+- **`README.md`** — Human landing page. Optimized for trust (what it is, build status, quick start) and points agents to `AGENTS.md`.
+- **`CONTRIBUTING.md`** — Human contributor path. Defers to `AGENTS.md` + `docs/skills/INDEX.md` so it never duplicates skill content.
+- **`docs/skills/INDEX.md`** — The only file agents load after `AGENTS.md`. Small enough to keep in context while routing.
+- **`docs/skills/skill-improvement.md`** — Meta-skill that teaches agents how to add, split, rename, and review skills.
+- **`docs/DOCUMENTATION_OVERHAUL_PLAN.md`** — Living audit/execution record. Not a skill; can be long.
+- **`docs/MVP_1_0_READINESS.md`** — External evaluator artifact. Not a skill; kept concise.
+- **`docs-checks.yml`** (to be created) — Enforces budgets and front-matter schema on PRs.
 
 ---
 
 ## 5. Lazy-Loading Design for `docs/skills/`
 
-### 5.1 Index / manifest
+### 5.1 Index / manifest (`docs/skills/INDEX.md`)
 
-`docs/skills/INDEX.md` is the first skill file an agent loads after `AGENTS.md`.
-It must be cheap to parse: small YAML front matter plus a routing table.
+Agents load `AGENTS.md` first; `AGENTS.md` points to `docs/skills/INDEX.md`. The index is the only skill file loaded eagerly. It contains:
 
-Front matter schema:
+1. A short statement of purpose.
+2. A machine-readable routing table with one row per skill.
+3. A short loading contract (“load only the skill that matches your task; keep INDEX in context for cross-references”).
+
+Index front-matter:
 
 ```yaml
 ---
 name: skills-index
-version: "2.0"
-last_updated: "YYYY-MM-DD"
-tags: [skills, routing, index]
-description: |
-  Short one-line purpose. No more than 25 words.
+description: Lazy-load manifest for Bluefin Server skills. Load this file after AGENTS.md, then read only the skill that matches your current task.
 metadata:
   type: index
-skills:
-  - id: ddi-installer
-    file: ddi-installer.md
-    trigger: ["installer", "ddi", "systemd-sysinstall", "systemd-repart"]
-    description: Build and debug the live installer media.
-  - id: factory-integration
-    file: factory-integration.md
-    trigger: ["factory", "k3s sysext", "dowstream", "lab"]
-    description: Server OS role inside the larger CI/OS factory.
-  # ... etc.
+  last_updated: "YYYY-MM-DD"
+---
+```
+
+Routing table columns (no prose duplication):
+
+| Skill file | When to load | One-line scope |
+|---|---|---|
+| `ddi-installer.md` | Installer boot flow, systemd-sysinstall, systemd-repart | High-level DDI install architecture |
+| `factory-integration.md` | How Bluefin Server fits into downstream CI/lab infrastructure | Factory-consumer integration |
+| `...` | ... | ... |
+
+The table must fit in the 500-line file budget and the description in the front-matter must be ≤1024 chars.
+
+### 5.2 Skill file naming & scoping
+
+- **Name = filename stem = kebab-case** (matches Anthropic `name` validation). Examples: `ddi-installer.md`, `systemd-sysext-extensions.md`.
+- **One skill per file.** If a skill exceeds 300 lines, split it: the parent skill keeps the decision tree, the child file keeps long reference material, and the child is linked from the parent.
+- **No numbered prefixes** (e.g., `01-...`) — agents route by trigger words, not sort order.
+- **Skills are mandatory, not optional** for the task they describe. If a topic is just background, put it in a `reference` child file and link it.
+
+### 5.3 Front-matter conventions
+
+Every skill file starts with:
+
+```yaml
+---
+name: <kebab-case-name>
+description: <≤1024 characters, states what this skill does and when to use it>
+metadata:
+  type: how-to | reference | meta-skill | index
+  status: stable | deprecated | draft
+  last_updated: "YYYY-MM-DD"
+  context7-sources:        # optional, only when source-verified external docs are used
+    - /org/project
 ---
 ```
 
 Rules:
-
-- The `skills:` array is the machine-readable source of truth. The Markdown
-  table below it is for humans and may be generated from the YAML.
-- Each skill has one primary `trigger` list. Use lower-case, comma-separated
-  keywords an agent will find in user prompts.
-- No skill description over 20 words.
-- The index file stays **under 100 lines** total.
-
-### 5.2 Skill file naming and scoping
-
-- File name = kebab-case topic verb/noun. One skill per file.
-- Scope = one concern. If a skill exceeds 200 lines, split it:
-  - primary skill file keeps the “When to Use / When NOT / Core Process / Key
-    Constraints / Verification.”
-  - child file named `<skill>-reference.md` holds deep examples, manual test
-    procedures, or copy-paste command dumps.
-- Cross-reference, never duplicate. Example: `ddi-installer.md` links to
-  `systemd-sysupdate-verification.md` for release signing; it does not restate
-  the signing procedure.
-
-### 5.3 Front-matter conventions
-
-Every `docs/skills/*.md` file begins with:
-
-```yaml
----
-name: <kebab-skill-name>
-version: "2.0"
-last_updated: "YYYY-MM-DD"
-tags: [topic, subtopic]
-description: |
-  One sentence, ≤25 words, describing when to load this skill.
-metadata:
-  type: procedure | reference | guide | design-roadmap | index
-  status: stable | draft | deprecated
-  context7-sources:
-    - /systemd/systemd
-    - /apache/buildstream
-  depends_on:
-    - ddi-installer
-    - systemd-sysupdate-verification
----
-```
-
-- `type`: tells the agent whether this is a how-to (`procedure`), lookup table
-  (`reference`), judgment aid (`guide`), or future design (`design-roadmap`).
-- `status`: `draft` for `architecture-roadmap.md` only.
-- `context7-sources`: optional list of Context7 library IDs. Agents should
-  resolve these before implementing tool-specific changes.
-- `depends_on`: skills that should be loaded before this one. The agent loader
-  follows dependencies depth-first and deduplicates.
+- `name` ≤64 chars, lowercase alphanumerics and hyphens only.
+- `description` ≤1024 chars.
+- No extra top-level keys; agent-specific tags go inside `metadata`.
+- `metadata.status: draft` is forbidden on `main`. Use issues for unfinished work.
+- `context7-sources` is optional and records external docs the skill relies on.
 
 ### 5.4 Cross-references without duplication
 
-Use one of two patterns:
-
-1. **Inline see-also link** (for a related skill):
-   `See [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).`
-2. **Canonical fact block** (for a rule repeated in several skills):
-   State the fact once in the most authoritative skill and in other skills
-   write:
-   `> Canonical rule: [Avoid forwarding Justfile recipes](avoid-over-engineering.md#forwarding-recipes).`
-
-Never copy tables, command lists, or diagrams into more than one file. If a
-fact needs to appear in two places, add a link.
+- Use one-line links: `See [factory-integration.md](factory-integration.md)`.
+- Do not copy a fact into two skills. If a fact must appear in a human-facing file, link to the canonical skill.
+- Keep a “Standing facts” section in `INDEX.md` only for ultra-stable one-liners (publish registry, version scheme). Anything longer belongs in a skill.
 
 ---
 
 ## 6. Token-Usage Optimization Rules
 
-Authors must follow these rules. CI can enforce them later.
+Enforced by `.github/workflows/docs-checks.yml` and honored by authors.
 
-| Rule | Rationale | Enforcement |
-|------|-----------|-------------|
-| **Heading hygiene** | Use `##` for top-level sections only when needed; prefer `###` for sub-sections so the file outline is shallow and agents can prune branches. | `markdownlint` + grep count of `^##` |
-| **Section budget** | One skill = one concern. Main skill file ≤ 200 lines; child reference ≤ 300 lines. | CI line-count check |
-| **Link vs. inline** | If the same prose would be useful in >1 skill, write it once and link. Exception: `AGENTS.md` may repeat the 5 hard rules because it is the bootstrap file. | Manual review + link-validity checker |
-| **Single source of truth** | Build commands live in `AGENTS.md`. Release signing lives in `systemd-sysupdate-verification.md`. Factory role lives in `factory-integration.md`. | Grep-based structure checks |
-| **Front-matter first** | Agents parse YAML metadata before reading prose. Keep front matter dense and accurate; do not put long essays in it. | YAML schema lint |
-| **Bullet/table preference** | Use tables and bullets over paragraphs. They compress better and chunk cleanly. | None (manual) |
-| **No “wall of context” intros** | Delete sentences that only say what the file is about. The front matter and first heading already do that. | Manual review |
-| **Code blocks over inline lists** | Commands go in fenced blocks with language tag so agents can extract them mechanically. | `markdownlint` |
-| **Avoid pronouns with ambiguous antecedents** | Bad: “it handles updates.” Good: “`systemd-sysupdate` handles updates.” | Manual review / text lint |
-
-**UNVERIFIED convention:** The 200-line skill budget and the front-matter schema
-are not AAIF/MCP requirements. They are derived from the common agent-tooling
-pattern of keeping each loaded context window small and explicit
-(openai/codex `AGENTS.md` enforces similar 500-line change limits; we apply the
-same discipline to documentation files).
+| Rule | Budget / Detail | Rationale |
+|---|---|---|
+| **Skill body line limit** | ≤300 lines preferred; absolute max 500 lines | Anthropic guidance; keeps skill body cheap to load. |
+| **Reference child files** | >300 lines must split into `*-reference.md` with a TOC | Long reference material is loaded only when needed. |
+| **Index size** | ≤150 lines | Eagerly loaded; must be small. |
+| **Root `AGENTS.md`** | ≤200 lines | First doc loaded; should fit easily in context. |
+| **Description length** | ≤1024 characters in front-matter | Metadata is always in context. |
+| **Heading hygiene** | Every heading must state a concrete action or topic; no “Miscellaneous” or “Notes” | Toss Technical Writing principle. |
+| **Canonical source** | One doc per fact; all others link | Prevents drift and duplicated token spend. |
+| **When to link vs. inline** | Inline definitions only for terms defined in the current doc; everything else links | Reduces cross-loading. |
+| **Tables over prose** | Prefer tables for comparisons and checklists | Dense, scannable, cheap. |
+| **No TODO/FIXME/draft in docs** | Zero tolerance on `main` | Stale flags poison search and agent decisions. |
+| **Code snippets** | Keep minimal and copy-pasteable; point to repo files for full examples | Avoids long pasted config. |
 
 ---
 
 ## 7. `AGENTS.md` Draft Contents
 
-`AGENTS.md` is an AAIF-standard Markdown file. No required schema. This draft
-is sized to be read in one agent context window.
+The final `AGENTS.md` should look like this. It is the canonical root entry point.
 
 ```markdown
 # Bluefin Server — Agent Entry Point
 
-Bluefin Server is a BuildStream 2-based, image-based Linux server OS.
-Load **[docs/skills/INDEX.md](docs/skills/INDEX.md)** to route to the skill
-for your task.
+Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
+- an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
+- an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
+- an optional k3s `systemd-sysext` (`oci/k3s-sysext.bst`)
 
-## What this repo is
+## What agents should know first
 
-- **Core OS:** `oci/bluefin-server-ddi.bst` produces the immutable XFS DDI
-  payload.
-- **Installer media:** `oci/bluefin-server-installer.bst` produces a UEFI
-  bootable raw GPT image with the DDI embedded as a data partition.
-- **Interactive installer:** `systemd-sysinstall` (systemd 261+) on
-  `/dev/console`; partitioning by `systemd-repart`.
-- **Updates:** image-based A/B updates via `systemd-sysupdate` from GitHub
-  Releases, verified with GPG-signed `SHA256SUMS` manifests.
-- **Extensions:** optional layers are `systemd-sysext` (or `systemd-confext`)
-  images, not packages baked into the base DDI.
-- **Factory floor:** this OS is designed to be the base image for downstream
-  CI labs and OS factories that build and test image-based Linux workloads.
+1. Read this file.
+2. Load `docs/skills/INDEX.md` to route to the skill for your task.
+3. Never guess label names, workflow secrets, or infra hostnames — check the relevant skill.
 
 ## Hard rules
 
 1. Compose from FSDK `components/*`. Never use `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
-3. Installer must stay `systemd-sysinstall`-native; no custom installer
-   scripts or knuckle.
-4. No shell in the running OS DDI image.
+3. Installer must stay `systemd-sysinstall`-native; no custom installer scripts.
+4. No shell in the running OS DDI image, except for the temporary SSH bring-up exception (see `docs/skills/factory-integration.md`).
 5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
+6. One canonical source per fact; do not duplicate content across docs.
 
 ## Build / test commands
 
-BuildStream runs inside the FSDK `bst2` container via the `just bst` wrapper.
-Only `podman` and `just` are required locally.
+All targets run BuildStream inside the FSDK `bst2` container via `just bst`.
 
 ```bash
-just validate              # merge contract: resolve the element graph
-just tags                  # show derived FSDK versions
-just build-installer       # local full installer build
-just export-installer      # export .raw.zst + SHA256SUMS
+just validate              # merge-contract graph check (run this on every change)
 just build-ddi             # local OS DDI payload build
-just export-ddi            # export DDI + SHA256SUMS
+just export-ddi            # export DDI artifacts
+just build-installer       # local full installer build
+just export-installer      # export installer + UKI
 just build-sysext          # build k3s systemd-sysext
 just export-sysext         # export sysext artifacts
-just cluster-build         # submit build to the CI cluster (preferred)
-just show-me-the-future    # QEMU smoke test of the installer
+just show-me-the-future    # local QEMU installer smoke test
 ```
 
 ## Skill routing
 
-| Task | Load |
-|------|------|
-| Build or debug the installer / DDI | `docs/skills/ddi-installer.md` |
-| Factory role, k3s sysext rationale | `docs/skills/factory-integration.md` |
-| Work with systemd-sysext / confext | `docs/skills/systemd-sysext-extensions.md` |
-| Build or ship the k3s sysext | `docs/skills/k3s-sysext.md` |
-| Update the FSDK pin / versioning | `docs/skills/bump-fsdk-version.md` |
-| CI workflows, action SHA pinning | `docs/skills/ci-tooling.md` |
-| Release signing / sysupdate trust | `docs/skills/systemd-sysupdate-verification.md` |
-| Credential sealing with TPM2 | `docs/skills/tpm2-credential-sealing.md` |
-| System containers (machinectl) | `docs/skills/system-containers.md` |
-| Cut bloat / avoid over-engineering | `docs/skills/avoid-over-engineering.md` |
-| Add or refactor skills or this file | `docs/skills/skill-improvement.md` |
+| Task | Skill |
+|---|---|
+| Build/debug installer or DDI | `docs/skills/ddi-installer.md`, `docs/skills/ddi-installer-build.md` |
+| Factory integration / lab test workflows | `docs/skills/factory-integration.md` |
+| systemd-sysext / confext | `docs/skills/systemd-sysext-extensions.md` |
+| k3s sysext | `docs/skills/k3s-sysext.md`, `docs/skills/k3s-sysext-ops.md` |
+| Versioning / FSDK bump | `docs/skills/bump-fsdk-version.md` |
+| CI workflow conventions | `docs/skills/ci-tooling.md` |
+| Add or refactor skills | `docs/skills/skill-improvement.md` |
 
 ## Documentation conventions
 
-- Keep `AGENTS.md` small. For task-specific guidance, load the skill from
-  `docs/skills/INDEX.md` rather than asking here.
-- Update the skill that matches your work before handoff. Output = work +
-  learning (see `docs/skills/skill-improvement.md`).
-- Before using an external tool, prefer Context7 lookup for authoritative docs.
-  If Context7 is unavailable, fetch the public spec and label uncertainty.
+- Update only the skill that matches your change.
+- Keep `AGENTS.md` small; do not list commands or deep context here.
+- Remove `TODO/FIXME/draft` before merging; move unfinished work to issues.
+- Use Conventional Commits. For doc-only changes: `docs:`.
 
 ## Boundaries
 
-- **Do not** add Containerfiles or shell-based installers.
-- **Do not** hardcode block device paths in boot configuration.
-- **Do not** put Kubernetes or debug tooling in the base DDI if it can live in
-  a sysext or system container.
-- **Do not** duplicate a fact that already lives in a skill file.
+- Do not add Containerfiles or shell-based installers.
+- Do not hardcode block device paths in boot configuration.
+- Do not put Kubernetes or debug tooling in the base DDI if it can live in a sysext or system container.
+- Do not duplicate a fact already in a skill.
 
 ## Verification
 
-- [ ] `just validate` passes before any handoff.
-- [ ] Any changed skill file is listed in `docs/skills/INDEX.md`.
-- [ ] Internal-only references (hostnames, private infra names) are not added to
-      `AGENTS.md` or skill files.
+- [ ] `just validate` passes.
+- [ ] Any changed skill is listed in `docs/skills/INDEX.md`.
+- [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.
 ```
 
 ---
 
 ## 8. Cleanup Execution Plan
 
-Execute in this order so links never point into the void during the migration.
-
 ### Phase 1 — Bootstrap the new entry point
 
 1. Rewrite `AGENTS.md` using the draft in §7.
-2. Update `docs/skills/INDEX.md` to the manifest schema in §5.1.
-3. Add `docs/skills/skill-improvement.md` additions: schema definition,
-   “add a skill” checklist, and link to the lazy-loading rules.
+2. Rewrite `docs/skills/INDEX.md` with Anthropic-aligned front-matter and a routing table.
+3. Rewrite `docs/skills/skill-improvement.md` as the meta-skill.
 
 ### Phase 2 — Genericize internal framing
 
-4. Rewrite `docs/skills/factory-integration.md`: replace `projectbluefin/lab`,
-   `ghost`, `exo-1`, and similar internal names with generic language
-   (“downstream CI lab,” “the OS factory”). Keep all architecture facts and
-   tables.
-5. Trim `docs/skills/bump-fsdk-version.md`: remove/reframe the “Dakota” note;
-   keep the technical guidance on stripping unused junction overrides.
-6. Split `docs/skills/gap-analysis-architecture.md`:
-   - Move verified design rules to the canonical skills
-     (`systemd-sysupdate-verification.md`, `tpm2-credential-sealing.md`,
-     `systemd-sysext-extensions.md`).
-   - Create `docs/skills/architecture-roadmap.md` with only the remaining
-     roadmap; mark `status: draft` in front matter.
+1. Update `README.md` to human quick-start only; remove duplicated build tables.
+2. Rewrite `CONTRIBUTING.md` to point to `AGENTS.md` → `docs/skills/INDEX.md`.
+3. Update `docs/skills/factory-integration.md` with the temporary SSH exception and the lab boot-test workflow reference.
 
 ### Phase 3 — Chunk oversized skills
 
-7. Rewrite `docs/skills/ddi-installer.md` to stay under 200 lines. Move the
-   lengthy copy-paste examples and manual test procedures to a child file
-   `docs/skills/ddi-installer-reference.md`.
-8. Rewrite `docs/skills/k3s-sysext.md` similarly; move runtime testing recipes
-   to `docs/skills/k3s-sysext-reference.md`.
+1. Review `ddi-installer.md` (171 lines), `gap-analysis-distros.md` (201 lines), `k3s-sysext.md` + `k3s-sysext-ops.md` for overlap. Split only if a single file exceeds 300 lines after trimming duplication.
+2. Create child reference files only when required; otherwise trim.
 
 ### Phase 4 — Deduplicate and cross-link
 
-9. Remove duplicated build-command tables from `README.md`,
-   `CONTRIBUTING.md`, `ddi-installer.md`, `k3s-sysext.md`, and
-   `ci-tooling.md`. Link to `AGENTS.md` for the canonical table.
-10. Centralize release/signing facts in
-    `systemd-sysupdate-verification.md`; replace the duplicate release
-    sections in `ddi-installer.md` and `k3s-sysext.md` with one-line links.
+1. Remove duplicate build command lists from `README.md` and `ci-tooling.md`; link to `AGENTS.md`.
+2. Ensure `factory-integration.md`, `systemd-sysupdate-verification.md`, and `MVP_1_0_READINESS.md` cross-link rather than restate facts.
+3. Resolve TODO flags in `tpm2-credential-sealing.md` or move to issues.
 
 ### Phase 5 — Human docs refresh
 
-11. Rewrite `README.md`: human-first quick-start, trust signals (signed
-    releases, immutable tags), and links to `AGENTS.md` / skill index.
-12. Rewrite `CONTRIBUTING.md`: remove duplicate commands; reference
-    `AGENTS.md` and `docs/skills/INDEX.md`.
+1. Trim `README.md` to ≤200 lines.
+2. Convert `MVP_1_0_READINESS.md` phase headings into a checklist.
 
 ### Phase 6 — Validate
 
-13. Run `just validate` to make sure no real code is broken.
-14. Run a link check (e.g., `markdown-link-check` or a small shell script that
-    lists all `[...](path)` targets and confirms they exist).
-15. Run line-count checks (index ≤ 100 lines, main skills ≤ 200 lines,
-    reference skills ≤ 300 lines, AGENTS.md ≤ 150 lines).
+1. Run the docs-checks script locally (see §9).
+2. Run `actionlint` if `.github/workflows/docs-checks.yml` is added.
+3. `just validate` must still pass.
 
 ### Path mapping
 
-| Old path | New path / action |
-|----------|-----------------|
-| `AGENTS.md` | rewritten in place (keep path) |
-| `README.md` | rewritten in place |
-| `CONTRIBUTING.md` | rewritten in place |
-| `docs/skills/INDEX.md` | rewritten in place |
-| `docs/skills/skill-improvement.md` | expanded in place |
-| `docs/skills/factory-integration.md` | rewritten in place |
-| `docs/skills/bump-fsdk-version.md` | trimmed in place |
-| `docs/skills/gap-analysis-architecture.md` | split into `architecture-roadmap.md` + updates to other skills |
-| `docs/skills/ddi-installer.md` | trimmed in place; deep reference moved to `docs/skills/ddi-installer-reference.md` |
-| `docs/skills/k3s-sysext.md` | trimmed in place; deep reference moved to `docs/skills/k3s-sysext-reference.md` |
-| `docs/skills/systemd-sysupdate-verification.md` | becomes canonical signing reference (small updates) |
-| `docs/skills/tpm2-credential-sealing.md` | minor front-matter only |
-| `docs/skills/systemd-sysext-extensions.md` | minor cross-links only |
-| `docs/skills/system-containers.md` | minor cross-links only |
-| `docs/skills/avoid-over-engineering.md` | minor cross-links only |
-| `docs/skills/ci-tooling.md` | trim duplicated commands |
-| `docs/DOCUMENTATION_OVERHAUL_PLAN.md` | this file (kept as record) |
+| Old path | Action | New path / reason |
+|---|---|---|
+| `AGENTS.md` | Rewrite | same path |
+| `README.md` | Rewrite | same path |
+| `CONTRIBUTING.md` | Rewrite | same path |
+| `docs/skills/INDEX.md` | Rewrite | same path |
+| `docs/skills/skill-improvement.md` | Rewrite | same path |
+| `docs/skills/gap-analysis-architecture.md` | Delete | content already moved to canonical skills |
+| `docs/skills/gap-analysis-distros.md` | Update status, trim | same path |
+| `docs/skills/factory-integration.md` | Update | same path |
+| `docs/skills/tpm2-credential-sealing.md` | Update | same path |
+| `docs/MVP_1_0_READINESS.md` | Rewrite | same path |
+| `.pytest_cache/README.md` | Delete | generated cache |
+| `.github/workflows/docs-checks.yml` | Create | new CI check (optional but recommended) |
 
 ---
 
@@ -429,94 +352,72 @@ Execute in this order so links never point into the void during the migration.
 
 ### Ownership
 
-- `AGENTS.md`: every agent edits it when a hard rule or bootstrap command
-  changes.
-- `docs/skills/INDEX.md`: updated whenever a skill file is added, removed, or
-  renamed.
-- Individual `docs/skills/*.md`: updated by the agent working on that topic
-  (the skill-improvement loop).
-- `README.md` / `CONTRIBUTING.md`: human contributors and release managers.
+- **Agent-facing structure (`AGENTS.md`, `docs/skills/INDEX.md`, skill-improvement skill):** doc maintainers own; changes require review by a doc maintainer *and* a subject-matter expert.
+- **Domain skills:** the same owner as the code domain (installer, sysext, CI, etc.).
+- **Human docs (`README.md`, `CONTRIBUTING.md`):** doc maintainers, with community feedback.
 
 ### Review triggers
 
-Review a doc when any of these happen:
-
-- A build/test command changes.
-- A hard rule is added, removed, or weakened.
-- A new skill is added or an existing skill is split.
-- Internal-only names or URLs leak into docs.
-- The `last_updated` front matter is older than 90 days (stale-digest flag).
+Review docs whenever:
+- `AGENTS.md` or any `docs/skills/*.md` changes.
+- A new skill is added or a skill is split.
+- Build/test commands or workflow names change.
+- Hard rules or boundaries evolve.
 
 ### CI checks
 
-| Check | Tool | Failure mode |
-|-------|------|--------------|
-| Markdown syntax | `markdownlint-cli` | Block PR merge. |
-| Internal links | custom shell script or `markdown-link-check` | Block PR merge if a relative link is dead. |
-| Front-matter schema | `yq`/Python validator against §5.3 schema | Block PR merge. |
-| Line-count budgets | `wc -l` against §6 budgets | Warn; fail on PRs that grow files past 1.5x budget. |
-| Proprietary reference scan | `grep -iE '(ghost|exo-1|dakota|internal.vpn|corp)' -- docs/ AGENTS.md README.md CONTRIBUTING.md` | Block PR merge if any match is not explicitly approved. |
+Add `.github/workflows/docs-checks.yml` with these light checks:
+
+| Check | Tool / method | Fail condition |
+|---|---|---|
+| Front-matter schema | `python -c`/`jsonschema` over YAML front-matter | Missing `name`, `description`, or unknown top-level keys; description >1024 chars; name not kebab-case or >64 chars. |
+| Skill line budget | `wc -l` on `docs/skills/*.md` excluding `INDEX.md` and meta files | Any skill >500 lines. |
+| Long-reference warning | `wc -l` | Any skill >300 lines emits a warning annotation. |
+| Stale-flag scan | `grep -R` | Any `TODO/FIXME/draft` in `.md` on `main`. |
+| Link validity | `markdown-link-check` or `lychee` | Broken internal links. |
 
 ### Skill improvement meta-skill
 
-`docs/skills/skill-improvement.md` is the place where “how to maintain this
-skill library” is documented. It must include:
-
-- The front-matter schema (§5.3).
-- The lazy-loading contract: index → skill file(s) → dependencies.
-- The no-duplication rule and cross-reference patterns.
-- A checklist for adding a new skill:
-  1. Pick a file name matching the topic.
-  2. Add front matter per schema.
-  3. Add an entry to `docs/skills/INDEX.md`.
-  4. Link from the relevant human docs (`README.md`, `CONTRIBUTING.md`,
-     related skills).
-  5. Run link and line-count checks.
-- A checklist for refactoring a skill:
-  1. Identify the canonical file for the fact.
-  2. Move the fact; leave a forward link.
-  3. Update the index if files are renamed or split.
-  4. Update `last_updated`.
+`docs/skills/skill-improvement.md` must teach agents:
+- How to decide whether a topic needs a new skill or a reference child file.
+- How to write front-matter that passes the schema.
+- How to add an entry to `docs/skills/INDEX.md`.
+- How to split a skill when it exceeds 300 lines.
+- How to verify docs before handoff (`docs-checks`, `just validate`, `actionlint`).
+- The rule: a skill is updated *before* the handoff that touches its topic.
 
 ---
 
 ## 10. Audience Mapping
 
-| Audience | Where they look | What they get |
-|----------|-----------------|---------------|
-| **External evaluators** (trust, process rigor) | `README.md`, `AGENTS.md`, signed-release workflow pointers in `systemd-sysupdate-verification.md` | Release trust signals, reproducible build commands, immutable versioning. |
-| **Active contributors / agents** | `AGENTS.md` → `docs/skills/INDEX.md` → specific skill | Exact commands, hard rules, context7 tools to look up, and boundaries. |
-| **Downstream maintainers** | `factory-integration.md`, `systemd-sysext-extensions.md`, `k3s-sysext.md` | How the OS composes into a larger factory and how to add extensions without forking the base DDI. |
-| **End users assessing release trust** | `README.md`, `CONTRIBUTING.md`, `systemd-sysupdate-verification.md` | How updates are signed, where artifacts live, and the update/rollback model. |
+| Audience | Primary docs | How the structure serves them |
+|---|---|---|
+| **External evaluators** (trust, release readiness) | `README.md`, `AGENTS.md`, `docs/MVP_1_0_READINESS.md`, `docs/skills/ci-tooling.md` | Quick scan of process, build trust signals, and verification checklists. |
+| **Active contributors / agents** | `AGENTS.md`, `docs/skills/INDEX.md`, task-specific skills | Fast routing: load only the skill that matches the current task. |
+| **Downstream maintainers** | `docs/skills/factory-integration.md`, `docs/skills/architecture-roadmap.md`, `docs/skills/ci-tooling.md` | Understand integration contracts, update cadence, and boundaries. |
+| **End users assessing release trust** | `README.md`, `docs/MVP_1_0_READINESS.md`, `docs/skills/systemd-sysupdate-verification.md` | Learn what the project ships, how updates are signed, and how to verify artifacts. |
 
-There are no audience-specific silos. All content lives in one tree; headings
-and the front-matter `type` field make it routable.
+No audience gets its own silo. `README.md` and `AGENTS.md` are signposts; skills are the shared source of truth.
 
 ---
 
 ## 11. Verification of This Plan
 
-Non-exhaustive checks an executor should run before calling the overhaul done:
+Before this overhaul can be called done:
 
-```bash
-# All required files exist and are readable
-ls AGENTS.md README.md CONTRIBUTING.md docs/skills/INDEX.md docs/skills/skill-improvement.md
-
-# No skill file has grown past the reference budget (child files get 300 lines)
-awk 'NR==FNR{a[$1]=1;next} {print $1, $0}' <(find docs/skills -name '*.md') <(wc -l docs/skills/*.md)
-
-# Build contract still holds
-just validate
-```
+- [ ] All required files exist and are readable: `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `docs/skills/INDEX.md`, `docs/skills/skill-improvement.md`.
+- [ ] Every skill file has valid front-matter and no skill exceeds 500 lines.
+- [ ] No `TODO/FIXME/draft` markers remain in `*.md` on `main`.
+- [ ] Internal links in `docs/` are valid.
+- [ ] `just validate` passes after any code-doc changes.
+- [ ] `docs-checks` CI workflow passes on the final PR.
 
 ---
 
-## Sources Recap
+## 12. Sources Recap
 
-- AAIF `AGENTS.md` standard: `https://agents.md/`
-- MCP Specification 2025-03-26: `https://modelcontextprotocol.io/specification/2025-03-26`
-- MCP docs index (`llms.txt` pattern): `https://modelcontextprotocol.io/llms.txt`
-- OpenAI `codex` agent file example: `https://raw.githubusercontent.com/openai/codex/main/AGENTS.md`
-
-Context7 MCP was not available in this session, so the above public documents
-were fetched directly and cited instead.
+- **Anthropic Skills** (`/anthropics/skills`, Context7) — SKILL.md front-matter validation, kebab-case naming, description budgets, three-level progressive loading, skill body budget (<500 lines), bundled resources.
+- **Vercel Labs Skills** (`/vercel-labs/skills`, Context7) — skill discovery paths (`skills/`, `.agents/skills/`, etc.) and root index as entry point.
+- **Toss Technical Writing** (`/toss/technical-writing`, Context7) — heading clarity, `INDEX.md` master navigation, hierarchical page structure.
+- **Model Context Protocol spec** (modelcontextprotocol.io, fetched + indexed) — confirms MCP is a protocol specification, not a repository skill-file layout standard.
+- **AAIF** — not found in Context7. This plan uses the widely adopted root `AGENTS.md` pattern and notes the gap explicitly.
