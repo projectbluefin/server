@@ -45,8 +45,7 @@ cluster cache rather than starving your local machine.
 
 ## Local builds with a remote cache
 
-If you must build locally, point BuildStream at the cluster cache tunnel on
-`ghost` by creating `~/.config/buildstream.conf` on your workstation:
+If you must build locally, point BuildStream at your cluster cache tunnel host (`<build-cache-host>`) by creating `~/.config/buildstream.conf` on your workstation:
 
 ```yaml
 projects:

@@ -41,7 +41,7 @@ existing repo convention already does the job.
 5. **Update docs.** Remove or rewrite any skill file, AGENTS.md, or README line
    that references the deleted target, dependency, or command.
 6. **Write the learning.** If the cut reveals a reusable pattern, update this
-   skill file or add a new one and link it in `docs/skills/INDEX.md`.
+   skill file or add a new one and link it in `docs/skills/index.md`.
 
 ## Common Rationalizations
 

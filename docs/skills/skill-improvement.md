@@ -8,7 +8,7 @@ metadata:
 ---
 # Skill Improvement — How to Maintain Agent Docs
 
-This is the meta-skill for the documentation loop. Any change that touches `AGENTS.md`, `docs/skills/INDEX.md`, or any skill file must also update this meta-skill if the process itself changes.
+This is the meta-skill for the documentation loop. Any change that touches `AGENTS.md`, `docs/skills/index.md`, or any skill file must also update this meta-skill if the process itself changes.
 
 ## When to Use
 
@@ -37,7 +37,7 @@ Write it once in the relevant skill. Do not paste the same fact into multiple fi
 
 1. Do the work.
 2. Update the skill that matches the changed domain.
-3. Update `docs/skills/INDEX.md` if a skill is added, removed, renamed, or re-scoped.
+3. Update `docs/skills/index.md` if a skill is added, removed, renamed, or re-scoped.
 4. Run the verification commands.
 5. Hand off the work with the changed skill files listed explicitly.
 
@@ -70,7 +70,7 @@ Rules:
 1. Pick a kebab-case name that describes the task, not the component.
 2. Create `docs/skills/<name>.md` with valid front-matter.
 3. Keep the body ≤ 300 lines; 500 lines is the hard maximum.
-4. Add a row to `docs/skills/INDEX.md`.
+4. Add a row to `docs/skills/index.md`.
 5. If the task appears in `AGENTS.md` routing, add or update the link there.
 6. Run verification.
 
@@ -80,18 +80,18 @@ A skill should split when it exceeds 300 lines or mixes a decision tree with lon
 
 1. Move the reference material into `docs/skills/<parent>-reference.md`.
 2. Keep the decision tree, trigger words, and links in the original file.
-3. Add the child file to `docs/skills/INDEX.md` with a clear scope.
+3. Add the child file to `docs/skills/index.md` with a clear scope.
 4. Update the parent's cross-reference line.
 
 ## How to refactor or rename a skill
 
 1. Rewrite or rename the file.
-2. Update every occurrence in `docs/skills/INDEX.md` and `AGENTS.md`.
+2. Update every occurrence in `docs/skills/index.md` and `AGENTS.md`.
 3. Add a redirect note at the old path only if external links exist; otherwise delete the old file.
 
 ## Lazy-loading contract
 
-- `docs/skills/INDEX.md` is loaded eagerly. It stays small.
+- `docs/skills/index.md` is loaded eagerly. It stays small.
 - Each skill body loads only when its task triggers.
 - Child reference files load only when the parent links to them.
 - Cross-skill facts are resolved via one-line links, not copy-paste.
@@ -102,4 +102,4 @@ A skill should split when it exceeds 300 lines or mixes a decision tree with lon
 - [ ] No skill file exceeds 500 lines.
 - [ ] No `TODO/FIXME/draft` markers remain in changed `.md` files.
 - [ ] All internal Markdown links resolve.
-- [ ] New or renamed skills are listed in `docs/skills/INDEX.md` and `AGENTS.md`.
+- [ ] New or renamed skills are listed in `docs/skills/index.md` and `AGENTS.md`.

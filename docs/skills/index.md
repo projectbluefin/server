@@ -1,5 +1,5 @@
 ---
-name: INDEX
+name: index
 description: Lazy-load manifest for Bluefin Server skills. Load this file after AGENTS.md, then read only the skill that matches your current task.
 metadata:
   type: index
@@ -39,7 +39,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 
 ## Standing facts
 
-- **Publish registry:** Zot in the lab cluster at `192.168.1.102:30500`.
-- **Cluster build workflow:** `bluefin-server-build-pipeline` in `projectbluefin/lab`.
-- **Cluster boot-test workflow:** `bluefin-server-boot-test` in `projectbluefin/lab`.
+- **Publish registry:** factory OCI registry (set by your operator).
+- **Cluster build workflow:** `bluefin-server-build-pipeline` in the downstream factory CI repository.
+- **Cluster boot-test workflow:** `bluefin-server-boot-test` in the downstream factory CI repository.
 - **Version scheme:** FSDK-derived only; no separate application version axis.

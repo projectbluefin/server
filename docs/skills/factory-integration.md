@@ -62,7 +62,7 @@ The workloads the factory tests and ships live in other repositories or image pi
 
 ## Temporary SSH exception
 
-> `sshd` is enabled for bring-up and cluster boot tests, and root login is permitted with password and pubkey. The lab runs the `bluefin-server-boot-test` Argo workflow (in `projectbluefin/lab`) to verify installer → first-boot success. SSH will be removed once diagnostics can be driven entirely by serial logs or a guest agent.
+> `sshd` is enabled for bring-up and cluster boot tests, and root login is permitted with password and pubkey. The lab runs the `bluefin-server-boot-test` Argo workflow (in the downstream factory CI repository) to verify installer → first-boot success. SSH will be removed once diagnostics can be driven entirely by serial logs or a guest agent.
 
 ## When to Use
 

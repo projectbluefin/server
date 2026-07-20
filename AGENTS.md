@@ -8,7 +8,7 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 ## What agents should know first
 
 1. Read this file.
-2. Load [`docs/skills/INDEX.md`](docs/skills/INDEX.md) to route to the skill for your task.
+2. Load [`docs/skills/index.md`](docs/skills/index.md) to route to the skill for your task.
 3. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill.
 
 ## Hard rules
@@ -55,7 +55,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 
 - Update only the skill that matches your change.
 - Keep `AGENTS.md` small; do not list deep context here.
-- Remove `TODO/FIXME/draft` before merging; move unfinished work to issues.
+- Remove `TODO/FIXME` and work-in-progress markers before merging; move unfinished work to issues.
 - Use Conventional Commits. For doc-only changes: `docs:`.
 
 ## Boundaries
@@ -68,5 +68,5 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 ## Verification
 
 - [ ] `just validate` passes.
-- [ ] Any changed skill is listed in [`docs/skills/INDEX.md`](docs/skills/INDEX.md).
+- [ ] Any changed skill is listed in [`docs/skills/index.md`](docs/skills/index.md).
 - [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.

@@ -29,7 +29,7 @@ See [`AGENTS.md`](AGENTS.md) for the full build matrix and agent skill routing.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist and [`docs/skills/INDEX.md`](docs/skills/INDEX.md) for task-specific guidance.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist and [`docs/skills/index.md`](docs/skills/index.md) for task-specific guidance.
 
 ## Release trust
 
