@@ -1,5 +1,8 @@
 ---
 name: tpm2-credential-sealing
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['tpm2', 'credentials', 'security']
 description: "Securing provisioning credentials (such as hashed root passwords or SSH keys) with TPM2 sealing via systemd-creds."
 metadata:
   context7-sources:

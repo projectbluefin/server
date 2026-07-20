@@ -6,7 +6,7 @@ It is a [BuildStream 2](https://buildstream.build/) project. No Containerfiles â
 BST elements build reproducible OCI images and DDI installer media from FSDK
 `components/*`.
 
-Load **[docs/skills/README.md](docs/skills/README.md)** for the skill routing table.
+Load **[docs/skills/INDEX.md](docs/skills/INDEX.md)** for the skill routing table.
 Only load the docs relevant to your task.
 
 > **Before using any tool or library: look up its docs via Context7 first. Always.**

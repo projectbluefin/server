@@ -1,5 +1,8 @@
 ---
 name: ddi-installer
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['installer', 'ddi', 'systemd-sysinstall', 'systemd-repart']
 description: "Use when building or debugging the Bluefin Server DDI live installer, or managing the systemd-sysinstall recipes or target boot configurations."
 metadata:
   context7-sources:

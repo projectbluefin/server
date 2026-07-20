@@ -1,11 +1,14 @@
 ---
-name: skills-readme
-description: Routing table for bluefin-server skills. Load when onboarding to this repo or deciding which skill applies to your task.
+name: skills-index
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['skills', 'routing', 'index']
+description: "Routing table for bluefin-server skills. Load when onboarding to this repo or deciding which skill applies to your task."
 metadata:
   type: index
 ---
 
-# docs/skills — Routing
+# docs/skills — Index
 
 `projectbluefin/server` is Bluefin Server — an FSDK-based, image-based Linux
 server OS. Start at [AGENTS.md](../../AGENTS.md) for the project model and hard
@@ -30,8 +33,14 @@ rules, then load the focused skill for your task.
 
 ## What belongs here
 
-Workflow knowledge and operational runbooks any agent needs to work in this repo.
-**Not here:** agent-instruction files (`AGENTS.md`) — loaded separately by tools.
+Workflow knowledge, architectural context, and operational runbooks any agent
+needs to work in this repo.
+
+## What does NOT belong here
+
+Agent-specific instruction files (`AGENTS.md`, `.cursorrules`,
+`.github/copilot-instructions.md`, etc.) are loaded separately by their
+respective tools and must not be listed here.
 
 ## Standing facts
 

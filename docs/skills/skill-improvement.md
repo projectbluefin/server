@@ -1,5 +1,8 @@
 ---
 name: skill-improvement
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['skills', 'improvement', 'documentation']
 description: "The skill-improvement mandate for projectbluefin repos. Every session produces work + a skill update. Use when finishing any task, deciding whether a learning belongs in docs/skills, or verifying the work+learning loop before handoff."
 metadata:
   type: procedure

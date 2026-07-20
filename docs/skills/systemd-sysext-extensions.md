@@ -1,5 +1,8 @@
 ---
 name: systemd-sysext-extensions
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['sysext', 'confext', 'extensions']
 description: "Extensibility via systemd-sysext and systemd-confext for Bluefin Server. Use when adding, debugging, or documenting system extensions."
 metadata:
   context7-sources:

@@ -1,5 +1,8 @@
 ---
 name: system-containers
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['containers', 'machinectl', 'nspawn']
 description: "Add or document system containers that should behave like first-class systemd machines rather than podman/OCI workloads. Use when managing container lifecycle with machinectl and systemd-run."
 metadata:
   context7-sources:

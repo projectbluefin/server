@@ -1,5 +1,8 @@
 ---
 name: k3s-sysext
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['k3s', 'sysext', 'kubernetes']
 description: "Build, ship, and enable the k3s systemd-sysext extension for Bluefin Server."
 metadata:
   context7-sources:

@@ -1,5 +1,8 @@
 ---
 name: gap-analysis-architecture
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['architecture', 'roadmap', 'design']
 description: "Use when reviewing or planning the implementation of Bluefin Server's core OS features, including updates, first-boot provisioning, security, and extensibility."
 metadata:
   type: design-roadmap

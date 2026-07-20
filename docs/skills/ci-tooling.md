@@ -1,9 +1,9 @@
 ---
 name: ci-tooling
-description: >
-  CI workflow conventions for Bluefin Server. Use when writing or editing
-  .github/workflows/*.yml, debugging a failing build job, or adding a new
-  CI step.
+version: "1.0"
+last_updated: "2026-07-20"
+tags: ['ci', 'workflows', 'github-actions']
+description: "CI workflow conventions for Bluefin Server. Use when writing or editing .github/workflows/*.yml, debugging a failing build job, or adding a new CI step."
 metadata:
   context7-sources:
     - /websites/github_en_actions
