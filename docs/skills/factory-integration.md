@@ -68,9 +68,10 @@ The factory requirements are why Bluefin Server is built the way it is:
 | Minimal attack surface / no shell in OS | Distroless DDI; optional tools as sysexts |
 
 > **Temporary exception:** `sshd` is enabled for bring-up and cluster boot
-> tests, and root login is permitted with password and pubkey. This will be
-> removed once first-boot verification and failure diagnostics no longer need
-> a remote shell.
+> tests, and root login is permitted with password and pubkey. The lab runs
+> the `bluefin-server-boot-test` Argo workflow (in `projectbluefin/lab`) to
+> verify installer → first-boot success. SSH will be removed once diagnostics
+> can be driven entirely by serial logs or a guest agent.
 | Kubernetes control plane on every node | k3s delivered as `systemd-sysext` |
 | Container workloads | `podman` in the base OS stack |
 | Signed, verifiable release artifacts | GPG-signed `SHA256SUMS` + `import-pubring.pgp` |
