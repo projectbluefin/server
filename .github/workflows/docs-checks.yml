@@ -1,0 +1,32 @@
+name: Docs checks
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+      - '.github/workflows/docs-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - '.github/workflows/docs-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Run docs checks
+        run: python .github/scripts/docs-checks.py
