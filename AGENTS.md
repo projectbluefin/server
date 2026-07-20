@@ -16,6 +16,9 @@ Only load the docs relevant to your task.
 
 ## What this repo is
 
+- **Core server OS for the Project Bluefin agentic factory.** The factory lab at
+  `projectbluefin/lab` (k3s + KubeVirt + Argo on bare metal) runs Bluefin Server;
+  `fsdk-containers` and variant OS images are the container workloads it hosts.
 - **OS image:** `oci/bluefin-server-ddi.bst` — the server OS DDI payload (XFS
   image compressed with zstd), deployed by the installer onto the target disk.
 - **Installer media:** `oci/bluefin-server-installer.bst` — a bootable GPT image

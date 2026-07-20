@@ -18,6 +18,7 @@ rules, then load the focused skill for your task.
 
 | If your task is... | Load |
 | ------------------ | ---- |
+| Understand Bluefin Server's factory role | [factory-integration.md](factory-integration.md) |
 | Build or debug the DDI live installer | [ddi-installer.md](ddi-installer.md) |
 | SSH into the live installer | [ddi-installer.md](ddi-installer.md) |
 | Work with systemd-sysext or confext overlays | [systemd-sysext-extensions.md](systemd-sysext-extensions.md) |

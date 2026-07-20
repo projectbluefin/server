@@ -20,8 +20,10 @@ offline, systemd-native installer.
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive
   terminal UI and `systemd-repart` handles partitioning and block-copy DDI
   placement.
-- **Fully automated GitOps-driven builds** — Renovate tracks FSDK point releases,
-  GitHub Actions builds and publishes DDI + installer + k3s sysext assets.
+- **Core OS for the agentic factory** — Project Bluefin's CI/testing lab
+  (`projectbluefin/lab`) runs on Bluefin Server; `fsdk-containers` and variant
+  images are the container workloads it hosts. Kubernetes is delivered as a
+  `systemd-sysext`, not baked into the base image.
 
 ## Build model
 
@@ -55,6 +57,21 @@ release in `elements/freedesktop-sdk.bst`:
 
 Installers, DDI payloads, and the k3s sysext all use the same `release-version`
 value from `project.conf`.
+
+## Factory role
+
+Bluefin Server is the operating system floor for the
+[Project Bluefin agentic factory](https://github.com/projectbluefin/lab). The
+factory lab — k3s, KubeVirt, Argo Workflows, and Argo CD on bare metal — is both
+the first consumer of Bluefin Server and the reason for its shape:
+
+- **DDI-first installs** so machines can be provisioned unattended.
+- **Image-based A/B updates** via `systemd-sysupdate` so updates are atomic and
+  rollback-capable.
+- **Optional k3s as a `systemd-sysext`** so the base image stays distroless.
+- **podman** for the container workloads the factory tests and ships.
+
+See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 
 ## System containers
 
@@ -97,7 +114,9 @@ GitHub Actions compiles the full project and publishes release assets automatica
 | Push to `main`, `workflow_dispatch` | `build.yml` / `build-and-release` | Builds DDI, live installer, target UKI, and k3s sysext on `/mnt` storage, signs a combined `SHA256SUMS` manifest, and uploads everything to a GitHub Release tagged `installer-v<FSDK-RELEASE>`. |
 
 No PATs or `repository_dispatch` are used; Renovate drives dependency updates.
-See [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for workflow conventions.
+See [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for workflow conventions
+and [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) for
+how the release artifacts feed the factory.
 
 ## License
 
