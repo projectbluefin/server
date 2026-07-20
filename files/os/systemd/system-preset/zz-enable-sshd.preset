@@ -1,0 +1,4 @@
+# Temporary override: enable sshd.service for bring-up and cluster boot tests.
+# This will be removed once the boot pipeline verifies installs over serial or
+# a guest-agent without requiring a login shell.
+enable sshd.service

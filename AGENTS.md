@@ -1,79 +1,72 @@
-# AGENTS.md
+# Bluefin Server — Agent Entry Point
 
-`projectbluefin/server` is **Bluefin Server** — an FSDK-based, image-based Linux
-server OS in the same use-case space as Flatcar Linux, Fedora CoreOS, and Talos.
-It is a [BuildStream 2](https://buildstream.build/) project. No Containerfiles —
-BST elements build reproducible OCI images and DDI installer media from FSDK
-`components/*`.
+Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
+- an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
+- an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
+- an optional k3s `systemd-sysext` (`oci/k3s-sysext.bst`)
 
-Load **[docs/skills/INDEX.md](docs/skills/INDEX.md)** for the skill routing table.
-Only load the docs relevant to your task.
+## What agents should know first
 
-> **Before using any tool or library: look up its docs via Context7 first. Always.**
-> BuildStream, podman, GitHub Actions, systemd (repart/ukify/sysinstall) —
-> every tool has live, authoritative docs. Pattern: `resolve-library-id` →
-> `get-library-docs` → implement → cite the section. Guessing is banned.
-
-## What this repo is
-
-- **Core server OS for the Project Bluefin agentic factory.** The factory lab at
-  `projectbluefin/lab` (k3s + KubeVirt + Argo on bare metal) runs Bluefin Server;
-  `fsdk-containers` and variant OS images are the container workloads it hosts.
-- **OS image:** `oci/bluefin-server-ddi.bst` — the server OS DDI payload (XFS
-  image compressed with zstd), deployed by the installer onto the target disk.
-- **Installer media:** `oci/bluefin-server-installer.bst` — a bootable GPT image
-  (ESP + embedded DDI data partition). At boot, systemd reaches
-  `system-install.target`, which launches **systemd-sysinstall** — the native
-  systemd interactive installer on `/dev/console` (tty0). The OS DDI is embedded
-  at build time; no network required at install time.
-- **No Knuckle.** The installer uses native systemd tooling (`systemd-sysinstall`
-  and `systemd-repart`) to partition the target disk, copy the XFS DDI filesystem
-  payload, register the boot loader via `bootctl`, and reboot.
-- **No shell in the OS image.** The DDI payload is distroless. The installer
-  rootfs carries only what systemd-sysinstall needs to install the OS.
+1. Read this file.
+2. Load [`docs/skills/index.md`](docs/skills/index.md) to route to the skill for your task.
+3. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill.
 
 ## Hard rules
 
-1. **Compose from `components/*`, never `platform.bst`.** `platform.bst` drags in
-   Wayland/Mesa/PipeWire desktop bloat.
-2. **No `x86_64_v3`.** Broad-compatibility baseline only.
-3. **Use systemd-sysinstall as the interactive installer.**
-4. **No knuckle, custom installer scripts, or custom systemd target/service units.**
-5. **PARTUUID boot entries only.** Never hardcode `/dev/vda2` or similar.
-   systemd-sysinstall and bootctl automatically write correct GPT PARTUUID boot loader entries.
+1. Compose from FSDK `components/*`. Never use `platform.bst`.
+2. Keep the CPU baseline broad: no `x86_64_v3`.
+3. Installer must stay `systemd-sysinstall`-native; no custom installer scripts or non-native installers.
+4. No shell in the running OS DDI image (temporary exception: SSH is enabled for bring-up and cluster boot tests; see [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md)).
+5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
+6. One canonical source per fact; do not duplicate content across docs.
 
-## Build / test commands (verified)
+## Build / test commands
 
-BuildStream runs inside the FSDK `bst2` container via the `just bst` wrapper —
-nothing to install but `podman` + [`just`](https://github.com/casey/just).
+All `just` targets run BuildStream inside the FSDK `bst2` container via `just bst`; BuildStream is not installed locally.
 
-```
-just validate             # resolve element graph (no build)
-just cluster-build        # submit build to the cluster via Argo (recommended, zero local resource usage)
-just build-installer      # full local build: cpio + ukify + systemd-repart
-just export-installer     # export .raw.zst + SHA256SUMS to dist/
-just build-ddi            # build OS DDI filesystem payload
-just export-ddi           # export DDI + SHA256SUMS to dist/ddi/
-just tags                 # show FSDK-derived version tags
-```
+| Command | Purpose |
+|---|---|
+| `just validate` | Merge-contract graph check — run this on every change. |
+| `just build-ddi` | Local OS DDI payload build. |
+| `just export-ddi` | Export DDI artifacts to `dist/ddi/`. |
+| `just build-installer` | Local full installer build. |
+| `just export-installer` | Export installer + UKI to `dist/`. |
+| `just build-sysext` | Build the k3s `systemd-sysext`. |
+| `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
+| `just show-me-the-future` | Local QEMU installer smoke test. |
 
-There is no `just verify` gate for the server repo (that is fsdk-containers).
-The contract here is: element graph resolves (`just validate`) and the
-lab build completes without error.
+## Skill routing
 
-## Versioning
+| Task | Skill |
+|---|---|
+| Build or debug the installer / DDI | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md), [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md) |
+| Factory role, k3s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
+| Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
+| Build or ship the k3s sysext | [`docs/skills/k3s-sysext.md`](docs/skills/k3s-sysext.md), [`docs/skills/k3s-sysext-ops.md`](docs/skills/k3s-sysext-ops.md) |
+| Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
+| CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
+| Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |
+| Credential sealing with TPM2 | [`docs/skills/tpm2-credential-sealing.md`](docs/skills/tpm2-credential-sealing.md) |
+| System containers (`machinectl`) | [`docs/skills/system-containers.md`](docs/skills/system-containers.md) |
+| Cut bloat / avoid over-engineering | [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md) |
+| Add or refactor skills | [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) |
 
-The version axis is the **FSDK release**, parsed from the pinned junction ref in
-`elements/freedesktop-sdk.bst`. The installer and DDI assets carry matching
-version strings from the same FSDK pin. Follow the FSDK lifecycle — see
-[docs/skills/bump-fsdk-version.md](docs/skills/bump-fsdk-version.md).
+## Documentation conventions
 
-## The self-improvement loop
+- Update only the skill that matches your change.
+- Keep `AGENTS.md` small; do not list deep context here.
+- Remove `TODO/FIXME` and work-in-progress markers before merging; move unfinished work to issues.
+- Use Conventional Commits. For doc-only changes: `docs:`.
 
-Every session produces two outputs:
+## Boundaries
 
-1. **The work** — the element, fix, or image.
-2. **The learning** — what a future agent needs to know, written into `docs/skills/`.
+- Do not add Containerfiles or shell-based installers.
+- Do not hardcode block device paths in boot configuration.
+- Do not put Kubernetes or debug tooling in the base DDI if it can live in a sysext or system container.
+- Do not duplicate a fact already in a skill.
 
-Output 1 without Output 2 leaves the project no smarter. Before handoff, update or
-add the relevant skill file. See [docs/skills/skill-improvement.md](docs/skills/skill-improvement.md).
+## Verification
+
+- [ ] `just validate` passes.
+- [ ] Any changed skill is listed in [`docs/skills/index.md`](docs/skills/index.md).
+- [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.

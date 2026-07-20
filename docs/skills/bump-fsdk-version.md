@@ -1,14 +1,13 @@
 ---
 name: bump-fsdk-version
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['fsdk', 'versioning', 'release']
-description: "Move Bluefin Server to a new freedesktop-sdk release and refresh the derived tags. Use when tracking the FSDK lifecycle or pinning a new FSDK point release."
+description: Move Bluefin Server to a new freedesktop-sdk release and refresh the derived tags. Use when tracking the FSDK lifecycle or pinning a new FSDK point release.
 metadata:
+  type: how-to
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /apache/buildstream
 ---
-
 # Bump the FSDK Version
 
 Use when moving to a new FSDK release, or refreshing the pinned ref.
@@ -50,10 +49,10 @@ export so every image self-declares its base.
    ```
 
    `elements/bluefin-server/os-release-flatcar.bst` reads the FSDK point release
-   directly from `elements/freedesktop-sdk.bst`, so `NAME`, `PRETTY_NAME`, and
+directly from `elements/freedesktop-sdk.bst`, so `NAME`, `PRETTY_NAME`, and
    `IMAGE_VERSION` update automatically.
 
-5. Follow the FSDK **lifecycle**: track the active minor line; when FSDK EOLs a
+5. Follow the FSDK lifecycle: track the active minor line; when FSDK EOLs a
    line, move `:latest` to the next supported minor. Don't pin to an EOL line.
 
 ## Verification
@@ -66,21 +65,20 @@ Before merging a bump:
 - [ ] `just build-installer` and `just build-ddi` complete without error
 - [ ] `io.projectbluefin.fsdk.version` label on the built image matches the new FSDK version
 
-- Bumping across a minor line (e.g. 25.08 → 26.08) may rename/relocate components.
+- Bumping across a minor line (for example, 25.08 → 26.08) may rename/relocate components.
   Re-confirm `components/*` names against the staged junction before assuming a
-  dep still exists.
+  dependency still exists.
 - A point-release tag is immutable: once `:25.08.13` is published, never republish
-  different bits under it.
-- **Only the systemd-* overrides and two CAS-config patches remain.** When Dakota
-  syncs a new FSDK pin, check whether `patches/freedesktop-sdk/0001` and `0002`
-  (CAS limits + GNOME CAS servers) still apply cleanly. All other dakota patches
-  (openssh, lvm2, pipewire, cross-compilers, frei0r, kernel-v3) were stripped
-  because this repo never builds those components.
-- **Junction overrides are only meaningful for components your local elements
-  reference directly.** The 25 GNOME sdk/* overrides (cairo, gtk3, pango, glib,
+different bits under it.
+- Only the systemd-* overrides and two CAS-config patches remain. When a downstream
+  variant syncs a new FSDK pin, check whether `patches/freedesktop-sdk/0001` and
+  `0002` (CAS limits + GNOME CAS servers) still apply cleanly. All other
+  downstream patches were stripped because this repo never builds those components.
+- Junction overrides are only meaningful for components your local elements
+  reference directly. The 25 GNOME sdk/* overrides (cairo, gtk3, pango, glib,
   gdk-pixbuf…) were dead weight — none of our `base-stack`, `brew-deps` etc. ever
-  reference those components. If you copy a junction from dakota in the future,
-  strip every override whose component is not in your local dep graph.
+  reference those components. If you copy a junction from another repo in the
+  future, strip every override whose component is not in your local dep graph.
 
 ## Automated Point-Release Bumps
 
@@ -88,5 +86,3 @@ Point releases are fully automated via Renovate and GitHub Actions.
 - **Trigger:** Renovate bot scans `elements/freedesktop-sdk.bst` using a custom regex manager. When a new upstream point release is published, Renovate creates a Pull Request.
 - **Mechanism:** On the Renovate PR, a GHA job in `build.yml` automatically runs `just bst source track freedesktop-sdk.bst` to track and resolve the raw tag to the full `git-describe` ref, then commits and pushes it back to the PR branch.
 - **Build Loop:** When the PR is merged to `main`, GitHub Actions automatically compiles the standalone DDI OS and installer images, and publishes them directly to GitHub Releases under the new FSDK point-release version.
-
-

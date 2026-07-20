@@ -1,13 +1,11 @@
 ---
 name: avoid-over-engineering
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['audit', 'bloat', 'dependencies']
-description: "Use when reviewing for bloat, auditing for cuts, or before adding a new dependency, Justfile recipe, or BuildStream variable. Keeps Bluefin Server lean by preferring standard tools, single sources of truth, and minimal targets."
+description: Use when reviewing for bloat, auditing for cuts, or before adding a new dependency, Justfile recipe, or BuildStream variable. Keeps Bluefin Server lean by preferring standard tools, single sources of truth, and minimal targets.
 metadata:
-  type: guide
+  type: reference
+  status: stable
+  last_updated: 2026-07-20
 ---
-
 # Avoid Over-Engineering
 
 Bluefin Server favors the smallest thing that works. Before adding code,
@@ -43,7 +41,7 @@ existing repo convention already does the job.
 5. **Update docs.** Remove or rewrite any skill file, AGENTS.md, or README line
    that references the deleted target, dependency, or command.
 6. **Write the learning.** If the cut reveals a reusable pattern, update this
-   skill file or add a new one and link it in `docs/skills/INDEX.md`.
+   skill file or add a new one and link it in `docs/skills/index.md`.
 
 ## Common Rationalizations
 

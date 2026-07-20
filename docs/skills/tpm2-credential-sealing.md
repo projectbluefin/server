@@ -1,19 +1,25 @@
 ---
 name: tpm2-credential-sealing
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['tpm2', 'credentials', 'security']
-description: "Securing provisioning credentials (such as hashed root passwords or SSH keys) with TPM2 sealing via systemd-creds."
+description: Securing provisioning credentials (such as hashed root passwords or SSH keys) with TPM2 sealing via systemd-creds.
 metadata:
+  type: how-to
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /systemd/systemd
 ---
-
 # TPM2 Credential Sealing
 
 To secure sensitive provisioning credentials (such as hashed root passwords or
 SSH keys) against physical tampering or unauthorized extraction, bind them to
 the TPM2 and the UKI boot state using `systemd-creds`.
+
+## Current scope
+
+This skill is the canonical home for sealed credentials such as hashed root
+passwords and similar provisioning secrets. Broader `systemd-creds` integration
+for SSH keys and network configuration is a future roadmap item in
+[architecture-roadmap.md](architecture-roadmap.md).
 
 ## Verify TPM2 device availability
 

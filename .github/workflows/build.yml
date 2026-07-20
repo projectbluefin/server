@@ -31,6 +31,8 @@ jobs:
 
       - name: Track and Resolve BuildStream Refs
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/')
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           set -euo pipefail
           git config --global user.name "github-actions[bot]"
@@ -40,7 +42,7 @@ jobs:
           if ! git diff --exit-code; then
             git add elements/
             git commit -m "chore: resolve BuildStream junction refs to git-describe format" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-            git push origin "HEAD:${{ github.head_ref }}"
+            git push origin "HEAD:${HEAD_REF}"
           fi
 
       - name: Validate Element Graph
@@ -50,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo mkdir -p /mnt/podman /mnt/buildstream
-          sudo chown -R $USER:$USER /mnt/podman /mnt/buildstream
+          sudo chown -R "$USER:$USER" /mnt/podman /mnt/buildstream
           mkdir -p ~/.config/containers
           cat > ~/.config/containers/storage.conf <<EOF
           [storage]
@@ -90,7 +92,8 @@ jobs:
           cp dist/ddi/bluefin-server-ddi-*.raw.zst dist/release/
           cp dist/sysext/k3s-*.raw.zst dist/release/
           (cd dist/release && sha256sum --binary -- * > SHA256SUMS)
-          export GNUPGHOME=$(mktemp -d)
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
           trap 'rm -rf "$GNUPGHOME"' EXIT
           echo "$SYSUPDATE_SIGNING_KEY" | gpg --batch --import
           gpg --batch --yes --detach-sign --armor -o dist/release/SHA256SUMS.gpg dist/release/SHA256SUMS

@@ -1,19 +1,24 @@
 ---
 name: systemd-sysext-extensions
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['sysext', 'confext', 'extensions']
-description: "Extensibility via systemd-sysext and systemd-confext for Bluefin Server. Use when adding, debugging, or documenting system extensions."
+description: Extensibility via systemd-sysext and systemd-confext for Bluefin Server. Use when adding, debugging, or documenting system extensions.
 metadata:
+  type: reference
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /systemd/systemd
 ---
-
 # Extensibility via systemd-sysext
 
 Bluefin Server is distroless and read-only. For debugging, monitoring, or
 runtime modifications, use systemd-sysext to overlay package bundles into
 `/usr` and `/opt`, or systemd-confext to overlay files into `/etc`.
+
+## Canonical scope
+
+This file is the canonical home for extension-loading behavior, compatibility
+checks, and runtime management. Future roadmap items for deeper integration
+with the provisioning flow remain in [architecture-roadmap.md](architecture-roadmap.md).
 
 ## Where extensions live
 

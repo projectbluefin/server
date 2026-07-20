@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: docs-checks
+        name: Documentation quality checks
+        entry: python .github/scripts/docs-checks.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/|AGENTS\.md|README\.md|CONTRIBUTING\.md|\.github/scripts/docs-checks\.py)$
+      - id: actionlint
+        name: Lint GitHub Actions workflows
+        entry: actionlint
+        language: system
+        files: ^\.github/workflows/.*\.(yml|yaml)$
