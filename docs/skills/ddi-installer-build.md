@@ -1,15 +1,14 @@
 ---
 name: ddi-installer-build
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['installer', 'ddi', 'build', 'flash']
-description: "Build, export, flash, and release the Bluefin Server installer media and DDI payload."
+description: Build, export, flash, and release the Bluefin Server installer media and DDI payload.
 metadata:
+  type: how-to
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
 ---
-
 # DDI Installer Build and Release
 
 Use this skill when you need to build the installer or DDI artifacts, export them,

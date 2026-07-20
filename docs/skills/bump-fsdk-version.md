@@ -1,14 +1,13 @@
 ---
 name: bump-fsdk-version
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['fsdk', 'versioning', 'release']
-description: "Move Bluefin Server to a new freedesktop-sdk release and refresh the derived tags. Use when tracking the FSDK lifecycle or pinning a new FSDK point release."
+description: Move Bluefin Server to a new freedesktop-sdk release and refresh the derived tags. Use when tracking the FSDK lifecycle or pinning a new FSDK point release.
 metadata:
+  type: how-to
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /apache/buildstream
 ---
-
 # Bump the FSDK Version
 
 Use when moving to a new FSDK release, or refreshing the pinned ref.

@@ -1,88 +1,72 @@
 # Bluefin Server — Agent Entry Point
 
-Bluefin Server is a BuildStream 2-based, image-based Linux server OS.
-Load **[docs/skills/INDEX.md](docs/skills/INDEX.md)** to route to the skill
-for your task.
+Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
+- an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
+- an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
+- an optional k3s `systemd-sysext` (`oci/k3s-sysext.bst`)
 
-## What this repo is
+## What agents should know first
 
-- **Core OS:** `oci/bluefin-server-ddi.bst` produces the immutable XFS DDI
-  payload.
-- **Installer media:** `oci/bluefin-server-installer.bst` produces a UEFI
-  bootable raw GPT image with the DDI embedded as a data partition.
-- **Interactive installer:** `systemd-sysinstall` (systemd 261+) on
-  `/dev/console`; partitioning by `systemd-repart`.
-- **Updates:** image-based A/B updates via `systemd-sysupdate` from GitHub
-  Releases, verified with GPG-signed `SHA256SUMS` manifests.
-- **Extensions:** optional layers are `systemd-sysext` (or `systemd-confext`)
-  images, not packages baked into the base DDI.
-- **Factory floor:** this OS is designed to be the base image for downstream
-  CI labs and OS factories that build and test image-based Linux workloads.
+1. Read this file.
+2. Load [`docs/skills/INDEX.md`](docs/skills/INDEX.md) to route to the skill for your task.
+3. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill.
 
 ## Hard rules
 
 1. Compose from FSDK `components/*`. Never use `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
-3. Installer must stay `systemd-sysinstall`-native; no custom installer
-   scripts or non-native installers.
-4. No shell in the running OS DDI image (temporary exception: SSH is
-   enabled for bring-up and cluster boot tests; scheduled for removal).
+3. Installer must stay `systemd-sysinstall`-native; no custom installer scripts or non-native installers.
+4. No shell in the running OS DDI image (temporary exception: SSH is enabled for bring-up and cluster boot tests; see [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md)).
 5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
+6. One canonical source per fact; do not duplicate content across docs.
 
 ## Build / test commands
 
-BuildStream runs inside the FSDK `bst2` container via the `just bst` wrapper.
-Only `podman` and `just` are required locally.
+All `just` targets run BuildStream inside the FSDK `bst2` container via `just bst`; BuildStream is not installed locally.
 
-```bash
-just validate              # merge contract: resolve the element graph
-just tags                  # show derived FSDK versions
-just build-installer       # local full installer build
-just export-installer      # export .raw.zst + SHA256SUMS
-just build-ddi             # local OS DDI payload build
-just export-ddi            # export DDI + SHA256SUMS
-just build-sysext          # build k3s systemd-sysext
-just export-sysext         # export sysext artifacts
-just cluster-build         # submit build to the CI cluster (preferred)
-just show-me-the-future    # QEMU smoke test of the installer
-```
+| Command | Purpose |
+|---|---|
+| `just validate` | Merge-contract graph check — run this on every change. |
+| `just build-ddi` | Local OS DDI payload build. |
+| `just export-ddi` | Export DDI artifacts to `dist/ddi/`. |
+| `just build-installer` | Local full installer build. |
+| `just export-installer` | Export installer + UKI to `dist/`. |
+| `just build-sysext` | Build the k3s `systemd-sysext`. |
+| `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
+| `just show-me-the-future` | Local QEMU installer smoke test. |
 
 ## Skill routing
 
-| Task | Load |
-|------|------|
-| Build or debug the installer / DDI | `docs/skills/ddi-installer.md` |
-| Factory role, k3s sysext rationale | `docs/skills/factory-integration.md` |
-| Work with systemd-sysext / confext | `docs/skills/systemd-sysext-extensions.md` |
-| Build or ship the k3s sysext | `docs/skills/k3s-sysext.md` |
-| Update the FSDK pin / versioning | `docs/skills/bump-fsdk-version.md` |
-| CI workflows, action SHA pinning | `docs/skills/ci-tooling.md` |
-| Release signing / sysupdate trust | `docs/skills/systemd-sysupdate-verification.md` |
-| Credential sealing with TPM2 | `docs/skills/tpm2-credential-sealing.md` |
-| System containers (machinectl) | `docs/skills/system-containers.md` |
-| Cut bloat / avoid over-engineering | `docs/skills/avoid-over-engineering.md` |
-| Add or refactor skills or this file | `docs/skills/skill-improvement.md` |
+| Task | Skill |
+|---|---|
+| Build or debug the installer / DDI | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md), [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md) |
+| Factory role, k3s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
+| Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
+| Build or ship the k3s sysext | [`docs/skills/k3s-sysext.md`](docs/skills/k3s-sysext.md), [`docs/skills/k3s-sysext-ops.md`](docs/skills/k3s-sysext-ops.md) |
+| Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
+| CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
+| Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |
+| Credential sealing with TPM2 | [`docs/skills/tpm2-credential-sealing.md`](docs/skills/tpm2-credential-sealing.md) |
+| System containers (`machinectl`) | [`docs/skills/system-containers.md`](docs/skills/system-containers.md) |
+| Cut bloat / avoid over-engineering | [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md) |
+| Add or refactor skills | [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) |
 
 ## Documentation conventions
 
-- Keep `AGENTS.md` small. For task-specific guidance, load the skill from
-  `docs/skills/INDEX.md` rather than asking here.
-- Update the skill that matches your work before handoff. Output = work +
-  learning (see `docs/skills/skill-improvement.md`).
-- Before using an external tool, prefer Context7 lookup for authoritative docs.
-  If Context7 is unavailable, fetch the public spec and label uncertainty.
+- Update only the skill that matches your change.
+- Keep `AGENTS.md` small; do not list deep context here.
+- Remove `TODO/FIXME/draft` before merging; move unfinished work to issues.
+- Use Conventional Commits. For doc-only changes: `docs:`.
 
 ## Boundaries
 
-- **Do not** add Containerfiles or shell-based installers.
-- **Do not** hardcode block device paths in boot configuration.
-- **Do not** put Kubernetes or debug tooling in the base DDI if it can live in
-  a sysext or system container.
-- **Do not** duplicate a fact that already lives in a skill file.
+- Do not add Containerfiles or shell-based installers.
+- Do not hardcode block device paths in boot configuration.
+- Do not put Kubernetes or debug tooling in the base DDI if it can live in a sysext or system container.
+- Do not duplicate a fact already in a skill.
 
 ## Verification
 
-- [ ] `just validate` passes before any handoff.
-- [ ] Any changed skill file is listed in `docs/skills/INDEX.md`.
-- [ ] Internal-only references (hostnames, private infra names) are not added to
-      `AGENTS.md` or skill files.
+- [ ] `just validate` passes.
+- [ ] Any changed skill is listed in [`docs/skills/INDEX.md`](docs/skills/INDEX.md).
+- [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.

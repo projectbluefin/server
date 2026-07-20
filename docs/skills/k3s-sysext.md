@@ -1,14 +1,13 @@
 ---
 name: k3s-sysext
-version: "2.0"
-last_updated: "2026-07-20"
-tags: ['k3s', 'sysext', 'kubernetes']
-description: "Build, ship, and enable the k3s systemd-sysext extension for Bluefin Server."
+description: Build, ship, and enable the k3s systemd-sysext extension for Bluefin Server.
 metadata:
+  type: how-to
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /systemd/systemd
 ---
-
 # k3s systemd-sysext
 
 Use this skill when working on the k3s systemd-sysext extension shipped as an

@@ -1,43 +1,23 @@
 # Contributing to Bluefin Server
 
-Thanks for helping build Bluefin Server.
-
-For the canonical project overview and contributor workflow, start with
-[README.md](README.md). The root README is the main landing page for the
-project, while this file is a short pointer for common contributor steps.
+Thanks for contributing. This repo is optimized for AI coding agents first; human contributors should follow the same skill-driven path.
 
 ## Quick contributor checklist
 
-1. Read [AGENTS.md](AGENTS.md) and the relevant skill in [docs/skills/](docs/skills/).
-2. Make your change.
-3. Validate the element graph:
-
-   ```sh
-   just validate
-   ```
-
-4. For installer or DDI changes, also run a local or cluster build:
-
-   ```sh
-   just build-installer       # or just cluster-build
-   ```
-
-5. Update or add a documentation skill when the change affects future workflow,
-   build, or debug knowledge.
+1. Read [`AGENTS.md`](AGENTS.md) and the skill in [`docs/skills/`](docs/skills/) that matches your change.
+2. Make the smallest change that solves the problem.
+3. Run `just validate` on every change that touches the element graph.
+4. Update the skill that matches your change while the work is fresh.
+5. Remove any `TODO/FIXME/draft` markers from docs before merging.
+6. Use Conventional Commits for commits and PR titles (`feat:`, `fix:`, `docs:`, `ci:`, `chore(deps):`).
+7. Target `main`. Keep branches local until ready; no WIP PRs.
 
 ## Useful references
 
-- [README.md](README.md) for the project overview and contributor workflow.
-- [docs/skills/INDEX.md](docs/skills/INDEX.md) for the skill index.
-- [docs/skills/ddi-installer.md](docs/skills/ddi-installer.md) and
-  [docs/skills/ddi-installer-build.md](docs/skills/ddi-installer-build.md)
-  for installer / DDI work.
-- [docs/skills/k3s-sysext.md](docs/skills/k3s-sysext.md) and
-  [docs/skills/k3s-sysext-ops.md](docs/skills/k3s-sysext-ops.md) for the k3s
-  sysext.
-- [docs/skills/ci-tooling.md](docs/skills/ci-tooling.md) for workflow
-  conventions.
+- [`AGENTS.md`](AGENTS.md) — root entry point, hard rules, build commands, boundaries.
+- [`docs/skills/INDEX.md`](docs/skills/INDEX.md) — lazy-load manifest that routes to the right skill.
+- [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) — how to add or refactor skills.
 
 ## License
 
-By contributing you agree your work is licensed under [Apache-2.0](LICENSE).
+By contributing, you agree that your contributions will be licensed under Apache-2.0.

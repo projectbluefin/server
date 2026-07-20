@@ -1,14 +1,13 @@
 ---
 name: systemd-sysupdate-verification
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['systemd-sysupdate', 'signing', 'verification']
-description: "Configure and operate GPG signature verification for Bluefin Server's systemd-sysupdate OTA updates from GitHub Releases."
+description: Configure and operate GPG signature verification for Bluefin Server's systemd-sysupdate OTA updates from GitHub Releases.
 metadata:
+  type: reference
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /systemd/systemd
 ---
-
 # systemd-sysupdate Signature Verification
 
 Use this skill when working on Bluefin Server's over-the-air update mechanism,

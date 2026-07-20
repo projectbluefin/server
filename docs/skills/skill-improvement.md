@@ -1,106 +1,105 @@
 ---
 name: skill-improvement
-version: "2.0"
-last_updated: "2026-07-19"
-tags: [skills, improvement, documentation]
-description: |
-  Maintain the skill library and the work+learning loop. Load when adding,
-  refactoring, or finishing a skill.
+description: How to add, split, rename, and refactor docs/skills files for Bluefin Server. Load this whenever documentation or skill structure is changing.
 metadata:
-  type: procedure
+  type: meta-skill
   status: stable
+  last_updated: 2026-07-20
 ---
+# Skill Improvement — How to Maintain Agent Docs
 
-# Skill Improvement Mandate
-
-Every agent session produces two outputs:
-
-1. **The work** — the element, fix, or image.
-2. **The learning** — what a future agent needs to know.
-
-Output 1 without Output 2 leaves the project no smarter.
+This is the meta-skill for the documentation loop. Any change that touches `AGENTS.md`, `docs/skills/INDEX.md`, or any skill file must also update this meta-skill if the process itself changes.
 
 ## When to Use
 
-Use when finishing any Bluefin Server task, deciding whether a discovery belongs
-in `docs/skills/`, or reviewing a branch before handoff.
+- Adding a new skill.
+- Splitting a skill that has grown too large.
+- Renaming, merging, or deleting a skill.
+- Changing skill front-matter schema or the lazy-loading contract.
+- Updating CI doc checks.
 
-## What counts as a learning worth writing down
+## What counts as learning worth writing down
 
-- A non-obvious FSDK behavior (e.g. "bash is in the `runtime` domain, not `shells`,
-  so `compose exclude: shells` does not remove it").
-- A size lever and its risk tier (what is safe to `rm`, what crashes at runtime).
-- A build sandbox constraint (e.g. "`dracut` invokes `grep`/`sed`/`ldconfig`
-  internally, so the script sandbox must include those tools even if your own
-  commands don't name them").
-- A versioning / lifecycle fact about tracking FSDK releases.
+- A boundary that caught a bad change.
+- A build or test command that every agent needs to know.
+- A non-obvious failure mode and its fix.
+- A convention that prevents duplication.
+
+Write it once in the relevant skill. Do not paste the same fact into multiple files.
 
 ## What does NOT belong here
 
-- Ephemeral session notes, changelog narration, personal scratch.
-- Secrets or tokens.
-- One-off task instructions.
+- A single project plan or release schedule — use GitHub issues or an architecture-roadmap reference file.
+- Internal-only hostnames, private URLs, or proprietary names — docs must be generic and reusable.
+- TODO or FIXME notes — move unfinished work to an issue before merging.
 
 ## The loop
 
 1. Do the work.
-2. Ask: *what did I learn that the next agent would have to rediscover?*
-3. Write it into the right `docs/skills/*.md` (or add a new one + link it in
-   `README.md`).
-4. Keep `just validate` green.
+2. Update the skill that matches the changed domain.
+3. Update `docs/skills/INDEX.md` if a skill is added, removed, renamed, or re-scoped.
+4. Run the verification commands.
+5. Hand off the work with the changed skill files listed explicitly.
 
 ## Skill front-matter schema
 
-Every `docs/skills/*.md` file begins with:
+Every `docs/skills/*.md` file must start with:
 
 ```yaml
 ---
-name: <kebab-skill-name>
-version: "2.0"
-last_updated: "YYYY-MM-DD"
-tags: [topic, subtopic]
-description: |
-  One sentence, ≤25 words, describing when to load this skill.
+name: <kebab-case-name>
+description: <≤ 1024 characters, says what this skill does and when to use it>
 metadata:
-  type: procedure | reference | guide | design-roadmap | index
-  status: stable | draft | deprecated
-  context7-sources:
-    - /systemd/systemd
-    - /apache/buildstream
-  depends_on:
-    - ddi-installer
-    - systemd-sysupdate-verification
+  type: how-to | reference | meta-skill | index
+  status: stable
+  last_updated: "YYYY-MM-DD"
+  context7-sources:        # optional, only when source-verified external docs are used
+    - /org/project
 ---
 ```
 
-- `type`: tells the agent whether this is a how-to (`procedure`), lookup table
-  (`reference`), judgment aid (`guide`), future design (`design-roadmap`), or
-  routing file (`index`).
-- `status`: `draft` for roadmap-only skills; `stable` for canonical facts;
-  `deprecated` when a skill is kept for history but should not be loaded first.
-- `context7-sources`: optional Context7 library IDs to resolve before
-  implementing tool-specific changes.
-- `depends_on`: skills that should be loaded depth-first before this one.
+Rules:
+- `name` must match the filename stem.
+- `name` is kebab-case, lowercase alphanumerics and hyphens only, ≤ 64 characters.
+- `description` ≤ 1024 characters.
+- No extra top-level front-matter keys; use `metadata` for anything else.
+- `metadata.status: draft` is not allowed on `main`.
 
 ## How to add a new skill
 
-1. Pick a file name matching the topic (`<kebab-topic>.md`).
-2. Add front matter per the schema above.
-3. Add an entry to `docs/skills/INDEX.md`.
-4. Link from the relevant human docs (`README.md`, `CONTRIBUTING.md`, and any
-   related skills).
-5. Run link and line-count checks.
+1. Pick a kebab-case name that describes the task, not the component.
+2. Create `docs/skills/<name>.md` with valid front-matter.
+3. Keep the body ≤ 300 lines; 500 lines is the hard maximum.
+4. Add a row to `docs/skills/INDEX.md`.
+5. If the task appears in `AGENTS.md` routing, add or update the link there.
+6. Run verification.
 
-## How to refactor / split a skill
+## How to split a skill
 
-1. Identify the canonical file for the fact.
-2. Move the fact; leave a forward link where it used to live.
-3. Update `docs/skills/INDEX.md` if files are renamed or split.
-4. Update `last_updated` on every touched skill file.
+A skill should split when it exceeds 300 lines or mixes a decision tree with long reference material.
+
+1. Move the reference material into `docs/skills/<parent>-reference.md`.
+2. Keep the decision tree, trigger words, and links in the original file.
+3. Add the child file to `docs/skills/INDEX.md` with a clear scope.
+4. Update the parent's cross-reference line.
+
+## How to refactor or rename a skill
+
+1. Rewrite or rename the file.
+2. Update every occurrence in `docs/skills/INDEX.md` and `AGENTS.md`.
+3. Add a redirect note at the old path only if external links exist; otherwise delete the old file.
 
 ## Lazy-loading contract
 
-Agents bootstrap in this order: `AGENTS.md` → `docs/skills/INDEX.md` → skill
-file(s) → their `depends_on` skills. The index front matter is the
-machine-readable routing table; the Markdown table below it is for humans.
-Cross-reference facts instead of copying them.
+- `docs/skills/INDEX.md` is loaded eagerly. It stays small.
+- Each skill body loads only when its task triggers.
+- Child reference files load only when the parent links to them.
+- Cross-skill facts are resolved via one-line links, not copy-paste.
+
+## Verification before handoff
+
+- [ ] `just validate` passes (if any code or build element changed).
+- [ ] No skill file exceeds 500 lines.
+- [ ] No `TODO/FIXME/draft` markers remain in changed `.md` files.
+- [ ] All internal Markdown links resolve.
+- [ ] New or renamed skills are listed in `docs/skills/INDEX.md` and `AGENTS.md`.

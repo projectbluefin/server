@@ -1,14 +1,13 @@
 ---
 name: k3s-sysext-ops
-version: "1.0"
-last_updated: "2026-07-20"
-tags: ['k3s', 'sysext', 'operations', 'runtime']
-description: "Enable, test, and troubleshoot the k3s systemd-sysext after it is built and published."
+description: Enable, test, and troubleshoot the k3s systemd-sysext after it is built and published.
 metadata:
+  type: how-to
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /systemd/systemd
 ---
-
 # k3s sysext Operations
 
 Use this skill when you need to enable the k3s sysext on a host, troubleshoot

@@ -1,105 +1,45 @@
 ---
-name: skills-index
-version: "2.0"
-last_updated: "2026-07-20"
-tags: [skills, routing, index]
-description: |
-  Lazy-load manifest for Bluefin Server agent skills. Start here after AGENTS.md.
+name: INDEX
+description: Lazy-load manifest for Bluefin Server skills. Load this file after AGENTS.md, then read only the skill that matches your current task.
 metadata:
   type: index
-skills:
-  - id: avoid-over-engineering
-    file: avoid-over-engineering.md
-    trigger: "over-engineering, bloat, cut scope, yagni"
-    description: Rules and red flags for keeping solutions small.
-  - id: architecture-roadmap
-    file: architecture-roadmap.md
-    trigger: "roadmap, architecture, draft, future"
-    description: Draft roadmap for future systemd-native architecture work.
-  - id: bump-fsdk-version
-    file: bump-fsdk-version.md
-    trigger: "fsdk, version, retag, junction"
-    description: Update the pinned FSDK release and derived tags.
-  - id: ci-tooling
-    file: ci-tooling.md
-    trigger: "ci, github actions, sha pin, workflow"
-    description: CI conventions and GitHub Actions security rules.
-  - id: ddi-installer
-    file: ddi-installer.md
-    trigger: "installer, ddi, systemd-sysinstall, systemd-repart"
-    description: Get the high-level installer architecture and boot flow.
-  - id: ddi-installer-build
-    file: ddi-installer-build.md
-    trigger: "installer build, flash installer, export installer, release"
-    description: Build, export, flash, and release the installer and DDI assets.
-  - id: factory-integration
-    file: factory-integration.md
-    trigger: "factory, downstream, lab, k3s sysext"
-    description: Server OS role inside the larger CI/OS factory.
-  - id: gap-analysis-distros
-    file: gap-analysis-distros.md
-    trigger: "gap analysis, distros, comparison, server os"
-    description: Source-verified comparison of Bluefin Server to comparable server OSes.
-  - id: k3s-sysext
-    file: k3s-sysext.md
-    trigger: "k3s, sysext, kubernetes"
-    description: Build, ship, and understand the k3s systemd-sysext.
-  - id: k3s-sysext-ops
-    file: k3s-sysext-ops.md
-    trigger: "k3s sysext, enable k3s, runtime test, troubleshoot"
-    description: Enable, test, and troubleshoot the k3s sysext after it is built.
-  - id: skill-improvement
-    file: skill-improvement.md
-    trigger: "skill, documentation, improvement, handoff"
-    description: Maintain the skill library and the work+learning loop.
-  - id: system-containers
-    file: system-containers.md
-    trigger: "system container, machinectl, nspawn"
-    description: Manage system containers on the host.
-  - id: systemd-sysext-extensions
-    file: systemd-sysext-extensions.md
-    trigger: "sysext, confext, extension, overlay"
-    description: Work with systemd-sysext and systemd-confext overlays.
-  - id: systemd-sysupdate-verification
-    file: systemd-sysupdate-verification.md
-    trigger: "sysupdate, signing, sha256sums, gpg, release"
-    description: Release signing and OTA update trust model.
-  - id: tpm2-credential-sealing
-    file: tpm2-credential-sealing.md
-    trigger: "tpm2, credential, sealing, tpm"
-    description: Secure provisioning credentials with TPM2 sealing.
+  status: stable
+  last_updated: 2026-07-20
 ---
-
 # docs/skills — Index
 
-Start at [AGENTS.md](../../AGENTS.md), then load the skill that matches your
-task. The YAML front matter above is the machine-readable manifest.
+This is the lazy-load routing table for agent skills. Keep this file in memory while you work; load only the skill file named in each row.
+
+## Loading contract
+
+1. Read `AGENTS.md` first.
+2. Read this file.
+3. Read **one** skill file from the table below that matches the current task.
+4. Do not load unrelated skills. If a skill references another file, follow the link only when the referenced topic is part of the current task.
 
 ## Routing table
 
-| ID | File | Use when... |
-|----|------|-------------|
-| avoid-over-engineering | [avoid-over-engineering.md](avoid-over-engineering.md) | cutting bloat / resisting over-engineering |
-| architecture-roadmap | [architecture-roadmap.md](architecture-roadmap.md) | architecture roadmap / draft future work |
-| bump-fsdk-version | [bump-fsdk-version.md](bump-fsdk-version.md) | updating the FSDK pin |
-| ci-tooling | [ci-tooling.md](ci-tooling.md) | writing or debugging CI workflows |
-| ddi-installer | [ddi-installer.md](ddi-installer.md) | high-level installer architecture / boot flow |
-| ddi-installer-build | [ddi-installer-build.md](ddi-installer-build.md) | building, exporting, flashing, or releasing the installer assets |
-| factory-integration | [factory-integration.md](factory-integration.md) | factory role or downstream composition |
-| gap-analysis-distros | [gap-analysis-distros.md](gap-analysis-distros.md) | comparing Bluefin Server to comparable server OSes |
-| k3s-sysext | [k3s-sysext.md](k3s-sysext.md) | building or understanding the k3s sysext |
-| k3s-sysext-ops | [k3s-sysext-ops.md](k3s-sysext-ops.md) | enabling, testing, or troubleshooting the k3s sysext |
-| skill-improvement | [skill-improvement.md](skill-improvement.md) | adding or refactoring skills |
-| system-containers | [system-containers.md](system-containers.md) | system containers with machinectl |
-| systemd-sysext-extensions | [systemd-sysext-extensions.md](systemd-sysext-extensions.md) | sysext / confext overlays |
-| systemd-sysupdate-verification | [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md) | release signing / sysupdate trust |
-| tpm2-credential-sealing | [tpm2-credential-sealing.md](tpm2-credential-sealing.md) | TPM2 credential sealing |
+| Skill file | When to load | One-line scope |
+|---|---|---|
+| [`avoid-over-engineering.md`](avoid-over-engineering.md) | Cutting scope, deleting code, resisting bloat | Rules and red flags for keeping solutions small. |
+| [`architecture-roadmap.md`](architecture-roadmap.md) | Future architecture direction, long-lead design | Roadmap for systemd-native architecture work. |
+| [`bump-fsdk-version.md`](bump-fsdk-version.md) | Pinning or retagging the FSDK junction | Update the pinned FSDK release and derived tags. |
+| [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
+| [`ddi-installer-build.md`](ddi-installer-build.md) | Building the installer or DDI on the cluster | Cluster build pipeline and local installer/DDI build. |
+| [`ddi-installer.md`](ddi-installer.md) | Installer boot flow, `systemd-sysinstall`, `systemd-repart` | High-level DDI install architecture and local smoke test. |
+| [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |
+| [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |
+| [`k3s-sysext-ops.md`](k3s-sysext-ops.md) | Building the k3s sysext | BuildStream element and publish steps for the k3s sysext. |
+| [`k3s-sysext.md`](k3s-sysext.md) | Operating k3s on Bluefin Server | Runtime operation and reboot coordination for k3s. |
+| [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
+| [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
+| [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and Flatcar compatibility. |
+| [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md) | Image-based A/B updates and signed manifests | Release signing, `systemd-sysupdate`, and trust model. |
+| [`tpm2-credential-sealing.md`](tpm2-credential-sealing.md) | TPM2-bound first-boot credentials | Credential sealing with `systemd-creds` and TPM2. |
 
 ## Standing facts
 
-- BuildStream runs in the FSDK `bst2` container via `just bst`. Local requirements:
-  `podman` + `just`.
-- Compose from FSDK `components/*`, never `platform.bst`.
-- The interactive installer is `systemd-sysinstall` (systemd 261+).
-- The installer is offline: the DDI is embedded as a data partition.
-- `just validate` is the merge contract for element graph changes.
+- **Publish registry:** Zot in the lab cluster at `192.168.1.102:30500`.
+- **Cluster build workflow:** `bluefin-server-build-pipeline` in `projectbluefin/lab`.
+- **Cluster boot-test workflow:** `bluefin-server-boot-test` in `projectbluefin/lab`.
+- **Version scheme:** FSDK-derived only; no separate application version axis.

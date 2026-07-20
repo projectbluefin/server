@@ -1,15 +1,14 @@
 ---
 name: ddi-installer
-version: "2.0"
-last_updated: "2026-07-20"
-tags: ['installer', 'ddi', 'systemd-sysinstall', 'systemd-repart']
-description: "Use when building or debugging the Bluefin Server DDI live installer, or managing the systemd-sysinstall recipes or target boot configurations."
+description: Use when building or debugging the Bluefin Server DDI live installer, or managing the systemd-sysinstall recipes or target boot configurations.
 metadata:
+  type: reference
+  status: stable
+  last_updated: 2026-07-20
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
 ---
-
 # DDI Installer
 
 ## When to Use

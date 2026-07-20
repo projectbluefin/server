@@ -1,21 +1,16 @@
 ---
 name: gap-analysis-distros
-version: "1.0"
-last_updated: "2026-07-20"
-tags: [architecture, gap-analysis, distros, design-roadmap]
 description: |
   Source-verified gap analysis comparing Bluefin Server to Ubuntu Server, Talos Linux,
   Flatcar Container Linux, and Fedora CoreOS.
 metadata:
   type: reference
   status: stable
-  context7-sources: []
+  last_updated: 2026-07-20
 ---
-
 # Gap Analysis: Bluefin Server versus Comparable Server OSes
 
-This is a **draft** comparison used during the Bluefin Server documentation overhaul.
-It is intentionally self-contained and uses generic, public-facing framing.
+This is a source-verified, self-contained comparison using generic, public-facing framing.
 Facts about other distributions are drawn from their upstream documentation;
 facts about Bluefin Server are drawn from source files in this repository.
 
