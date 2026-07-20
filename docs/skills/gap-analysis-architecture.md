@@ -47,8 +47,8 @@ This document outlines the gap analysis comparing Bluefin Server to Ubuntu Serve
 To maintain our systemd-native philosophy and avoid custom agents, Bluefin Server utilizes **`systemd-sysupdate`** for atomic over-the-air (OTA) updates:
 - **Delivery Vehicle:** Public GitHub Releases.
 - **Signature Verification:** SHA256SUMS manifests are signed in CI with a project GPG key. The public keyring ships in `/usr/lib/systemd/import-pubring.pgp` and `systemd-sysupdate` verifies detached `SHA256SUMS.gpg` signatures by default (`Verify=yes`).
-- **Client Configuration:** Dual-slot configuration (`root-a`/`root-b` on target disk) and matching ESP UKI slots (`uki-a`/`uki-b`).
-- **Mechanism:** `systemd-sysupdate` running on the client pulls the latest target UKI (`bluefin-server-@v.efi`) and compressed DDI (`bluefin-server-ddi-@v.raw.xz`) from GitHub Releases, verifies the manifest signatures and file hashes, flashes them block-for-block to the inactive slots, and marks `/run/reboot-required`.
+- **Client Configuration:** A single root slot (`root-a`) and matching ESP UKI slot are implemented today. A future A/B dual-slot design (`root-a`/`root-b` and `uki-a`/`uki-b`) is planned for atomic rollback.
+- **Mechanism:** `systemd-sysupdate` running on the client pulls the latest target UKI (`bluefin-server-@v.efi`) and compressed DDI (`bluefin-server-ddi-@v.raw.zst`) from GitHub Releases, verifies the manifest signatures and file hashes, flashes them block-for-block to the inactive slots, and marks `/run/reboot-required`.
 
 ### 2. First-Boot Provisioning Engine (systemd-creds)
 Declarative system setups (users, network links, SSH keys) are handled natively using **systemd credentials**:

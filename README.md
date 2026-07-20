@@ -1,140 +1,103 @@
 # Bluefin Server
 
-**The world’s premier FSDK server operating system.**
+**An FSDK-based, image-based Linux server OS.**
 
-Bluefin Server an operating system designed for modern workloads. The use case is the same as Flatcar Linux, Fedora CoreOS, and Talos. 
+Bluefin Server targets the same use-case space as Flatcar Linux, Fedora CoreOS,
+and Talos, but it is built from scratch with [BuildStream 2](https://buildstream.build/)
+from [freedesktop-sdk](https://freedesktop-sdk.freedesktop.org/) components.
 
-The difference is this is [DDI first](https://0pointer.net/blog/fitting-everything-together.html) and built with buildstream. API and GitOps driven. 
+It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html):
+the OS payload is a compressed XFS DDI filesystem image that is deployed by an
+offline, systemd-native installer.
 
 ## What it is
 
-- FSDK-first server OS work in progress
-- Image-based updates and atomic rollbacks
-- Fully automated GitOps-driven builds
-- Pure DDI, follows modern linux patterns
+- **Image-based updates and atomic rollbacks** via A/B partition slots and
+  `systemd-sysupdate`.
+- **DDI-first delivery** — the installer embeds the OS payload as a data
+  partition; no network is required at install time.
+- **Minimal, distroless OS image** — no shell in the running rootfs.
+- **systemd-native installer** — `systemd-sysinstall` provides the interactive
+  terminal UI and `systemd-repart` handles partitioning and block-copy DDI
+  placement.
+- **Fully automated GitOps-driven builds** — Renovate tracks FSDK point releases,
+  GitHub Actions builds and publishes DDI + installer + k3s sysext assets.
 
 ## Build model
 
-Use the local `just` targets while iterating:
+All `just` targets run BuildStream inside the FSDK `bst2` container via `podman`;
+you do not install BuildStream locally.
 
 ```sh
-just show-me-the-future
+just validate              # resolve the element graph
+just version               # print the FSDK-derived release version
+just tags                  # print latest / YY.MM / YY.MM.PP tags
+just build-ddi             # build the OS DDI payload
+just export-ddi            # export DDI artifacts to dist/ddi/
+just build-installer       # build the live installer disk image
+just export-installer      # export installer + UKI to dist/
+just build-sysext          # build the optional k3s systemd-sysext
+just export-sysext         # export sysext artifacts to dist/sysext/
+just flash-installer       # write the installer image to a USB device
+just show-me-the-future    # end-to-end QEMU installer smoke test
 ```
 
-## Repository status
+The merge contract for element graph changes is `just validate`.
 
 ## Versioning
 
-All versions just follow fsdk. Tags are derived from the pinned junction ref in
-`elements/freedesktop-sdk.bst`:
+There is no separate application version axis. Versions follow the pinned FSDK
+release in `elements/freedesktop-sdk.bst`:
 
-- `:latest` -- rolling
-- `:25.08` -- FSDK minor line
-- `:25.08.13` -- FSDK point release (treated immutable)
+- `:latest` — rolling, every publish
+- `:25.08` — FSDK minor line
+- `:25.08.13` — FSDK point release, treated as immutable
 
-Every image self-declares its base via `io.projectbluefin.fsdk.version` and
-`io.projectbluefin.fsdk.ref` labels.
-
-## Build locally
-
-Requires `podman` and [`just`](https://github.com/caesar/just). BuildStream runs
-inside the FSDK `bst2` container -- nothing to install.
-
-    just validate        # resolve the element graph
-    just build           # build + load ghcr.io/projectbluefin/base:latest
-    just verify          # assert distroless + certs + tzdata
-    just tags            # show derived tags
+Installers, DDI payloads, and the k3s sysext all use the same `release-version`
+value from `project.conf`.
 
 ## System containers
 
-System containers are transparent, systemd-managed toolboxes you can turn on when you need them. They are meant to feel like part of the host, not like a separate app stack.
+System containers are transparent, systemd-managed toolboxes. They run via
+`systemd-nspawn` and are operated with `machinectl` plus the
+`system-container` helper shipped in the OS image at `/usr/bin/system-container`.
 
-The first built-in examples are:
-
-- `homebrew` for a Homebrew-based toolbox experience
-- `ubuntu` for an Ubuntu-style server shell
-- `debian` for a Debian-style toolbox
-
-### First-time setup
-
-Replace the placeholder image URL below with the published image you want to import.
+First-time setup:
 
 ```sh
-sudo machinectl import-tar <homebrew-image-url> homebrew
+sudo machinectl import-tar <image-url> homebrew
 sudo system-container start homebrew
 sudo system-container enter homebrew
 ```
 
-When you are done inside the container, leave it with `exit` and stop it again when you do not need it:
+When finished:
 
 ```sh
 exit
 sudo system-container stop homebrew
 ```
 
-### Daily use
-
-Use the same commands every day:
-
-```sh
-sudo system-container start homebrew
-sudo system-container enter homebrew
-```
-
-To stop it later:
-
-```sh
-sudo system-container stop homebrew
-```
-
-If you want to see what is available on the host:
-
-```sh
-machinectl list
-machinectl list-images
-```
-
-### Other containers
-
-Ubuntu:
-
-```sh
-sudo machinectl import-tar <ubuntu-image-url> ubuntu
-sudo system-container start ubuntu
-sudo system-container enter ubuntu
-```
-
-Debian:
-
-```sh
-sudo machinectl import-tar <debian-image-url> debian
-sudo system-container start debian
-sudo system-container enter debian
-```
-
-### Reset a container
-
-Resetting removes the machine and starts over from a fresh import:
+To reset and start over:
 
 ```sh
 sudo system-container reset homebrew
-sudo machinectl import-tar <homebrew-image-url> homebrew
+sudo machinectl import-tar <image-url> homebrew
 sudo system-container start homebrew
 ```
 
-Homebrew uses `/home/linuxbrew` as the writable prefix and defaults to `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_INSTALL_CLEANUP=1` so it behaves like a real Linux Homebrew environment. This is a convenience wrapper for daily use, not a security boundary.
+`system-container` is a thin wrapper around `machinectl start|poweroff|shell|remove`.
 
 ## CI / Release pipeline
 
-GitHub Actions compiles the entire project (Standalone OS DDI and bootable installer) and handles publishing automatically. Automated Renovate manages updates to core platform dependencies.
+GitHub Actions compiles the full project and publishes release assets automatically.
 
 | Trigger | Workflow / Job | What happens |
-|---------|---------------|--------------|
-| Pull request | `build.yml` | Resolves element graph (`just validate`) and executes raw BuildStream compilation to verify stability. Resolves/tracks Renovate refs automatically if opened by Renovate. |
-| Push to `main`, `workflow_dispatch` | `build.yml` | Builds stand-alone DDI OS, live installer, and target UKI using `/mnt` SSD storage on GHA hosted runners, then creates/updates the corresponding GitHub Release and uploads all compiled assets. |
+|---|---|---|
+| Pull request | `build.yml` / `build-and-release` | Resolves the element graph (`just validate`) and performs a full BuildStream compile to verify stability. Tracks Renovate refs if opened by Renovate. |
+| Push to `main`, `workflow_dispatch` | `build.yml` / `build-and-release` | Builds DDI, live installer, target UKI, and k3s sysext on `/mnt` storage, signs a combined `SHA256SUMS` manifest, and uploads everything to a GitHub Release tagged `installer-v<FSDK-RELEASE>`. |
 
-No PATs/App tokens/repository_dispatch are used; Renovate is the control driver.
-See [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for conventions.
+No PATs or `repository_dispatch` are used; Renovate drives dependency updates.
+See [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for workflow conventions.
 
 ## License
 

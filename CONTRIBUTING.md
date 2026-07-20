@@ -1,55 +1,62 @@
-# Contributing to fsdk-containers
+# Contributing to Bluefin Server
 
-Thanks for helping bring distroless patterns to freedesktop-sdk containers.
+Thanks for helping build Bluefin Server.
 
 ## Principles
 
-- **Inherit, don't reinvent.** Images are carved from FSDK `components/*`. We rely
-  on FSDK for the hard stuff (C libraries, language runtimes) and its CVE patching.
-- **Slim by default.** The default image is the slim image. No "batteries" tier.
-- **Keep the crash-preventers.** `tzdata`, a common charset set, and CA certificates
-  stay — they cost little and prevent runtime crashes (`zoneinfo`, TLS, legacy decode).
-- **Don't duplicate upstream.** If a tool already ships an official, maintained
-  CNCF/upstream distroless image (e.g. `kubectl`), consume it. Don't rebuild it here.
+- **Compose from FSDK `components/*`, never `platform.bst`.** Keep the OS image
+  server-focused; do not pull in desktop stacks.
+- **No `x86_64_v3`.** The base image must run on the broadest CPU baseline.
+- **Use native systemd tooling.** Prefer `systemd-sysinstall`, `systemd-repart`,
+  `bootctl`, and `ukify` over custom installers or shell scripts.
+- **PARTUUID boot entries only.** Never hardcode block device paths such as
+  `/dev/vda2` in boot configuration.
+- **DDI-first.** The OS payload is an offline, compressed XFS DDI; updates are
+  image replacements, not in-place package mutations.
 
 ## Prerequisites
 
-- `podman` (rootless works)
+- `podman`
 - [`just`](https://github.com/casey/just)
 
-BuildStream itself runs inside the FSDK `bst2` container via `just bst` — you do
-not install BuildStream locally.
+BuildStream runs inside the FSDK `bst2` container via `just bst` — you do not
+install BuildStream locally.
 
 ## Workflow
 
-1. Read [AGENTS.md](AGENTS.md) and the relevant file in [docs/skills/](docs/skills/).
-2. Make your change (see the skills for the common tasks below).
-3. Run the contract:
+1. Read [`AGENTS.md`](AGENTS.md) and the relevant file in [`docs/skills/`](docs/skills/).
+2. Make your change.
+3. Validate the element graph:
 
    ```
-   just validate   # graph resolves
-   just build      # builds + loads the image
-   just verify     # 4 gates must pass
+   just validate
    ```
 
-4. Update or add a `docs/skills/*.md` file capturing anything a future contributor
-   would need to know (the self-improvement loop).
+4. For installer/DDI changes, also verify with a local build or cluster build:
+
+   ```
+   just build-installer       # or just cluster-build
+   ```
+
+5. Update or add a `docs/skills/*.md` file capturing anything a future
+   contributor would need to know (the self-improvement loop).
 
 ## Common tasks
 
 | Task | Skill |
-| ---- | ----- |
-| Add a new distroless image | [docs/skills/add-new-image.md](docs/skills/add-new-image.md) |
-| Apply / extend the SLIM recipe | [docs/skills/slim-an-image.md](docs/skills/slim-an-image.md) |
-| Bump the FSDK version | [docs/skills/bump-fsdk-version.md](docs/skills/bump-fsdk-version.md) |
-| Verify distroless guarantees | [docs/skills/verify-distroless.md](docs/skills/verify-distroless.md) |
+|---|---|
+| Build or debug the DDI installer | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md) |
+| Bump the FSDK version | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
+| Work on the k3s systemd-sysext | [`docs/skills/k3s-sysext.md`](docs/skills/k3s-sysext.md) |
+| Write or debug CI workflows | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
+| Cut bloat / remove dependencies | [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md) |
 
 ## Conventions
 
-- BST elements only for image content. No Containerfile package overlays.
-- Compose from `components/*`, never `platform.bst`.
-- No `x86_64_v3` micro-arch.
-- Commit messages: imperative mood, explain the *why*.
+- BuildStream elements only. No Containerfiles.
+- Commit messages: imperative mood, explain the **why**.
+- All documentation changes are also verified against the source of truth
+  (`Justfile`, `elements/`, `.github/workflows/build.yml`).
 
 ## License
 

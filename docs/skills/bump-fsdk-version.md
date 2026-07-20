@@ -1,6 +1,6 @@
 ---
 name: bump-fsdk-version
-description: Move fsdk-containers to a new freedesktop-sdk release and refresh the derived tags. Use when tracking the FSDK lifecycle or pinning a new FSDK point release.
+description: Move Bluefin Server to a new freedesktop-sdk release and refresh the derived tags. Use when tracking the FSDK lifecycle or pinning a new FSDK point release.
 metadata:
   context7-sources:
     - /apache/buildstream
@@ -42,8 +42,8 @@ export so every image self-declares its base.
    ```
    just validate
    just tags        # confirm derived tags look right
-   just build
-   just verify
+   just build-installer
+   just build-ddi
    ```
 
    `elements/bluefin-server/os-release-flatcar.bst` reads the FSDK point release
@@ -59,8 +59,8 @@ Before merging a bump:
 
 - [ ] `just validate` passes (element graph resolves with new ref)
 - [ ] `just tags` output matches the expected `latest / YY.MM / YY.MM.PP` triple
-- [ ] Both CAS-config patches (`0001`, `0002`) applied cleanly (no patch failure in `just validate`)
-- [ ] `just build && just verify` — all 4 gates pass
+- [ ] Both `patches/freedesktop-sdk/` patches (`0001`, `0002`) applied cleanly (no patch failure in `just validate`)
+- [ ] `just build-installer` and `just build-ddi` complete without error
 - [ ] `io.projectbluefin.fsdk.version` label on the built image matches the new FSDK version
 
 - Bumping across a minor line (e.g. 25.08 → 26.08) may rename/relocate components.

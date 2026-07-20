@@ -17,20 +17,16 @@ rules, then load the focused skill for your task.
 | ------------------ | ---- |
 | Build or debug the DDI live installer | [ddi-installer.md](ddi-installer.md) |
 | SSH into the live installer | [ddi-installer.md](ddi-installer.md) |
-| Review gap analysis or architectural roadmap | [gap-analysis-architecture.md](gap-analysis-architecture.md) |
-| Add a non-distroless nspawn machine image (dev env, tarball) | [nspawn-machine-image.md](nspawn-machine-image.md) |
-| Add or document system containers (machinectl, systemd machines) | [system-containers.md](system-containers.md) |
-| Make an image smaller / apply the SLIM recipe | [slim-an-image.md](slim-an-image.md) |
-| Move to a new FSDK release / retag | [bump-fsdk-version.md](bump-fsdk-version.md) |
-| Prove an image is still distroless | [verify-distroless.md](verify-distroless.md) |
-| Supply chain security (signing and SBOM) | [signing-and-sbom.md](signing-and-sbom.md) |
-| Write or debug a CI workflow | [ci-tooling.md](ci-tooling.md) |
-| Automate ArtifactHub submissions | [artifacthub-automation.md](artifacthub-automation.md) |
-| Finishing a task (always) | [skill-improvement.md](skill-improvement.md) |
-| Securing Provisioning Credentials (TPM2 Sealing) | [tpm2-credential-sealing.md](tpm2-credential-sealing.md) |
-| Extensibility via systemd-sysext and Bakery | [systemd-sysext-extensions.md](systemd-sysext-extensions.md) |
+| Work with systemd-sysext or confext overlays | [systemd-sysext-extensions.md](systemd-sysext-extensions.md) |
 | Build, ship, or enable the k3s systemd-sysext | [k3s-sysext.md](k3s-sysext.md) |
-| Avoiding over-engineering / auditing for cuts | [avoid-over-engineering.md](avoid-over-engineering.md) |
+| Add or document system containers (`machinectl`) | [system-containers.md](system-containers.md) |
+| Configure `systemd-sysupdate` GPG verification | [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md) |
+| Review gap analysis or architectural roadmap | [gap-analysis-architecture.md](gap-analysis-architecture.md) |
+| Move to a new FSDK release / retag | [bump-fsdk-version.md](bump-fsdk-version.md) |
+| Write or debug a CI workflow | [ci-tooling.md](ci-tooling.md) |
+| Avoid over-engineering / audit for cuts | [avoid-over-engineering.md](avoid-over-engineering.md) |
+| Securing provisioning credentials (TPM2 sealing) | [tpm2-credential-sealing.md](tpm2-credential-sealing.md) |
+| Finishing a task (always) | [skill-improvement.md](skill-improvement.md) |
 
 ## What belongs here
 
@@ -42,7 +38,9 @@ Workflow knowledge and operational runbooks any agent needs to work in this repo
 - BuildStream runs in the FSDK `bst2` container via `just bst`. Nothing to install
   but `podman` + `just`.
 - Compose from FSDK `components/*`, never `platform.bst`.
-- The interactive installer is **systemd-sysinstall** (introduced in systemd 261).
-- The installer is **offline** — DDI embedded as a data partition. No network pull at install time.
-- The live installer has no SSH server and no baked-in root credentials; all interaction happens on `/dev/console`.
+- The interactive installer is **systemd-sysinstall** (added in systemd 261).
+- The installer is **offline** — the DDI is embedded as a data partition. No
+  network pull is required at install time.
+- The live installer has no SSH server and no baked-in root credentials; all
+  interaction happens on `/dev/console`.
 - `just validate` is the merge contract for element graph changes.

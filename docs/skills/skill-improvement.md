@@ -24,8 +24,9 @@ in `docs/skills/`, or reviewing a branch before handoff.
 - A non-obvious FSDK behavior (e.g. "bash is in the `runtime` domain, not `shells`,
   so `compose exclude: shells` does not remove it").
 - A size lever and its risk tier (what is safe to `rm`, what crashes at runtime).
-- A build sandbox constraint (e.g. "`find` is not available in the oci-builder
-  sandbox — use shell globs").
+- A build sandbox constraint (e.g. "`dracut` invokes `grep`/`sed`/`ldconfig`
+  internally, so the script sandbox must include those tools even if your own
+  commands don't name them").
 - A versioning / lifecycle fact about tracking FSDK releases.
 
 ## What does NOT belong here
@@ -40,4 +41,4 @@ in `docs/skills/`, or reviewing a branch before handoff.
 2. Ask: *what did I learn that the next agent would have to rediscover?*
 3. Write it into the right `docs/skills/*.md` (or add a new one + link it in
    `README.md`).
-4. Keep `just verify` green.
+4. Keep `just validate` green.
