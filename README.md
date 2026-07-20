@@ -16,7 +16,9 @@ offline, systemd-native installer.
   `systemd-sysupdate`.
 - **DDI-first delivery** — the installer embeds the OS payload as a data
   partition; no network is required at install time.
-- **Minimal, distroless OS image** — no shell in the running rootfs.
+- **Minimal, distroless OS image** — no shell in the running rootfs by default
+  (SSH is temporarily enabled during bring-up and can be removed once
+  diagnostics are guest-agent or serial based).
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive
   terminal UI and `systemd-repart` handles partitioning and block-copy DDI
   placement.
@@ -57,6 +59,54 @@ release in `elements/freedesktop-sdk.bst`:
 
 Installers, DDI payloads, and the k3s sysext all use the same `release-version`
 value from `project.conf`.
+
+## Contributing
+
+The best starting point for contributors is the repository overview above plus the
+skills index in [`docs/skills/INDEX.md`](docs/skills/INDEX.md).
+
+### Prerequisites
+
+- `podman`
+- [`just`](https://github.com/casey/just)
+
+BuildStream runs inside the FSDK `bst2` container via `just bst`; you do not
+install BuildStream locally.
+
+### Workflow
+
+1. Read [`AGENTS.md`](AGENTS.md) and the relevant skill in
+   [`docs/skills/`](docs/skills/).
+2. Make your change.
+3. Validate the element graph:
+
+   ```sh
+   just validate
+   ```
+
+4. For installer/DDI work, also run a local or cluster build:
+
+   ```sh
+   just build-installer       # or just cluster-build
+   ```
+
+5. Update or add a `docs/skills/*.md` file when the change affects future
+   contributor workflows or build/debug knowledge.
+
+### Useful skills
+
+- [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md) and
+  [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md)
+  for installer / DDI work.
+- [`docs/skills/k3s-sysext.md`](docs/skills/k3s-sysext.md) and
+  [`docs/skills/k3s-sysext-ops.md`](docs/skills/k3s-sysext-ops.md) for the
+  k3s sysext.
+- [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) for
+  FSDK bumps.
+- [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) for workflow
+  conventions.
+- [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md)
+  for cutting bloat and avoiding unnecessary dependencies.
 
 ## Factory role
 

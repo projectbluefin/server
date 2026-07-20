@@ -46,6 +46,10 @@ Key facts from `sysupdate.d(5)`:
 - The public keyring is read from `/usr/lib/systemd/import-pubring.pgp` or
   `/etc/systemd/import-pubring.pgp`.
 
+## Current implementation status
+
+The current tree uses a single root/ESP slot and a single signed manifest flow for OTA delivery. Future work on dual-slot root partitions, dual UKIs, and broader rollback strategies is tracked in [architecture-roadmap.md](architecture-roadmap.md).
+
 ## Repository Layout
 
 - `files/os/sysupdate-keys/import-pubring.pgp` — public OpenPGP keyring (binary

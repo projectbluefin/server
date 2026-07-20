@@ -1,7 +1,7 @@
 ---
 name: skills-index
 version: "2.0"
-last_updated: "2026-07-19"
+last_updated: "2026-07-20"
 tags: [skills, routing, index]
 description: |
   Lazy-load manifest for Bluefin Server agent skills. Start here after AGENTS.md.
@@ -12,6 +12,10 @@ skills:
     file: avoid-over-engineering.md
     trigger: "over-engineering, bloat, cut scope, yagni"
     description: Rules and red flags for keeping solutions small.
+  - id: architecture-roadmap
+    file: architecture-roadmap.md
+    trigger: "roadmap, architecture, draft, future"
+    description: Draft roadmap for future systemd-native architecture work.
   - id: bump-fsdk-version
     file: bump-fsdk-version.md
     trigger: "fsdk, version, retag, junction"
@@ -23,19 +27,27 @@ skills:
   - id: ddi-installer
     file: ddi-installer.md
     trigger: "installer, ddi, systemd-sysinstall, systemd-repart"
-    description: Build and debug the live installer media.
+    description: Get the high-level installer architecture and boot flow.
+  - id: ddi-installer-build
+    file: ddi-installer-build.md
+    trigger: "installer build, flash installer, export installer, release"
+    description: Build, export, flash, and release the installer and DDI assets.
   - id: factory-integration
     file: factory-integration.md
     trigger: "factory, downstream, lab, k3s sysext"
     description: Server OS role inside the larger CI/OS factory.
-  - id: gap-analysis-architecture
-    file: gap-analysis-architecture.md
-    trigger: "gap analysis, roadmap, architecture"
-    description: Design rules and future architecture notes.
+  - id: gap-analysis-distros
+    file: gap-analysis-distros.md
+    trigger: "gap analysis, distros, comparison, server os"
+    description: Source-verified comparison of Bluefin Server to comparable server OSes.
   - id: k3s-sysext
     file: k3s-sysext.md
     trigger: "k3s, sysext, kubernetes"
-    description: Build, ship, and enable the k3s systemd-sysext.
+    description: Build, ship, and understand the k3s systemd-sysext.
+  - id: k3s-sysext-ops
+    file: k3s-sysext-ops.md
+    trigger: "k3s sysext, enable k3s, runtime test, troubleshoot"
+    description: Enable, test, and troubleshoot the k3s sysext after it is built.
   - id: skill-improvement
     file: skill-improvement.md
     trigger: "skill, documentation, improvement, handoff"
@@ -68,12 +80,15 @@ task. The YAML front matter above is the machine-readable manifest.
 | ID | File | Use when... |
 |----|------|-------------|
 | avoid-over-engineering | [avoid-over-engineering.md](avoid-over-engineering.md) | cutting bloat / resisting over-engineering |
+| architecture-roadmap | [architecture-roadmap.md](architecture-roadmap.md) | architecture roadmap / draft future work |
 | bump-fsdk-version | [bump-fsdk-version.md](bump-fsdk-version.md) | updating the FSDK pin |
 | ci-tooling | [ci-tooling.md](ci-tooling.md) | writing or debugging CI workflows |
-| ddi-installer | [ddi-installer.md](ddi-installer.md) | building or debugging the installer |
+| ddi-installer | [ddi-installer.md](ddi-installer.md) | high-level installer architecture / boot flow |
+| ddi-installer-build | [ddi-installer-build.md](ddi-installer-build.md) | building, exporting, flashing, or releasing the installer assets |
 | factory-integration | [factory-integration.md](factory-integration.md) | factory role or downstream composition |
-| gap-analysis-architecture | [gap-analysis-architecture.md](gap-analysis-architecture.md) | architecture roadmap / gaps |
-| k3s-sysext | [k3s-sysext.md](k3s-sysext.md) | building or shipping the k3s sysext |
+| gap-analysis-distros | [gap-analysis-distros.md](gap-analysis-distros.md) | comparing Bluefin Server to comparable server OSes |
+| k3s-sysext | [k3s-sysext.md](k3s-sysext.md) | building or understanding the k3s sysext |
+| k3s-sysext-ops | [k3s-sysext-ops.md](k3s-sysext-ops.md) | enabling, testing, or troubleshooting the k3s sysext |
 | skill-improvement | [skill-improvement.md](skill-improvement.md) | adding or refactoring skills |
 | system-containers | [system-containers.md](system-containers.md) | system containers with machinectl |
 | systemd-sysext-extensions | [systemd-sysext-extensions.md](systemd-sysext-extensions.md) | sysext / confext overlays |

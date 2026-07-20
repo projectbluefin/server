@@ -15,6 +15,13 @@ To secure sensitive provisioning credentials (such as hashed root passwords or
 SSH keys) against physical tampering or unauthorized extraction, bind them to
 the TPM2 and the UKI boot state using `systemd-creds`.
 
+## Current scope
+
+This skill is the canonical home for sealed credentials such as hashed root
+passwords and similar provisioning secrets. Broader `systemd-creds` integration
+for SSH keys and network configuration remains a draft roadmap item in
+[architecture-roadmap.md](architecture-roadmap.md).
+
 ## Verify TPM2 device availability
 
 ```bash

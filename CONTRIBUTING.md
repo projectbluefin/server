@@ -2,61 +2,41 @@
 
 Thanks for helping build Bluefin Server.
 
-## Principles
+For the canonical project overview and contributor workflow, start with
+[README.md](README.md). The root README is the main landing page for the
+project, while this file is a short pointer for common contributor steps.
 
-- **Compose from FSDK `components/*`, never `platform.bst`.** Keep the OS image
-  server-focused; do not pull in desktop stacks.
-- **No `x86_64_v3`.** The base image must run on the broadest CPU baseline.
-- **Use native systemd tooling.** Prefer `systemd-sysinstall`, `systemd-repart`,
-  `bootctl`, and `ukify` over custom installers or shell scripts.
-- **PARTUUID boot entries only.** Never hardcode block device paths such as
-  `/dev/vda2` in boot configuration.
-- **DDI-first.** The OS payload is an offline, compressed XFS DDI; updates are
-  image replacements, not in-place package mutations.
+## Quick contributor checklist
 
-## Prerequisites
-
-- `podman`
-- [`just`](https://github.com/casey/just)
-
-BuildStream runs inside the FSDK `bst2` container via `just bst` — you do not
-install BuildStream locally.
-
-## Workflow
-
-1. Read [`AGENTS.md`](AGENTS.md) and the relevant file in [`docs/skills/`](docs/skills/).
+1. Read [AGENTS.md](AGENTS.md) and the relevant skill in [docs/skills/](docs/skills/).
 2. Make your change.
 3. Validate the element graph:
 
-   ```
+   ```sh
    just validate
    ```
 
-4. For installer/DDI changes, also verify with a local build or cluster build:
+4. For installer or DDI changes, also run a local or cluster build:
 
-   ```
+   ```sh
    just build-installer       # or just cluster-build
    ```
 
-5. Update or add a `docs/skills/*.md` file capturing anything a future
-   contributor would need to know (the self-improvement loop).
+5. Update or add a documentation skill when the change affects future workflow,
+   build, or debug knowledge.
 
-## Common tasks
+## Useful references
 
-| Task | Skill |
-|---|---|
-| Build or debug the DDI installer | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md) |
-| Bump the FSDK version | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
-| Work on the k3s systemd-sysext | [`docs/skills/k3s-sysext.md`](docs/skills/k3s-sysext.md) |
-| Write or debug CI workflows | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
-| Cut bloat / remove dependencies | [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md) |
-
-## Conventions
-
-- BuildStream elements only. No Containerfiles.
-- Commit messages: imperative mood, explain the **why**.
-- All documentation changes are also verified against the source of truth
-  (`Justfile`, `elements/`, `.github/workflows/build.yml`).
+- [README.md](README.md) for the project overview and contributor workflow.
+- [docs/skills/INDEX.md](docs/skills/INDEX.md) for the skill index.
+- [docs/skills/ddi-installer.md](docs/skills/ddi-installer.md) and
+  [docs/skills/ddi-installer-build.md](docs/skills/ddi-installer-build.md)
+  for installer / DDI work.
+- [docs/skills/k3s-sysext.md](docs/skills/k3s-sysext.md) and
+  [docs/skills/k3s-sysext-ops.md](docs/skills/k3s-sysext-ops.md) for the k3s
+  sysext.
+- [docs/skills/ci-tooling.md](docs/skills/ci-tooling.md) for workflow
+  conventions.
 
 ## License
 

@@ -14,6 +14,13 @@ depends:
   - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/shadow.bst
 
+  # Remote access during bring-up (temporary — see docs/skills/factory-integration.md)
+  - freedesktop-sdk.bst:components/openssh-systemd.bst
+
+  # SSH enablement drop-ins
+  - bluefin-server/os-sshd-preset.bst
+  - bluefin-server/os-sshd-config.bst
+
   # Stock FSDK Kernel & Server-Chiseled Firmware
   - freedesktop-sdk.bst:components/linux.bst
   - bluefin-server/linux-firmware-split.bst

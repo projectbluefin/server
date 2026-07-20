@@ -1,6 +1,6 @@
 ---
-name: gap-analysis-distros-draft
-version: "0.1"
+name: gap-analysis-distros
+version: "1.0"
 last_updated: "2026-07-20"
 tags: [architecture, gap-analysis, distros, design-roadmap]
 description: |
@@ -8,7 +8,7 @@ description: |
   Flatcar Container Linux, and Fedora CoreOS.
 metadata:
   type: reference
-  status: draft
+  status: stable
   context7-sources: []
 ---
 
@@ -140,6 +140,8 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 1. **A/B dual-slot rollback is not wired end-to-end.** The `sysupdate` transfer names `root-a`/`root-b`, but the installer only provisions `root-a`, so Bluefin cannot atomically stage and roll back a new root image today.
 2. **Root filesystem immutability is not enforced.** The DDI is built and booted read-write; the intended read-only `/usr` + overlay model depends entirely on optional sysext behavior rather than runtime policy.
 3. **First-boot credential provisioning is incomplete.** Only the `root` password credential path is shipped; SSH keys, network configuration, and other `systemd-creds`-based provisioning remain documented but not implemented.
+
+These gaps drive the priorities in [architecture-roadmap.md](architecture-roadmap.md).
 
 ## 6. Sources Consulted
 

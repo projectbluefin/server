@@ -25,7 +25,8 @@ for your task.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
 3. Installer must stay `systemd-sysinstall`-native; no custom installer
    scripts or non-native installers.
-4. No shell in the running OS DDI image.
+4. No shell in the running OS DDI image (temporary exception: SSH is
+   enabled for bring-up and cluster boot tests; scheduled for removal).
 5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
 
 ## Build / test commands

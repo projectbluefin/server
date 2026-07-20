@@ -15,6 +15,12 @@ Bluefin Server is distroless and read-only. For debugging, monitoring, or
 runtime modifications, use systemd-sysext to overlay package bundles into
 `/usr` and `/opt`, or systemd-confext to overlay files into `/etc`.
 
+## Canonical scope
+
+This file is the canonical home for extension-loading behavior, compatibility
+checks, and runtime management. Draft roadmap items for deeper integration with
+provisioning flow remain in [architecture-roadmap.md](architecture-roadmap.md).
+
 ## Where extensions live
 
 System extensions are searched in:
