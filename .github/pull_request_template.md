@@ -1,4 +1,4 @@
-# bluefin-common PR
+# Bluefin Server PR
 
 ## What does this change?
 
@@ -23,11 +23,11 @@ opened ──▶ review ──▶ approved ──▶ merged
 ## Checklist
 
 - [ ] PR title follows Conventional Commits (`fix:`, `feat:`, `docs:`, `ci:`, `refactor:`, etc.)
-- [ ] `just check` passes
+- [ ] `just validate` passes
 - [ ] `pre-commit run --all-files` passes
 - [ ] Skill doc updated if the change affects agent-facing conventions or behavior (see `docs/skills/skill-improvement.md`)
 - [ ] `AGENTS.md` / `docs/SKILL.md` / `docs/skills/` links remain valid
-- [ ] CI is green after push: `gh run list --repo projectbluefin/common --limit 5`
+- [ ] CI is green after push: `gh run list --repo projectbluefin/server --limit 5`
 
 ## AI attribution
 

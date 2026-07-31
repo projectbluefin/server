@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `projectbluefin/server` consume the canonical projectbluefin/common factory contract for documentation, lifecycle automation, templates, Renovate policy, and live GitHub labels.
+**Goal:** Make `projectbluefin/server` consume the canonical projectbluefin/common factory contract for documentation, lifecycle policy, templates, Renovate policy, and live GitHub labels.
 
-**Architecture:** Keep Bluefin Server build, release, installer, DDI, sysext, and ownership rules local. Replace duplicated lifecycle guidance and local design-only enforcement with links to common’s canonical label workflow, bonedigger’s synchronized templates, and bonedigger’s currently callable reusable workflow. Migrate the live repository labels in a separate, verified step so active issues retain their meaning.
+**Architecture:** Keep Bluefin Server build, release, installer, DDI, sysext, and ownership rules local. Link shared lifecycle policy to common, consume bonedigger’s synchronized template structure with labels validated against the common catalog, and retain the local label-enforcement workflow. Do not install the incompatible bonedigger lifecycle caller while no verified full lifecycle owner is available. Migrate the live repository labels in a separate, verified step so active issues retain their meaning.
 
 **Tech Stack:** Markdown/YAML/JSON5, GitHub Actions reusable workflows, GitHub CLI (`gh`), existing Python documentation checks, `actionlint`, `pre-commit`, and `just validate`.
 
@@ -68,7 +68,7 @@
   git commit -m "docs: align server guidance with common workflow"
   ```
 
-### Task 2: Adopt canonical templates, lifecycle caller, and Renovate layout
+### Task 2: Adopt canonical templates, local label enforcement, and Renovate layout
 
 **Files:**
 - Create: `.github/ISSUE_TEMPLATE/config.yml`
@@ -76,18 +76,18 @@
 - Replace: `.github/ISSUE_TEMPLATE/feature-request.yml`
 - Replace: `.github/ISSUE_TEMPLATE/help-this-project.yml`
 - Create: `.github/pull_request_template.md`
-- Create: `.github/workflows/bonedigger.yml`
-- Delete: `.github/workflows/label-enforcement.yml`
+- Restore: `.github/workflows/label-enforcement.yml`
+- Delete: `.github/workflows/bonedigger.yml`
 - Create: `.github/renovate.json5`
 - Delete: `renovate.json`
 
 **Interfaces:**
-- Consumes: `projectbluefin/bonedigger/templates/{bug-report.yml,feature-request.yml,help-this-project.yml,config.yml}`, `projectbluefin/common/.github/pull_request_template.md`, `projectbluefin/bonedigger/.github/workflows/lifecycle.yml@main`, and the existing BuildStream custom Renovate manager.
-- Produces: canonical downstream templates, a reusable lifecycle caller, and common-compatible Renovate configuration with server-specific dependency rules preserved.
+- Consumes: `projectbluefin/bonedigger/templates/{bug-report.yml,feature-request.yml,help-this-project.yml,config.yml}`, `projectbluefin/common/.github/pull_request_template.md`, the common label catalog, the prior local label-enforcement workflow, and the existing BuildStream custom Renovate manager.
+- Produces: common-compatible downstream templates, local label enforcement, and Renovate configuration with server-specific dependency rules preserved. It does not install a full lifecycle caller.
 
 - [ ] **Step 1: Copy the canonical issue templates**
 
-  Replace the three local issue templates with the exact current contents from:
+  Replace the three local issue templates with the current structure from:
 
   ```text
   projectbluefin/bonedigger/templates/bug-report.yml
@@ -96,9 +96,9 @@
   projectbluefin/bonedigger/templates/config.yml
   ```
 
-  Preserve the filenames and place `config.yml` under `.github/ISSUE_TEMPLATE/`. Do not retain `labels: ["1-triage"]`; the canonical templates must use common’s namespaced labels.
+  Preserve the filenames and place `config.yml` under `.github/ISSUE_TEMPLATE/`. Normalize their labels to the catalog: `kind/bug` plus `status/triage` for bugs, `kind/enhancement` plus `status/discussing` for features, and `flow/agent-donation` for donation requests. Retain the donation form’s `Workflow: Agent Donation` body marker because it is the exact marker used by bonedigger.
 
-- [ ] **Step 2: Copy the canonical pull-request template**
+- [ ] **Step 2: Adapt the canonical pull-request template**
 
   Copy the exact current contents of:
 
@@ -106,40 +106,43 @@
   projectbluefin/common/.github/pull_request_template.md
   ```
 
-  Preserve its issue-linkage, lifecycle, Conventional Commit, validation, and AI-attribution requirements.
+  Preserve its issue-linkage, lifecycle, Conventional Commit, validation, and
+  AI-attribution requirements, while naming this repository as Bluefin Server,
+  using `just validate`, and pointing CI checks at `projectbluefin/server`.
 
-- [ ] **Step 3: Add the lifecycle caller**
+- [ ] **Step 3: Restore local label enforcement and remove the incompatible caller**
 
-  Read the currently available reusable workflow’s `workflow_call` contract from:
+  Restore `.github/workflows/label-enforcement.yml` as the thin caller for the
+  existing design-enforcement workflow:
 
   ```text
-  projectbluefin/bonedigger/.github/workflows/lifecycle.yml@main
+  projectbluefin/actions/.github/workflows/reusable-design-enforcement.yml@67d4cfb597e331448e31047a380439bdeee91865
   ```
 
-  Create `.github/workflows/bonedigger.yml` as a thin caller using that workflow at `@main`, `secrets: inherit`, and these events and permissions from the current downstream pattern:
+  Use the prior issue and pull-request events, narrow permissions, and
+  `secrets: inherit`. Delete `.github/workflows/bonedigger.yml`; the current
+  bonedigger workflow applies the nonexistent `status/approved` label, and no
+  compatible full lifecycle caller is available for this repository.
 
   ```yaml
   on:
     issues:
-      types: [opened, labeled, closed]
-    issue_comment:
-      types: [created]
+      types: [opened, edited, labeled, unlabeled]
     pull_request:
-      types: [opened]
-    schedule:
-      - cron: '0 9 * * *'
+      types: [opened, reopened, synchronize, labeled, unlabeled]
 
   permissions:
-    issues: write
-    pull-requests: write
     contents: read
+    issues: write
+    pull-requests: read
   ```
 
-  The caller provides the current bonedigger intake/priority/donation contract; it must not claim to restore the removed full queue/widget lifecycle. Do not copy the reusable workflow implementation into this repository.
+- [ ] **Step 4: Keep the local label-enforcement workflow**
 
-- [ ] **Step 4: Remove the local design-only enforcement workflow**
-
-  Delete `.github/workflows/label-enforcement.yml` after the lifecycle caller exists. Keep `.github/workflows/build.yml` and `.github/workflows/docs-checks.yml` unchanged except for any required common-contract pinning or validation fixes.
+  Keep the restored label-enforcement workflow as the only local workflow for
+  issue/PR label enforcement. Keep `.github/workflows/build.yml` and
+  `.github/workflows/docs-checks.yml` unchanged except for any required
+  common-contract pinning or validation fixes.
 
 - [ ] **Step 5: Merge the common Renovate baseline**
 
@@ -166,13 +169,15 @@
   git diff --check
   ```
 
-  Expected: actionlint and whitespace validation exit 0; the lifecycle caller resolves the reusable workflow and no local template retains a legacy numeric label.
+  Expected: actionlint and whitespace validation exit 0; no local workflow
+  references the incompatible bonedigger lifecycle caller, and every template
+  label exists in `common/labels.json`.
 
 - [ ] **Step 7: Commit only this task’s files**
 
   ```bash
   git add .github/ISSUE_TEMPLATE .github/pull_request_template.md .github/workflows/bonedigger.yml .github/workflows/label-enforcement.yml .github/renovate.json5 renovate.json
-  git commit -m "ci: adopt common lifecycle and templates"
+  git commit -m "ci: align common templates and label enforcement"
   ```
 
 ### Task 3: Migrate the live GitHub label set
@@ -208,7 +213,7 @@
   1-triage       -> status/triage
   2-discussing   -> status/discussing
   3-human-queue  -> status/queued
-  3-clanker-queue -> status/queued plus `clanker-queue`
+  3-clanker-queue -> status/queued (retain any other valid routing labels)
   blocked        -> agent/blocked
   hold           -> status/hold
   ```
@@ -267,7 +272,7 @@
 
 - [ ] **Step 3: Recheck live GitHub lifecycle state**
 
-  Confirm with `gh issue list` and `gh pr list` that active items use common lifecycle labels, no issue/PR was commented on or assigned unexpectedly, and the lifecycle caller is present on the default branch.
+  Confirm with `gh issue list` and `gh pr list` that active items use common lifecycle labels, no issue/PR was commented on or assigned unexpectedly, and no incompatible bonedigger lifecycle caller is present.
 
 - [ ] **Step 4: Commit any validation-only fixes**
 

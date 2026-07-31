@@ -10,8 +10,9 @@ Server-specific build and release constraints.
 
 - `projectbluefin/common/labels.json` is the source of truth for GitHub labels.
 - The shared label workflow defines the issue and pull-request lifecycle.
-- `projectbluefin/bonedigger` owns synchronized issue/PR templates, their
-  downstream propagation, and the currently callable lifecycle workflow.
+- `projectbluefin/bonedigger` owns synchronized issue/PR templates and their
+  downstream propagation. Its current lifecycle workflow is not adopted here:
+  it applies `status/approved`, which is absent from the common catalog.
 - Server documentation keeps only server-specific policy and links to those
   shared sources.
 
@@ -31,13 +32,17 @@ Update `AGENTS.md`, `CONTRIBUTING.md`, `.github/copilot-instructions.md`, and
 ## GitHub automation and templates
 
 Adopt the canonical synchronized issue/PR template set and template config.
-Call the currently available `projectbluefin/bonedigger` reusable workflow
-instead of a server-local design-only substitute. Its current contract covers
-report intake, priority escalation, and donation fast-track; do not claim that
-it provides the older full queue/widget lifecycle described by stale common
-documentation. Keep `build.yml` and `docs-checks.yml` server-owned. Align
-Renovate's location and baseline policy with common while preserving the
-custom BuildStream reference manager and server-specific dependency rules.
+Use the canonical template structure, but validate every emitted label against
+`projectbluefin/common/labels.json`: bugs use `kind/bug` and `status/triage`,
+features use `kind/enhancement` and `status/discussing`, and donation requests
+use `flow/agent-donation` while retaining the `Workflow: Agent Donation` body
+marker. Keep the local label-enforcement workflow and do not add a
+`projectbluefin/bonedigger` lifecycle caller until a compatible full lifecycle
+owner is published. This repository therefore makes no claim to provide a
+working full lifecycle caller. Keep `build.yml` and `docs-checks.yml`
+server-owned. Align Renovate's location and baseline policy with common while
+preserving the custom BuildStream reference manager and server-specific
+dependency rules.
 
 ## Label migration
 
@@ -48,7 +53,7 @@ legacy labels before removal:
 | --- | --- |
 | `1-triage` | `status/triage` |
 | `2-discussing` | `status/discussing` |
-| `3-clanker-queue` | `status/queued` plus the appropriate agent-routing label |
+| `3-clanker-queue` | `status/queued` (retain any other valid routing labels) |
 | `3-human-queue` | `status/queued` |
 | `4-review` | `pr/needs-review` |
 | `blocked` | `agent/blocked` |
@@ -63,8 +68,10 @@ mapped and the final label set is verified against `labels.json`.
 - Run the existing documentation checker and actionlint/pre-commit checks
   required by the repository.
 - Verify every changed Markdown link and front-matter entry.
-- Confirm the lifecycle caller and synchronized templates reference the
-  intended common/bonedigger sources.
+- Confirm the synchronized templates reference the intended bonedigger source
+  while their labels match `common/labels.json`.
+- Confirm the local label-enforcement workflow is present and no incompatible
+  bonedigger lifecycle caller is installed.
 - Query GitHub labels and open issues/PRs after migration; confirm no active
   item is left without a valid lifecycle label.
 - Review the final diff for accidental changes to server build/release
