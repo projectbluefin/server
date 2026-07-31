@@ -70,3 +70,13 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 - [ ] `just validate` passes.
 - [ ] Any changed skill is listed in [`docs/skills/index.md`](docs/skills/index.md).
 - [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.
+
+## Factory workflow and ownership
+
+Use the shared
+[`label workflow`](https://github.com/projectbluefin/common/blob/main/docs/skills/label-workflow.md)
+for labels, lifecycle, and ownership, and
+[`bonedigger templates`](https://github.com/projectbluefin/bonedigger/blob/main/docs/skills/bonedigger-templates.md)
+for template synchronization. Humans triage and approve; agents claim only
+queued work; Clankers only transports Hive assignments. Keep server-specific
+workflow and ownership local, and never write to `ublue-os/*`.

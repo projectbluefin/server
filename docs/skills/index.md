@@ -25,6 +25,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`architecture-roadmap.md`](architecture-roadmap.md) | Future architecture direction, long-lead design | Roadmap for systemd-native architecture work. |
 | [`bump-fsdk-version.md`](bump-fsdk-version.md) | Pinning or retagging the FSDK junction | Update the pinned FSDK release and derived tags. |
 | [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
+| [`projectbluefin/common label workflow`](https://github.com/projectbluefin/common/blob/main/docs/skills/label-workflow.md) | Issue labels, lifecycle, ownership, or template synchronization | Shared factory workflow; use [`bonedigger templates`](https://github.com/projectbluefin/bonedigger/blob/main/docs/skills/bonedigger-templates.md) for downstream template ownership and do not duplicate the label taxonomy locally. |
 | [`ddi-installer-build.md`](ddi-installer-build.md) | Building the installer or DDI on the cluster | Cluster build pipeline and local installer/DDI build. |
 | [`ddi-installer.md`](ddi-installer.md) | Installer boot flow, `systemd-sysinstall`, `systemd-repart` | High-level DDI install architecture and local smoke test. |
 | [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |

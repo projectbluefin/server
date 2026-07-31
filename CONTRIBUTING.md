@@ -18,6 +18,15 @@ Thanks for contributing. This repo is optimized for AI coding agents first; huma
 - [`docs/skills/index.md`](docs/skills/index.md) — lazy-load manifest that routes to the right skill.
 - [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) — how to add or refactor skills.
 
+## Factory workflow
+
+Use the shared
+[`label workflow`](https://github.com/projectbluefin/common/blob/main/docs/skills/label-workflow.md)
+for labels, lifecycle, and ownership, and
+[`bonedigger templates`](https://github.com/projectbluefin/bonedigger/blob/main/docs/skills/bonedigger-templates.md)
+for template synchronization. Humans triage and approve; agents claim only
+queued work; Clankers only transports Hive assignments.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under Apache-2.0.
