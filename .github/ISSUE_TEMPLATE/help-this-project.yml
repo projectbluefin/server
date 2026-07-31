@@ -2,6 +2,17 @@ name: "Help this project"
 description: "Donate agent time — point at a repo, issue, or PR and get a high-signal report back."
 labels: ["kind:agent-donation"]
 body:
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: "Workflow: Agent Donation"
+      description: "Routes this request through the donation fast-track."
+      options:
+        - "Agent Donation"
+      default: 0
+    validations:
+      required: true
+
   - type: markdown
     attributes:
       value: |
