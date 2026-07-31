@@ -1,0 +1,21 @@
+name: bonedigger intake and priority
+
+on:
+  issues:
+    types: [opened, labeled, closed]
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened]
+  schedule:
+    - cron: '0 9 * * *'
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  bonedigger:
+    uses: projectbluefin/bonedigger/.github/workflows/lifecycle.yml@main
+    secrets: inherit
