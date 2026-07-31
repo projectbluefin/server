@@ -10,8 +10,8 @@ Server-specific build and release constraints.
 
 - `projectbluefin/common/labels.json` is the source of truth for GitHub labels.
 - The shared label workflow defines the issue and pull-request lifecycle.
-- `projectbluefin/bonedigger` owns synchronized issue/PR templates and their
-  downstream propagation.
+- `projectbluefin/bonedigger` owns synchronized issue/PR templates, their
+  downstream propagation, and the currently callable lifecycle workflow.
 - Server documentation keeps only server-specific policy and links to those
   shared sources.
 
@@ -31,9 +31,12 @@ Update `AGENTS.md`, `CONTRIBUTING.md`, `.github/copilot-instructions.md`, and
 ## GitHub automation and templates
 
 Adopt the canonical synchronized issue/PR template set and template config.
-Use the shared lifecycle caller rather than a server-local substitute that only
-enforces design labels. Keep `build.yml` and `docs-checks.yml` server-owned.
-Align Renovate's location and baseline policy with common while preserving the
+Call the currently available `projectbluefin/bonedigger` reusable workflow
+instead of a server-local design-only substitute. Its current contract covers
+report intake, priority escalation, and donation fast-track; do not claim that
+it provides the older full queue/widget lifecycle described by stale common
+documentation. Keep `build.yml` and `docs-checks.yml` server-owned. Align
+Renovate's location and baseline policy with common while preserving the
 custom BuildStream reference manager and server-specific dependency rules.
 
 ## Label migration

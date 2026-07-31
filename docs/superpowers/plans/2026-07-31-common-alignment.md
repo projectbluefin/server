@@ -4,7 +4,7 @@
 
 **Goal:** Make `projectbluefin/server` consume the canonical projectbluefin/common factory contract for documentation, lifecycle automation, templates, Renovate policy, and live GitHub labels.
 
-**Architecture:** Keep Bluefin Server build, release, installer, DDI, sysext, and ownership rules local. Replace duplicated lifecycle guidance and local design-only enforcement with links to common’s canonical workflow, bonedigger’s synchronized templates, and the reusable lifecycle workflow in `projectbluefin/actions`. Migrate the live repository labels in a separate, verified step so active issues retain their meaning.
+**Architecture:** Keep Bluefin Server build, release, installer, DDI, sysext, and ownership rules local. Replace duplicated lifecycle guidance and local design-only enforcement with links to common’s canonical label workflow, bonedigger’s synchronized templates, and bonedigger’s currently callable reusable workflow. Migrate the live repository labels in a separate, verified step so active issues retain their meaning.
 
 **Tech Stack:** Markdown/YAML/JSON5, GitHub Actions reusable workflows, GitHub CLI (`gh`), existing Python documentation checks, `actionlint`, `pre-commit`, and `just validate`.
 
@@ -76,13 +76,13 @@
 - Replace: `.github/ISSUE_TEMPLATE/feature-request.yml`
 - Replace: `.github/ISSUE_TEMPLATE/help-this-project.yml`
 - Create: `.github/pull_request_template.md`
-- Create: `.github/workflows/lifecycle.yml`
+- Create: `.github/workflows/bonedigger.yml`
 - Delete: `.github/workflows/label-enforcement.yml`
 - Create: `.github/renovate.json5`
 - Delete: `renovate.json`
 
 **Interfaces:**
-- Consumes: `projectbluefin/bonedigger/templates/{bug-report.yml,feature-request.yml,help-this-project.yml,config.yml}`, `projectbluefin/common/.github/pull_request_template.md`, `projectbluefin/actions/.github/workflows/lifecycle.yml@main`, and the existing BuildStream custom Renovate manager.
+- Consumes: `projectbluefin/bonedigger/templates/{bug-report.yml,feature-request.yml,help-this-project.yml,config.yml}`, `projectbluefin/common/.github/pull_request_template.md`, `projectbluefin/bonedigger/.github/workflows/lifecycle.yml@main`, and the existing BuildStream custom Renovate manager.
 - Produces: canonical downstream templates, a reusable lifecycle caller, and common-compatible Renovate configuration with server-specific dependency rules preserved.
 
 - [ ] **Step 1: Copy the canonical issue templates**
@@ -110,13 +110,32 @@
 
 - [ ] **Step 3: Add the lifecycle caller**
 
-  Read the reusable workflow’s `workflow_call` contract from:
+  Read the currently available reusable workflow’s `workflow_call` contract from:
 
   ```text
-  projectbluefin/actions/.github/workflows/lifecycle.yml@main
+  projectbluefin/bonedigger/.github/workflows/lifecycle.yml@main
   ```
 
-  Create `.github/workflows/lifecycle.yml` as a thin caller using that workflow at `@main`, `secrets: inherit`, and the permissions/events required by its contract. The caller must handle issue events, issue comments, pull-request events, and scheduled lifecycle maintenance as defined by the reusable workflow. Do not copy the reusable workflow implementation into this repository.
+  Create `.github/workflows/bonedigger.yml` as a thin caller using that workflow at `@main`, `secrets: inherit`, and these events and permissions from the current downstream pattern:
+
+  ```yaml
+  on:
+    issues:
+      types: [opened, labeled, closed]
+    issue_comment:
+      types: [created]
+    pull_request:
+      types: [opened]
+    schedule:
+      - cron: '0 9 * * *'
+
+  permissions:
+    issues: write
+    pull-requests: write
+    contents: read
+  ```
+
+  The caller provides the current bonedigger intake/priority/donation contract; it must not claim to restore the removed full queue/widget lifecycle. Do not copy the reusable workflow implementation into this repository.
 
 - [ ] **Step 4: Remove the local design-only enforcement workflow**
 
@@ -152,7 +171,7 @@
 - [ ] **Step 7: Commit only this task’s files**
 
   ```bash
-  git add .github/ISSUE_TEMPLATE .github/pull_request_template.md .github/workflows/lifecycle.yml .github/workflows/label-enforcement.yml .github/renovate.json5 renovate.json
+  git add .github/ISSUE_TEMPLATE .github/pull_request_template.md .github/workflows/bonedigger.yml .github/workflows/label-enforcement.yml .github/renovate.json5 renovate.json
   git commit -m "ci: adopt common lifecycle and templates"
   ```
 
