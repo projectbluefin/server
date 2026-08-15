@@ -31,6 +31,10 @@ See [`AGENTS.md`](AGENTS.md) for the full build matrix and agent skill routing.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist and [`docs/skills/index.md`](docs/skills/index.md) for task-specific guidance.
 
+## Security
+
+See [`SECURITY.md`](SECURITY.md) for the vulnerability disclosure policy, supported versions, and how to verify signed release artifacts.
+
 ## Release trust
 
 - GitHub Actions builds all artifacts, signs a combined `SHA256SUMS` manifest, and publishes a GitHub Release.
