@@ -50,17 +50,25 @@ before adding an action.
 
 ### Workflow permissions
 
-The release job in `.github/workflows/build.yml` uses:
+`.github/workflows/build.yml` defaults to a read-only token:
 
 ```yaml
 permissions:
-  contents: write
+  contents: read
 ```
 
-That single permission is sufficient for the workflow to resolve and push
-BuildStream refs, create GitHub Releases, and upload release assets. If a new
-job needs additional permissions, keep them as narrow as possible and document
-why.
+The workflow checks out and executes PR-controlled code (the `Justfile` and
+build scripts come from the PR head), so no job that runs on `pull_request`
+may hold a write token. `contents: write` is granted per job only to:
+
+- `track-refs` — pushes resolved BuildStream refs back to the PR branch; gated
+  to `renovate/*` PRs.
+- `release` — creates the GitHub Release and uploads assets; gated to
+  `refs/heads/main`.
+
+The `build` job (validation, compile, signing) runs with the read-only default
+on every event. If a new job needs additional permissions, keep them as narrow
+as possible and document why.
 
 ### `sudo` scope
 
@@ -86,7 +94,9 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
-| `build-and-release` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile, and uploads DDI/installer/sysext assets to GitHub Releases on push to `main`. |
+| `track-refs` | `build.yml` | `pull_request` (`renovate/*` only) | Resolves BuildStream junction refs and pushes them back to the PR branch. Sole `contents: write` grant on `pull_request`. |
+| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile, and signs the release manifest on pushes to `main`. Read-only token. |
+| `release` | `build.yml` | `push/main`, `workflow_dispatch` | Downloads the signed assets handed off by `build` and publishes them to the GitHub Release. `contents: write`. |
 
 GitHub Actions runs the **complete BuildStream compilation pipeline** using `/mnt`
 SSD storage on the runner for podman and BuildStream caches. Release assets are

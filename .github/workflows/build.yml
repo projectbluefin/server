@@ -10,13 +10,25 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege by default: this workflow executes PR-controlled build code
+# (the Justfile and build scripts come from the PR head), so the workflow-wide
+# token is read-only. contents: write is granted per job only where genuinely
+# required (see track-refs and release below).
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-and-release:
+  # Resolves BuildStream junction refs and pushes them back to the PR branch.
+  # This runs PR-controlled code (`just bst source track`) with a write token,
+  # so it keeps the pre-existing renovate/* branch gate. The push updates the
+  # PR branch tip; the build job below runs afterwards and checks out that
+  # updated tip.
+  track-refs:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/')
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 60
+    permissions:
+      contents: write # pushes resolved refs back to the renovate/* PR branch
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -30,7 +42,6 @@ jobs:
           tool: just
 
       - name: Track and Resolve BuildStream Refs
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/')
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: |
@@ -44,6 +55,29 @@ jobs:
             git commit -m "chore: resolve BuildStream junction refs to git-describe format" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
             git push origin "HEAD:${HEAD_REF}"
           fi
+
+  build:
+    # Read-only token (workflow default): on pull_request this job checks out
+    # and executes PR-controlled code, so it must never hold a write token.
+    needs: track-refs
+    # track-refs is skipped for non-renovate PRs and pushes; only a failed or
+    # cancelled track job should stop the build.
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - name: Set up just
+        uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb # v2
+        with:
+          tool: just
 
       - name: Validate Element Graph
         run: just validate
@@ -98,13 +132,45 @@ jobs:
           echo "$SYSUPDATE_SIGNING_KEY" | gpg --batch --import
           gpg --batch --yes --detach-sign --armor -o dist/release/SHA256SUMS.gpg dist/release/SHA256SUMS
 
-      - name: Upload assets to GitHub Release
+      - name: Resolve release version
         if: github.ref == 'refs/heads/main'
+        id: version
+        run: echo "version=$(just version)" >> "$GITHUB_OUTPUT"
+
+      # Hand the signed assets to the release job below; the build job itself
+      # stays read-only, so it cannot publish the release.
+      - name: Upload release assets artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets
+          path: dist/release/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Publishes the signed assets to the GitHub Release. Only runs on
+  # pushes/dispatches to main, where the code is already reviewed, and is the
+  # only job besides track-refs that holds contents: write.
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write # creates the GitHub Release and uploads its assets
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-assets
+          path: dist/release
+
+      - name: Upload assets to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          V=$(just version)
+          V="${{ needs.build.outputs.version }}"
           TAG="installer-v${V}"
           echo "Uploading release assets for tag: ${TAG}"
           gh release create "${TAG}" --title "Bluefin Server v${V}" --notes "Automated release triggered by Renovate dependency update on main" --prerelease=false || true
