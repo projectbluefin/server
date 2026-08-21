@@ -101,7 +101,7 @@ cluster-build REF="main":
         -n argo \
         --watch
 
-# Export the installer disk image + SHA256SUMS to dist/.
+# Export the installer disk image, UKI, PXE artifacts + SHA256SUMS to dist/.
 # bst artifact checkout requires an empty destination, and dist/ may
 # already hold dist/ddi/ or dist/sysext/ from earlier export steps, so
 # check out into a clean staging directory and move the files over.
@@ -114,6 +114,14 @@ export-installer: build-installer
     mv dist/installer-checkout/* dist/
     rm -rf dist/installer-checkout
     @echo "==> wrote:" && ls -lh dist/
+
+# Export standalone PXE kernel/initrd artifacts to dist/pxe/.
+[group('installer')]
+export-pxe: export-installer
+    rm -rf dist/pxe
+    mkdir -p dist/pxe
+    cp dist/bluefin-server-pxe-* dist/SHA256SUMS dist/pxe/
+    @echo "==> wrote PXE artifacts:" && ls -lh dist/pxe/
 
 # -- k3s systemd-sysext -------------------------------------------------------
 # Produces a systemd-sysext extension image for k3s.

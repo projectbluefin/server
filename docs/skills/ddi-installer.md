@@ -74,6 +74,11 @@ remains stateless.
    stack includes `xfsprogs` so the root and `/var` filesystems can grow to fill
    their partitions on first boot.
 
+For PXE/netboot, use the standalone kernel and initrd artifacts with the
+opt-in `inst.ddi_url` parameters documented in
+[pxe-netboot.md](pxe-netboot.md). Without those parameters, installation
+continues to use the embedded DDI and requires no network.
+
 ## Partition Layout
 
 ### Installer media (the USB/raw disk image)

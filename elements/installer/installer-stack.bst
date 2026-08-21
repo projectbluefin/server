@@ -27,6 +27,9 @@ depends:
   - freedesktop-sdk.bst:components/cryptsetup.bst
   - freedesktop-sdk.bst:components/xfsprogs.bst
   - freedesktop-sdk.bst:components/dosfstools.bst
+  # Optional PXE installer path (curl fetches the compressed DDI; zstd expands it).
+  - freedesktop-sdk.bst:components/curl.bst
+  - freedesktop-sdk.bst:components/zstd.bst
 
   # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
   - freedesktop-sdk.bst:components/linux.bst

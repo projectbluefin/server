@@ -31,6 +31,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |
 | [`k3s-sysext-ops.md`](k3s-sysext-ops.md) | Building the k3s sysext | BuildStream element and publish steps for the k3s sysext. |
 | [`k3s-sysext.md`](k3s-sysext.md) | Operating k3s on Bluefin Server | Runtime operation and reboot coordination for k3s. |
+| [`pxe-netboot.md`](pxe-netboot.md) | Installing over PXE/netboot | Standalone boot artifacts, DDI URL parameters, and troubleshooting. |
 | [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
 | [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
 | [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and Flatcar compatibility. |

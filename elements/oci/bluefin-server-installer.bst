@@ -130,8 +130,58 @@ config:
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
       TARGET_DISK=""
       INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"
+      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
+
+      # PXE installs opt in with inst.ddi_url. Keep the compressed download on
+      # the installer filesystem, then expose the expanded image at the same
+      # path used by the embedded-media repart definition.
+      DDI_URL=""
+      DDI_SHA256=""
+      REQUESTED_TARGET=""
+      for arg in ${CMDLINE}; do
+        case "${arg}" in
+          inst.ddi_url=*) DDI_URL="${arg#inst.ddi_url=}" ;;
+          inst.ddi_sha256=*) DDI_SHA256="${arg#inst.ddi_sha256=}" ;;
+          inst.target_disk=*) REQUESTED_TARGET="${arg#inst.target_disk=}" ;;
+        esac
+      done
+
+      if [ -n "${DDI_URL}" ]; then
+        case "${DDI_URL}" in
+          http://*|https://*) ;;
+          *) echo "ERROR: inst.ddi_url must use http:// or https://" >&2; exit 1 ;;
+        esac
+        mkdir -p /run/installer
+        echo "==> Fetching DDI from ${DDI_URL}"
+        curl --fail --show-error --location --retry 3 --output /run/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"
+        if [ -n "${DDI_SHA256}" ]; then
+          printf '%s  %s\n' "${DDI_SHA256}" /run/installer/bluefin-server-ddi.raw.zst \
+            | sha256sum --check --status -
+          echo "==> DDI checksum verified"
+        fi
+        zstd --decompress --stdout /run/installer/bluefin-server-ddi.raw.zst \
+          > /run/installer/bluefin-server-ddi.raw
+        rm -f /run/installer/bluefin-server-ddi.raw.zst
+        mkdir -p /dev/disk/by-partlabel
+        ln -sfn /run/installer/bluefin-server-ddi.raw \
+          /dev/disk/by-partlabel/bluefin-installer-data
+        INSTALLER_PART=""
+      fi
+
+      if [ -n "${REQUESTED_TARGET}" ]; then
+        case "${REQUESTED_TARGET}" in
+          /dev/*) ;;
+          *) echo "ERROR: inst.target_disk must be an absolute /dev path" >&2; exit 1 ;;
+        esac
+        if [ ! -b "${REQUESTED_TARGET}" ]; then
+          echo "ERROR: inst.target_disk is not a block device: ${REQUESTED_TARGET}" >&2
+          exit 1
+        fi
+        TARGET_DISK="${REQUESTED_TARGET}"
+      fi
 
       while read -r name type ro size; do
+        [ -z "${TARGET_DISK}" ] || break
         [ "${type}" = "disk" ] || continue
         [ "${ro}" = "0" ] || continue
         [ "${size}" -gt 0 ] || continue
@@ -146,7 +196,6 @@ config:
       done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
 
       # Check for unattended in kernel command line
-      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
       if [[ " ${CMDLINE} " == *" unattended "* ]]; then
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then
@@ -181,6 +230,8 @@ config:
       mkdir -p /layer/etc/systemd/system/systemd-sysinstall.service.d
       cat > /layer/etc/systemd/system/systemd-sysinstall.service.d/override.conf << 'EOF'
       [Unit]
+      Wants=network-online.target
+      After=network-online.target
       SuccessAction=poweroff
       FailureAction=poweroff
 
@@ -316,7 +367,13 @@ config:
 
       # Also export the target UKI (.efi) for GitHub Releases and systemd-sysupdate
       cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{installer-version}.efi"
+      # Export separate PXE boot artifacts. Their cmdline is supplied by the
+      # PXE loader, unlike the fixed cmdline embedded in the UKI.
+      cp /layer/boot/vmlinuz "bluefin-server-pxe-vmlinuz-%{installer-version}"
+      cp /installer.cpio.gz "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz"
 
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS
       sha256sum --binary "bluefin-server-%{installer-version}.efi" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-vmlinuz-%{installer-version}" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz" >> SHA256SUMS
       ls -lh
