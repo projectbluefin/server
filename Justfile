@@ -109,11 +109,19 @@ cluster-build REF="main":
 export-installer: build-installer
     rm -rf dist/installer-checkout
     mkdir -p dist dist/installer-checkout
-    rm -f dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/SHA256SUMS
+    rm -f dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/bluefin-server-pxe-* dist/SHA256SUMS
     just bst artifact checkout oci/bluefin-server-installer.bst --directory /src/dist/installer-checkout
     mv dist/installer-checkout/* dist/
     rm -rf dist/installer-checkout
     @echo "==> wrote:" && ls -lh dist/
+
+# Export standalone kernel and initrd for PXE boot. The DDI remains embedded
+# in the raw installer image; network DDI fetching is not enabled.
+[group('installer')]
+export-pxe: export-installer
+    @test -n "$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-pxe-vmlinuz-*' -print -quit)" || { echo "ERROR: PXE kernel was not exported." >&2; exit 1; }
+    @test -n "$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-pxe-initrd-*.cpio.gz' -print -quit)" || { echo "ERROR: PXE initrd was not exported." >&2; exit 1; }
+    @echo "==> wrote PXE artifacts:" && ls -lh dist/bluefin-server-pxe-*
 
 # -- k3s systemd-sysext -------------------------------------------------------
 # Produces a systemd-sysext extension image for k3s.

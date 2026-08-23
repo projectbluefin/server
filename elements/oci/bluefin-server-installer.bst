@@ -316,7 +316,13 @@ config:
 
       # Also export the target UKI (.efi) for GitHub Releases and systemd-sysupdate
       cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{installer-version}.efi"
+      # Export raw PXE inputs alongside the UKI. PXE users supply their own
+      # kernel command line, so these remain separate from the fixed-cmdline UKI.
+      cp /layer/boot/vmlinuz "bluefin-server-pxe-vmlinuz-%{installer-version}"
+      cp /installer.cpio.gz "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz"
 
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS
       sha256sum --binary "bluefin-server-%{installer-version}.efi" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-vmlinuz-%{installer-version}" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz" >> SHA256SUMS
       ls -lh
