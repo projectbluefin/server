@@ -109,11 +109,20 @@ cluster-build REF="main":
 export-installer: build-installer
     rm -rf dist/installer-checkout
     mkdir -p dist dist/installer-checkout
-    rm -f dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/SHA256SUMS
+    rm -f dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/bluefin-server-pxe-* dist/SHA256SUMS
     just bst artifact checkout oci/bluefin-server-installer.bst --directory /src/dist/installer-checkout
     mv dist/installer-checkout/* dist/
     rm -rf dist/installer-checkout
     @echo "==> wrote:" && ls -lh dist/
+
+# Export standalone PXE kernel and initrd to dist/pxe/.
+[group('installer')]
+export-pxe: export-installer
+    rm -rf dist/pxe
+    mkdir -p dist/pxe
+    cp dist/bluefin-server-pxe-* dist/pxe/
+    (cd dist/pxe && sha256sum --binary -- bluefin-server-pxe-* > SHA256SUMS)
+    @echo "==> wrote PXE artifacts:" && ls -lh dist/pxe/
 
 # -- k3s systemd-sysext -------------------------------------------------------
 # Produces a systemd-sysext extension image for k3s.

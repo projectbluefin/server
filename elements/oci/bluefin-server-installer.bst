@@ -127,26 +127,99 @@ config:
       #!/bin/bash
       set -euo pipefail
 
-      # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
-      TARGET_DISK=""
+      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
+      CMDLINE_ARGS=()
+      read -r -a CMDLINE_ARGS <<< "${CMDLINE}"
+      get_cmdline_value() {
+        local key="$1" arg
+        for arg in "${CMDLINE_ARGS[@]}"; do
+          case "${arg}" in
+            "${key}"=*) printf '%s' "${arg#*=}"; return 0 ;;
+          esac
+        done
+        return 1
+      }
+
       INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"
-
-      while read -r name type ro size; do
-        [ "${type}" = "disk" ] || continue
-        [ "${ro}" = "0" ] || continue
-        [ "${size}" -gt 0 ] || continue
-
-        # Skip the disk containing the installer partition
-        if [ -n "${INSTALLER_PART}" ] && [[ "${INSTALLER_PART}" == "${name}"* ]]; then
-          continue
+      DDI_URL="$(get_cmdline_value inst.ddi_url || true)"
+      DDI_SHA256="$(get_cmdline_value inst.ddi_sha256 || true)"
+      if [ -n "${DDI_URL}" ]; then
+        case "${DDI_URL}" in
+          http://*|https://*) ;;
+          *) echo "ERROR: inst.ddi_url must use http:// or https://: ${DDI_URL}" >&2; exit 1 ;;
+        esac
+        if [[ ! "${DDI_SHA256}" =~ ^[[:xdigit:]]{64}$ ]]; then
+          echo "ERROR: inst.ddi_sha256 must be a 64-character SHA-256 digest when inst.ddi_url is set" >&2
+          exit 1
         fi
+        DDI_COMPRESSED="/run/installer/bluefin-server-ddi.raw.zst"
+        DDI_RAW="/run/installer/bluefin-server-ddi.raw"
+        DDI_COMPRESSED_PART="${DDI_COMPRESSED}.part"
+        DDI_RAW_PART="${DDI_RAW}.part"
+        echo "==> Fetching DDI from ${DDI_URL}..."
+        mkdir -p /run/installer /dev/disk/by-partlabel
+        rm -f "${DDI_COMPRESSED_PART}" "${DDI_RAW_PART}"
+        if ! curl --fail --show-error --location --connect-timeout 10 \
+          --retry 10 --retry-delay 2 \
+          --output "${DDI_COMPRESSED_PART}" "${DDI_URL}"; then
+          echo "ERROR: failed to fetch DDI from ${DDI_URL}" >&2
+          exit 1
+        fi
+        if ! printf '%s  %s\n' "${DDI_SHA256}" "${DDI_COMPRESSED_PART}" |
+          sha256sum --check --status -; then
+          echo "ERROR: DDI checksum verification failed" >&2
+          exit 1
+        fi
+        echo "==> DDI checksum verified."
+        if ! zstd --decompress --stdout "${DDI_COMPRESSED_PART}" > "${DDI_RAW_PART}"; then
+          echo "ERROR: downloaded DDI is not a valid zstd stream" >&2
+          exit 1
+        fi
+        mv -f "${DDI_RAW_PART}" "${DDI_RAW}"
+        rm -f "${DDI_COMPRESSED_PART}"
+        DDI_LOOP="$(losetup --find --show --read-only "${DDI_RAW}")"
+        ln -sfn "${DDI_LOOP}" /dev/disk/by-partlabel/bluefin-installer-data
+      fi
 
-        TARGET_DISK="${name}"
-        break
-      done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
+      # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
+      TARGET_DISK="$(get_cmdline_value inst.target_disk || true)"
+      if [ -n "${TARGET_DISK}" ]; then
+        case "${TARGET_DISK}" in
+          /dev/*) ;;
+          *) echo "ERROR: inst.target_disk must be an absolute /dev path: ${TARGET_DISK}" >&2; exit 1 ;;
+        esac
+        TARGET_TYPE="$(lsblk -ndo TYPE "${TARGET_DISK}" 2>/dev/null || true)"
+        TARGET_RO="$(lsblk -ndo RO "${TARGET_DISK}" 2>/dev/null || true)"
+        TARGET_SIZE="$(lsblk -ndo SIZE "${TARGET_DISK}" 2>/dev/null || true)"
+        if [ ! -b "${TARGET_DISK}" ] || [ "${TARGET_TYPE}" != "disk" ] ||
+          [ "${TARGET_RO}" != "0" ] ||
+          ! [[ "${TARGET_SIZE}" =~ ^[0-9]+$ ]] || [ "${TARGET_SIZE}" -le 0 ]; then
+          echo "ERROR: inst.target_disk is not a writable whole-disk block device: ${TARGET_DISK}" >&2
+          exit 1
+        fi
+        if [ -n "${INSTALLER_PART}" ] && [[ "${INSTALLER_PART}" == "${TARGET_DISK}"* ]]; then
+          echo "ERROR: inst.target_disk points to installer media: ${TARGET_DISK}" >&2
+          exit 1
+        fi
+      fi
+
+      if [ -z "${TARGET_DISK}" ]; then
+        while read -r name type ro size; do
+          [ "${type}" = "disk" ] || continue
+          [ "${ro}" = "0" ] || continue
+          [ "${size}" -gt 0 ] || continue
+
+          # Skip the disk containing the installer partition
+          if [ -n "${INSTALLER_PART}" ] && [[ "${INSTALLER_PART}" == "${name}"* ]]; then
+            continue
+          fi
+
+          TARGET_DISK="${name}"
+          break
+        done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
+      fi
 
       # Check for unattended in kernel command line
-      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
       if [[ " ${CMDLINE} " == *" unattended "* ]]; then
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then
@@ -316,7 +389,12 @@ config:
 
       # Also export the target UKI (.efi) for GitHub Releases and systemd-sysupdate
       cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{installer-version}.efi"
+      # Export separate PXE inputs; PXE supplies its own kernel command line.
+      cp /layer/boot/vmlinuz "bluefin-server-pxe-vmlinuz-%{installer-version}"
+      cp /installer.cpio.gz "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz"
 
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS
       sha256sum --binary "bluefin-server-%{installer-version}.efi" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-vmlinuz-%{installer-version}" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz" >> SHA256SUMS
       ls -lh

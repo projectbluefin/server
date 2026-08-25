@@ -27,6 +27,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
 | [`ddi-installer-build.md`](ddi-installer-build.md) | Building the installer or DDI on the cluster | Cluster build pipeline and local installer/DDI build. |
 | [`ddi-installer.md`](ddi-installer.md) | Installer boot flow, `systemd-sysinstall`, `systemd-repart` | High-level DDI install architecture and local smoke test. |
+| [`pxe-netboot.md`](pxe-netboot.md) | Network booting the installer | PXE artifacts, kernel command line, and network DDI fetch. |
 | [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |
 | [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |
 | [`k3s-sysext-ops.md`](k3s-sysext-ops.md) | Building the k3s sysext | BuildStream element and publish steps for the k3s sysext. |

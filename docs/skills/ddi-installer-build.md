@@ -22,7 +22,8 @@ The repo exposes the main build entrypoints through `just`:
 just validate              # resolve the BuildStream graph
 just cluster-build         # submit an Argo workflow to build/publish
 just build-installer       # build the installer locally
-just export-installer      # export installer + UKI + SHA256SUMS to dist/
+just export-installer      # export installer, UKI, PXE inputs + SHA256SUMS to dist/
+just export-pxe             # copy standalone PXE inputs + checksums to dist/pxe/
 just build-ddi             # build the OS DDI payload
 just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
 just build-sysext          # build the k3s sysext
@@ -87,7 +88,8 @@ Use direct I/O and full-block reads to avoid dirtying the page cache.
 The release process is driven by `.github/workflows/build.yml`:
 
 - Renovate point-release updates or direct pushes to `main` trigger a full build.
-- CI builds the DDI payload, installer, target UKI, and k3s sysext.
+- CI builds the DDI payload, installer, target UKI, standalone PXE kernel/initrd,
+  and k3s sysext.
 - CI uploads the versioned release assets to the corresponding
   `installer-v<release-version>` GitHub Release.
 - CI also produces a combined `dist/release/SHA256SUMS` manifest and signs it

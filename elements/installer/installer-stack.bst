@@ -8,8 +8,8 @@ description: |
   bluefin-server-installer.bst. This keeps the toolchain minimal and removes
   the dracut dependency chain.
 
-  The DDI payload is embedded in the installer media (offline install).
-  No network access required at install time.
+  The DDI payload is embedded in installer media by default. PXE boot can
+  opt into fetching it over HTTP(S).
 
 depends:
   # Base runtime
@@ -27,6 +27,11 @@ depends:
   - freedesktop-sdk.bst:components/cryptsetup.bst
   - freedesktop-sdk.bst:components/xfsprogs.bst
   - freedesktop-sdk.bst:components/dosfstools.bst
+  # Optional PXE installer path: fetch and unpack a network DDI.
+  - freedesktop-sdk.bst:components/curl.bst
+  - freedesktop-sdk.bst:components/coreutils.bst
+  - freedesktop-sdk.bst:components/util-linux.bst
+  - freedesktop-sdk.bst:components/zstd.bst
 
   # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
   - freedesktop-sdk.bst:components/linux.bst
