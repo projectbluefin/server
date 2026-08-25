@@ -24,14 +24,14 @@ metadata:
 - OCI-only image work (no installer involvement).
 - Bootc-specific changes.
 - Desktop or nspawn machine image work.
-- Adding a network-pull installer — the design is offline; the DDI is embedded as
-  a data partition.
+- PXE/netboot deployment — see [pxe-netboot.md](pxe-netboot.md).
 
 ## Architecture
 
-The installer is offline, self-contained, and systemd-native. The OS DDI payload
-(`bluefin-server-ddi.bst`) is embedded as a data partition on the installer
-media at build time. No network access is required at install time.
+The default installer is offline, self-contained, and systemd-native. The OS DDI
+payload (`bluefin-server-ddi.bst`) is embedded as a data partition on installer
+media at build time. PXE boot can opt into fetching the same DDI over HTTP(S);
+see [pxe-netboot.md](pxe-netboot.md).
 
 The installer UI is systemd's built-in `systemd-sysinstall` which provides a
 terminal-based interactive installation that:
@@ -142,7 +142,7 @@ For the detailed build/export/flash/release workflow, see
 | "A bash script is simpler." | A bash script cannot run the systemd-native interactive installer TUI. Use `systemd-sysinstall`. |
 | "Use knuckle instead." | knuckle is deprecated in favor of native `systemd-sysinstall` (systemd 261+). |
 | "Hardcode `root=/dev/vda2` for QEMU." | Bare metal has different device names. Always use PARTUUID. |
-| "Pull the DDI from the network at install time." | Network failures = broken installs. The DDI is embedded in the installer media. |
+| "Pull the DDI from the network at install time." | Only PXE boot enables this; failures stop before target-disk installation. |
 | "Put the DDI in the initrd cpio." | The DDI is 2 GiB+. The initrd cpio step must run before the DDI is placed in `/layer`. |
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |

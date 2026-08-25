@@ -4,8 +4,8 @@ description: |
 
   Output: bluefin-server-installer-<ver>.raw.zst + SHA256SUMS
 
-  Offline installer: the OS DDI payload is embedded as a data partition on
-  the installer media. No network required at install time.
+  Default offline installer: the OS DDI payload is embedded as a data partition
+  on the installer media. PXE boot can opt into fetching the DDI over HTTP(S).
 
   Initrd approach: dracut-free, cpio-native.
   The installer-stack rootfs is packed directly into a cpio.zst initrd using
@@ -127,26 +127,64 @@ config:
       #!/bin/bash
       set -euo pipefail
 
-      # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
-      TARGET_DISK=""
+      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
+      get_cmdline_value() {
+        local key="$1" arg
+        for arg in ${CMDLINE}; do
+          case "${arg}" in
+            "${key}"=*) printf '%s' "${arg#*=}"; return 0 ;;
+          esac
+        done
+        return 1
+      }
+
       INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"
-
-      while read -r name type ro size; do
-        [ "${type}" = "disk" ] || continue
-        [ "${ro}" = "0" ] || continue
-        [ "${size}" -gt 0 ] || continue
-
-        # Skip the disk containing the installer partition
-        if [ -n "${INSTALLER_PART}" ] && [[ "${INSTALLER_PART}" == "${name}"* ]]; then
-          continue
+      DDI_URL="$(get_cmdline_value inst.ddi_url || true)"
+      DDI_SHA256="$(get_cmdline_value inst.ddi_sha256 || true)"
+      if [ -n "${DDI_URL}" ]; then
+        case "${DDI_URL}" in
+          http://*|https://*) ;;
+          *) echo "ERROR: inst.ddi_url must use http:// or https://" >&2; exit 1 ;;
+        esac
+        DDI_COMPRESSED="/run/installer/bluefin-server-ddi.raw.zst"
+        DDI_RAW="/run/installer/bluefin-server-ddi.raw"
+        echo "==> Fetching DDI from ${DDI_URL}..."
+        mkdir -p /run/installer /dev/disk/by-partlabel
+        curl --fail --location --retry 3 --output "${DDI_COMPRESSED}" "${DDI_URL}"
+        if [ -n "${DDI_SHA256}" ]; then
+          printf '%s  %s\n' "${DDI_SHA256}" "${DDI_COMPRESSED}" | sha256sum --check --status -
+          echo "==> DDI checksum verified."
         fi
+        zstd --decompress --stdout "${DDI_COMPRESSED}" > "${DDI_RAW}"
+        rm -f "${DDI_COMPRESSED}"
+        ln -sfn "${DDI_RAW}" /dev/disk/by-partlabel/bluefin-installer-data
+        INSTALLER_PART=""
+      fi
 
-        TARGET_DISK="${name}"
-        break
-      done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
+      # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
+      TARGET_DISK="$(get_cmdline_value inst.target_disk || true)"
+      if [ -n "${TARGET_DISK}" ] && { [ ! -b "${TARGET_DISK}" ] || [ "$(lsblk -ndo TYPE "${TARGET_DISK}")" != "disk" ] || [ "$(lsblk -ndo RO "${TARGET_DISK}")" != "0" ]; }; then
+        echo "ERROR: inst.target_disk is not a valid whole-disk block device: ${TARGET_DISK}" >&2
+        exit 1
+      fi
+
+      if [ -z "${TARGET_DISK}" ]; then
+        while read -r name type ro size; do
+          [ "${type}" = "disk" ] || continue
+          [ "${ro}" = "0" ] || continue
+          [ "${size}" -gt 0 ] || continue
+
+          # Skip the disk containing the installer partition
+          if [ -n "${INSTALLER_PART}" ] && [[ "${INSTALLER_PART}" == "${name}"* ]]; then
+            continue
+          fi
+
+          TARGET_DISK="${name}"
+          break
+        done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
+      fi
 
       # Check for unattended in kernel command line
-      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
       if [[ " ${CMDLINE} " == *" unattended "* ]]; then
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then
@@ -316,7 +354,11 @@ config:
 
       # Also export the target UKI (.efi) for GitHub Releases and systemd-sysupdate
       cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{installer-version}.efi"
+      cp /layer/boot/vmlinuz "bluefin-server-pxe-vmlinuz-%{installer-version}"
+      cp /installer.cpio.gz "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz"
 
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS
       sha256sum --binary "bluefin-server-%{installer-version}.efi" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-vmlinuz-%{installer-version}" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz" >> SHA256SUMS
       ls -lh
