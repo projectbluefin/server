@@ -24,8 +24,7 @@ metadata:
 - OCI-only image work (no installer involvement).
 - Bootc-specific changes.
 - Desktop or nspawn machine image work.
-- Adding a network-pull installer — the design is offline; the DDI is embedded as
-  a data partition.
+- Adding network DDI fetching — the DDI remains embedded as a data partition.
 
 ## Architecture
 
@@ -134,6 +133,24 @@ This is the gist of the process:
 
 For the detailed build/export/flash/release workflow, see
 [ddi-installer-build.md](ddi-installer-build.md).
+
+## PXE boot artifacts
+
+The installer build also publishes standalone PXE inputs:
+
+- `bluefin-server-pxe-vmlinuz-<ver>` — installer kernel.
+- `bluefin-server-pxe-initrd-<ver>.cpio.gz` — installer initrd.
+
+Both files are included in the installer artifact `SHA256SUMS`. PXE clients can
+boot them with the same command line used by the installer UKI, for example:
+
+```text
+systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended
+```
+
+The DDI is still required on `bluefin-installer-data`; standalone network DDI
+fetching is not supported yet. Use the raw installer image for complete,
+offline installation.
 
 ## Common Rationalizations
 
