@@ -34,6 +34,10 @@ depends:
   - freedesktop-sdk.bst:components/xfsprogs.bst
   - freedesktop-sdk.bst:components/dosfstools.bst
 
+  # Network DDI fetching for PXE installs
+  - freedesktop-sdk.bst:components/curl.bst
+  - freedesktop-sdk.bst:components/sed.bst
+  - freedesktop-sdk.bst:components/zstd.bst
   # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
   - freedesktop-sdk.bst:components/linux.bst
 
