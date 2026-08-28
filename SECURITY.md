@@ -48,7 +48,7 @@ keyring shipped in this repository:
 ```sh
 # Download SHA256SUMS and SHA256SUMS.gpg from the release, then:
 gpg --no-default-keyring \
-    --keyring files/os/sysupdate-keys/import-pubring.pgp \
+    --keyring files/os/sysupdate-keys/import-pubring.gpg \
     --verify SHA256SUMS.gpg SHA256SUMS
 sha256sum --check SHA256SUMS
 ```

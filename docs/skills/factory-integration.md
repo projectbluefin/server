@@ -58,7 +58,7 @@ The workloads the factory tests and ships live in other repositories or image pi
 | Minimal attack surface / no shell in OS | Distroless DDI; optional tools as sysexts |
 | Kubernetes control plane on every node | k3s delivered as `systemd-sysext` |
 | Container workloads | `podman` in the base OS stack |
-| Signed, verifiable release artifacts | GPG-signed `SHA256SUMS` + `import-pubring.pgp` |
+| Signed, verifiable release artifacts | GPG-signed `SHA256SUMS` + `import-pubring.gpg` |
 
 ## Temporary SSH exception
 

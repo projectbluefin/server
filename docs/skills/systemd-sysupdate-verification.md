@@ -42,8 +42,8 @@ Key facts from `sysupdate.d(5)`:
 - `Verify=` in `[Transfer]` is a boolean and defaults to `yes`.
 - When enabled, `systemd-sysupdate` validates the GPG signature of the
   downloaded `SHA256SUMS` manifest.
-- The public keyring is read from `/usr/lib/systemd/import-pubring.pgp` or
-  `/etc/systemd/import-pubring.pgp`.
+- The public keyring is read from `/usr/lib/systemd/import-pubring.gpg` or
+  `/etc/systemd/import-pubring.gpg`.
 
 ## Current implementation status
 
@@ -51,8 +51,8 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
 
 ## Repository Layout
 
-- `files/os/sysupdate-keys/import-pubring.pgp` — public OpenPGP keyring (binary
-  format). Shipped to `/usr/lib/systemd/import-pubring.pgp` by
+- `files/os/sysupdate-keys/import-pubring.gpg` — public OpenPGP keyring (binary
+  format). Shipped to `/usr/lib/systemd/import-pubring.gpg` by
   `elements/bluefin-server/os-sysupdate-keys.bst`.
 - `.github/workflows/build.yml` — assembles all release assets under
   `dist/release/`, generates a single combined `dist/release/SHA256SUMS`,
@@ -82,7 +82,7 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
    EOF
    gpg --batch --gen-key "$GNUPGHOME/keygen"
    KEYID=$(gpg --list-keys --with-colons 'releases@projectbluefin.io' | awk -F: '/^pub:/ {print $5; exit}')
-   gpg --export --output files/os/sysupdate-keys/import-pubring.pgp "$KEYID"
+   gpg --export --output files/os/sysupdate-keys/import-pubring.gpg "$KEYID"
    gpg --export-secret-keys --armor "$KEYID" > /secure/offline/backup.asc
    rm -rf "$GNUPGHOME"
    ```
@@ -111,8 +111,8 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
 - **Testing the trust chain locally.** In a Fedora container
   (`dnf install systemd-udev systemd-container` — the `systemd-pull` helper
   lives in `systemd-container`), copy
-  `files/os/sysupdate-keys/import-pubring.pgp` to
-  `/usr/lib/systemd/import-pubring.pgp`, point `--definitions=` at a scratch
+  `files/os/sysupdate-keys/import-pubring.gpg` to
+  `/usr/lib/systemd/import-pubring.gpg`, point `--definitions=` at a scratch
   copy of a transfer with only `[Target] Path=` rewritten, and run `list` and
   `update`. The live release must yield "Signature verification succeeded";
   gpg's "WARNING: Using untrusted key!" is expected ownertrust noise.
@@ -122,7 +122,7 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
 - [ ] `files/os/sysupdate.d/*.transfer` does not contain `Verify=no`.
 - [ ] `elements/bluefin-server/os-stack.bst` includes
       `bluefin-server/os-sysupdate-keys.bst`.
-- [ ] `files/os/sysupdate-keys/import-pubring.pgp` exists and contains the
+- [ ] `files/os/sysupdate-keys/import-pubring.gpg` exists and contains the
       public half of the key used to sign releases.
 - [ ] CI assembles all release assets under `dist/release/`.
 - [ ] CI generates and signs exactly one combined `dist/release/SHA256SUMS`

@@ -78,8 +78,8 @@ podman run --rm -v "$SCRATCH:/scratch:z" quay.io/fedora/fedora:latest bash -c '
 
 - `systemd-sysupdate` is in `systemd-udev`; the `systemd-pull` helper needed for
   `url-file` sources is in `systemd-container`.
-- For the full trust chain, copy `files/os/sysupdate-keys/import-pubring.pgp`
-  to `/usr/lib/systemd/import-pubring.pgp` inside the container.
+- For the full trust chain, copy `files/os/sysupdate-keys/import-pubring.gpg`
+  to `/usr/lib/systemd/import-pubring.gpg` inside the container.
 
 ### Sysext merge and unit checks
 
