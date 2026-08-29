@@ -9,6 +9,10 @@ description: |
   metadata, Bluefin tuning defaults, and a tmpfiles.d entry that seeds
   those defaults into /etc/rancher/k3s/config.yaml.d/.
 
+# %{systemd-arch} — the extension-release ARCHITECTURE= value, derived from
+# the `arch` option rather than hardcoded in the staged source file.
+(@): include/arch.yml
+
 build-depends:
   # Core runtime for /bin/sh, coreutils, install, and sha256sum.
   - base/base-stack.bst
@@ -54,8 +58,11 @@ config:
       # systemd units (not enabled; provisioning can enable them).
       cp -a k3s.service k3s-agent.service sysext/usr/lib/systemd/system/
 
-      # Extension identity required by systemd-sysext.
+      # Extension identity required by systemd-sysext. ARCHITECTURE= is
+      # generated from the build's `arch` option so it can never disagree
+      # with the architecture of the k3s binary staged above.
       cp -a extension-release.k3s sysext/usr/lib/extension-release.d/
+      echo "ARCHITECTURE=%{systemd-arch}" >> sysext/usr/lib/extension-release.d/extension-release.k3s
 
       # Tuning defaults shipped in /usr and seeded into /etc via tmpfiles.
       cp -a 50-bluefin-tuning.yaml sysext/usr/share/bluefin/k3s/

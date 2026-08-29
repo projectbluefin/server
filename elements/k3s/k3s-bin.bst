@@ -20,4 +20,16 @@ sources:
 
 config:
   install-commands:
+    - |
+      # The pinned `sources` entry above is the upstream amd64 asset (its
+      # SHA256 comes from sha256sum-amd64.txt). Nothing downstream inspects
+      # the ELF, so under any other `arch` this would silently stage an
+      # x86-64 binary into a foreign rootfs. Fail closed instead; adding the
+      # k3s-arm64 source is a deliberate, separate change.
+      if [ "%{arch}" != "x86_64" ]; then
+        echo "ERROR: elements/k3s/k3s-bin.bst pins the upstream k3s amd64 binary;" >&2
+        echo "       arch=%{arch} has no pinned source. Add an arch-conditional" >&2
+        echo "       source (k3s-arm64) before building k3s for %{arch}." >&2
+        exit 1
+      fi
     - install -D -m 0755 k3s "%{install-root}/usr/bin/k3s"

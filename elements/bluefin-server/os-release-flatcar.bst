@@ -1,6 +1,9 @@
 kind: manual
 description: Create custom Flatcar-compatible os-release metadata to support Flatcar system extensions (sysext).
 
+# %{flatcar-board} — derived from the `arch` option, never hardcoded here.
+(@): include/arch.yml
+
 build-depends:
   # Needed so the manual-element sandbox provides /bin/sh and coreutils (cat, ln, mkdir, sed).
   - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
@@ -45,7 +48,7 @@ config:
       ANSI_COLOR="0;38;5;208"
       HOME_URL="https://github.com/projectbluefin/server"
       BUG_REPORT_URL="https://github.com/projectbluefin/server/issues"
-      FLATCAR_BOARD="amd64-usr"
+      FLATCAR_BOARD="%{flatcar-board}"
       CPE_NAME="cpe:/o:flatcar-linux:flatcar_linux:${FLATCAR_VERSION}"
       IMAGE_VERSION=${FSDK_VERSION}
       EOF
