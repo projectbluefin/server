@@ -30,7 +30,7 @@ Every `uses:` line must reference a full commit SHA. Never use `@v2` or `@main`.
 
 ```yaml
 # correct
-- uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb # v2
+- uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2
 
 # wrong — mutable tag, supply-chain risk
 - uses: taiki-e/install-action@v2
@@ -43,7 +43,7 @@ before adding an action.
 ### Installing `just` — taiki-e/install-action, not snap/cargo/apt
 
 ```yaml
-- uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb # v2
+- uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2
   with:
     tool: just
 ```
