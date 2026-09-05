@@ -1,0 +1,47 @@
+name: Unit tests
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/unit-tests.yml'
+      - 'files/**'
+      - 'tests/unit/**'
+      - 'Justfile'
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/unit-tests.yml'
+      - 'files/**'
+      - 'tests/unit/**'
+      - 'Justfile'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y bats
+          pip install pytest pyyaml
+
+      - name: Set up just
+        uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2
+        with:
+          tool: just
+
+      - name: Run unit tests
+        run: just test-unit

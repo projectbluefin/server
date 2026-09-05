@@ -56,10 +56,11 @@ validate:
     just bst show --deps all oci/bluefin-server-installer.bst
     just bst show --deps all oci/k3s-sysext.bst
 
-# Run the Python unit tests for .github/scripts/.
+# Run the unit test suite (pytest + bats).
 [group('dev')]
 test-unit:
     python3 -m pytest tests/unit -q
+    bats tests/unit
 
 # ── Build ─────────────────────────────────────────────────────────────
 # Build and export the installer (DDI is embedded; built as a dependency).
