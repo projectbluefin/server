@@ -12,3 +12,9 @@ repos:
         entry: actionlint
         language: system
         files: ^\.github/workflows/.*\.(yml|yaml)$
+      - id: check-release-version
+        name: release-version matches pinned FSDK point release
+        entry: python .github/scripts/check-release-version.py
+        language: system
+        pass_filenames: false
+        files: ^(project\.conf|elements/freedesktop-sdk\.bst|\.github/scripts/check-release-version\.py)$
