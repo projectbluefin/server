@@ -24,7 +24,7 @@ k8s ROLE="server" TOKEN="":
         echo "==> Seeding neutral defaults for k3s role: {{ROLE}}"
         cat <<EOF > /etc/rancher/k3s/config.yaml
 # Seeded by just k8s
-write-kubeconfig-mode: "0644"
+write-kubeconfig-mode: "0600"
 EOF
         if [ -n "{{TOKEN}}" ]; then
             echo "token: \"{{TOKEN}}\"" >> /etc/rancher/k3s/config.yaml
