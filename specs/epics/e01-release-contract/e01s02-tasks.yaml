@@ -1,0 +1,21 @@
+story_id: e01s02
+title: Verify signed release manifests before upload
+status: failing
+bcps: 5
+tasks:
+  - id: 1
+    description: Add a standard-library release asset and manifest verifier with negative checks for stale, missing, duplicate, or unexpected assets.
+    verify: python3 .github/scripts/verify-release.py --help
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [security, release]
+  - id: 2
+    description: Gate signing and upload on filename-set, checksum, and detached-signature verification and stop masking release creation failures.
+    verify: actionlint .github/workflows/build.yml
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [security, ci]

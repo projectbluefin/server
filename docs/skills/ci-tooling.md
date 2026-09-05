@@ -87,27 +87,32 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
 | `build-and-release` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile, and uploads DDI/installer/sysext assets to GitHub Releases on push to `main`. |
+| `pytest` | `tests.yml` | `pull_request`, `push/main` (paths: `.github/scripts/**`, `tests/**`) | Runs the pytest unit tests in `tests/` (e.g. `verify-release.py` coverage). |
 
 GitHub Actions runs the **complete BuildStream compilation pipeline** using `/mnt`
 SSD storage on the runner for podman and BuildStream caches. Release assets are
-uploaded to a GitHub Release tagged `installer-v<FSDK-RELEASE>`.
+uploaded to a GitHub Release tagged `bluefin-server-v<FSDK-RELEASE>`.
 
 ## Core Process
 
-1. **Renovate tracking:** `renovate.json` is configured with a custom regex
+1. **Renovate tracking:** `renovate.json5` is configured with a custom regex
    manager to scan BuildStream junction files (`freedesktop-sdk.bst` and
-   `gnome-build-meta.bst`) using the `git-refs` datasource.
+   `freedesktop-sdk.bst`) using the `git-refs` datasource.
 2. **Auto-resolution:** On Renovate PRs, GitHub Actions executes
-   `just bst source track` to resolve raw tags to full `git-describe` refs and
-   commits them back to the PR branch.
+   `just bst source track` to resolve raw tags to full `git-describe` refs,
+   re-syncs `release-version` in `project.conf` to the pinned FSDK point
+   release, and commits both back to the PR branch. `just check-version`
+   then fails the run if the two ever drift apart.
 3. **Full Compilation:** Builds the standalone DDI OS image, live installer, and
    k3s systemd-sysext on every pull request and push to `main`.
 4. **Version Derivation:** The release tag is derived with `just version`, which
    parses the pinned FSDK point release from `elements/freedesktop-sdk.bst`.
 5. **Automated Publishing:** For pushes to `main` (including Renovate PR merges),
-   GitHub Actions creates a GitHub Release, uploads all compiled assets, and
-   produces a combined `dist/release/SHA256SUMS` plus detached
-   `SHA256SUMS.gpg` for `systemd-sysupdate` verification.
+   GitHub Actions creates a GitHub Release, uploads all compiled assets plus
+   BuildStream-native SPDX SBOMs (`just sboms`, see `signing-and-sbom.md`),
+   and produces a combined `dist/release/SHA256SUMS` plus detached
+   `SHA256SUMS.gpg` for `systemd-sysupdate` verification. SBOMs are part of
+   the signed manifest, enforced by `verify-release.py`.
 
 ## Common Rationalizations
 
@@ -128,6 +133,8 @@ uploaded to a GitHub Release tagged `installer-v<FSDK-RELEASE>`.
 - [ ] Every `uses:` line has a full 40-character SHA and a `# vX` comment.
 - [ ] `just validate` passes after workflow changes.
 - [ ] No new mutable action refs introduced.
+- [ ] `.github/scripts/verify-release.py` rejects missing, stale, duplicate, or
+      unexpected release artifacts before signing.
 - [ ] The release signing step uploads detached `.gpg` signatures for every
       combined `SHA256SUMS` manifest.
 - [ ] The signing secret name matches the one documented in

@@ -1,0 +1,9 @@
+id: e05
+slug: alpha-release
+title: Alpha 2 release evidence and publication
+status: planned
+stories:
+  - id: e05s01
+    title: Publish verified Bluefin Server release evidence
+    bcps: 5
+    delta: ADDED

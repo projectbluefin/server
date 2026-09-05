@@ -1,0 +1,21 @@
+project: bluefin-server
+project_cycle:
+  current_phase: 3
+  completed_phases: [1, 2]
+  release_id: bluefin-server-alpha-2
+active_flow: plan_work
+active_epic_id: e01
+active_story_id: e01s01
+session:
+  started_at: 2026-07-20T23:00:00Z
+  branch: docs/overhaul-and-gaps
+  note: Alpha 2 release hardening follows the audited release gaps.
+handoff:
+  last_step_completed: scope-and-release-plan
+  next_skill: plan-work
+open_decisions: []
+decisions:
+  - Immutable Alpha 2 contract is read-only vendor /usr with writable supported state, not a blind read-only / mount.
+risks:
+  - Existing branch contains unrelated README.md changes.
+  - Downstream factory boot-test workflow is external to this repository.

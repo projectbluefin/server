@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+artifacts=("$root_dir"/dist/bluefin-server-installer-*.raw.zst)
+
+if (( $# != 1 )); then
+  echo "ERROR: expected the pinned bst2 image as the only argument" >&2
+  exit 1
+fi
+bst2_image="$1"
+
+if (( ${#artifacts[@]} != 1 )) || [[ ! -f "${artifacts[0]}" ]]; then
+  echo "ERROR: expected exactly one exported installer in $root_dir/dist/" >&2
+  exit 1
+fi
+
+for command in qemu-system-x86_64 zstd timeout podman; do
+  command -v "$command" >/dev/null || {
+    echo "ERROR: required host command is unavailable: $command" >&2
+    exit 1
+  }
+done
+
+podman_cmd=(podman)
+if ! podman info >/dev/null 2>&1; then
+  command -v sudo >/dev/null || {
+    echo "ERROR: rootless podman is unavailable and sudo is not installed" >&2
+    exit 1
+  }
+  podman_cmd=(sudo podman)
+fi
+
+if [[ ! -r /dev/kvm ]]; then
+  echo "ERROR: /dev/kvm is unavailable; hardware virtualization is required" >&2
+  exit 1
+fi
+
+qemu_prefix=""
+if command -v brew >/dev/null; then
+  qemu_prefix="$(brew --prefix qemu 2>/dev/null || true)"
+fi
+
+find_firmware() {
+  local candidate
+  for candidate in "$@"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ovmf_code="${OVMF_CODE:-}"
+if [[ -z "$ovmf_code" ]]; then
+  ovmf_code="$(find_firmware \
+    "$qemu_prefix/share/qemu/edk2-x86_64-code.fd" \
+    /usr/share/edk2/ovmf/OVMF_CODE.fd \
+    /usr/share/OVMF/OVMF_CODE.fd \
+    /usr/share/OVMF/OVMF_CODE_4M.fd \
+    /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+    /usr/share/qemu/OVMF_CODE.fd)" || {
+      echo "ERROR: OVMF firmware not found; set OVMF_CODE to its path" >&2
+      exit 1
+    }
+fi
+
+ovmf_vars="${OVMF_VARS:-}"
+if [[ -z "$ovmf_vars" ]]; then
+  ovmf_vars="$(find_firmware \
+    "$qemu_prefix/share/qemu/edk2-x86_64-vars.fd" \
+    /usr/share/edk2/ovmf/OVMF_VARS.fd \
+    /usr/share/OVMF/OVMF_VARS.fd \
+    /usr/share/OVMF/OVMF_VARS_4M.fd \
+    /usr/share/edk2/x64/OVMF_VARS.4m.fd \
+    /usr/share/qemu/OVMF_VARS.fd)" || true
+fi
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}"
+mkdir -p "$cache_dir"
+workdir="$(mktemp -d "$cache_dir/bluefin-installer-test.XXXXXX")"
+installer_log="$workdir/installer-serial.log"
+boot_log="$workdir/boot-serial.log"
+qemu_log="$workdir/qemu.log"
+boot_pid=""
+firmware_container=""
+passed=0
+
+cleanup() {
+  if [[ -n "$boot_pid" ]] && kill -0 "$boot_pid" 2>/dev/null; then
+    kill "$boot_pid"
+    wait "$boot_pid" || true
+  fi
+  if [[ -n "$firmware_container" ]]; then
+    "${podman_cmd[@]}" rm -f "$firmware_container" >/dev/null 2>&1 || true
+  fi
+  if (( passed )); then
+    rm -rf "$workdir"
+  else
+    echo "Diagnostics retained at: $workdir" >&2
+  fi
+}
+trap cleanup EXIT
+
+stage_firmware() {
+  firmware_container="$("${podman_cmd[@]}" create "$bst2_image")" || {
+    echo "ERROR: unable to create the cached bst2 firmware container" >&2
+    exit 1
+  }
+  if ! "${podman_cmd[@]}" cp "${firmware_container}:/usr/share/qemu/edk2-x86_64-code.fd" "$workdir/ovmf-code.fd" ||
+    ! "${podman_cmd[@]}" cp "${firmware_container}:/usr/share/qemu/edk2-i386-vars.fd" "$workdir/ovmf-vars-template.fd"; then
+    echo "ERROR: unable to stage UEFI firmware from $bst2_image" >&2
+    exit 1
+  fi
+  "${podman_cmd[@]}" rm -f "$firmware_container" >/dev/null
+  firmware_container=""
+}
+
+if [[ -z "$ovmf_code" || -z "$ovmf_vars" ]]; then
+  stage_firmware
+  ovmf_code="${ovmf_code:-$workdir/ovmf-code.fd}"
+  ovmf_vars="${ovmf_vars:-$workdir/ovmf-vars-template.fd}"
+fi
+
+if [[ ! -r "$ovmf_code" || ! -r "$ovmf_vars" ]]; then
+  echo "ERROR: UEFI firmware is unreadable; set OVMF_CODE and OVMF_VARS" >&2
+  exit 1
+fi
+
+show_log() {
+  local log="$1"
+  echo "----- $(basename "$log") -----" >&2
+  tail -n 200 "$log" >&2 || true
+}
+
+zstd -d --quiet "${artifacts[0]}" -o "$workdir/installer.raw"
+cp "$ovmf_vars" "$workdir/ovmf-vars.fd"
+truncate -s 16G "$workdir/target.raw"
+
+qemu_args=(
+  -enable-kvm
+  -m 4096
+  -cpu host
+  -smp 2
+  -nographic
+  -monitor none
+  -nic none
+  -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code"
+  -drive "if=pflash,format=raw,file=$workdir/ovmf-vars.fd"
+)
+
+echo "==> Installing Bluefin Server in QEMU..."
+set +e
+timeout --preserve-status --kill-after=30s 1800 qemu-system-x86_64 \
+  "${qemu_args[@]}" \
+  -drive "file=$workdir/installer.raw,format=raw,if=virtio,readonly=on" \
+  -drive "file=$workdir/target.raw,format=raw,if=virtio" \
+  -serial "file:$installer_log" >>"$qemu_log" 2>&1
+installer_status=$?
+set -e
+if (( installer_status != 0 )); then
+  echo "ERROR: installer VM exited with status $installer_status" >&2
+  show_log "$installer_log"
+  show_log "$qemu_log"
+  exit 1
+fi
+if grep -qiE 'kernel panic - not syncing|dracut:.*fatal|ERROR: No suitable target disk|\[FAILED\] Failed to start System Install Tool' "$installer_log"; then
+  echo "ERROR: installer serial output contains a failure marker" >&2
+  show_log "$installer_log"
+  exit 1
+fi
+
+echo "==> Booting the installed system..."
+qemu-system-x86_64 \
+  "${qemu_args[@]}" \
+  -drive "file=$workdir/target.raw,format=raw,if=virtio" \
+  -serial "file:$boot_log" >>"$qemu_log" 2>&1 &
+boot_pid=$!
+
+deadline=$((SECONDS + 300))
+while (( SECONDS < deadline )); do
+  if grep -qiE 'kernel panic - not syncing|dracut:.*fatal|error: unable to boot|no supported file system' "$boot_log" 2>/dev/null; then
+    echo "ERROR: installed system serial output contains a failure marker" >&2
+    show_log "$boot_log"
+    exit 1
+  fi
+  if grep -qE 'Reached target .*[Ss]ystem|Startup finished in' "$boot_log" 2>/dev/null; then
+    kill "$boot_pid"
+    wait "$boot_pid" || true
+    boot_pid=""
+    passed=1
+    echo "Bluefin Server installer-to-boot test passed"
+    exit 0
+  fi
+  if ! kill -0 "$boot_pid" 2>/dev/null; then
+    wait "$boot_pid" || true
+    boot_pid=""
+    echo "ERROR: installed system VM exited before reaching a systemd target" >&2
+    show_log "$boot_log"
+    show_log "$qemu_log"
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "ERROR: installed system did not reach a systemd target within 300 seconds" >&2
+show_log "$boot_log"
+exit 1

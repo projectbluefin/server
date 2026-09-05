@@ -4,7 +4,7 @@ description: Enable, test, and troubleshoot the k3s systemd-sysext after it is b
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
   context7-sources:
     - /systemd/systemd
 ---
@@ -13,7 +13,19 @@ metadata:
 Use this skill when you need to enable the k3s sysext on a host, troubleshoot
 runtime issues, or validate the sysext and OTA delivery path.
 
-## Enabling k3s on a host
+## When to Use
+
+- Enabling a k3s server or agent role on a host.
+- Troubleshooting sysext merge, unit, or tuning-default problems at runtime.
+- Testing OTA delivery and the sysupdate trust chain without a lab VM.
+
+## When NOT to Use
+
+- Building or publishing the sysext — see [k3s-sysext.md](k3s-sysext.md).
+- Transfer-file or signing-key changes — see
+  [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
+
+## Core Process
 
 Because the OS image has no shell and `/usr` is read-only, role selection is
 performed with systemd unit enablement and a drop-in config file rather than by
@@ -60,6 +72,28 @@ not merged by k3s; they are plain YAML files in the config directory.
   OS `os-release`.
 - **The base DDI does not include k3s.** k3s is delivered OTA or dropped into
   `/var/lib/extensions/` by provisioning.
+- **Known issue — `just k8s <ROLE> <TOKEN>` exposes the token on the command
+  line.** The optional `TOKEN` argument is visible in shell history and the
+  process list. This exposure remains open until first-boot credential
+  provisioning (release epic e02) lands; until then, prefer writing
+  `/etc/rancher/k3s/config.yaml` directly and keeping it mode `0600` (the
+  recipe enforces `0600` on the file either way).
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "Just run the upstream k3s install script." | There is no shell in the OS image; enable the shipped units and write `/etc/rancher/k3s/config.yaml`. |
+| "Passing the token as a CLI argument is fine." | It lands in shell history and the process list; write the config file directly (mode `0600`). |
+| "Edit the tuning defaults in `/etc` in place." | The tmpfiles rule only copies from `/usr` when no `/etc` copy exists; manage the source file or accept drift. |
+
+## Red Flags
+
+- `k3s.service` or `k3s-agent.service` enabled by default in the image.
+- `/bin/sh` references reintroduced into unit `ExecStartPre` lines.
+- `ID=` in `extension-release.k3s` scoped to a specific OS version without
+  updating the base OS `os-release`.
+- k3s binaries or tooling added to the base DDI instead of the sysext.
 
 ## Runtime testing without a lab VM
 

@@ -4,7 +4,7 @@ description: Understand Bluefin Server's role as the core OS for an image-based 
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
 ---
 # Factory Integration
 
@@ -60,9 +60,24 @@ The workloads the factory tests and ships live in other repositories or image pi
 | Container workloads | `podman` in the base OS stack |
 | Signed, verifiable release artifacts | GPG-signed `SHA256SUMS` + `import-pubring.pgp` |
 
-## Temporary SSH exception
+## Core Process
 
-> `sshd` is enabled for bring-up and cluster boot tests, and root login is permitted with password and pubkey. The lab runs the `bluefin-server-boot-test` Argo workflow (in the downstream factory CI repository) to verify installer → first-boot success. SSH will be removed once diagnostics can be driven entirely by serial logs or a guest agent.
+When deciding where a new capability belongs:
+
+1. Is it required to boot, install, or update the core OS? It may go in the
+   base DDI — justify it against the factory core-OS role.
+2. Is it an optional platform layer (Kubernetes, debugging tooling)? Ship it
+   as a `systemd-sysext` with its own sysupdate transfer, like k3s.
+3. Is it a workload or interactive tool? Run it as a `podman` container or a
+   `machinectl` system container.
+4. Never add it to `elements/bluefin-server/os-stack.bst` just because that is
+   the easiest place.
+
+## SSH policy
+
+> OpenSSH is installed in the OS DDI but `sshd.service` is disabled by default. When an operator enables it, authentication is key-only (`PermitRootLogin prohibit-password`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`), so the service fails closed without a provisioned authorized key. First-boot SSH-key provisioning is not implemented; it is tracked separately in the credential-provisioning work (see `docs/MVP_1_0_READINESS.md`). The lab runs the `bluefin-server-boot-test` Argo workflow (in the downstream factory CI repository) to verify installer → first-boot success over serial or guest-agent diagnostics, not SSH.
+
+The sshd vendor config and policy drop-in live under `/usr/etc` (`/usr/etc/ssh/sshd_config`, `/usr/etc/ssh/sshd_config.d/bluefin-server.conf`) per the [`/usr/etc` policy](systemd-sysext-extensions.md). Upstream OpenSSH compiles in `/etc/ssh/sshd_config`, so the documented compatibility mechanism — produced by `elements/bluefin-server/os-sshd-config.bst` — is a single relative symlink `/etc/ssh/sshd_config → ../../usr/etc/ssh/sshd_config`. Operator and systemd userdb drop-ins in `/etc/ssh/sshd_config.d/*.conf` are included before the vendor drop-in (first-match-wins), so policy is overridable via mutable `/etc` and the systemd wiring stays effective. Because `/etc` ships inside the root image, such drop-in edits are boot-local across root-image OTA replacement; durable overrides belong in a `systemd-confext` under `/var/lib/confexts/`.
 
 ## When to Use
 
@@ -83,7 +98,7 @@ The workloads the factory tests and ships live in other repositories or image pi
 |---|---|
 | “k3s should be in the base image.” | Keep the OS DDI minimal. k3s is optional and delivered OTA as a sysext. |
 | “We can pull the DDI at install time.” | Unattended installs must survive network loss; the DDI is embedded in the installer media. |
-| “Let’s add a shell for debugging.” | Shells belong in sysexts or system containers, not in the distroless DDI. (Temporary exception: SSH during bring-up; see above.) |
+| “Let’s add a shell for debugging.” | Shells belong in sysexts or system containers, not in the distroless DDI. (OpenSSH is installed but opt-in and key-only; see above.) |
 | “Package updates are small patches.” | Image-based updates are whole-OS replacements; the rollback unit is the OS image, not a package delta. |
 
 ## Red Flags

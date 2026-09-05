@@ -4,7 +4,7 @@ description: How to add, split, rename, and refactor docs/skills files for Bluef
 metadata:
   type: meta-skill
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
 ---
 # Skill Improvement — How to Maintain Agent Docs
 
@@ -17,6 +17,30 @@ This is the meta-skill for the documentation loop. Any change that touches `AGEN
 - Renaming, merging, or deleting a skill.
 - Changing skill front-matter schema or the lazy-loading contract.
 - Updating CI doc checks.
+
+## When NOT to Use
+
+- Changing technical content of one skill without touching structure — edit that
+  skill directly.
+- Repository workflow, labels, or ownership — that lives in the shared label
+  workflow docs, not here.
+
+## Skill body anatomy
+
+Every actual skill (everything except `index.md`, which is a router) follows
+the canonical anatomy, in this order:
+
+1. YAML front-matter (`name`, `description`, `metadata`).
+2. `## When to Use`
+3. `## When NOT to Use`
+4. `## Core Process` (or the file's existing procedure section, renamed to it)
+5. Domain-specific sections as needed.
+6. `## Common Rationalizations`
+7. `## Red Flags`
+8. `## Verification` (checklist)
+
+Keep domain sections between Core Process and Common Rationalizations. Do not
+add session logs, issue backlogs, or live PR numbers to skill bodies.
 
 ## What counts as learning worth writing down
 
@@ -33,7 +57,7 @@ Write it once in the relevant skill. Do not paste the same fact into multiple fi
 - Internal-only hostnames, private URLs, or proprietary names — docs must be generic and reusable.
 - TODO or FIXME notes — move unfinished work to an issue before merging.
 
-## The loop
+## Core Process
 
 1. Do the work.
 2. Update the skill that matches the changed domain.
@@ -96,7 +120,22 @@ A skill should split when it exceeds 300 lines or mixes a decision tree with lon
 - Child reference files load only when the parent links to them.
 - Cross-skill facts are resolved via one-line links, not copy-paste.
 
-## Verification before handoff
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "I'll update the docs in a follow-up." | The skill update is part of the change; handoff lists the changed skill files. |
+| "This fact matters, so put it in every skill." | One canonical home; everywhere else gets a one-line link. |
+| "A 600-line skill is fine." | Split at 300 lines; 500 is the hard maximum enforced by CI. |
+
+## Red Flags
+
+- A skill whose `name` does not match its filename stem.
+- The same fact written in two skill files.
+- A new or renamed skill missing from `docs/skills/index.md` or `AGENTS.md`.
+- Unfinished-work markers left in a merged doc.
+
+## Verification
 
 - [ ] `just validate` passes (if any code or build element changed).
 - [ ] No skill file exceeds 500 lines.

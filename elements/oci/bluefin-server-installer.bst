@@ -21,7 +21,7 @@ description: |
   Build pipeline:
     1. Add /init symlink + mount points
     2. Link default.target -> system-install.target
-    3. Pack rootfs as newc cpio + gzip -> installer.cpio.gz
+    3. Pack rootfs as newc cpio + Zstandard -> installer.cpio.zst
     4. ukify build: kernel + cpio.gz -> installer.efi (unsigned UKI)
     5. Decompress DDI payload into /layer for embedding (after cpio, not in initrd)
     6. systemd-repart --empty=create: assemble two-partition GPT disk
@@ -86,24 +86,72 @@ config:
         echo "ERROR: no kernel module tree found under /target-root/usr/lib/modules" >&2
         exit 1
       fi
+      KERNEL="/target-root/usr/lib/modules/${KVER}/vmlinuz"
+      if [ ! -f "${KERNEL}" ]; then
+        echo "ERROR: target kernel is missing at ${KERNEL}" >&2
+        exit 1
+      fi
       depmod -b /target-root "${KVER}"
-      # Regenerate dynamic linker cache inside the build container so dracut-install can find system libraries (e.g. libc.so.6, libgcc_s.so.1)
-      ldconfig
+      # Build the target-root cache, then stage it at the initrd's /etc path
+      # so PID 1 resolves FSDK's private systemd libraries at early boot.
+      # glibc requires absolute includes when generating a cache under -r.
+      mkdir -p /target-root/tmp
+      printf '/usr/lib/x86_64-linux-gnu\n/usr/lib/x86_64-linux-gnu/systemd\ninclude /etc/ld.so.conf.d/*.conf\n' \
+        > /target-root/tmp/ld.so.conf
+      ldconfig -r /target-root -f /tmp/ld.so.conf
+      rm /target-root/tmp/ld.so.conf
+      cp /target-root/etc/ld.so.cache /etc/ld.so.cache
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS and VirtIO block/scsi storage drivers.
       # Since we build inside a container sandbox, dracut won't detect the VM virtual disks automatically
       # and will produce an unbootable/panicking host-only initrd unless forced.
       dracut -v --reproducible --no-machineid --no-hostonly \
         --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs" \
         --filesystems "xfs vfat" \
+        --install /etc/ld.so.cache \
+        --install /usr/lib/x86_64-linux-gnu/libc.so.6 \
+        --install /usr/lib/x86_64-linux-gnu/libm.so.6 \
+        --install /usr/bin/mount \
+        --install /usr/lib/x86_64-linux-gnu/libmount.so.1 \
+        --install /usr/lib/x86_64-linux-gnu/libblkid.so.1 \
+        --install /usr/lib/x86_64-linux-gnu/libeconf.so.0 \
+        --install /usr/lib/x86_64-linux-gnu/libreadline.so.8 \
+        --install /usr/lib/x86_64-linux-gnu/libtinfo.so.6 \
+        --install /usr/lib/x86_64-linux-gnu/libncursesw.so.6 \
+        --install /usr/lib/x86_64-linux-gnu/libtinfow.so.6 \
         --kmoddir "/target-root/usr/lib/modules/${KVER}" \
-        --kernel-image /target-root/boot/vmlinuz \
+        --kernel-image "${KERNEL}" \
         --kver "${KVER}" \
-        --kernel-cmdline "rw console=ttyS0,115200 console=tty0" \
+        --kernel-cmdline "rw console=tty0 console=ttyS0,115200" \
         /tmp/bluefin-server-target.initramfs
+      # The kernel does not mount devtmpfs before launching this initramfs.
+      # Mount it without systemd's unsupported size option, then launch PID 1.
+      mkdir -p /tmp/bluefin-server-target-initrd
+      zstd -d /tmp/bluefin-server-target.initramfs \
+        -o /tmp/bluefin-server-target-initrd/initrd.cpio
+      ( cd /tmp/bluefin-server-target-initrd \
+        && cpio --extract --make-directories --no-absolute-filenames \
+          < /tmp/bluefin-server-target-initrd/initrd.cpio )
+      mkdir -p /tmp/bluefin-server-target-initrd/tmp
+      printf '/usr/lib/x86_64-linux-gnu\n/usr/lib/x86_64-linux-gnu/systemd\n' \
+        > /tmp/bluefin-server-target-initrd/tmp/ld.so.conf
+      ldconfig -r /tmp/bluefin-server-target-initrd -C /etc/ld.so.cache -f /tmp/ld.so.conf
+      rm /tmp/bluefin-server-target-initrd/tmp/ld.so.conf
+      rm /tmp/bluefin-server-target-initrd/init
+      cat > /tmp/bluefin-server-target-initrd/init << 'EOF'
+      #!/usr/bin/bash
+      set -eu
+      /usr/bin/mount -t devtmpfs -o mode=0755 devtmpfs /dev
+      exec /usr/lib/systemd/systemd
+      EOF
+      chmod +x /tmp/bluefin-server-target-initrd/init
+      ( cd /tmp/bluefin-server-target-initrd \
+        && find . -print0 | cpio --null --create --format=newc ) \
+        | zstd -q -19 -c > /tmp/bluefin-server-target.initramfs
+      rm -rf /tmp/bluefin-server-target-initrd
       ukify build \
-        --linux=/target-root/boot/vmlinuz \
+        --linux="${KERNEL}" \
         --initrd=/tmp/bluefin-server-target.initramfs \
-        --cmdline="rw console=ttyS0,115200 console=tty0" \
+        --cmdline="rw console=tty0 console=ttyS0,115200" \
         --output=/target-root/boot/EFI/Linux/bluefin-server.efi
       cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
       # System users for networkd/resolved
@@ -129,7 +177,12 @@ config:
 
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
       TARGET_DISK=""
+      udevadm settle
       INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"
+      INSTALLER_DISK=""
+      if [ -n "${INSTALLER_PART}" ]; then
+        INSTALLER_DISK="/dev/$(lsblk -no PKNAME "${INSTALLER_PART}")"
+      fi
 
       while read -r name type ro size; do
         [ "${type}" = "disk" ] || continue
@@ -137,7 +190,7 @@ config:
         [ "${size}" -gt 0 ] || continue
 
         # Skip the disk containing the installer partition
-        if [ -n "${INSTALLER_PART}" ] && [[ "${INSTALLER_PART}" == "${name}"* ]]; then
+        if [ -n "${INSTALLER_DISK}" ] && [ "${INSTALLER_DISK}" = "${name}" ]; then
           continue
         fi
 
@@ -151,15 +204,16 @@ config:
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then
           echo "==> Auto-detected target disk: ${TARGET_DISK}"
-          exec /usr/bin/systemd-sysinstall \
+          exec /usr/bin/systemd-sysinstall "${TARGET_DISK}" \
             --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
+            --definitions=/usr/lib/repart.d \
             --erase=yes \
             --confirm=no \
             --summary=no \
             --variables=yes \
             --reboot=no \
-            --mute-console=yes \
-            "${TARGET_DISK}" < /dev/null
+            --mute-console=no \
+            </dev/console >/dev/console 2>&1
         else
           echo "ERROR: No suitable target disk found for unattended installation!" >&2
           exit 1
@@ -168,6 +222,7 @@ config:
         echo "==> Running in INTERACTIVE mode..."
         exec /usr/bin/systemd-sysinstall \
           --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
+          --definitions=/usr/lib/repart.d \
           --variables=yes \
           --reboot=yes \
           --mute-console=yes \
@@ -239,8 +294,8 @@ config:
 
       ( cd /layer && find . -print0 \
           | cpio --null --create --format=newc ) \
-        | gzip -9 -c > /installer.cpio.gz
-      ls -lh /installer.cpio.gz
+        | zstd -q -19 -c > /installer.cpio.zst
+      ls -lh /installer.cpio.zst
 
     # ── Step 4: Build the UKI ────────────────────────────────────────────
     # Unsigned UKI — acceptable for USB installer media. Secure Boot
@@ -249,9 +304,15 @@ config:
     - |
       set -eu
       mkdir -p /layer/boot/efi/EFI/BOOT
+      KVER="$(basename "$(find /layer/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
+      KERNEL="/layer/usr/lib/modules/${KVER}/vmlinuz"
+      if [ ! -f "${KERNEL}" ]; then
+        echo "ERROR: installer kernel is missing at ${KERNEL}" >&2
+        exit 1
+      fi
       ukify build \
-        --linux="/layer/boot/vmlinuz" \
-        --initrd=/installer.cpio.gz \
+        --linux="${KERNEL}" \
+        --initrd=/installer.cpio.zst \
         --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended" \
         --output=/layer/boot/efi/EFI/BOOT/BOOTX64.EFI
       ls -lh /layer/boot/efi/EFI/BOOT/BOOTX64.EFI

@@ -4,7 +4,7 @@ description: Add or document system containers that should behave like first-cla
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
   context7-sources:
     - /systemd/systemd
 ---
@@ -33,7 +33,7 @@ runtime UI.
 - Adding a distroless OCI runtime image — the server repo does not build those.
 - Kubernetes workload or cluster questions — use `k3s-sysext.md`.
 
-## Lifecycle
+## Core Process
 
 The OS image ships a small helper at `/usr/bin/system-container`:
 
@@ -94,6 +94,20 @@ To run a command inside a running machine:
 ```bash
 systemd-run --machine=homebrew --pty /usr/bin/env
 ```
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "Run the toolbox with podman like everything else." | The design is a transparent machine experience managed by `machinectl`, not a container-runtime UI. |
+| "Let Homebrew auto-update inside the toolbox." | Set `HOMEBREW_NO_AUTO_UPDATE=1`; updates are explicit so the environment stays reproducible. |
+| "Any writable prefix works for Homebrew." | Use `/home/linuxbrew` so the prefix matches standard Linux Homebrew behavior. |
+
+## Red Flags
+
+- Toolbox images documented as OCI images or sysexts.
+- `files/bin/system-container` diverging from plain `machinectl` operations.
+- Homebrew installed to a prefix other than `/home/linuxbrew`.
 
 ## Verification
 

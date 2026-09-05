@@ -1,0 +1,39 @@
+release:
+  id: bluefin-server-alpha-2
+  target: bluefin-server-v26.08.0
+  goal: >-
+    Produce a version-consistent, signed, boot-tested Bluefin Server alpha
+    with recoverable image updates and systemd-native first-boot provisioning.
+  status: planned
+  scope: specs/product/SCOPE_LATEST.yaml
+epics:
+  - id: e01
+    slug: release-contract
+    title: Release identity and verification
+    wsjf: 10
+    bcps: 5
+    depends_on: []
+  - id: e02
+    slug: immutable-provisioning
+    title: Immutable runtime and first-boot credentials
+    wsjf: 9
+    bcps: 8
+    depends_on: [e01]
+  - id: e03
+    slug: ab-recovery
+    title: Coupled A/B root and UKI recovery
+    wsjf: 10
+    bcps: 13
+    depends_on: [e01, e02]
+  - id: e04
+    slug: factory-gate
+    title: Installer boot-test release gate
+    wsjf: 8
+    bcps: 8
+    depends_on: [e01, e02, e03]
+  - id: e05
+    slug: alpha-release
+    title: Alpha 2 release evidence and publication
+    wsjf: 7
+    bcps: 5
+    depends_on: [e01, e02, e03, e04]

@@ -19,13 +19,13 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Set up just
-        uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb # v2
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
         with:
           tool: just
 
@@ -38,12 +38,18 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           just bst source track freedesktop-sdk.bst || true
-          just bst source track gnome-build-meta.bst || true
+          # Keep project.conf release-version in lockstep with the pinned FSDK
+          # point release so `just check-version` passes on the Renovate PR.
+          V="$(grep -oE 'freedesktop-sdk-[0-9]+\.[0-9]+\.[0-9]+' elements/freedesktop-sdk.bst | head -1 | sed 's/freedesktop-sdk-//')"
+          sed -i -E "s/release-version: \"[0-9]+\.[0-9]+\.[0-9]+\"/release-version: \"${V}\"/" project.conf
           if ! git diff --exit-code; then
-            git add elements/
-            git commit -m "chore: resolve BuildStream junction refs to git-describe format" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+            git add elements/ project.conf
+            git commit -m "chore: resolve BuildStream junction refs to git-describe format and sync release-version" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
             git push origin "HEAD:${HEAD_REF}"
           fi
+
+      - name: Validate release version
+        run: just check-version
 
       - name: Validate Element Graph
         run: just validate
@@ -78,25 +84,44 @@ jobs:
           just build-sysext
           just export-sysext
 
+      - name: Restore pip cache for buildstream-sbom
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/pip
+          key: pip-sbom-0706fec3bedf6f73bd9d2fed32c2aed585feef8d
+          restore-keys: pip-sbom-
+
+      - name: Generate BuildStream-native SBOMs
+        run: just sboms
+
       - name: Sign release SHA256SUMS manifest
         if: github.ref == 'refs/heads/main'
         env:
           SYSUPDATE_SIGNING_KEY: ${{ secrets.SYSUPDATE_SIGNING_KEY }}
         run: |
           set -euo pipefail
+          V=$(just version)
           # systemd-sysupdate fetches <Path>/SHA256SUMS as the version
           # manifest, so all release assets must share one combined,
           # flat manifest at the release root.
+          rm -rf dist/release
           mkdir -p dist/release
           cp dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/release/
           cp dist/ddi/bluefin-server-ddi-*.raw.zst dist/release/
           cp dist/sysext/k3s-*.raw.zst dist/release/
+          cp ./*-*.spdx.json dist/release/
+          python3 .github/scripts/verify-release.py \
+            --version "$V" \
+            --directory dist/release
           (cd dist/release && sha256sum --binary -- * > SHA256SUMS)
+          (cd dist/release && sha256sum --check SHA256SUMS)
           GNUPGHOME=$(mktemp -d)
           export GNUPGHOME
           trap 'rm -rf "$GNUPGHOME"' EXIT
           echo "$SYSUPDATE_SIGNING_KEY" | gpg --batch --import
           gpg --batch --yes --detach-sign --armor -o dist/release/SHA256SUMS.gpg dist/release/SHA256SUMS
+          gpgv --keyring "$GITHUB_WORKSPACE/files/os/sysupdate-keys/import-pubring.pgp" \
+            dist/release/SHA256SUMS.gpg dist/release/SHA256SUMS
 
       - name: Upload assets to GitHub Release
         if: github.ref == 'refs/heads/main'
@@ -105,10 +130,14 @@ jobs:
         run: |
           set -euo pipefail
           V=$(just version)
-          TAG="installer-v${V}"
+          TAG="bluefin-server-v${V}"
           echo "Uploading release assets for tag: ${TAG}"
-          gh release create "${TAG}" --title "Bluefin Server v${V}" --notes "Automated release triggered by Renovate dependency update on main" --prerelease=false || true
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" \
+              --title "Bluefin Server v${V}" \
+              --notes "Automated release triggered by Renovate dependency update on main" \
+              --prerelease=false
+          fi
           gh release upload "${TAG}" \
             dist/release/* \
             --clobber
-

@@ -1,0 +1,15 @@
+From: Bluefin Server <noreply@projectbluefin.io>
+Subject: [PATCH] systemd: enable sysinstall
+
+Bluefin Server uses systemd-sysinstall for its native offline installer.
+
+diff --git a/elements/components/_private/systemd-base.bst b/elements/components/_private/systemd-base.bst
+--- a/elements/components/_private/systemd-base.bst
++++ b/elements/components/_private/systemd-base.bst
+@@ -70,6 +70,7 @@ variables:
+     -Didn=true
+     -Drepart=enabled
++    -Dsysinstall=true
+     -Dman=enabled
+     -Dhtml=enabled
+     -Dlibcryptsetup=enabled

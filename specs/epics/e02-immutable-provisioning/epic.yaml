@@ -1,0 +1,13 @@
+id: e02
+slug: immutable-provisioning
+title: Immutable runtime and first-boot credentials
+status: planned
+stories:
+  - id: e02s01
+    title: Define and enforce the immutable runtime state model
+    bcps: 5
+    delta: MODIFIED
+  - id: e02s02
+    title: Provision first-boot root credentials and SSH keys
+    bcps: 8
+    delta: ADDED

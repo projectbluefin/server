@@ -12,9 +12,10 @@ It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html): t
 - **DDI-first delivery** — the installer embeds the OS payload as a data partition; no network is required at install time.
 - **Minimal, distroless OS image** — no shell in the running rootfs by default.
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive terminal UI and `systemd-repart` handles partitioning and block-copy DDI placement.
-- **Optional k3s as a `systemd-sysext`** so the base image stays distroless.
+- **Podman in the base system** for running OCI containers without adding a package layer.
+- **Optional k3s as a `systemd-sysext`** so Kubernetes stays separate from the base image.
 
-> **Temporary bring-up exception:** SSH is enabled for cluster boot tests and remote debugging. It is scheduled for removal once diagnostics move to serial logs or a guest agent. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
+> **SSH policy:** OpenSSH is installed but `sshd.service` is disabled by default and only accepts public-key authentication (`PasswordAuthentication no`, `PermitRootLogin prohibit-password`). Provision an authorized key through an external mechanism before running `systemctl enable --now sshd.service`; first-boot key provisioning is not implemented yet. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 
 ## Quick start
 
@@ -22,10 +23,53 @@ You need only `podman` and [`just`](https://github.com/casey/just). BuildStream 
 
 ```sh
 just validate              # resolve the element graph
-just show-me-the-future    # end-to-end QEMU installer smoke test
+just test                  # install and boot-test locally in QEMU/KVM
 ```
 
 See [`AGENTS.md`](AGENTS.md) for the full build matrix and agent skill routing.
+
+## Enable Kubernetes
+
+Bluefin Server ships Podman in the base image. Kubernetes is optional: provision
+the published k3s `systemd-sysext` as `/var/lib/extensions/k3s.raw` (decompress the
+release asset first if needed), then refresh extensions:
+
+```sh
+systemd-sysext refresh
+systemd-sysext status
+```
+
+For a server node, create `/etc/rancher/k3s/config.yaml` with any required
+settings, then enable k3s. The file may carry the cluster join token, so keep
+it root-only (`0600`):
+
+```yaml
+# /etc/rancher/k3s/config.yaml
+# token: set-a-shared-secret-for-agents
+```
+
+```sh
+chmod 0600 /etc/rancher/k3s/config.yaml
+systemctl enable --now k3s.service
+```
+
+For an agent node, configure the server URL and shared token instead:
+
+```yaml
+# /etc/rancher/k3s/config.yaml
+server: https://control-plane.example:6443
+token: set-a-shared-secret
+```
+
+```sh
+chmod 0600 /etc/rancher/k3s/config.yaml
+systemctl enable --now k3s-agent.service
+```
+
+Both units are disabled by default. Do not use the upstream `curl | sh`
+installer; k3s is delivered and managed as a systemd sysext. See
+[`docs/skills/k3s-sysext-ops.md`](docs/skills/k3s-sysext-ops.md) for extension
+provisioning, OTA delivery, and troubleshooting.
 
 ## Contributing
 

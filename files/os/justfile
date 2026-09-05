@@ -19,16 +19,19 @@ k8s ROLE="server" TOKEN="":
     # 2. Setup Rancher configuration directory
     mkdir -p /etc/rancher/k3s
 
-    # 3. Create config.yaml if it does not exist
+    # 3. Create config.yaml (mode 0600: it may carry the cluster join token)
     if [ ! -f /etc/rancher/k3s/config.yaml ]; then
         echo "==> Seeding neutral defaults for k3s role: {{ROLE}}"
-        cat <<EOF > /etc/rancher/k3s/config.yaml
+        install -m 0600 /dev/null /etc/rancher/k3s/config.yaml
+        cat <<EOF >> /etc/rancher/k3s/config.yaml
 # Seeded by just k8s
-write-kubeconfig-mode: "0644"
+write-kubeconfig-mode: "0600"
 EOF
         if [ -n "{{TOKEN}}" ]; then
             echo "token: \"{{TOKEN}}\"" >> /etc/rancher/k3s/config.yaml
         fi
+    else
+        chmod 0600 /etc/rancher/k3s/config.yaml
     fi
 
     # 4. Trigger systemd-sysext to merge extensions into /usr immediately

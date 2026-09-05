@@ -14,11 +14,11 @@ depends:
   - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/shadow.bst
 
-  # Remote access during bring-up (temporary — see docs/skills/factory-integration.md)
+  # OpenSSH: installed but disabled by default; operators opt in with
+  # systemctl enable --now sshd.service after provisioning an authorized key.
   - freedesktop-sdk.bst:components/openssh-systemd.bst
 
-  # SSH enablement drop-ins
-  - bluefin-server/os-sshd-preset.bst
+  # SSH authentication policy drop-in (key-only, no password root login)
   - bluefin-server/os-sshd-config.bst
 
   # Stock FSDK Kernel & Server-Chiseled Firmware
@@ -36,6 +36,9 @@ depends:
 
   # Public keyring for verifying SHA256SUMS manifests from GitHub Releases
   - bluefin-server/os-sysupdate-keys.bst
+
+  # gpg binary required by systemd-sysupdate to verify SHA256SUMS.gpg
+  - freedesktop-sdk.bst:components/gnupg.bst
 
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst

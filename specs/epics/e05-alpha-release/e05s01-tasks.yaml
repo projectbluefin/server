@@ -1,0 +1,21 @@
+story_id: e05s01
+title: Publish verified Bluefin Server release evidence
+status: failing
+bcps: 5
+tasks:
+  - id: 1
+    description: Add release notes and a promotion checklist covering install, first boot, signed update discovery, recovery, and known limits.
+    verify: python3 .github/scripts/docs-checks.py
+    risk: P1
+    status: failing
+    allure:
+      severity: high
+      categories: [release, documentation]
+  - id: 2
+    description: Publish bluefin-server-v<version> only after all local and downstream gates pass, then verify the public release manifest and signature.
+    verify: gh release view bluefin-server-v26.08.0 --repo projectbluefin/server
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [release, security]

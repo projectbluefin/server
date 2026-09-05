@@ -1,0 +1,13 @@
+story_id: e03s02
+title: Exercise inactive-slot update and rollback
+status: failing
+bcps: 8
+tasks:
+  - id: 1
+    description: Extend the QEMU smoke path to inspect slots, stage an inactive update, reboot into it, and retain the previous boot path for recovery.
+    verify: just test
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [qemu, recovery]

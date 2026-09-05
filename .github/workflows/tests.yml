@@ -1,0 +1,41 @@
+name: Python tests
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/**'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+      # Tests statically verify BuildStream elements and payload files
+      # (e.g. the SSH element and policy drop-in), so they must run on
+      # any change to those inputs.
+      - 'elements/**'
+      - 'files/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/**'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+      - 'elements/**'
+      - 'files/**'
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pytest
+
+      - name: Run unit tests
+        run: python -m pytest tests/ -q

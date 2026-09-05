@@ -1,0 +1,21 @@
+story_id: e04s01
+title: Make installer boot verification release-blocking
+status: failing
+bcps: 8
+tasks:
+  - id: 1
+    description: Document the downstream build and boot-test contract, inputs, assertions, logs, and versioned artifact source.
+    verify: python3 .github/scripts/docs-checks.py
+    risk: P1
+    status: failing
+    allure:
+      severity: high
+      categories: [factory, e2e]
+  - id: 2
+    description: Run the downstream boot test against a successful build and expose its result as release evidence or a blocking promotion gate.
+    verify: gh run list --repo projectbluefin/server --limit 5
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [factory, release]

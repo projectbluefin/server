@@ -26,7 +26,7 @@ installer-to-boot acceptance test. The existing lower-level
 `build-installer` and `export-installer` commands remain available for
 operators who need their portable artifacts directly.
 
-Replace the opaque, interactive `show-me-the-future` command. Do not add
+Replace the former opaque, interactive smoke command. Do not add
 alternative VM-backend, pipeline, or environment-selection targets.
 
 ### Host test harness
@@ -50,9 +50,11 @@ service, shell, package, user, credential, or test signal to the DDI or UKI.
 
 ### Virtualization scope
 
-Use the installed `qemu-system-x86_64` Linuxbrew formula with KVM and OVMF.
-This is the existing compatible path and does not add a dependency on this
-host.
+Use the installed `qemu-system-x86_64` Linuxbrew formula with KVM. When the
+host does not provide OVMF paths, stage the UEFI firmware from the cached,
+pinned `bst2` build image, which is already required by the export dependency.
+This keeps the test self-contained without adding a firmware package, VM
+manager, or network download.
 
 gVisor is a container syscall-sandbox runtime, not a full-system VM.
 Firecracker requires a supplied kernel and root filesystem rather than UEFI
@@ -64,7 +66,7 @@ firmware. None are introduced.
 
 Expected implementation changes:
 
-- `Justfile`: replace `show-me-the-future` with a single `test` target that
+- `Justfile`: replace the former smoke target with a single `test` target that
   depends on `export-installer` and calls the host test harness.
 - Add one focused host test-harness file for the QEMU process, serial capture,
   timeouts, and cleanup.
@@ -81,7 +83,7 @@ or image-build element changes are in scope.
 3. Run `just test` and require an unattended install followed by an
    installed-disk-only UEFI boot that reaches the serial systemd milestone.
 4. Confirm failure preserves the named diagnostic directory and serial logs.
-5. Search for stale active `show-me-the-future` references.
+5. Search for stale active references to the former smoke target.
 
 ## Non-goals
 

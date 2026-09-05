@@ -1,0 +1,21 @@
+story_id: e01s01
+title: Enforce one release version and tag contract
+status: failing
+bcps: 3
+tasks:
+  - id: 1
+    description: Add a shared version consistency check for the FSDK ref, BuildStream release-version, artifact names, and bluefin-server release tag.
+    verify: just check-version
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [release, versioning]
+  - id: 2
+    description: Make CI run the version check before graph resolution and release publication.
+    verify: actionlint .github/workflows/build.yml
+    risk: P1
+    status: failing
+    allure:
+      severity: high
+      categories: [ci, release]

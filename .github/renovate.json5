@@ -33,13 +33,7 @@
     {
       "matchDatasources": ["git-refs"],
       "matchPackageNames": ["https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git"],
-      "extractVersion": "^freedesktop-sdk-(?<version>25\\.08\\.[0-9]+)$",
-      "versioning": "semver"
-    },
-    {
-      "matchDatasources": ["git-refs"],
-      "matchPackageNames": ["https://gitlab.gnome.org/GNOME/gnome-build-meta.git"],
-      "extractVersion": "^(?<version>50\\.[0-9]+)$",
+      "extractVersion": "^freedesktop-sdk-(?<version>26\\.08\\.[0-9]+)$",
       "versioning": "semver"
     }
   ]

@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server DDI live installe
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -63,16 +63,18 @@ remains stateless.
    which calls `systemd-sysinstall` with the target OS UKI at
    `/usr/lib/bluefin-server/bluefin-server.efi` so `bootctl link` installs the
    target UKI instead of the installer UKI.
-5. `systemd-sysinstall` reads partition recipes from
-   `/usr/lib/repart.sysinstall.d/` if it is populated; otherwise it falls back
-   to `/usr/lib/repart.d/`. The target recipes are staged at
-   `/usr/lib/repart.d/` (`10-esp.conf`, `20-root-a.conf`, `30-var.conf`).
+5. `bluefin-sysinstall` passes the target recipes explicitly with
+   `--definitions=/usr/lib/repart.d`. The recipes are staged there as
+   `10-esp.conf`, `20-root-a.conf`, and `30-var.conf`.
 6. `20-root-a.conf` copies the DDI block-for-block from
    `/dev/disk/by-partlabel/bluefin-installer-data` (the embedded DDI data
    partition on the installer media).
 7. Target OS volume expansion is handled by `systemd-growfs`; the target OS
    stack includes `xfsprogs` so the root and `/var` filesystems can grow to fill
    their partitions on first boot.
+8. The target UKI's Dracut initramfs mounts `devtmpfs` without a size limit
+   before it starts systemd. This preserves the systemd-native boot path on
+   kernels that do not pre-mount `devtmpfs` for an initramfs.
 
 ## Partition Layout
 
@@ -146,6 +148,14 @@ For the detailed build/export/flash/release workflow, see
 | "Put the DDI in the initrd cpio." | The DDI is 2 GiB+. The initrd cpio step must run before the DDI is placed in `/layer`. |
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |
+
+## Red Flags
+
+- `systemd-sysinstall.service` missing from `system-install.target.wants`.
+- A hardcoded device path like `root=/dev/vda2` in any boot cmdline.
+- DDI decompression ordered before the cpio step.
+- FAT32/vfat used for the installer data partition instead of XFS.
+- A custom installer script or non-native installer replacing `systemd-sysinstall`.
 
 ## Verification
 

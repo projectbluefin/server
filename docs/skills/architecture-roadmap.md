@@ -4,7 +4,7 @@ description: Roadmap for future Bluefin Server architecture work. Use when plann
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-07-20"
+  last_updated: "2026-09-04"
   context7-sources:
     - /systemd/systemd
 ---
@@ -15,6 +15,26 @@ Status: current roadmap.
 
 This file captures planned architecture work and the rationale behind it. Verified implementation rules now live in [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md), [tpm2-credential-sealing.md](tpm2-credential-sealing.md), and [systemd-sysext-extensions.md](systemd-sysext-extensions.md).
 The source-verified gap analysis lives in [gap-analysis-distros.md](gap-analysis-distros.md).
+
+## When to Use
+
+- Planning long-lead architecture work (A/B slots, read-only `/usr`, rollback, credential provisioning).
+- Deciding whether a proposed feature is already on the roadmap and why.
+- Checking which roadmap item a gap in [gap-analysis-distros.md](gap-analysis-distros.md) maps to.
+
+## When NOT to Use
+
+- Verified, implemented behavior — use the domain skills linked above.
+- Sprint-level task tracking — that lives in GitHub issues, not here.
+
+## Core Process
+
+1. Derive every roadmap item from a source-verified gap in
+   [gap-analysis-distros.md](gap-analysis-distros.md); no gap, no item.
+2. Keep only planned work and rationale here. Once an item is implemented,
+   remove it and move the verified procedure into the matching domain skill.
+3. Preserve the systemd-native model: no custom daemons or parallel update
+   mechanisms.
 
 ## Planned work
 
@@ -35,3 +55,23 @@ Priorities are derived from [gap-analysis-distros.md](gap-analysis-distros.md).
 - The current tree intentionally favors a single-slot update path and a single signed manifest flow.
 - Any implementation work should preserve the current systemd-native model and avoid custom daemons.
 - See [gap-analysis-distros.md](gap-analysis-distros.md) for the source-verified comparison that produced this list.
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "Write the implementation rules here too." | Verified behavior belongs in the domain skill; this file holds only planned work. |
+| "Add the item now, find the source gap later." | Every item must trace to a gap in the source-verified analysis. |
+| "A small custom daemon is fine for rollback." | The design is systemd-native; extend `systemd-sysupdate`/`systemd-boot` behavior instead. |
+
+## Red Flags
+
+- A roadmap item with no corresponding gap in [gap-analysis-distros.md](gap-analysis-distros.md).
+- Implemented, verified behavior still listed as planned work.
+- Proposals that duplicate facts already canonical in another skill.
+
+## Verification
+
+- [ ] Every planned item cites its source gap.
+- [ ] No item duplicates verified behavior already documented in a domain skill.
+- [ ] Removed/landed items have their procedures moved to the matching skill.

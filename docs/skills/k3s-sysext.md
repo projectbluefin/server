@@ -4,7 +4,7 @@ description: Build, ship, and enable the k3s systemd-sysext extension for Bluefi
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
   context7-sources:
     - /systemd/systemd
 ---
@@ -86,6 +86,19 @@ just build-sysext          # build oci/k3s-sysext.bst
 just export-sysext         # export sysext artifacts to dist/sysext/
 ```
 
+## Core Process
+
+1. Make the change (binary pin, sysext contents, tuning defaults, or transfer
+   definition).
+2. Run `just validate` to confirm the element graph still resolves.
+3. Run `just build-sysext && just export-sysext` and inspect the artifacts in
+   `dist/sysext/`.
+4. Merge; CI in `build.yml` builds, signs, and publishes the sysext assets to
+   the GitHub Release.
+5. Hosts pull the new sysext OTA via `files/os/sysupdate.d/70-k3s.transfer`;
+   enablement and runtime testing are covered in
+   [k3s-sysext-ops.md](k3s-sysext-ops.md).
+
 ## Bumping the k3s Version
 
 Two places must change together when the upstream k3s release moves:
@@ -100,6 +113,22 @@ still resolves.
 
 For enabling the sysext on a host, common gotchas, and runtime testing guidance,
 see [k3s-sysext-ops.md](k3s-sysext-ops.md).
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "Use the get.k3s.io installer script." | The OS image has no shell; the sysext fetches the upstream binary directly in `k3s-bin.bst`. |
+| "Enable `k3s.service` by default so it just works." | Role is chosen at provisioning time; both units ship disabled. |
+| "Bump only the binary pin." | `extension-release.k3s` `VERSION_ID=` must move with it or the metadata lies. |
+
+## Red Flags
+
+- A pinned k3s URL without a matching SHA256.
+- `VERSION_ID=` drift between `k3s-bin.bst` and `extension-release.k3s`.
+- An `os-release` file shipped inside the sysext image.
+- Enablement symlinks for `k3s.service`/`k3s-agent.service` committed in the
+  image.
 
 ## Verification
 

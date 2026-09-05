@@ -1,0 +1,21 @@
+story_id: e03s01
+title: Provision matching root and UKI slots
+status: failing
+bcps: 8
+tasks:
+  - id: 1
+    description: Add matching root and ESP slot layout using GPT labels/PARTUUIDs and install-time assertions.
+    verify: just validate
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [storage, boot]
+  - id: 2
+    description: Align root and UKI sysupdate transfer definitions with the installed slot layout.
+    verify: grep -RIn 'root-a\|root-b\|MatchPattern' files/os/sysupdate.d
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [ota, boot]

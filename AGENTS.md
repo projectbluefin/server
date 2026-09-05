@@ -16,9 +16,10 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 1. Compose from FSDK `components/*`. Never use `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
 3. Installer must stay `systemd-sysinstall`-native; no custom installer scripts or non-native installers.
-4. No shell in the running OS DDI image (temporary exception: SSH is enabled for bring-up and cluster boot tests; see [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md)).
-5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
-6. One canonical source per fact; do not duplicate content across docs.
+4. No shell in the running OS DDI image. OpenSSH is installed for operators but `sshd.service` is disabled by default and key-only; see [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
+5. Vendor-authored configuration belongs under `/usr/etc` by repo policy (systemd does not automatically search it); `/etc` is mutable but boot-local operator/runtime state — durable operator overrides belong in a `systemd-confext` under `/var/lib/confexts/`. A file under `/etc` is allowed only when an upstream tool hardcodes that path (or has no vendor-config lookup) or the file is generated/local state, and the exception must be documented with its compatibility mechanism; see [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md).
+6. Boot entries use GPT `PARTUUID`; never hardcode device paths.
+7. One canonical source per fact; do not duplicate content across docs.
 
 ## Build / test commands
 
@@ -33,7 +34,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 | `just export-installer` | Export installer + UKI to `dist/`. |
 | `just build-sysext` | Build the k3s `systemd-sysext`. |
 | `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
-| `just show-me-the-future` | Local QEMU installer smoke test. |
+| `just test` | Local QEMU installer-to-boot acceptance test. |
 
 ## Skill routing
 
@@ -61,6 +62,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 ## Boundaries
 
 - Do not add Containerfiles or shell-based installers.
+- Do not ship vendor defaults in `/etc`; use `/usr/etc` unless a documented exception (upstream-hardcoded path or no vendor-config lookup) applies.
 - Do not hardcode block device paths in boot configuration.
 - Do not put Kubernetes or debug tooling in the base DDI if it can live in a sysext or system container.
 - Do not duplicate a fact already in a skill.

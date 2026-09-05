@@ -1,0 +1,59 @@
+core_value: >-
+  Ship a trustworthy Bluefin Server alpha release whose published artifacts,
+  installer, first boot, and signed update path are version-consistent and
+  recoverable.
+summary: >-
+  Alpha 2 closes the release-process gaps found in the release audit. A release
+  must publish one unambiguous Bluefin Server version, expose verifiable signed
+  artifacts, and prove the installer-to-first-boot path in the factory lab.
+  The installed system must support inactive-slot updates and recovery rather
+  than overwriting the running root.
+
+  The release also needs a complete first-boot credential path for unattended
+  operation. The implementation remains systemd-native, preserves the DDI-first
+  architecture, and keeps optional k3s delivery separate from the base image.
+in_scope:
+  - id: release-identity
+    outcome: Release tags, artifact filenames, manifests, and update definitions use one version contract.
+  - id: release-verification
+    outcome: CI verifies manifest composition, detached signatures, and release asset consistency before publishing.
+  - id: installer-ab
+    outcome: Installer provisions the root/ESP layout required for inactive-slot image updates and recovery.
+  - id: immutable-runtime
+    outcome: Installed OS keeps the vendor /usr tree immutable while supported mutable state remains under the designated state partitions.
+  - id: first-boot-provisioning
+    outcome: First boot accepts the supported root credential and SSH authorized-key inputs without baking secrets into the image.
+  - id: factory-boot-gate
+    outcome: The downstream factory boot test runs against a successful build and is documented as a release gate.
+  - id: alpha-release
+    outcome: A published Bluefin Server alpha release contains release notes, checksums, signatures, and verification evidence.
+out_of_scope:
+  - item: Signing-key rotation
+    reason: The existing trust key is valid; rotation is a separate operational event requiring fleet coordination.
+  - item: Multi-architecture builds
+    reason: Alpha 2 remains scoped to the existing x86_64 build path.
+  - item: Replacing GitHub Releases as the artifact host
+    reason: The current sysupdate source contract already uses GitHub Releases.
+  - item: General Kubernetes productization
+    reason: k3s remains an optional independently delivered sysext; only its release verification is in scope.
+constraints:
+  architecture: DDI-first, systemd-sysinstall, systemd-repart, systemd-sysupdate, and systemd-sysext.
+  security: No secrets or pre-hashed credentials may be baked into release artifacts.
+  compatibility: Keep the broad x86_64 CPU baseline and existing BuildStream/FSDK toolchain.
+  external_dependency: The downstream factory CI repository owns Argo build and boot-test workflow templates.
+success_criteria:
+  - just validate resolves all three release graphs.
+  - actionlint passes all repository workflows.
+  - CI fails when the release tag, artifact versions, or manifest entries disagree.
+  - The public release manifest and detached signature verify with the shipped public key.
+  - The installer creates both update target slots and a bootable installed system.
+  - The installed /usr tree is immutable and supported mutable state remains writable.
+  - First boot provisions the documented root credential and SSH authorized key path.
+  - The downstream boot test completes successfully and is recorded as release evidence.
+  - The Alpha 2 release notes document install, update, verification, and recovery procedures.
+references:
+  - docs/MVP_1_0_READINESS.md
+  - docs/skills/systemd-sysupdate-verification.md
+  - docs/skills/ddi-installer-build.md
+  - docs/skills/factory-integration.md
+  - .github/workflows/build.yml

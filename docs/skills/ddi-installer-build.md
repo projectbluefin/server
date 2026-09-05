@@ -4,7 +4,7 @@ description: Build, export, flash, and release the Bluefin Server installer medi
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -14,13 +14,25 @@ metadata:
 Use this skill when you need to build the installer or DDI artifacts, export them,
 flash them to media, or understand the release automation.
 
+## When to Use
+
+- Building or exporting the installer, DDI, or sysext artifacts locally or on the cluster.
+- Flashing installer media to a USB device.
+- Understanding or extending the release automation in `build.yml`.
+
+## When NOT to Use
+
+- Installer architecture, partition layout, or boot-flow questions — see
+  [ddi-installer.md](ddi-installer.md).
+- SBOM generation or release signing details — see
+  [signing-and-sbom.md](signing-and-sbom.md).
+
 ## Build targets
 
 The repo exposes the main build entrypoints through `just`:
 
 ```bash
 just validate              # resolve the BuildStream graph
-just cluster-build         # submit an Argo workflow to build/publish
 just build-installer       # build the installer locally
 just export-installer      # export installer + UKI + SHA256SUMS to dist/
 just build-ddi             # build the OS DDI payload
@@ -28,36 +40,25 @@ just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
 just build-sysext          # build the k3s sysext
 just export-sysext         # export sysext artifacts to dist/sysext/
 just flash-installer       # write the installer image to a USB device
-just show-me-the-future    # end-to-end QEMU installer smoke test
+just test                  # end-to-end local QEMU/KVM installer boot test
 just tags                  # show FSDK-derived version tags
 ```
 
-## Preferred build path
+## Core Process
 
-For heavy builds, prefer the cluster build over a local workstation build:
+Run the local installer-to-boot acceptance path with:
 
 ```bash
-just cluster-build
+just test
 ```
 
-This submits the `bluefin-server-build-pipeline` Argo workflow and uses the
-cluster cache rather than starving your local machine.
-
-## Local builds with a remote cache
-
-If you must build locally, point BuildStream at your cluster cache tunnel host (`<build-cache-host>`) by creating `~/.config/buildstream.conf` on your workstation:
-
-```yaml
-projects:
-  bluefin-server:
-    artifacts:
-      override-project-caches: false
-      servers:
-      - url: grpc://127.0.0.1:8980
-        push: true
-```
-
-Then run `just build-installer` or `just build-ddi`.
+It builds and exports the installer, then boots the existing UEFI raw image in
+QEMU/KVM. The test does not need a lab and keeps serial diagnostics when it
+fails. It requires `qemu-system-x86_64`, readable `/dev/kvm`, `zstd`, and
+`podman`. When host OVMF paths are not supplied, the harness stages the UEFI
+code and variable-store template from the same cached `bst2` image used to
+build the installer. Set both `OVMF_CODE` and `OVMF_VARS` to override that
+source.
 
 ## Flashing the installer media
 
@@ -89,11 +90,11 @@ The release process is driven by `.github/workflows/build.yml`:
 - Renovate point-release updates or direct pushes to `main` trigger a full build.
 - CI builds the DDI payload, installer, target UKI, and k3s sysext.
 - CI uploads the versioned release assets to the corresponding
-  `installer-v<release-version>` GitHub Release.
+  `bluefin-server-v<release-version>` GitHub Release.
 - CI also produces a combined `dist/release/SHA256SUMS` manifest and signs it
   to create `SHA256SUMS.gpg` for `systemd-sysupdate` verification.
 
-## Common rationalizations
+## Common Rationalizations
 
 | Rationalization | Reality |
 |---|---|
@@ -105,7 +106,7 @@ The release process is driven by `.github/workflows/build.yml`:
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |
 
-## Red flags
+## Red Flags
 
 - `systemd-sysinstall.service` is missing from `system-install.target.wants`.
 - Boot cmdline uses a hardcoded device path like `root=/dev/vda2`.

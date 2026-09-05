@@ -1,0 +1,13 @@
+id: e01
+slug: release-contract
+title: Release identity and verification
+status: planned
+stories:
+  - id: e01s01
+    title: Enforce one release version and tag contract
+    bcps: 3
+    delta: MODIFIED
+  - id: e01s02
+    title: Verify signed release manifests before upload
+    bcps: 5
+    delta: ADDED

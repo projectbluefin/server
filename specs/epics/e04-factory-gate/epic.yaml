@@ -1,0 +1,9 @@
+id: e04
+slug: factory-gate
+title: Installer boot-test release gate
+status: planned
+stories:
+  - id: e04s01
+    title: Make installer boot verification release-blocking
+    bcps: 8
+    delta: ADDED

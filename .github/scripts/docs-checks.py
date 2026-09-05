@@ -164,7 +164,6 @@ def main():
     check_budget(ROOT / "README.md", 200, 150)
     check_budget(ROOT / "CONTRIBUTING.md", 100, 80)
     check_budget(DOCS_DIR / "MVP_1_0_READINESS.md", 250, 200)
-    check_budget(DOCS_DIR / "DOCUMENTATION_OVERHAUL_PLAN.md", 3000, 2500)
 
     for doc in [ROOT / "AGENTS.md", ROOT / "README.md", ROOT / "CONTRIBUTING.md", DOCS_DIR / "MVP_1_0_READINESS.md"]:
         check_stale_flags(doc)

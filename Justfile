@@ -34,9 +34,20 @@ bst *ARGS:
         "{{bst2_image}}" \
         bash -c 'bst --colors "$@"' -- --no-interactive ${BST_FLAGS:-} {{ARGS}}
 
+# Verify the BuildStream release version matches the pinned FSDK point release.
+[group('info')]
+check-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    project_version="$(grep -oE 'release-version: "[0-9]+\.[0-9]+\.[0-9]+"' project.conf | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)"/\1/')"
+    fsdk_version="$(grep -oE 'freedesktop-sdk-[0-9]+\.[0-9]+\.[0-9]+' elements/freedesktop-sdk.bst | head -1 | sed 's/freedesktop-sdk-//')"
+    [[ "$project_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid project release-version: $project_version" >&2; exit 1; }
+    [[ "$fsdk_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid FSDK release: $fsdk_version" >&2; exit 1; }
+    [[ "$project_version" == "$fsdk_version" ]] || { echo "release version mismatch: project.conf=$project_version FSDK=$fsdk_version" >&2; exit 1; }
+
 # Print the FSDK-derived point release used for asset versioning.
 [group('info')]
-version:
+version: check-version
     @echo "{{fsdk_version}}"
 
 # Print the tag set derived from the FSDK release: latest, minor line, point release.
@@ -50,7 +61,7 @@ tags:
 
 # ── Validate ──────────────────────────────────────────────────────────
 [group('dev')]
-validate:
+validate: check-version
     just bst show --deps all oci/bluefin-server-ddi.bst
     just bst show --deps all oci/bluefin-server-installer.bst
     just bst show --deps all oci/k3s-sysext.bst
@@ -91,16 +102,6 @@ export-ddi: build-ddi
 build-installer:
     just bst build oci/bluefin-server-installer.bst
 
-# Submit the build to the cluster using Argo workflows.
-[group('build')]
-cluster-build REF="main":
-    argo submit --from wftmpl/bluefin-server-build-pipeline \
-        --parameter ref={{REF}} \
-        --parameter repo=https://github.com/projectbluefin/server.git \
-        --parameter registry=registry.testing-lab.internal:30500 \
-        -n argo \
-        --watch
-
 # Export the installer disk image + SHA256SUMS to dist/.
 # bst artifact checkout requires an empty destination, and dist/ may
 # already hold dist/ddi/ or dist/sysext/ from earlier export steps, so
@@ -136,6 +137,103 @@ export-sysext: build-sysext
     rm -rf dist/sysext-checkout
     @echo "==> wrote k3s sysext:" && ls -lh dist/sysext/
 
+# -- SBOM --------------------------------------------------------------------
+# BuildStream-native SPDX SBOMs via buildstream-sbom, generated from the
+# build graph. Post-hoc rootfs scanners are useless here (no RPM/dpkg
+# database), so the build graph is the only authoritative package source.
+# See docs/skills/signing-and-sbom.md.
+
+# Generate a BuildStream-native SPDX SBOM for one artifact:
+# bluefin-server-ddi, bluefin-server-installer, or k3s.
+[group('sbom')]
+sbom artifact="bluefin-server-ddi":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{artifact}}" in
+        bluefin-server-ddi)       ELEMENT="oci/bluefin-server-ddi.bst" ;;
+        bluefin-server-installer) ELEMENT="oci/bluefin-server-installer.bst" ;;
+        k3s)                      ELEMENT="oci/k3s-sysext.bst" ;;
+        *) echo "ERROR: unknown artifact '{{artifact}}' (expected bluefin-server-ddi, bluefin-server-installer, or k3s)" >&2; exit 1 ;;
+    esac
+    OUTFILE="{{artifact}}-{{fsdk_version}}.spdx.json"
+    mkdir -p "${HOME}/.cache/buildstream" "${HOME}/.cache/pip"
+    GIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+
+    {{sudo_cmd}} podman run --rm \
+        --privileged \
+        --device /dev/fuse \
+        --network=host \
+        -v "{{justfile_directory()}}:/src:rw" \
+        -v "${HOME}/.cache/buildstream:/root/.cache/buildstream:rw" \
+        -v "${HOME}/.cache/pip:/root/.cache/pip:rw" \
+        -w /src \
+        -e ELEMENT="${ELEMENT}" \
+        -e SPDX_NAME="{{artifact}}" \
+        -e OUTFILE="${OUTFILE}" \
+        -e GIT_SHA="${GIT_SHA}" \
+        "{{bst2_image}}" \
+        bash -c '
+            for attempt in 1 2 3; do
+                pip install --quiet \
+                    git+https://gitlab.com/BuildStream/buildstream-sbom.git@0706fec3bedf6f73bd9d2fed32c2aed585feef8d \
+                    && break
+                echo "buildstream-sbom install failed (attempt ${attempt}/3); retrying in 5s..."
+                [ "${attempt}" -lt 3 ] && sleep 5
+            done
+            buildstream-sbom "${ELEMENT}" \
+                --spdx-name "${SPDX_NAME}" \
+                --spdx-namespace "https://github.com/projectbluefin/server/sbom/${GIT_SHA}/${SPDX_NAME}" \
+                --spdx-creator "Tool: buildstream-sbom" \
+                --spdx-creator "Organization: projectbluefin" \
+                --deps all \
+                --output "/src/${OUTFILE}"
+        '
+    @echo "==> wrote ${OUTFILE}"
+
+# Generate SBOMs for all three release artifacts in a single container run.
+[group('sbom')]
+sboms:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p "${HOME}/.cache/buildstream" "${HOME}/.cache/pip"
+    GIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+
+    {{sudo_cmd}} podman run --rm \
+        --privileged \
+        --device /dev/fuse \
+        --network=host \
+        -v "{{justfile_directory()}}:/src:rw" \
+        -v "${HOME}/.cache/buildstream:/root/.cache/buildstream:rw" \
+        -v "${HOME}/.cache/pip:/root/.cache/pip:rw" \
+        -w /src \
+        -e GIT_SHA="${GIT_SHA}" \
+        -e VERSION="{{fsdk_version}}" \
+        "{{bst2_image}}" \
+        bash -c '
+            for attempt in 1 2 3; do
+                pip install --quiet \
+                    git+https://gitlab.com/BuildStream/buildstream-sbom.git@0706fec3bedf6f73bd9d2fed32c2aed585feef8d \
+                    && break
+                echo "buildstream-sbom install failed (attempt ${attempt}/3); retrying in 5s..."
+                [ "${attempt}" -lt 3 ] && sleep 5
+            done
+            for pair in bluefin-server-ddi:oci/bluefin-server-ddi.bst \
+                        bluefin-server-installer:oci/bluefin-server-installer.bst \
+                        k3s:oci/k3s-sysext.bst; do
+                NAME="${pair%%:*}"
+                ELEMENT="${pair#*:}"
+                echo "==> Generating SBOM for ${NAME}..."
+                buildstream-sbom "${ELEMENT}" \
+                    --spdx-name "${NAME}" \
+                    --spdx-namespace "https://github.com/projectbluefin/server/sbom/${GIT_SHA}/${NAME}" \
+                    --spdx-creator "Tool: buildstream-sbom" \
+                    --spdx-creator "Organization: projectbluefin" \
+                    --deps all \
+                    --output "/src/${NAME}-${VERSION}.spdx.json"
+            done
+        '
+    @echo "==> wrote SBOMs:" && ls -lh *.spdx.json
+
 # Write the raw GPT installer image to a physical USB drive.
 [group('installer')]
 flash-installer DEVICE="":
@@ -170,85 +268,7 @@ flash-installer DEVICE="":
     sudo sh -c "zstd -dc ${IMG} | dd of={{DEVICE}} bs=4M iflag=fullblock oflag=direct status=progress conv=fsync"
     echo "Successfully flashed the Bluefin Server installer to {{DEVICE}}!"
 
-# Build, install, and reboot the server in QEMU using the raw installer disk.
+# Build, install, and boot the server in QEMU using the exported raw installer disk.
 [group('test')]
-show-me-the-future:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
-    mkdir -p "$CACHE_DIR"
-    WORKDIR="$(mktemp -d "${CACHE_DIR}/bluefin-show-future.XXXXXX")"
-    trap 'rm -rf "$WORKDIR"' EXIT
-
-    just build-installer
-    just export-installer
-
-    cp dist/bluefin-server-installer-*.raw.zst "$WORKDIR/installer.raw.zst"
-    zstd -d "$WORKDIR/installer.raw.zst" -o "$WORKDIR/installer.raw"
-    TARGET_SIZE="${SHOW_ME_THE_FUTURE_DISK_SIZE:-16G}"
-    truncate -s "${TARGET_SIZE}" "$WORKDIR/target.raw"
-
-    # Return the first existing file from a list of candidates.
-    first_existing() {
-      for candidate in "$@"; do
-        if [ -f "$candidate" ]; then
-          echo "$candidate"
-          return 0
-        fi
-      done
-      return 1
-    }
-
-    OVMF_CODE=$(first_existing \
-      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-code.fd \
-      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-secure-code.fd \
-      /usr/share/edk2/ovmf/OVMF_CODE.fd \
-      /usr/share/OVMF/OVMF_CODE.fd \
-      /usr/share/OVMF/OVMF_CODE_4M.fd \
-      /usr/share/edk2/x64/OVMF_CODE.4m.fd \
-      /usr/share/qemu/OVMF_CODE.fd) \
-      || { echo "ERROR: OVMF_CODE not found"; exit 1; }
-
-    OVMF_VARS=$(first_existing \
-      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-vars.fd \
-      /usr/share/edk2/ovmf/OVMF_VARS.fd \
-      /usr/share/OVMF/OVMF_VARS.fd \
-      /usr/share/OVMF/OVMF_VARS_4M.fd \
-      /usr/share/edk2/x64/OVMF_VARS.4m.fd \
-      /usr/share/qemu/OVMF_VARS.fd) \
-      || true
-    if [ -n "$OVMF_VARS" ]; then
-      cp "$OVMF_VARS" "$WORKDIR/ovmf-vars.fd"
-    else
-      truncate -s "$(stat -c '%s' "$OVMF_CODE")" "$WORKDIR/ovmf-vars.fd"
-    fi
-
-    echo "==> Booting installer media in QEMU..."
-    # ponytail: we want QEMU to exit cleanly after install. Since QEMU's -no-reboot
-    # suspends/halts on reboot signals, we override systemd-sysinstall.service SuccessAction/FailureAction
-    # to poweroff. When the installer triggers poweroff, QEMU terminates, and we boot into the newly installed OS.
-    qemu-system-x86_64 \
-        -enable-kvm \
-        -m 4096 \
-        -cpu host \
-        -smp 2 \
-        -drive file="$WORKDIR/installer.raw",format=raw,if=virtio,readonly=on \
-        -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
-        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
-        -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
-        -nographic \
-        -serial mon:stdio \
-        -no-reboot < /dev/null
-
-    echo "==> Rebooting into the installed server..."
-    qemu-system-x86_64 \
-        -enable-kvm \
-        -m 4096 \
-        -cpu host \
-        -smp 2 \
-        -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
-        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
-        -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
-        -nographic \
-        -serial mon:stdio
+test: export-installer
+    ./tests/installer-smoke-test "{{bst2_image}}"

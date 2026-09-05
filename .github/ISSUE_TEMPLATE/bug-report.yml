@@ -6,12 +6,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Run `ujust report` before submitting. It captures your image, kernel, hardware, and logs — paste the gist URL below and we likely have everything we need.
+        Gather diagnostics before submitting: image version (`cat /etc/os-release`), kernel (`uname -r`), hardware model, and logs (`journalctl -b`). Paste a gist link below or attach the details inline — that usually covers everything we need.
 
   - type: input
     id: report-link
     attributes:
-      label: "ujust report gist URL"
+      label: "Diagnostics gist URL"
       placeholder: "https://gist.github.com/..."
     validations:
       required: false

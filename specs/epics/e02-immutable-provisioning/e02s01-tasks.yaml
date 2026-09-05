@@ -1,0 +1,21 @@
+story_id: e02s01
+title: Define and enforce the immutable runtime state model
+status: failing
+bcps: 5
+tasks:
+  - id: 1
+    description: Resolve the documented immutable /usr versus literal read-only / contract and align installer cmdlines, mounts, and readiness requirements.
+    verify: grep -RIn 'read-only\|ro console\|rw console' docs elements files | head -80
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [runtime, immutability]
+  - id: 2
+    description: Implement the chosen mount state and prove mutable state remains writable without mutating the immutable OS payload.
+    verify: just validate
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [runtime, qemu]

@@ -6,10 +6,10 @@ description: |
   the release's sha256sum-amd64.txt asset.
 
 build-depends:
-  - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
+  - freedesktop-sdk.bst:public-stacks/runtime-gnu.bst
 
 variables:
-  # Do not try to strip the pre-built upstream binary; runtime-minimal
+  # Do not try to strip the pre-built upstream binary; the build stack
   # does not ship the stripper toolchain.
   strip-binaries: ""
 

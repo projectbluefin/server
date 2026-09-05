@@ -2,8 +2,8 @@ kind: manual
 description: Create custom Flatcar-compatible os-release metadata to support Flatcar system extensions (sysext).
 
 build-depends:
-  # Needed so the manual-element sandbox provides /bin/sh and coreutils (cat, ln, mkdir, sed).
-  - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
+  # Manual commands use bash and coreutils, which are build-only dependencies.
+  - freedesktop-sdk.bst:public-stacks/runtime-gnu.bst
 
 # Disable binary stripping; this element only creates text files and the
 # runtime-minimal sandbox does not include the stripper toolchain.
@@ -19,7 +19,7 @@ config:
   install-commands:
     - mkdir -p "%{install-root}/usr/lib"
     - |
-      # Extract the FSDK point release (e.g. 25.08.13) from the pinned junction ref.
+      # Extract the FSDK point release from the pinned junction ref.
       FSDK_VERSION=""
       while read -r line; do
         if [[ "${line}" =~ ref:[[:space:]]+freedesktop-sdk-([0-9]+\.[0-9]+\.[0-9]+)- ]]; then

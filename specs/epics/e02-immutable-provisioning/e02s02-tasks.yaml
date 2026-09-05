@@ -1,0 +1,21 @@
+story_id: e02s02
+title: Provision first-boot root credentials and SSH keys
+status: failing
+bcps: 8
+tasks:
+  - id: 1
+    description: Define a systemd-native first-boot credential contract for the root password and authorized SSH keys without embedding secrets.
+    verify: grep -RIn 'passwd.hashed-password.root\|authorized_keys\|credential' docs elements files | head -120
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [security, provisioning]
+  - id: 2
+    description: Wire credential consumption and add an unattended install/first-boot verification path.
+    verify: just test
+    risk: P0
+    status: failing
+    allure:
+      severity: critical
+      categories: [security, qemu]

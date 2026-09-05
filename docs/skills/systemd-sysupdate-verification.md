@@ -4,7 +4,7 @@ description: Configure and operate GPG signature verification for Bluefin Server
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
   context7-sources:
     - /systemd/systemd
 ---
@@ -55,13 +55,26 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
   format). Shipped to `/usr/lib/systemd/import-pubring.pgp` by
   `elements/bluefin-server/os-sysupdate-keys.bst`.
 - `.github/workflows/build.yml` — assembles all release assets under
-  `dist/release/`, generates a single combined `dist/release/SHA256SUMS`,
-  signs it with the `SYSUPDATE_SIGNING_KEY` repository secret, producing
-  `dist/release/SHA256SUMS.gpg`, and uploads `dist/release/*` to the GitHub
-  Release.
+  `dist/release/`, verifies the exact versioned artifact set with
+  `.github/scripts/verify-release.py`, generates a single combined
+  `dist/release/SHA256SUMS`, signs it with the `SYSUPDATE_SIGNING_KEY`
+  repository secret, verifies the detached signature with the shipped public
+  keyring, and uploads `dist/release/*` to the GitHub Release.
 - `files/os/sysupdate.d/*.transfer` — each transfer points its static `Path=`
   at `https://github.com/projectbluefin/server/releases/latest/download/` so
   all transfers share the same signed manifest.
+
+## Core Process
+
+1. Edit or add a transfer in `files/os/sysupdate.d/` — static `Path=` in
+   `[Source]`, `@v` only in `MatchPattern=`.
+2. Test the trust chain locally in a Fedora container (see "Common Gotchas").
+3. On merge, CI assembles `dist/release/`, verifies the artifact set with
+   `verify-release.py`, signs the single combined `SHA256SUMS`, verifies the
+   detached signature, and uploads to the GitHub Release.
+4. Hosts verify `SHA256SUMS.gpg` against the shipped
+   `/usr/lib/systemd/import-pubring.pgp` before applying any update.
+5. Rotate the signing key only around a release boundary (procedure below).
 
 ## Rotating the Signing Key
 
@@ -116,6 +129,22 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
   copy of a transfer with only `[Target] Path=` rewritten, and run `list` and
   `update`. The live release must yield "Signature verification succeeded";
   gpg's "WARNING: Using untrusted key!" is expected ownertrust noise.
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "`Verify=no` just for local testing." | Never ship it; `Verify=` defaults to `yes` and must stay that way in every shipped transfer. |
+| "Put `@v` in `Path=` for cleaner URLs." | `Path=` is static and never expanded; `@v` there 404s version discovery for every transfer. |
+| "Sign a separate manifest per asset type." | All transfers share one `Path=`; multiple `SHA256SUMS` uploads collide and break sysupdate. |
+
+## Red Flags
+
+- `Verify=no` in any shipped transfer.
+- `@v` anywhere in a `[Source] Path=`.
+- More than one `SHA256SUMS` manifest uploaded to a single release.
+- The private signing key stored anywhere except the `SYSUPDATE_SIGNING_KEY`
+  repository secret.
 
 ## Verification
 

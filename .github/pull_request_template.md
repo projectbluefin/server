@@ -17,7 +17,7 @@ opened ──▶ review ──▶ approved ──▶ merged
                                 when CI green
 ```
 
-> Add `do-not-merge` at any time to block automation.
+> Add `hold` at any time to block automation.
 > `/approve` or `lgtm` from a maintainer triggers merge queue.
 
 ## Checklist
@@ -26,7 +26,7 @@ opened ──▶ review ──▶ approved ──▶ merged
 - [ ] `just validate` passes
 - [ ] `pre-commit run --all-files` passes
 - [ ] Skill doc updated if the change affects agent-facing conventions or behavior (see `docs/skills/skill-improvement.md`)
-- [ ] `AGENTS.md` / `docs/SKILL.md` / `docs/skills/` links remain valid
+- [ ] `AGENTS.md` and `docs/skills/` links remain valid
 - [ ] CI is green after push: `gh run list --repo projectbluefin/server --limit 5`
 
 ## AI attribution

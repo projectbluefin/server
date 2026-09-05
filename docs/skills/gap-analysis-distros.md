@@ -6,13 +6,36 @@ description: |
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-04
 ---
 # Gap Analysis: Bluefin Server versus Comparable Server OSes
 
 This is a source-verified, self-contained comparison using generic, public-facing framing.
 Facts about other distributions are drawn from their upstream documentation;
 facts about Bluefin Server are drawn from source files in this repository.
+
+## When to Use
+
+- Checking a factual capability gap between Bluefin Server and a comparable
+  server OS.
+- Justifying or re-prioritizing work in [architecture-roadmap.md](architecture-roadmap.md).
+- Writing design docs that need cited upstream references.
+
+## When NOT to Use
+
+- How-to procedures for building or operating anything — use the domain skills.
+- Marketing-style comparisons; this is a source-verified engineering artifact.
+
+## Core Process
+
+When refreshing this analysis:
+
+1. Re-read the upstream distribution documentation listed in
+   "Sources Consulted" and update the per-distro sections.
+2. Verify every Bluefin Server claim against the linked source files in this
+   repository, not against other docs.
+3. Re-derive the factual gaps, then update
+   [architecture-roadmap.md](architecture-roadmap.md) to match.
 
 ## 1. Comparison Axes
 
@@ -137,6 +160,26 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 3. **First-boot credential provisioning is incomplete.** Only the `root` password credential path is shipped; SSH keys, network configuration, and other `systemd-creds`-based provisioning remain documented but not implemented.
 
 These gaps drive the priorities in [architecture-roadmap.md](architecture-roadmap.md).
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "I remember how Talos/Flatcar does it." | Cite the upstream doc; memories go stale between releases. |
+| "The skill file says the feature exists." | Verify against the linked source files in this repo — docs describe intent, source shows implementation. |
+| "Close enough, the gap list is probably still right." | Every refresh must re-derive gaps from current source, then re-sync the roadmap. |
+
+## Red Flags
+
+- A Bluefin Server claim with no linked source file in this repository.
+- A distribution claim with no upstream documentation citation.
+- Roadmap items that no longer trace back to a gap listed here.
+
+## Verification
+
+- [ ] Every Bluefin Server claim links to a file in this repository.
+- [ ] Every distribution claim links to upstream documentation.
+- [ ] The gap list and [architecture-roadmap.md](architecture-roadmap.md) priorities agree.
 
 ## 6. Sources Consulted
 
