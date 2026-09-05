@@ -1,0 +1,25 @@
+# Single source of truth for CPU-architecture identity strings.
+#
+# project.conf declares `options.arch` (aarch64, x86_64) and binds it to
+# `%{arch}`. Artifacts that have to restate that choice in a vendor-specific
+# spelling read it from here instead of hardcoding a literal, so the build
+# axis and the identity written into the image cannot drift apart.
+#
+#   %{arch}           BuildStream / uname -m      x86_64      aarch64
+#   %{systemd-arch}   systemd `ARCHITECTURE=`     x86-64      arm64
+#   %{flatcar-board}  Flatcar `FLATCAR_BOARD=`    amd64-usr   arm64-usr
+#
+# `options.arch.values` in project.conf constrains the axis to the two
+# architectures mapped below, so an unmapped architecture cannot be selected.
+#
+# Included by:
+#   elements/oci/k3s-sysext.bst              -> %{systemd-arch}
+#   elements/bluefin-server/os-release-flatcar.bst -> %{flatcar-board}
+variables:
+  (?):
+    - arch == "x86_64":
+        systemd-arch: "x86-64"
+        flatcar-board: "amd64-usr"
+    - arch == "aarch64":
+        systemd-arch: "arm64"
+        flatcar-board: "arm64-usr"
