@@ -97,6 +97,8 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | `track-refs` | `build.yml` | `pull_request` (`renovate/*` only) | Resolves BuildStream junction refs and pushes them back to the PR branch. Sole `contents: write` grant on `pull_request`. |
 | `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile, and signs the release manifest on pushes to `main`. Read-only token. |
 | `release` | `build.yml` | `push/main`, `workflow_dispatch` | Downloads the signed assets handed off by `build` and publishes them to the GitHub Release. `contents: write`. |
+| `docs` | `docs-checks.yml` | `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. Read-only token. |
+| `unit` | `unit-tests.yml` | `pull_request`, `push/main` | Runs pytest and BATS unit test suites. Read-only token. |
 
 GitHub Actions runs the **complete BuildStream compilation pipeline** using `/mnt`
 SSD storage on the runner for podman and BuildStream caches. Release assets are
