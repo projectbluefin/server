@@ -1,7 +1,7 @@
 kind: import
 description: |
-  Install a temporary sshd drop-in that allows root login for bring-up
-  and cluster boot tests.
+  Install a hardened sshd drop-in: key-based auth only, no direct root
+  password login. Bring-up diagnostics use key-based access.
 
 sources:
   - kind: local
