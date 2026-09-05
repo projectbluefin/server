@@ -46,19 +46,27 @@ just tags                  # show FSDK-derived version tags
 
 ## Core Process
 
-Run the local installer-to-boot acceptance path with:
+The lab is the primary installer-to-boot gate — see the boot-test gate in
+[`factory-integration.md`](factory-integration.md). Push the change and let the
+lab install and reboot it before treating it as verified.
+
+`just test` is the local escape hatch for the developer loop:
 
 ```bash
 just test
 ```
 
 It builds and exports the installer, then boots the existing UEFI raw image in
-QEMU/KVM. The test does not need a lab and keeps serial diagnostics when it
+QEMU/KVM. The test needs no lab and keeps serial diagnostics when it
 fails. It requires `qemu-system-x86_64`, readable `/dev/kvm`, `zstd`, and
 `podman`. When host OVMF paths are not supplied, the harness stages the UEFI
 code and variable-store template from the same cached `bst2` image used to
 build the installer. Set both `OVMF_CODE` and `OVMF_VARS` to override that
 source.
+
+A local pass does not substitute for the lab gate; the lab asserts strictly
+more. Note that each run writes a multi-gigabyte installer image and a target
+disk under `$XDG_CACHE_HOME`, retained only when the run fails.
 
 ## Flashing the installer media
 

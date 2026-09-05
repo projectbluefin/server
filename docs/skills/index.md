@@ -28,7 +28,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`projectbluefin/common label workflow`](https://github.com/projectbluefin/common/blob/main/docs/skills/label-workflow.md) | Issue labels, lifecycle, ownership, or template synchronization | Shared factory workflow; use [`bonedigger templates`](https://github.com/projectbluefin/bonedigger/blob/main/docs/skills/bonedigger-templates.md) for downstream template ownership and do not duplicate the label taxonomy locally. |
 | [`ddi-installer-build.md`](ddi-installer-build.md) | Building the installer or DDI on the cluster | Cluster build pipeline and local installer/DDI build. |
 | [`ddi-installer.md`](ddi-installer.md) | Installer boot flow, `systemd-sysinstall`, `systemd-repart` | High-level DDI install architecture and local smoke test. |
-| [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |
+| [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test gate, factory role | How Bluefin Server is consumed by the CI lab, and the primary boot-test gate. |
 | [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |
 | [`k3s-sysext.md`](k3s-sysext.md) | Building the k3s sysext | BuildStream element and publish steps for the k3s sysext. |
 | [`k3s-sysext-ops.md`](k3s-sysext-ops.md) | Operating k3s on Bluefin Server | Runtime operation and reboot coordination for k3s. |
@@ -43,5 +43,5 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 
 - **Publish registry:** factory OCI registry (set by your operator).
 - **Cluster build workflow:** `bluefin-server-build-pipeline` in the downstream factory CI repository.
-- **Cluster boot-test workflow:** `bluefin-server-boot-test` in the downstream factory CI repository.
+- **Cluster boot-test workflow:** `bluefin-server-boot-test` in the downstream factory CI repository — the primary gate; `just test` is a local escape hatch.
 - **Version scheme:** FSDK-derived only; no separate application version axis.

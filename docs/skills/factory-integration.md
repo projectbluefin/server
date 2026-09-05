@@ -73,6 +73,32 @@ When deciding where a new capability belongs:
 4. Never add it to `elements/bluefin-server/os-stack.bst` just because that is
    the easiest place.
 
+## Boot-test gate
+
+The lab is the primary installer-to-boot gate. A change is only considered
+verified once the lab has installed and rebooted it; the local
+[`just test`](ddi-installer-build.md) harness is a fast escape hatch for the
+developer loop, not the gate.
+
+The lab runs two Argo `WorkflowTemplate`s, owned by the downstream factory CI
+repository and reconciled by Argo CD:
+
+| Workflow | Role |
+|---|---|
+| `bluefin-server-build-pipeline` | Builds `oci/bluefin-server-ddi.bst` and `oci/bluefin-server-installer.bst` from a git ref and publishes the installer OCI to the lab registry. |
+| `bluefin-server-boot-test` | Pulls that installer OCI, installs it to a blank disk in a KubeVirt VM, reboots from the target disk alone, and asserts on the serial log. |
+
+Because the build pipeline takes a **git ref**, a change must be pushed before
+the lab can gate it. Local commits are invisible to the lab.
+
+The lab gate is strictly stronger than the local harness: in addition to the
+serial-log assertions, it verifies that the installed disk carries a
+`bluefin-server-root-a` partition label. Treat a local pass with a lab failure
+as a lab-authoritative failure.
+
+Template names, parameters, and defaults are owned by the cluster. Query them
+before submitting anything; never reproduce their YAML from documentation.
+
 ## SSH policy
 
 > OpenSSH is installed in the OS DDI but `sshd.service` is disabled by default. When an operator enables it, authentication is key-only (`PermitRootLogin prohibit-password`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`), so the service fails closed without a provisioned authorized key. First-boot SSH-key provisioning is not implemented; it is tracked separately in the credential-provisioning work (see `docs/MVP_1_0_READINESS.md`). The lab runs the `bluefin-server-boot-test` Argo workflow (in the downstream factory CI repository) to verify installer → first-boot success over serial or guest-agent diagnostics, not SSH.

@@ -34,7 +34,11 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 | `just export-installer` | Export installer + UKI to `dist/`. |
 | `just build-sysext` | Build the k3s `systemd-sysext`. |
 | `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
-| `just test` | Local QEMU installer-to-boot acceptance test. |
+| `just test` | Local QEMU installer-to-boot escape hatch; the lab is the gate. |
+
+The lab is the primary installer-to-boot gate — push the change and let it
+install and reboot there. See
+[`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 
 ## Skill routing
 
@@ -70,6 +74,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 ## Verification
 
 - [ ] `just validate` passes.
+- [ ] Installer or DDI boot behaviour changes are gated by a lab run, not only `just test`.
 - [ ] Any changed skill is listed in [`docs/skills/index.md`](docs/skills/index.md).
 - [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.
 
