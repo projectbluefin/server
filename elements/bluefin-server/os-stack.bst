@@ -37,6 +37,9 @@ depends:
   # Public keyring for verifying SHA256SUMS manifests from GitHub Releases
   - bluefin-server/os-sysupdate-keys.bst
 
+  # gpg binary required by systemd-sysupdate to verify SHA256SUMS.gpg
+  - freedesktop-sdk.bst:components/gnupg.bst
+
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
 
