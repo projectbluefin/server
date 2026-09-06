@@ -2,8 +2,11 @@ kind: manual
 description: |
   Produce a systemd-sysext extension image for k3s.
 
-  Output: k3s-<release-version>.raw, k3s-<release-version>.raw.zst, and
-  SHA256SUMS, versioned on the OS release axis like the other release assets.
+  Output: k3s-<k3s-version>.raw, k3s-<k3s-version>.raw.zst, and
+  SHA256SUMS, versioned on the k3s axis (include/k3s.yml) — not on the OS
+  release axis. k3s is an independently-pinned third-party payload, and
+  files/os/sysupdate.d/70-k3s.transfer treats this filename as its version
+  oracle, so the filename must move exactly when the k3s binary moves.
 
   The image contains /usr/bin/k3s, systemd units, extension-release
   metadata, Bluefin tuning defaults, and a tmpfiles.d entry that seeds
@@ -11,7 +14,11 @@ description: |
 
 # %{systemd-arch} — the extension-release ARCHITECTURE= value, derived from
 # the `arch` option rather than hardcoded in the staged source file.
-(@): include/arch.yml
+# %{k3s-version} — the asset/extension-release version, derived from the one
+# pinned k3s release rather than restated per consumer.
+(@):
+  - include/arch.yml
+  - include/k3s.yml
 
 build-depends:
   # Core runtime for /bin/sh, coreutils, install, and sha256sum.
@@ -41,8 +48,9 @@ config:
     - |
       set -euo pipefail
       OUT="%{install-root}"
-      # Version on the OS release axis, matching the other release assets.
-      FNAME="k3s-%{release-version}.raw"
+      # Version on the k3s axis: the sysupdate transfer reads this filename
+      # as the version of the thing it delivers, which is k3s — not the OS.
+      FNAME="k3s-%{k3s-version}.raw"
 
       mkdir -p sysext/usr/bin
       mkdir -p sysext/usr/lib/systemd/system
@@ -58,10 +66,12 @@ config:
       # systemd units (not enabled; provisioning can enable them).
       cp -a k3s.service k3s-agent.service sysext/usr/lib/systemd/system/
 
-      # Extension identity required by systemd-sysext. ARCHITECTURE= is
-      # generated from the build's `arch` option so it can never disagree
-      # with the architecture of the k3s binary staged above.
+      # Extension identity required by systemd-sysext. ARCHITECTURE= and
+      # VERSION_ID= are generated from the build's `arch` option and the
+      # pinned k3s version so they can never disagree with the binary staged
+      # above or with the asset filename systemd-sysupdate compares.
       cp -a extension-release.k3s sysext/usr/lib/extension-release.d/
+      echo "VERSION_ID=%{k3s-version}" >> sysext/usr/lib/extension-release.d/extension-release.k3s
       echo "ARCHITECTURE=%{systemd-arch}" >> sysext/usr/lib/extension-release.d/extension-release.k3s
 
       # Tuning defaults shipped in /usr and seeded into /etc via tmpfiles.

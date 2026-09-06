@@ -18,3 +18,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^(project\.conf|elements/freedesktop-sdk\.bst|\.github/scripts/check-release-version\.py)$
+      - id: check-k3s-version
+        name: k3s version derived from include/k3s.yml, not restated
+        entry: python .github/scripts/check-k3s-version.py
+        language: system
+        pass_filenames: false
+        files: ^(include/k3s\.yml|elements/k3s/k3s-bin\.bst|elements/oci/k3s-sysext\.bst|files/k3s/sysext/extension-release\.k3s|files/os/sysupdate\.d/70-k3s\.transfer|\.github/scripts/check-k3s-version\.py)$

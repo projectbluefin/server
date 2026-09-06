@@ -52,6 +52,7 @@ tags:
 [group('dev')]
 validate:
     python3 .github/scripts/check-release-version.py
+    python3 .github/scripts/check-k3s-version.py
     just bst show --deps all oci/bluefin-server-ddi.bst
     just bst show --deps all oci/bluefin-server-installer.bst
     just bst show --deps all oci/k3s-sysext.bst

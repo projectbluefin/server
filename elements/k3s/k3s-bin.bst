@@ -2,8 +2,13 @@ kind: manual
 description: |
   Import the upstream k3s release binary.
 
-  Pinned to the latest stable release for x86_64. The SHA256 is taken from
-  the release's sha256sum-amd64.txt asset.
+  Pinned to the latest stable release for x86_64. The release tag comes from
+  include/k3s.yml (%{k3s-upstream-tag}); only the SHA256 below is restated
+  here, taken from that release's sha256sum-amd64.txt asset.
+
+# %{k3s-upstream-tag} — the upstream release tag, URL-escaped. Single source
+# of truth for the k3s version axis; see include/k3s.yml.
+(@): include/k3s.yml
 
 build-depends:
   - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
@@ -15,7 +20,7 @@ variables:
 
 sources:
   - kind: remote
-    url: github:k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+    url: github:k3s-io/k3s/releases/download/%{k3s-upstream-tag}/k3s
     ref: 65a55ec56c24eab44383086166ec620a491952b7e23941a49ddca6e8a4c4b4de
 
 config:

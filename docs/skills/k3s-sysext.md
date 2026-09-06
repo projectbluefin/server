@@ -56,27 +56,34 @@ Design choices:
 
 | Path | Purpose |
 |------|---------|
-| `elements/k3s/k3s-bin.bst` | Pins the upstream `k3s` binary release and SHA256. |
-| `elements/oci/k3s-sysext.bst` | Builds the EROFS sysext image (`k3s-<release-version>.raw`). |
+| `include/k3s.yml` | **Single source of truth for the k3s version axis** (`%{k3s-upstream-tag}`, `%{k3s-version}`). |
+| `elements/k3s/k3s-bin.bst` | Pins the upstream `k3s` binary SHA256; the release URL is derived from `include/k3s.yml`. |
+| `elements/oci/k3s-sysext.bst` | Builds the EROFS sysext image (`k3s-<k3s-version>.raw`). |
 | `files/k3s/sysext/k3s.service` | systemd unit for the k3s server. Not enabled. |
 | `files/k3s/sysext/k3s-agent.service` | systemd unit for the k3s agent. Not enabled. |
-| `files/k3s/sysext/extension-release.k3s` | Sysext identity (`ID=_any`). |
+| `files/k3s/sysext/extension-release.k3s` | Static sysext identity (`ID=_any`); `VERSION_ID=`/`ARCHITECTURE=` are appended at build time. |
 | `files/k3s/sysext/50-bluefin-tuning.yaml` | Bluefin tuning defaults shipped in `/usr`. |
 | `files/k3s/sysext/k3s-bluefin.conf` | tmpfiles rule that copies tuning defaults to `/etc`. |
 | `files/os/sysupdate.d/70-k3s.transfer` | sysupdate transfer track for the k3s sysext. |
 | `Justfile` | `build-sysext` / `export-sysext` targets. |
 | `.github/workflows/build.yml` | Builds, signs, and publishes sysext assets. |
+| `.github/scripts/check-k3s-version.py` | Fails closed if any consumer restates the k3s version instead of deriving it. |
 
 ## Build Outputs
 
 `elements/oci/k3s-sysext.bst` produces:
 
-- `k3s-<release-version>.raw` — uncompressed EROFS sysext image.
-- `k3s-<release-version>.raw.zst` — zstd-compressed release asset.
+- `k3s-<k3s-version>.raw` — uncompressed EROFS sysext image.
+- `k3s-<k3s-version>.raw.zst` — zstd-compressed release asset.
 - `SHA256SUMS` — checksum manifest for the compressed asset.
 
-The sysext artifact filename is keyed to the OS release version, so it does not
-change when the upstream k3s version changes.
+`<k3s-version>` is `%{k3s-version}` from `include/k3s.yml` — the upstream k3s
+release in filename-safe form (`v1.36.2+k3s1` → `1.36.2-k3s1`; GitHub rewrites
+`+` in release asset names). The artifact filename is keyed to the **k3s**
+version, not the OS release version, because `70-k3s.transfer` reads that
+filename through `@v` as the version of the thing it delivers. A k3s bump
+therefore ships on its own, and an OS point release no longer renames a
+byte-identical sysext.
 
 ## Justfile Commands
 
@@ -90,11 +97,15 @@ just export-sysext         # export sysext artifacts to dist/sysext/
 
 Two places must change together when the upstream k3s release moves:
 
-1. **Binary pin and checksum** in `elements/k3s/k3s-bin.bst`.
-2. **Extension metadata** in `files/k3s/sysext/extension-release.k3s`.
+1. **The version atoms** `k3s-k8s-version` and `k3s-patch` in `include/k3s.yml`.
+   Every other spelling — the download URL, the release asset filename, and the
+   `VERSION_ID=` in the extension-release metadata — is derived from these.
+2. **The checksum** `ref:` in `elements/k3s/k3s-bin.bst`, taken from the new
+   release's `sha256sum-amd64.txt` asset.
 
-After updating these values, run `just validate` to confirm the element graph
-still resolves.
+After updating these values, run `just validate` (which runs
+`.github/scripts/check-k3s-version.py`) to confirm the version invariant holds
+and the element graph still resolves.
 
 ## Operations and runtime testing
 
@@ -103,14 +114,16 @@ see [k3s-sysext-ops.md](k3s-sysext-ops.md).
 
 ## Verification
 
-- [ ] `elements/k3s/k3s-bin.bst` uses a real upstream k3s release URL and a
-      matching SHA256.
-- [ ] `files/k3s/sysext/extension-release.k3s` has `VERSION_ID=` set to the
-      real upstream tag and `ID=_any`.
+- [ ] `include/k3s.yml` is the only file naming a k3s version; the URL in
+      `elements/k3s/k3s-bin.bst` derives from `%{k3s-upstream-tag}` and carries
+      a matching SHA256.
+- [ ] `files/k3s/sysext/extension-release.k3s` has `ID=_any` and no literal
+      `VERSION_ID=` (it is appended from `%{k3s-version}` at build time).
+- [ ] `python3 .github/scripts/check-k3s-version.py` passes.
 - [ ] Both `k3s.service` and `k3s-agent.service` are present and neither is
       enabled by default.
-- [ ] `files/os/sysupdate.d/70-k3s.transfer` uses a static `Path=` and OS-release
-      `@v` patterns plus `CurrentSymlink=k3s.raw`.
+- [ ] `files/os/sysupdate.d/70-k3s.transfer` uses a static `Path=` and `@v`
+      patterns matching the k3s-axis asset name, plus `CurrentSymlink=k3s.raw`.
 - [ ] `just validate` resolves the element graph after any k3s version bump.
 - [ ] `just build-sysext && just export-sysext` produces the expected artifacts.
 

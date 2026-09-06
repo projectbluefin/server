@@ -6,10 +6,14 @@ project.conf declares:
     variables:
       release-version: "X.Y.Z"   # must match the FSDK point release
 
-That value names every published release asset
+That value names every published *OS* release asset
 (`bluefin-server-ddi-<v>.raw.zst`, `bluefin-server-<v>.efi`,
-`bluefin-server-installer-<v>.raw.zst`, `k3s-<v>.raw.zst`) and is the
-version systemd-sysupdate extracts from those filenames via `@v`.
+`bluefin-server-installer-<v>.raw.zst`) and is the version
+systemd-sysupdate extracts from those filenames via `@v`.
+
+The k3s sysext is deliberately *not* on this axis: it is an
+independently-pinned third-party payload versioned from `include/k3s.yml`
+and enforced separately by `.github/scripts/check-k3s-version.py`.
 
 The release *tag* is derived independently by the Justfile
 (`fsdk_version`), which greps the point release out of the pinned
