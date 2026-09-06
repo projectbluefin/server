@@ -51,3 +51,6 @@ depends:
 
   # System Management Justfile
   - bluefin-server/os-justfile.bst
+
+  # Console issue banner with KubeStellar dashboard URL
+  - bluefin-server/os-issue.bst
