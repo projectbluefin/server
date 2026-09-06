@@ -5,7 +5,7 @@ sources:
   url: gitlab:freedesktop-sdk/freedesktop-sdk.git
   track: freedesktop-sdk-25.08*
 # renovate: datasource=git-refs depName=https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git
-  ref: freedesktop-sdk-25.08.15-0-gda39a00d43df80bcf17898c2ebf7035df59a6a39
+  ref: freedesktop-sdk-25.08.16-0-gc4f8b7234c787e8282fb9d4f208b08f9f677eba9
 - kind: patch_queue
   path: patches/freedesktop-sdk
 

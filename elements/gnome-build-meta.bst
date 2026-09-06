@@ -5,7 +5,7 @@ sources:
   url: gnome:gnome-build-meta.git
   track: gnome-50
 # renovate: datasource=git-refs depName=https://gitlab.gnome.org/GNOME/gnome-build-meta.git
-  ref: 50.4-0-g8524013485013dd5616bfff02dbeab274d5a4553
+  ref: 50.4-1-gec28a45a6fcd99195ebc39c1aeda78fd6fe27b8f
 - kind: patch_queue
   path: patches/gnome-build-meta
 
