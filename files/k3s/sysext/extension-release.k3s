@@ -1,3 +1,9 @@
+# Static half of the k3s sysext extension-release metadata.
+#
+# VERSION_ID= and ARCHITECTURE= are deliberately absent: both are appended by
+# elements/oci/k3s-sysext.bst from %{k3s-version} (include/k3s.yml) and
+# %{systemd-arch} (include/arch.yml), so the identity reported by
+# `systemd-sysext status` cannot drift from the asset filename or from the
+# architecture of the staged binary.
 NAME=k3s
 ID=_any
-VERSION_ID=v1.36.2+k3s1
