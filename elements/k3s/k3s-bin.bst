@@ -11,7 +11,8 @@ description: |
 (@): include/k3s.yml
 
 build-depends:
-  - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
+  # Base runtime providing /bin/sh and install in the sandbox.
+  - base/base-stack.bst
 
 variables:
   # Do not try to strip the pre-built upstream binary; runtime-minimal
