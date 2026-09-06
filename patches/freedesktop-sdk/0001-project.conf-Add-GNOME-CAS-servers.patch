@@ -1,61 +1,51 @@
-From 370caed5e3a627187448040925fe2bc150c11f8c Mon Sep 17 00:00:00 2001
+From 462f8a6df0a481fa601da0ecdb7a1b01ac4bc291 Mon Sep 17 00:00:00 2001
 From: Jordan Petridis <jpetridis@gnome.org>
 Date: Mon, 4 Aug 2025 20:22:27 +0300
-Subject: [PATCH 02/14] project.conf: Add GNOME CAS servers
+Subject: [PATCH] project.conf: Add GNOME CAS servers
 
 This is meant as a downstream patch. Till now everyone
 has to configure the servers in their buildstream config,
 and in order to have this work ootb we need to patch
 the project.conf of fdo-sdk in order for the junction
 to also make use of the CAS server.
+
+Rebased onto freedesktop-sdk 26.08rc.1: upstream absorbed the
+previous 0001 CAS-limits patch (project.conf now sets
+retry-limit/retry-delay/request-timeout itself), so this patch's
+context now uses the upstream values.
 ---
  project.conf | 12 ++++++++++++
  1 file changed, 12 insertions(+)
 
 diff --git a/project.conf b/project.conf
-index 9600a65fd..f04634f94 100644
+index b3fd0f8..982bddf 100644
 --- a/project.conf
 +++ b/project.conf
-@@ -152,28 +152,40 @@ options:
-     description: Use production boot keys
-     default: False
-
- artifacts:
- - url: https://cache.freedesktop-sdk.io:11001
-   connection-config:
-     keepalive-time: 60
-     retry-limit: 5
+@@ -149,6 +149,12 @@ artifacts:
+     retry-limit: 4
      retry-delay: 500
-     request-timeout: 180
+     request-timeout: 300
 +- url: https://gbm.gnome.org:11003
 +  connection-config:
 +    keepalive-time: 60
-+    retry-limit: 5
++    retry-limit: 4
 +    retry-delay: 500
-+    request-timeout: 180
-
++    request-timeout: 300
+ 
  source-caches:
  - url: https://cache.freedesktop-sdk.io:11001
-   connection-config:
-     keepalive-time: 60
-     retry-limit: 5
+@@ -157,6 +163,12 @@ source-caches:
+     retry-limit: 4
      retry-delay: 500
-     request-timeout: 180
+     request-timeout: 300
 +- url: https://gbm.gnome.org:11003
 +  connection-config:
 +    keepalive-time: 60
-+    retry-limit: 5
++    retry-limit: 4
 +    retry-delay: 500
-+    request-timeout: 180
-
++    request-timeout: 300
+ 
  sandbox:
    build-arch: '%{target_arch}'
-
- elements:
-   autotools:
-     (@): include/_private/autotools-conf.yml
-   cmake:
-     (@): include/_private/cmake-conf.yml
-   meson:
---
-2.54.0
+-- 
+2.55.0

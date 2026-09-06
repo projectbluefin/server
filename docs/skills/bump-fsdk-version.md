@@ -4,7 +4,7 @@ description: Move Bluefin Server to a new freedesktop-sdk release and refresh th
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: 2026-09-06
   context7-sources:
     - /apache/buildstream
 ---
@@ -17,11 +17,11 @@ Use when moving to a new FSDK release, or refreshing the pinned ref.
 There is no application version for these images — the version axis IS the FSDK
 release. Tags are derived from the pinned junction ref in
 `elements/freedesktop-sdk.bst` (the `ref:` line, e.g.
-`freedesktop-sdk-25.08.13-...`):
+`freedesktop-sdk-26.08.0-...`):
 
 - `:latest` — rolling, every publish
-- `:25.08` — FSDK minor line (moves within the line)
-- `:25.08.13` — FSDK point release, treated **immutable**
+- `:26.08` — FSDK minor line (moves within the line)
+- `:26.08.0` — FSDK point release, treated **immutable**
 
 `just tags` parses these from the ref. Provenance labels
 `io.projectbluefin.fsdk.version` / `io.projectbluefin.fsdk.ref` are applied at
@@ -61,19 +61,16 @@ Before merging a bump:
 
 - [ ] `just validate` passes (element graph resolves with new ref)
 - [ ] `just tags` output matches the expected `latest / YY.MM / YY.MM.PP` triple
-- [ ] Both `patches/freedesktop-sdk/` patches (`0001`, `0002`) applied cleanly (no patch failure in `just validate`)
+- [ ] The `patches/freedesktop-sdk/0001-project.conf-Add-GNOME-CAS-servers.patch` applied cleanly (no patch failure in `just validate`)
 - [ ] `just build-installer` and `just build-ddi` complete without error
 - [ ] `io.projectbluefin.fsdk.version` label on the built image matches the new FSDK version
 
-- Bumping across a minor line (for example, 25.08 → 26.08) may rename/relocate components.
-  Re-confirm `components/*` names against the staged junction before assuming a
-  dependency still exists.
-- A point-release tag is immutable: once `:25.08.13` is published, never republish
-different bits under it.
-- Only the systemd-* overrides and two CAS-config patches remain. When a downstream
-  variant syncs a new FSDK pin, check whether `patches/freedesktop-sdk/0001` and
-  `0002` (CAS limits + GNOME CAS servers) still apply cleanly. All other
-  downstream patches were stripped because this repo never builds those components.
+- Bumping across a minor line (for example, 25.08 → 26.08) may rename/relocate components or restructure runtime stacks:
+  - In FSDK 26.08, `public-stacks/runtime-minimal.bst` drops bash and coreutils, which moved to `public-stacks/runtime-gnu.bst`. Stacks whose components carry shell integration commands (like `elements/base/base-stack.bst` for `ldconfig` and `ca-certificates`) need `public-stacks/runtime-gnu.bst` in `depends:`.
+  - `components/systemd-base.bst` was dropped in FSDK 26.08, and FSDK now ships its own systemd directly, so the previous `gnome-build-meta` systemd overrides were removed from `elements/freedesktop-sdk.bst`.
+- A point-release tag is immutable: once `:26.08.0` is published, never republish
+  different bits under it.
+- **Only one CAS-config patch remains.** FSDK 26.08 absorbed the old `0001` CAS-limits patch (upstream `project.conf` sets `retry-limit`/`retry-delay`/`request-timeout` itself), so `patches/freedesktop-sdk/` carries only `0001-project.conf-Add-GNOME-CAS-servers.patch`.
 - Junction overrides are only meaningful for components your local elements
   reference directly. The 25 GNOME sdk/* overrides (cairo, gtk3, pango, glib,
   gdk-pixbuf…) were dead weight — none of our `base-stack`, `brew-deps` etc. ever

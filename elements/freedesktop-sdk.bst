@@ -3,9 +3,9 @@ kind: junction
 sources:
 - kind: git_repo
   url: gitlab:freedesktop-sdk/freedesktop-sdk.git
-  track: freedesktop-sdk-25.08*
+  track: freedesktop-sdk-26.08*
 # renovate: datasource=git-refs depName=https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git
-  ref: freedesktop-sdk-25.08.15-0-gda39a00d43df80bcf17898c2ebf7035df59a6a39
+  ref: freedesktop-sdk-26.08.0-0-gdb97cce32cecadc7a3e98f06d557ebfa6ba9ad46
 - kind: patch_queue
   path: patches/freedesktop-sdk
 
@@ -22,10 +22,9 @@ config:
     - arch == "riscv64":
         bootstrap_build_arch: "x86_64"
 
-  overrides:
-    # Use gnome-build-meta's systemd: it is patched for nspawn/container use
-    # and required by brew-deps.bst (the brew nspawn machine image).
-    components/systemd-base.bst: gnome-build-meta.bst:core-deps/systemd-base.bst
-    components/systemd.bst: gnome-build-meta.bst:core-deps/systemd.bst
-    components/systemd-ukify.bst: gnome-build-meta.bst:core-deps/systemd-ukify.bst
-    components/systemd-libs.bst: gnome-build-meta.bst:core-deps/systemd-libs.bst
+  # FSDK 26.08 dropped components/systemd-base.bst, and gnome-build-meta
+  # (gnome-50 / master) is still pinned to FSDK 25.08 and still depends on it,
+  # so overriding FSDK's systemd onto gnome-build-meta's fails to load.
+  # Use FSDK 26.08's own systemd until gnome-build-meta tracks 26.08.
+  # NOTE: re-evaluate for brew-deps.bst (nspawn machine image), which wanted
+  # gnome-build-meta's nspawn/container patches.
