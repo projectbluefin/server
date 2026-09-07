@@ -131,26 +131,26 @@ export-pxe: export-installer
     @test -n "$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-pxe-initrd-*.cpio.gz' -print -quit)" || { echo "ERROR: PXE initrd was not exported." >&2; exit 1; }
     @echo "==> wrote PXE artifacts:" && ls -lh dist/bluefin-server-pxe-*
 
-# -- k3s systemd-sysext -------------------------------------------------------
-# Produces a systemd-sysext extension image for k3s.
+# -- k0s systemd-sysext -------------------------------------------------------
+# Produces a systemd-sysext extension image for k0s.
 
-# Build the k3s systemd-sysext image.
+# Build the k0s systemd-sysext image.
 [group('sysext')]
 build-sysext:
-    just bst build oci/k3s-sysext.bst
+    just bst build oci/k0s-sysext.bst
 
-# Export the k3s systemd-sysext image + SHA256SUMS to dist/sysext/.
+# Export the k0s systemd-sysext image + SHA256SUMS to dist/sysext/.
 # The artifact checkout also emits an uncompressed .raw; only the
 # versioned .raw.zst release asset and its SHA256SUMS are published.
 [group('sysext')]
 export-sysext: build-sysext
     rm -rf dist/sysext dist/sysext-checkout
     mkdir -p dist/sysext-checkout dist/sysext
-    just bst artifact checkout oci/k3s-sysext.bst --directory /src/dist/sysext-checkout
-    cp dist/sysext-checkout/k3s-*.raw.zst dist/sysext/
+    just bst artifact checkout oci/k0s-sysext.bst --directory /src/dist/sysext-checkout
+    cp dist/sysext-checkout/k0s-*.raw.zst dist/sysext/
     cp dist/sysext-checkout/SHA256SUMS dist/sysext/
     rm -rf dist/sysext-checkout
-    @echo "==> wrote k3s sysext:" && ls -lh dist/sysext/
+    @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
 
 # Write the raw GPT installer image to a physical USB drive.
 [group('installer')]
