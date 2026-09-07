@@ -1,0 +1,12 @@
+diff --git a/elements/components/_private/glib-stage1.bst b/elements/components/_private/glib-stage1.bst
+index 903ad40..abc3b6e 100644
+--- a/elements/components/_private/glib-stage1.bst
++++ b/elements/components/_private/glib-stage1.bst
+@@ -23,6 +23,7 @@ variables:
+   meson-local: >-
+     -Dauto_features=disabled
+     -Dglib_debug=disabled
++    -Dtests=false
+ 
+ public:
+   bst:
