@@ -99,13 +99,30 @@ config:
       ln -sf "../usr/lib/modules/${TARGET_KVER}/vmlinuz" /target-root/boot/vmlinuz
 
       depmod -b /target-root "${TARGET_KVER}" || true
-      # Regenerate dynamic linker cache inside the build container so dracut-install can find system libraries
-      ldconfig || true
+
+      # Configure dynamic linker search paths so ldconfig indexes FSDK libraries
+      # (e.g. libc.so.6, libgcc_s.so.1, libkmod.so) for dracut-install
+      printf '/usr/lib/x86_64-linux-gnu\n/usr/lib/x86_64-linux-gnu/systemd\n' > /etc/ld.so.conf
+      if [ -d /etc/ld.so.conf.d ]; then
+        echo 'include /etc/ld.so.conf.d/*.conf' >> /etc/ld.so.conf
+      fi
+      ldconfig
+
+      # Build target-root linker cache and stage it at /etc/ld.so.cache for dracut
+      mkdir -p /target-root/tmp /target-root/etc
+      printf '/usr/lib/x86_64-linux-gnu\n/usr/lib/x86_64-linux-gnu/systemd\n' > /target-root/tmp/ld.so.conf
+      if [ -d /target-root/etc/ld.so.conf.d ]; then
+        echo 'include /etc/ld.so.conf.d/*.conf' >> /target-root/tmp/ld.so.conf
+      fi
+      ldconfig -r /target-root -f /tmp/ld.so.conf
+      rm -f /target-root/tmp/ld.so.conf
+      cp /target-root/etc/ld.so.cache /etc/ld.so.cache
 
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS and VirtIO block/scsi storage drivers.
       dracut -v --reproducible --no-machineid --no-hostonly \
         --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs" \
         --filesystems "xfs vfat" \
+        --install /etc/ld.so.cache \
         --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
         --kernel-image "${TARGET_KERNEL}" \
         --kver "${TARGET_KVER}" \
