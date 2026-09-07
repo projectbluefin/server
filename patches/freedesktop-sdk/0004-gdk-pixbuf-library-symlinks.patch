@@ -1,0 +1,16 @@
+diff --git a/elements/components/gdk-pixbuf.bst b/elements/components/gdk-pixbuf.bst
+index 60f8f89..878c7c9 100644
+--- a/elements/components/gdk-pixbuf.bst
++++ b/elements/components/gdk-pixbuf.bst
+@@ -24,6 +24,11 @@ variables:
+     -Djpeg=disabled
+     -Dpng=disabled
+     -Dtiff=disabled
++  meson-build: |
++    mkdir -p %{build-dir}/gdk-pixbuf
++    ln -sf libgdk_pixbuf-2.0.so.0.4400.7 %{build-dir}/gdk-pixbuf/libgdk_pixbuf-2.0.so.0
++    ln -sf libgdk_pixbuf-2.0.so.0 %{build-dir}/gdk-pixbuf/libgdk_pixbuf-2.0.so
++    LD_LIBRARY_PATH="$(pwd)/%{build-dir}/gdk-pixbuf:${LD_LIBRARY_PATH:-}" ninja -v -j ${JOBS} -C %{build-dir}
+ 
+ public:
+   bst:
