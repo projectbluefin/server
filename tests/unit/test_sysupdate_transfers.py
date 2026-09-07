@@ -227,3 +227,23 @@ def test_k0s_sysext_image_name_matches_its_extension_release_name():
         "ID must be _any: the sysext ships independently of the host os-release "
         "version and would otherwise be rejected after an OS update"
     )
+
+
+@pytest.mark.parametrize("path", transfer_paths(), ids=lambda p: p.name)
+def test_every_source_artifact_is_staged_in_release_workflow(path: Path):
+    """The release asset a transfer downloads must be staged into dist/release/ by build.yml."""
+    prefix, _ = split_match_pattern(
+        load_transfer(path)["Source"]["MatchPattern"]
+    )
+    # k0s sysext may be staged directly or via the k3s compatibility symlink
+    staged_prefixes = [prefix]
+    if prefix == "k0s-":
+        staged_prefixes.append("k3s-")
+    build_yml = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
+    assert any(
+        re.search(rf"cp\s+.*{re.escape(p)}\*.*dist/release/", build_yml)
+        for p in staged_prefixes
+    ), (
+        f"{path.name} source asset prefix {prefix!r} is not staged to dist/release/ in .github/workflows/build.yml"
+    )
+
