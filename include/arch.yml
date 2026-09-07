@@ -13,7 +13,7 @@
 # architectures mapped below, so an unmapped architecture cannot be selected.
 #
 # Included by:
-#   elements/oci/k3s-sysext.bst              -> %{systemd-arch}
+#   elements/oci/k0s-sysext.bst              -> %{systemd-arch}
 #   elements/bluefin-server/os-release-flatcar.bst -> %{flatcar-board}
 variables:
   (?):
