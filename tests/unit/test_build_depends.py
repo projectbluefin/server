@@ -45,3 +45,45 @@ def test_manual_and_script_elements_depend_on_base_stack():
                 f"{bst_path.relative_to(REPO_ROOT)} is kind: {kind} but does not include "
                 f"base/base-stack.bst in build-depends"
             )
+
+
+def test_compose_elements_set_integrate_false():
+    """Ensure compose elements set integrate: False to avoid invoking nonexistent /bin/sh.
+
+    In FSDK 26.08, shell-less or minimal target images fail if BuildStream attempts
+    to execute integration scripts in the composed sandbox.
+    """
+    for bst_path in ELEMENTS_DIR.rglob("*.bst"):
+        if bst_path.name in ("freedesktop-sdk.bst", "gnome-build-meta.bst"):
+            continue
+
+        content = bst_path.read_text(encoding="utf-8")
+        if "kind: compose" not in content:
+            continue
+
+        data = yaml.safe_load(content)
+        if not isinstance(data, dict) or data.get("kind") != "compose":
+            continue
+
+        config = data.get("config", {})
+        assert config.get("integrate") is False, (
+            f"{bst_path.relative_to(REPO_ROOT)} is kind: compose but does not set "
+            f"'integrate: False' in config"
+        )
+
+
+def test_os_stack_uses_uutils_not_gnu():
+    """Bluefin Server OS must use uutils-coreutils, not GNU userspace."""
+    os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
+    data = yaml.safe_load(os_stack.read_text(encoding="utf-8"))
+    depends = data.get("depends", [])
+
+    assert "bluefin-server/uutils-coreutils.bst" in depends, (
+        "os-stack.bst must include bluefin-server/uutils-coreutils.bst"
+    )
+    assert "freedesktop-sdk.bst:public-stacks/runtime-gnu.bst" not in depends, (
+        "os-stack.bst must NOT depend on GNU userspace (runtime-gnu.bst)"
+    )
+
+
+

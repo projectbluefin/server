@@ -9,3 +9,4 @@ config:
     - debug
     - devel
     - doc
+  integrate: False

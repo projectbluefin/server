@@ -5,6 +5,8 @@ build-depends:
   - freedesktop-sdk.bst:components/linux-firmware.bst
 
 config:
+  integrate: False
+
   # Exclude debug symbols, development files, and locales from composed output
   exclude:
     - debug

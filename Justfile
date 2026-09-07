@@ -22,6 +22,8 @@ export fsdk_ref := `grep -E '^\s*ref:' elements/freedesktop-sdk.bst | head -1 | 
 bst *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    export CONTAINERS_CONF="${CONTAINERS_CONF:-/dev/null}"
+    export CONTAINERS_CONF_OVERRIDE="${CONTAINERS_CONF_OVERRIDE:-/dev/null}"
     mkdir -p "${HOME}/.cache/buildstream"
     # shellcheck disable=SC2086
     {{sudo_cmd}} podman run --rm \
