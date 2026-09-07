@@ -4,7 +4,7 @@ description: Securing provisioning credentials (such as hashed root passwords or
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -68,5 +68,6 @@ cp /path/to/secured_credential.cred /loader/credentials/passwd.hashed-password.r
 
 ## See also
 
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.
 - `systemd-creds(1)`
 - `systemd.system-credentials(7)`

@@ -4,7 +4,7 @@ description: Use when reviewing for bloat, auditing for cuts, or before adding a
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
 ---
 # Avoid Over-Engineering
 
@@ -79,3 +79,4 @@ existing repo convention already does the job.
 
 - [skill-improvement.md](skill-improvement.md) — writing the learning down.
 - [ddi-installer.md](ddi-installer.md) — installer-specific constraints.
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary and preferred terminology.

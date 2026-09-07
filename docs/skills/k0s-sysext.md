@@ -4,7 +4,7 @@ description: Build, ship, and enable the k0s systemd-sysext extension with nativ
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-09-06
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -85,4 +85,5 @@ see [k0s-sysext-ops.md](k0s-sysext-ops.md).
 ## See also
 
 - [k0s-sysext-ops.md](k0s-sysext-ops.md)
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (Sysext definition).
 - `systemd-sysext(8)`, `systemd-confext(8)`

@@ -4,7 +4,7 @@ description: How to add, split, rename, and refactor docs/skills files for Bluef
 metadata:
   type: meta-skill
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
 ---
 # Skill Improvement — How to Maintain Agent Docs
 
@@ -36,7 +36,7 @@ Write it once in the relevant skill. Do not paste the same fact into multiple fi
 ## The loop
 
 1. Do the work.
-2. Update the skill that matches the changed domain.
+2. Update the skill that matches the changed domain, aligning with [`CONTEXT.md`](../../CONTEXT.md) for canonical project terminology.
 3. Update `docs/skills/index.md` if a skill is added, removed, renamed, or re-scoped.
 4. Run the verification commands.
 5. Hand off the work with the changed skill files listed explicitly.
@@ -103,3 +103,9 @@ A skill should split when it exceeds 300 lines or mixes a decision tree with lon
 - [ ] No `TODO/FIXME/draft` markers remain in changed `.md` files.
 - [ ] All internal Markdown links resolve.
 - [ ] New or renamed skills are listed in `docs/skills/index.md` and `AGENTS.md`.
+
+## See also
+
+- [index.md](index.md) — lazy-load routing manifest.
+- [avoid-over-engineering.md](avoid-over-engineering.md) — keeping skills and codebase minimal.
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.

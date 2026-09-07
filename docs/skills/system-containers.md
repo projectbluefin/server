@@ -4,7 +4,7 @@ description: Add or document system containers that should behave like first-cla
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -100,3 +100,8 @@ systemd-run --machine=homebrew --pty /usr/bin/env
 - [ ] `files/bin/system-container` exists and maps to valid `machinectl` commands.
 - [ ] The rootfs image format is documented (`.tar.zst` for `import-tar`).
 - [ ] Toolbox images are not confused with OCI images or sysexts in docs.
+
+## See also
+
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.
+- `machinectl(1)`, `systemd-nspawn(1)`

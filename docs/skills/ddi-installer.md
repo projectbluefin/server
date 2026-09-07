@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server DDI live installe
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -181,6 +181,7 @@ offline installation.
 ## See also
 
 - [ddi-installer-build.md](ddi-installer-build.md)
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (OS DDI and Installer terminology).
 - `systemd-sysinstall(8)`, `systemd-sysinstall.service(8)`
 - `systemd-repart(8)`, `repart.d(5)`
 - `bootctl(1)`, `ukify(1)`

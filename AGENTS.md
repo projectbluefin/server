@@ -9,17 +9,32 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 
 1. Read this file.
 2. Load [`docs/skills/index.md`](docs/skills/index.md) to route to the skill for your task.
-3. Cross-repo factory directives: follow [`projectbluefin/common:docs/factory/agentic-model.md`](https://github.com/projectbluefin/common/blob/main/docs/factory/agentic-model.md) — query `projectbluefin` MCP (`search_knowledge`) before investigating or implementing.
-4. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill.
+3. Cross-repo factory directives: follow [`projectbluefin/common:docs/factory/agentic-model.md`](https://github.com/projectbluefin/common/blob/main/docs/factory/agentic-model.md).
+4. Mandatory use of `projectbluefin` MCP server: query before investigating, designing, or implementing:
+   - `search_knowledge(query, limit)` — engineering patterns, coverage gaps, CI conventions, and per-repository findings across `projectbluefin/*`.
+   - `get_factory_status()` / `get_work_queue()` — live Hive factory state.
+   - Offline fallback: `~/agent.md`, refreshed by `~/.local/bin/sync-hive-kb` (search with `grep`, never load whole file into context).
+5. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill. Use `<build-cache-host>` and `<registry-host>:30500` for generic placeholders.
 
 ## Hard rules
 
-1. Compose from FSDK `components/*`. Never use `platform.bst`.
+1. Compose from FSDK 26.08 `components/*`. Never use `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
-3. Installer must stay `systemd-sysinstall`-native; no custom installer scripts or non-native installers.
+3. Installer must stay `systemd-sysinstall`-native and `systemd-repart`-based; no custom installer scripts or non-native installers.
 4. No shell in the running OS DDI image (temporary exception: SSH is enabled for bring-up and cluster boot tests; see [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md)).
-5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
-6. One canonical source per fact; do not duplicate content across docs.
+5. Deliver k0s as an optional `systemd-sysext`; never bundle Kubernetes or container runtimes into the base OS DDI.
+6. Boot entries use GPT `PARTUUID`; never hardcode device paths.
+7. One canonical source per fact; do not duplicate content across docs.
+
+## Commit and attribution conventions
+
+- Use Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`, `chore:`, etc.).
+- Every AI-authored commit must include standard attribution trailers:
+  ```text
+  Assisted-by: <Model> via GitHub Copilot
+  Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+  ```
+- Staging audit before every commit: never use `git add -A` or `git add .`. Run `git status` and `git diff --cached --name-only` to ensure only intended files are staged.
 
 ## Build / test commands
 
@@ -57,7 +72,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 - Update only the skill that matches your change.
 - Keep `AGENTS.md` small; do not list deep context here.
 - Remove `TODO/FIXME` and work-in-progress markers before merging; move unfinished work to issues.
-- Use Conventional Commits. For doc-only changes: `docs:`.
+- Validate documentation changes with `python3 .github/scripts/docs-checks.py`.
 
 ## Boundaries
 
@@ -65,9 +80,11 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 - Do not hardcode block device paths in boot configuration.
 - Do not put Kubernetes or debug tooling in the base DDI if it can live in a sysext or system container.
 - Do not duplicate a fact already in a skill.
+- Never hardcode internal-only hostnames or IPs; use `<build-cache-host>` / `<registry-host>:30500` placeholders.
 
 ## Verification
 
 - [ ] `just validate` passes.
+- [ ] `python3 .github/scripts/docs-checks.py` passes.
 - [ ] Any changed skill is listed in [`docs/skills/index.md`](docs/skills/index.md).
-- [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.
+- [ ] No internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.

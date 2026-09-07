@@ -4,7 +4,7 @@ description: Operator runbook for the k0s systemd-sysext extension — provision
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-09-06
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -55,4 +55,5 @@ k0s kubectl get pods -A
 ## See also
 
 - [k0s-sysext.md](k0s-sysext.md)
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (Sysext definition).
 - `systemd-sysext(8)`

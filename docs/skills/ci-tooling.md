@@ -4,7 +4,7 @@ description: CI workflow conventions for Bluefin Server. Use when writing or edi
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
   context7-sources:
     - /websites/github_en_actions
     - /websites/cli_github_manual
@@ -144,3 +144,8 @@ uploaded to a GitHub Release tagged `installer-v<FSDK-RELEASE>`.
       combined `SHA256SUMS` manifest.
 - [ ] The signing secret name matches the one documented in
       `docs/skills/systemd-sysupdate-verification.md`.
+
+## See also
+
+- [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md) — release signing and sysupdate verification.
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.

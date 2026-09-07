@@ -4,7 +4,7 @@ description: Move Bluefin Server to a new freedesktop-sdk release and refresh th
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-09-06
+  last_updated: "2026-09-07"
   context7-sources:
     - /apache/buildstream
 ---
@@ -83,3 +83,7 @@ Point releases are fully automated via Renovate and GitHub Actions.
 - **Trigger:** Renovate bot scans `elements/freedesktop-sdk.bst` using a custom regex manager. When a new upstream point release is published, Renovate creates a Pull Request.
 - **Mechanism:** On the Renovate PR, a GHA job in `build.yml` automatically runs `just bst source track freedesktop-sdk.bst` to track and resolve the raw tag to the full `git-describe` ref, then commits and pushes it back to the PR branch.
 - **Build Loop:** When the PR is merged to `main`, GitHub Actions automatically compiles the standalone DDI OS and installer images, and publishes them directly to GitHub Releases under the new FSDK point-release version.
+
+## See also
+
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.

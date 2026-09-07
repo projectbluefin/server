@@ -6,7 +6,7 @@ description: |
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
 ---
 # Gap Analysis: Bluefin Server versus Comparable Server OSes
 
@@ -178,6 +178,7 @@ These gaps drive the priorities in [architecture-roadmap.md](architecture-roadma
 ### Bluefin Server source files
 
 - [../../AGENTS.md](../../AGENTS.md)
+- [../../CONTEXT.md](../../CONTEXT.md)
 - [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)
 - [systemd-sysext-extensions.md](systemd-sysext-extensions.md)
 - [k0s-sysext.md](k0s-sysext.md)

@@ -4,7 +4,7 @@ description: Build, export, flash, and release the Bluefin Server installer medi
 metadata:
   type: how-to
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -45,7 +45,7 @@ cluster cache rather than starving your local machine.
 
 ## Local builds with a remote cache
 
-If you must build locally, point BuildStream at your cluster cache tunnel host (`<build-cache-host>`) by creating `~/.config/buildstream.conf` on your workstation:
+If you must build locally, point BuildStream at your cluster cache tunnel host (`<build-cache-host>`) by creating `~/.config/buildstream.conf` on your workstation. Operators must substitute `<build-cache-host>` with their specific cluster cache hostname or IP when setting up the SSH tunnel (e.g. `ssh -L 8980:<build-cache-host>:8980 ...`):
 
 ```yaml
 projects:
@@ -127,3 +127,8 @@ The release process is driven by `.github/workflows/build.yml`:
       passwords.
 - [ ] The DDI is decompressed after the cpio step.
 - [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
+
+## See also
+
+- [ddi-installer.md](ddi-installer.md) — installer architecture and repart configuration.
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (OS DDI, Installer terminology).

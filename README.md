@@ -2,9 +2,17 @@
 
 **An FSDK-based, image-based Linux server OS.**
 
-Bluefin Server targets the same use-case space as Flatcar Container Linux, Fedora CoreOS, and Talos, but is built from scratch with [BuildStream 2](https://buildstream.build/) from [freedesktop-sdk](https://freedesktop-sdk.freedesktop.org/) components.
+Bluefin Server targets the same use-case space as Flatcar Container Linux, Fedora CoreOS, and Talos, but is built from scratch with [BuildStream 2](https://buildstream.build/) from [freedesktop-sdk](https://freedesktop-sdk.freedesktop.org/) (FSDK 26.08) components and uutils coreutils.
 
 It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html): the OS payload is a compressed XFS DDI filesystem image that is deployed by an offline, systemd-native installer.
+
+## Release status: Alpha
+
+Bluefin Server is currently in **Alpha**:
+- **Milestone status**: Phase A (reproducible build path, uutils, k0s sysext, graph validation) is complete. Phase B (automated boot verification on lab cluster) is in progress.
+- **Trust model**: Releases include cryptographic provenance with GPG-signed `SHA256SUMS` manifests and in-tree `systemd-sysupdate` verification configurations.
+- **Suitability**: Alpha builds are intended for evaluation, testing, and factory validation. Not yet recommended for production workloads.
+- **Readiness roadmap**: Track completed criteria and remaining gates toward 1.0 in [`docs/MVP_1_0_READINESS.md`](docs/MVP_1_0_READINESS.md).
 
 ## What it is
 
@@ -25,21 +33,17 @@ just validate              # resolve the element graph
 just show-me-the-future    # end-to-end QEMU installer smoke test
 ```
 
-See [`AGENTS.md`](AGENTS.md) for the full build matrix and agent skill routing.
+See [`AGENTS.md`](AGENTS.md) for the full build command matrix, hard rules, and agent skill routing.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist and [`docs/skills/index.md`](docs/skills/index.md) for task-specific guidance.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist, Conventional Commit rules, and [`docs/skills/index.md`](docs/skills/index.md) for task-specific guidance.
 
-## Security
+## Security and release trust
 
-See [`SECURITY.md`](SECURITY.md) for the vulnerability disclosure policy, supported versions, and how to verify signed release artifacts.
-
-## Release trust
-
-- GitHub Actions builds all artifacts, signs a combined `SHA256SUMS` manifest, and publishes a GitHub Release.
-- Updates are verified with GPG-signed `SHA256SUMS` manifests from GitHub Releases.
-- See [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) for the trust model.
+- **Signed manifests**: GitHub Actions builds all release artifacts, generates a combined `SHA256SUMS` manifest, and signs it with GPG before publishing to GitHub Releases.
+- **Sysupdate verification**: Target nodes verify updates using signed manifest transfers; see [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) for details.
+- **Vulnerability disclosure**: See [`SECURITY.md`](SECURITY.md) for policy details and how to report security issues.
 
 ## License
 

@@ -4,7 +4,7 @@ description: Extensibility via systemd-sysext and systemd-confext for Bluefin Se
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -107,5 +107,6 @@ systemd-sysext merge --force
 
 ## See also
 
+- [k0s-sysext.md](k0s-sysext.md) for the built-in Kubernetes extension
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (Sysext definition).
 - `systemd-sysext(8)`, `systemd-confext(8)`
-- `k3s-sysext.md` for the built-in Kubernetes extension

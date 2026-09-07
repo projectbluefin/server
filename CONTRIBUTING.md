@@ -1,22 +1,29 @@
 # Contributing to Bluefin Server
 
-Thanks for contributing. This repo is optimized for AI coding agents first; human contributors should follow the same skill-driven path.
+Thanks for contributing. This repository is optimized for AI coding agents first; human contributors follow the same skill-driven workflow and conventions.
 
-## Quick contributor checklist
+## Contributor workflow and rules
 
-1. Read [`AGENTS.md`](AGENTS.md) and the skill in [`docs/skills/index.md`](docs/skills/index.md) that matches your change.
-2. Make the smallest change that solves the problem.
-3. Run `just validate` on every change that touches the element graph.
-4. Update the skill that matches your change while the work is fresh.
-5. Remove any `TODO/FIXME` or work-in-progress markers from docs before merging.
-6. Use Conventional Commits for commits and PR titles (`feat:`, `fix:`, `docs:`, `ci:`, `chore(deps):`).
-7. Target `main`. Keep branches local until ready; no WIP PRs.
+1. Read [`AGENTS.md`](AGENTS.md) and the skill in [`docs/skills/index.md`](docs/skills/index.md) matching your task.
+2. AI agents must query the `projectbluefin` MCP server (`search_knowledge(query, limit)`, `get_factory_status()`, `get_work_queue()`) before investigating or implementing.
+3. Make the smallest change that solves the problem.
+4. Run `just validate` on every change that touches the element graph.
+5. Validate documentation changes with `python3 .github/scripts/docs-checks.py`.
+6. Use Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`, `chore:`).
+7. Attribution trailers are required on all AI-assisted commits:
+   ```text
+   Assisted-by: <Model> via GitHub Copilot
+   Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+   ```
+8. Staging audit: never use `git add -A` or `git add .`. Audit staged changes using `git status` and `git diff --cached --name-only`.
+9. Remove any TODO or work-in-progress markers before opening a PR.
+10. Target `main`. Keep branches local until ready; no WIP PRs.
 
-## Useful references
+## References
 
-- [`AGENTS.md`](AGENTS.md) — root entry point, hard rules, build commands, boundaries.
-- [`docs/skills/index.md`](docs/skills/index.md) — lazy-load manifest that routes to the right skill.
-- [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) — how to add or refactor skills.
+- [`AGENTS.md`](AGENTS.md) — root entry point, hard rules, build matrix, and boundaries.
+- [`docs/skills/index.md`](docs/skills/index.md) — lazy-load manifest routing to the appropriate skill.
+- [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) — guide for creating or refining skills.
 
 ## License
 

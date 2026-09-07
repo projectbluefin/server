@@ -4,7 +4,7 @@ description: Lazy-load manifest for Bluefin Server skills. Load this file after 
 metadata:
   type: index
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
 ---
 # docs/skills — Index
 
@@ -13,9 +13,10 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 ## Loading contract
 
 1. Read `AGENTS.md` first.
-2. Read this file.
-3. Read **one** skill file from the table below that matches the current task.
-4. Do not load unrelated skills. If a skill references another file, follow the link only when the referenced topic is part of the current task.
+2. Consult [`CONTEXT.md`](../../CONTEXT.md) for canonical project domain terminology (OS DDI, Installer, Sysext, Transfer).
+3. Read this file.
+4. Read **one** skill file from the table below that matches the current task.
+5. Do not load unrelated skills. If a skill references another file, follow the link only when the referenced topic is part of the current task.
 
 ## Routing table
 
@@ -39,7 +40,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 
 ## Standing facts
 
-- **Publish registry:** factory OCI registry (set by your operator).
+- **Publish registry:** factory OCI registry at `<registry-host>:30500` (or configured by operator).
 - **Cluster build workflow:** `bluefin-server-build-pipeline` in the downstream factory CI repository.
 - **Cluster boot-test workflow:** `bluefin-server-boot-test` in the downstream factory CI repository.
 - **Version scheme:** FSDK-derived only; no separate application version axis.

@@ -4,7 +4,7 @@ description: Configure and operate GPG signature verification for Bluefin Server
 metadata:
   type: reference
   status: stable
-  last_updated: 2026-07-20
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -131,3 +131,8 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
 - [ ] Every transfer in `files/os/sysupdate.d/*.transfer` uses a static `Path=`
       with no `@v` placeholder.
 - [ ] Every transfer uses `@v` only inside `MatchPattern=`.
+
+## See also
+
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (Transfer definition).
+- `systemd-sysupdate(8)`, `sysupdate.d(5)`

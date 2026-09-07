@@ -4,7 +4,7 @@ description: Roadmap for future Bluefin Server architecture work. Use when plann
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-07-20"
+  last_updated: "2026-09-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -35,3 +35,8 @@ Priorities are derived from [gap-analysis-distros.md](gap-analysis-distros.md).
 - The current tree intentionally favors a single-slot update path and a single signed manifest flow.
 - Any implementation work should preserve the current systemd-native model and avoid custom daemons.
 - See [gap-analysis-distros.md](gap-analysis-distros.md) for the source-verified comparison that produced this list.
+
+## See also
+
+- [gap-analysis-distros.md](gap-analysis-distros.md) — source-verified distro comparison.
+- [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.
