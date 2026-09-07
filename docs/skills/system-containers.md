@@ -31,7 +31,7 @@ runtime UI.
 ## When NOT to Use
 
 - Adding a distroless OCI runtime image — the server repo does not build those.
-- Kubernetes workload or cluster questions — use `k3s-sysext.md`.
+- Kubernetes workload or cluster questions — use `k0s-sysext.md`.
 
 ## Lifecycle
 

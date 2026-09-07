@@ -113,7 +113,7 @@ uploaded to a GitHub Release tagged `installer-v<FSDK-RELEASE>`.
    `just bst source track` to resolve raw tags to full `git-describe` refs and
    commits them back to the PR branch.
 3. **Full Compilation:** Builds the standalone DDI OS image, live installer, and
-   k3s systemd-sysext on every pull request and push to `main`.
+   k0s systemd-sysext on every pull request and push to `main`.
 4. **Version Derivation:** The release tag is derived with `just version`, which
    parses the pinned FSDK point release from `elements/freedesktop-sdk.bst`.
 5. **Automated Publishing:** For pushes to `main` (including Renovate PR merges),

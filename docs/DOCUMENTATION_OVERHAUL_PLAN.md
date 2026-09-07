@@ -58,8 +58,8 @@ Audit scope: all `*.md` files owned by this repository. Dependency caches under 
 | `docs/skills/ddi-installer.md` | 170 | **Keep** | Architecture reference under the 300-line warning and 500-line hard cap. |
 | `docs/skills/factory-integration.md` | 101 | **Keep / refresh** | Genericize the downstream workflow reference (“the factory CI repository” rather than a repo path + internal details). Keep the temporary SSH exception. |
 | `docs/skills/gap-analysis-distros.md` | 196 | **Keep** | Source-verified comparison; under budget. Cross-links to roadmap. |
-| `docs/skills/k3s-sysext.md` | 120 | **Keep** | How-to for building/sysext design. |
-| `docs/skills/k3s-sysext-ops.md` | 119 | **Keep** | How-to for enabling/troubleshooting. Some overlap with `k3s-sysext.md` is intentional (build vs. ops); keep split. |
+| `docs/skills/k0s-sysext.md` | 120 | **Keep** | How-to for building/sysext design. |
+| `docs/skills/k0s-sysext-ops.md` | 119 | **Keep** | How-to for enabling/troubleshooting. Some overlap with `k0s-sysext.md` is intentional (build vs. ops); keep split. |
 | `docs/skills/system-containers.md` | 102 | **Keep** | Focused system-container how-to. |
 | `docs/skills/systemd-sysext-extensions.md` | 111 | **Keep** | Extension loading reference. |
 | `docs/skills/systemd-sysupdate-verification.md` | 133 | **Keep** | Trust/signing reference. No internal-only refs. |
@@ -100,8 +100,8 @@ projectbluefin/server
 │       ├── ddi-installer-build.md
 │       ├── factory-integration.md
 │       ├── gap-analysis-distros.md
-│       ├── k3s-sysext.md
-│       ├── k3s-sysext-ops.md
+│       ├── k0s-sysext.md
+│       ├── k0s-sysext-ops.md
 │       ├── system-containers.md
 │       ├── systemd-sysext-extensions.md
 │       ├── systemd-sysupdate-verification.md
@@ -209,7 +209,7 @@ The existing `AGENTS.md` is already AAIF-aligned. The target content below keeps
 Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 - an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
 - an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
-- an optional k3s `systemd-sysext` (`oci/k3s-sysext.bst`)
+- an optional k0s `systemd-sysext` (`oci/k0s-sysext.bst`)
 
 ## What agents should know first
 
@@ -237,7 +237,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 | `just export-ddi` | Export DDI artifacts to `dist/ddi/`. |
 | `just build-installer` | Local full installer build. |
 | `just export-installer` | Export installer + UKI to `dist/`. |
-| `just build-sysext` | Build the k3s `systemd-sysext`. |
+| `just build-sysext` | Build the k0s `systemd-sysext`. |
 | `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
 | `just show-me-the-future` | Local QEMU installer smoke test. |
 
@@ -246,9 +246,9 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 | Task | Skill |
 |---|---|
 | Build or debug the installer / DDI | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md), [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md) |
-| Factory role, k3s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
+| Factory role, k0s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
 | Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
-| Build or ship the k3s sysext | [`docs/skills/k3s-sysext.md`](docs/skills/k3s-sysext.md), [`docs/skills/k3s-sysext-ops.md`](docs/skills/k3s-sysext-ops.md) |
+| Build or ship the k0s sysext | [`docs/skills/k0s-sysext.md`](docs/skills/k0s-sysext.md), [`docs/skills/k0s-sysext-ops.md`](docs/skills/k0s-sysext-ops.md) |
 | Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
 | CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
 | Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |

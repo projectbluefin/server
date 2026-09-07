@@ -51,7 +51,7 @@ must match the value baked into `elements/bluefin-server/os-release-flatcar.bst`
 
 ## Adding an extension from the Flatcar Bakery
 
-The k3s sysext is the built-in example, but any Flatcar-compatible extension can
+The k0s sysext is the built-in example, but any Flatcar-compatible extension can
 be layered the same way.
 
 ```bash

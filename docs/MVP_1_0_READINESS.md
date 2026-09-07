@@ -4,7 +4,7 @@ This audit tracks the gap between the current tree and a first public/usable MVP
 
 ## MVP 1.0 bar
 
-1. **Reproducible build path** — documented command or CI job that produces the DDI, live installer, and k3s sysext.
+1. **Reproducible build path** — documented command or CI job that produces the DDI, live installer, and k0s sysext.
 2. **Signed release artifacts** — combined `SHA256SUMS` + detached GPG signature published to GitHub Releases.
 3. **Automated boot verification** — at least one non-human test that proves the installer writes a bootable disk and the installed OS reaches a target.
 4. **Functional update path** — host can pull the signed manifest and apply an OS update without manual intervention.
@@ -15,7 +15,7 @@ This audit tracks the gap between the current tree and a first public/usable MVP
 
 | Check | Status | Evidence |
 |---|---|---|
-| Element graph resolves | ✅ | `just validate` succeeds for DDI, installer, and k3s sysext |
+| Element graph resolves | ✅ | `just validate` succeeds for DDI, installer, and k0s sysext |
 | Release workflow lint | ✅ | `actionlint .github/workflows/build.yml` clean |
 | Release path exists | ✅ | `.github/workflows/build.yml` builds, signs, uploads to GitHub Release |
 | Cluster build pipeline | ✅ | Deadlines fixed in the downstream factory CI repository; branch build running |
@@ -39,7 +39,7 @@ Priority order. Each item depends on the ones above it.
 - [x] Extend cluster build deadlines so the pipeline can finish.
 - [x] Fix `build.yml` actionlint warnings.
 - [ ] Confirm a branch build succeeds and publishes `bluefin-server-installer:latest` to lab Zot.
-- [ ] Add `oci/k3s-sysext.bst` to the cluster build pipeline.
+- [ ] Add `oci/k0s-sysext.bst` to the cluster build pipeline.
 
 ### Phase B: automated boot verification
 

@@ -28,20 +28,20 @@ The factory pattern is broader than a single host: a downstream CI lab or OS fac
 │ Bluefin Server (this repo)                                  │
 │ Core server OS: DDI-first, image-updated, distroless        │
 │ • systemd-sysupdate for atomic A/B updates                  │
-│ • systemd-sysext for optional layers (k3s, extensions)      │
+│ • systemd-sysext for optional layers (k0s, extensions)      │
 │ • podman for container workloads                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## k3s is a sysext, not base image bloat
+## k0s is a sysext, not base image bloat
 
-Kubernetes is not baked into the OS DDI. The base image stays small and stateless; k3s is delivered as a `systemd-sysext` EROFS image that overlays `/usr/` at runtime.
+Kubernetes is not baked into the OS DDI. The base image stays small and stateless; k0s is delivered as a `systemd-sysext` EROFS image that overlays `/usr/` at runtime.
 
-- `elements/oci/k3s-sysext.bst` builds the sysext.
-- `files/os/sysupdate.d/70-k3s.transfer` enables OTA updates of the sysext.
-- `files/os/justfile` provides the `just k8s server|agent` entrypoint.
+- `elements/oci/k0s-sysext.bst` builds the sysext.
+- `files/os/sysupdate.d/70-k0s.transfer` enables OTA updates of the sysext.
+- `files/os/justfile` provides the `just k8s` entrypoint.
 
-See [k3s-sysext.md](k3s-sysext.md) for details.
+See [k0s-sysext.md](k0s-sysext.md) for details.
 
 ## Workloads are containers
 

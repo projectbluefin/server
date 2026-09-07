@@ -61,13 +61,13 @@ For the full trust model, key rotation, and transfer configuration, see
 
 This policy covers everything this repository produces and its build pipeline:
 
-- The OS DDI payload, the offline installer disk image, and the k3s
+- The OS DDI payload, the offline installer disk image, and the k0s
   `systemd-sysext`.
 - BuildStream elements, build tooling, and GitHub Actions workflows.
 - Release signing and the `systemd-sysupdate` update/verification flow.
 
 **Out of scope:** vulnerabilities in upstream components such as
-freedesktop-sdk, GNOME build metadata, systemd, or k3s itself. Report those to
+freedesktop-sdk, GNOME build metadata, systemd, or k0s itself. Report those to
 the respective upstream project; report to this repository only when the issue
 is introduced by our integration, build, signing, or packaging of the
 component.

@@ -25,7 +25,7 @@ just build-installer       # build the installer locally
 just export-installer      # export installer + UKI + SHA256SUMS to dist/
 just build-ddi             # build the OS DDI payload
 just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
-just build-sysext          # build the k3s sysext
+just build-sysext          # build the k0s sysext
 just export-sysext         # export sysext artifacts to dist/sysext/
 just flash-installer       # write the installer image to a USB device
 just show-me-the-future    # end-to-end QEMU installer smoke test
@@ -87,7 +87,7 @@ Use direct I/O and full-block reads to avoid dirtying the page cache.
 The release process is driven by `.github/workflows/build.yml`:
 
 - Renovate point-release updates or direct pushes to `main` trigger a full build.
-- CI builds the DDI payload, installer, target UKI, and k3s sysext.
+- CI builds the DDI payload, installer, target UKI, and k0s sysext.
 - CI uploads the versioned release assets to the corresponding
   `installer-v<release-version>` GitHub Release.
 - CI also produces a combined `dist/release/SHA256SUMS` manifest and signs it

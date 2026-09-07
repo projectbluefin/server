@@ -3,7 +3,7 @@
 Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 - an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
 - an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
-- an optional k3s `systemd-sysext` (`oci/k3s-sysext.bst`)
+- an optional k0s `systemd-sysext` (`oci/k0s-sysext.bst`)
 
 ## What agents should know first
 
@@ -31,7 +31,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 | `just export-ddi` | Export DDI artifacts to `dist/ddi/`. |
 | `just build-installer` | Local full installer build. |
 | `just export-installer` | Export installer + UKI to `dist/`. |
-| `just build-sysext` | Build the k3s `systemd-sysext`. |
+| `just build-sysext` | Build the k0s `systemd-sysext`. |
 | `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
 | `just show-me-the-future` | Local QEMU installer smoke test. |
 
@@ -40,9 +40,9 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 | Task | Skill |
 |---|---|
 | Build or debug the installer / DDI | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md), [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md) |
-| Factory role, k3s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
+| Factory role, k0s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
 | Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
-| Build or ship the k3s sysext | [`docs/skills/k3s-sysext.md`](docs/skills/k3s-sysext.md), [`docs/skills/k3s-sysext-ops.md`](docs/skills/k3s-sysext-ops.md) |
+| Build or ship the k0s sysext | [`docs/skills/k0s-sysext.md`](docs/skills/k0s-sysext.md), [`docs/skills/k0s-sysext-ops.md`](docs/skills/k0s-sysext-ops.md) |
 | Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
 | CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
 | Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |

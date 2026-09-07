@@ -12,7 +12,7 @@ It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html): t
 - **DDI-first delivery** — the installer embeds the OS payload as a data partition; no network is required at install time.
 - **Minimal, distroless OS image** — no shell in the running rootfs by default.
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive terminal UI and `systemd-repart` handles partitioning and block-copy DDI placement.
-- **Optional k3s as a `systemd-sysext`** so the base image stays distroless.
+- **Optional k0s as a `systemd-sysext`** so the base image stays distroless.
 
 > **Temporary bring-up exception:** SSH is enabled for cluster boot tests and remote debugging. It is scheduled for removal once diagnostics move to serial logs or a guest agent. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 
