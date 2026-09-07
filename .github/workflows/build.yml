@@ -107,7 +107,7 @@ jobs:
           just build-installer
           just export-installer
 
-      - name: Build and export k0s systemd-sysext
+      - name: Build and export k3s systemd-sysext
         run: |
           just build-sysext
           just export-sysext
@@ -124,7 +124,7 @@ jobs:
           mkdir -p dist/release
           cp dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/release/
           cp dist/ddi/bluefin-server-ddi-*.raw.zst dist/release/
-          cp dist/sysext/k0s-*.raw.zst dist/release/
+          cp dist/sysext/k3s-*.raw.zst dist/release/
           (cd dist/release && sha256sum --binary -- * > SHA256SUMS)
           GNUPGHOME=$(mktemp -d)
           export GNUPGHOME
