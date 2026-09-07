@@ -32,6 +32,7 @@ build-depends:
   # Toolchain for assembly
   - base/base-stack.bst
   - freedesktop-sdk.bst:components/dracut.bst
+  - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/cpio.bst      # newc cpio archive creation
   - freedesktop-sdk.bst:components/findutils.bst  # find for cpio pipe
   # grep/sed are required by dracut/dracut-install even though our commands don't name them.
@@ -61,11 +62,9 @@ variables:
 
 config:
   commands:
-    # ── Step 1: Prepare the initrd rootfs ───────────────────────────────
-    # /init is required by the Linux initrd protocol (kernel hands control
-    # to /init as PID 1). For systemd-native initrds this is a symlink.
+    # ── Step 1a: Prepare rootfs directories and mount points ────────────
     - |
-      set -eu
+      set -eux
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
       for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall; do
@@ -80,35 +79,61 @@ config:
       # Mount points needed by the installer service
       mkdir -p /layer/efi /layer/mnt/esp /layer/mnt/root /layer/run/installer
       mkdir -p /layer/usr/lib/bluefin-server
+      mkdir -p /layer/boot
       mkdir -p /target-root/boot/EFI/Linux /tmp /var/tmp
-      KVER="$(basename "$(find /target-root/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
-      if [ -z "${KVER}" ]; then
+
+    # ── Step 1b: Generate target OS UKI (dracut + ukify) ────────────────
+    - |
+      set -eux
+      TARGET_KVER="$(basename "$(find /target-root/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
+      if [ -z "${TARGET_KVER}" ]; then
         echo "ERROR: no kernel module tree found under /target-root/usr/lib/modules" >&2
         exit 1
       fi
-      depmod -b /target-root "${KVER}"
-      # Regenerate dynamic linker cache inside the build container so dracut-install can find system libraries (e.g. libc.so.6, libgcc_s.so.1)
-      ldconfig
+      TARGET_KERNEL="/target-root/usr/lib/modules/${TARGET_KVER}/vmlinuz"
+      if [ ! -f "${TARGET_KERNEL}" ]; then
+        echo "ERROR: target kernel is missing at ${TARGET_KERNEL}" >&2
+        exit 1
+      fi
+      mkdir -p /target-root/boot
+      ln -sf "../usr/lib/modules/${TARGET_KVER}/vmlinuz" /target-root/boot/vmlinuz
+
+      depmod -b /target-root "${TARGET_KVER}" || true
+      # Regenerate dynamic linker cache inside the build container so dracut-install can find system libraries
+      ldconfig || true
+
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS and VirtIO block/scsi storage drivers.
-      # Since we build inside a container sandbox, dracut won't detect the VM virtual disks automatically
-      # and will produce an unbootable/panicking host-only initrd unless forced.
       dracut -v --reproducible --no-machineid --no-hostonly \
         --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs" \
         --filesystems "xfs vfat" \
-        --kmoddir "/target-root/usr/lib/modules/${KVER}" \
-        --kernel-image /target-root/boot/vmlinuz \
-        --kver "${KVER}" \
+        --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
+        --kernel-image "${TARGET_KERNEL}" \
+        --kver "${TARGET_KVER}" \
         --kernel-cmdline "rw console=ttyS0,115200 console=tty0" \
         /tmp/bluefin-server-target.initramfs
+
       ukify build \
-        --linux=/target-root/boot/vmlinuz \
+        --linux="${TARGET_KERNEL}" \
         --initrd=/tmp/bluefin-server-target.initramfs \
         --cmdline="rw console=ttyS0,115200 console=tty0" \
         --output=/target-root/boot/EFI/Linux/bluefin-server.efi
       cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
+
+    # ── Step 1c: Configure installer services and users ─────────────────
+    - |
+      set -eux
+      INSTALLER_KVER="$(basename "$(find /layer/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
+      if [ -z "${INSTALLER_KVER}" ]; then
+        echo "ERROR: no installer kernel module tree found under /layer/usr/lib/modules" >&2
+        exit 1
+      fi
+      mkdir -p /layer/boot
+      ln -sf "../usr/lib/modules/${INSTALLER_KVER}/vmlinuz" /layer/boot/vmlinuz
+
       # System users for networkd/resolved
       printf 'systemd-network:x:998:998:systemd Network Management:/run/systemd:/usr/sbin/nologin\nsystemd-resolve:x:997:997:systemd Resolver:/run/systemd:/usr/sbin/nologin\n' >> /layer/etc/passwd
       printf 'systemd-network:x:998:\nsystemd-resolve:x:997:\n' >> /layer/etc/group
+
       # Enable sysusers plus the services needed on the live installer target.
       mkdir -p /layer/usr/lib/systemd/system/sysinit.target.wants
       ln -sf /usr/lib/systemd/system/systemd-sysusers.service \
@@ -118,10 +143,14 @@ config:
         /layer/usr/lib/systemd/system/system-install.target.wants/systemd-networkd.service
       ln -sf /usr/lib/systemd/system/systemd-resolved.service \
         /layer/usr/lib/systemd/system/system-install.target.wants/systemd-resolved.service
+
       # Mask systemd-firstboot to prevent interactive credential blocks on tty1
       mkdir -p /layer/etc/systemd/system
       ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
 
+    # ── Step 1d: Installer wrapper script and network configuration ──────
+    - |
+      set -eux
       # Write the installer wrapper script
       cat > /layer/usr/bin/bluefin-sysinstall << 'EOF'
       #!/bin/bash
@@ -188,6 +217,7 @@ config:
       ExecStart=
       ExecStart=/usr/bin/bluefin-sysinstall
       EOF
+
       # DHCP on all ethernet interfaces
       mkdir -p /layer/etc/systemd/network
       printf '[Match]\nName=en* eth* ens* enp*\n\n[Network]\nDHCP=yes\n' \
@@ -247,10 +277,12 @@ config:
     # signing can be layered on by passing --secureboot-private-key /
     # --secureboot-certificate if keys are injected at CI time.
     - |
-      set -eu
+      set -eux
       mkdir -p /layer/boot/efi/EFI/BOOT
+      INSTALLER_KVER="$(basename "$(find /layer/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
+      INSTALLER_KERNEL="/layer/usr/lib/modules/${INSTALLER_KVER}/vmlinuz"
       ukify build \
-        --linux="/layer/boot/vmlinuz" \
+        --linux="${INSTALLER_KERNEL}" \
         --initrd=/installer.cpio.gz \
         --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended" \
         --output=/layer/boot/efi/EFI/BOOT/BOOTX64.EFI
@@ -309,7 +341,7 @@ config:
 
     # ── Step 7: Compress + checksum ──────────────────────────────────────
     - |
-      set -eu
+      set -eux
       cd "%{install-root}"
       FNAME="bluefin-server-installer-%{installer-version}.raw"
       zstd --rm -T0 -19 -q "${FNAME}" -o "${FNAME}.zst"
@@ -318,7 +350,8 @@ config:
       cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{installer-version}.efi"
       # Export raw PXE inputs alongside the UKI. PXE users supply their own
       # kernel command line, so these remain separate from the fixed-cmdline UKI.
-      cp /layer/boot/vmlinuz "bluefin-server-pxe-vmlinuz-%{installer-version}"
+      INSTALLER_KVER="$(basename "$(find /layer/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
+      cp "/layer/usr/lib/modules/${INSTALLER_KVER}/vmlinuz" "bluefin-server-pxe-vmlinuz-%{installer-version}"
       cp /installer.cpio.gz "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz"
 
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS

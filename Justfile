@@ -34,7 +34,7 @@ bst *ARGS:
         -v "${HOME}/.cache/buildstream:/root/.cache/buildstream:rw" \
         -w /src \
         "{{bst2_image}}" \
-        bash -c 'bst --colors "$@"' -- --no-interactive ${BST_FLAGS:-} {{ARGS}}
+        bash -c 'bst --colors "$@"' -- --no-interactive --error-lines 500 ${BST_FLAGS:-} {{ARGS}}
 
 # Print the FSDK-derived point release used for asset versioning.
 [group('info')]
