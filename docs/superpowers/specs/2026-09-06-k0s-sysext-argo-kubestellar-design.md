@@ -21,6 +21,7 @@ The `k0s-<k0s-version>.raw` EROFS extension image overlays the read-only host `/
 /usr/lib/systemd/system/k0scontroller.service        # Single-node controller + worker unit
 /usr/lib/extension-release.d/extension-release.k0s   # sysext metadata (ID=_any, VERSION_ID, ARCHITECTURE)
 /usr/lib/tmpfiles.d/k0s-manifests.conf               # systemd-tmpfiles seeding configuration
+/usr/lib/issue.d/40-kubestellar.issue                # Login banner (active only when sysext is merged)
 /usr/share/k0s/manifests/argocd/install.yaml         # Raw Argo CD declarative manifests
 /usr/share/k0s/manifests/kubestellar/*.yaml          # Raw KubeStellar (KubeFlex, Postgres, Core, Console)
 ```
@@ -86,7 +87,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/k0s controller --enable-worker --single
+ExecStart=/usr/bin/k0s controller --enable-worker --single --disable-components=helm
 Restart=always
 RestartSec=5s
 Delegate=yes
@@ -115,7 +116,6 @@ WantedBy=multi-user.target
 Replaces `70-k3s.transfer`:
 ```ini
 [Transfer]
-ProtectVersion=%A
 
 [Source]
 Type=url-file
@@ -126,6 +126,7 @@ MatchPattern=k0s-@v.raw.zst
 Type=regular-file
 Path=/var/lib/extensions
 MatchPattern=k0s-@v.raw
+CurrentSymlink=k0s.raw
 Mode=0644
 ```
 
@@ -144,7 +145,9 @@ Mode=0644
 | `tests/unit/test_k3s_version.py` | **Deleted** | `tests/unit/test_k0s_version.py` |
 | `docs/skills/k3s-sysext.md` | **Deleted** | `docs/skills/k0s-sysext.md` |
 | `docs/skills/k3s-sysext-ops.md` | **Deleted** | `docs/skills/k0s-sysext-ops.md` |
-| `Justfile` (`build-sysext`, `export-sysext`) | **Updated** | Refers to `oci/k0s-sysext.bst` |
+| `files/os/justfile` (`just k8s`) | **Updated** | Rewritten to target `k0s.raw`, `/etc/k0s/`, and `k0scontroller.service` |
+| `.pre-commit-config.yaml` | **Updated** | Points hook to `check-k0s-version.py` |
+| Cross-linking docs (`docs/skills/*`, `SECURITY.md`, etc.) | **Updated** | Update internal links to `k0s-sysext.md` and purge stale k3s references |
 | `.github/workflows/build.yml` | **Updated** | Builds and uploads k0s sysext |
 | `AGENTS.md`, `README.md`, `docs/skills/index.md` | **Updated** | Updated skill routing and references |
 
