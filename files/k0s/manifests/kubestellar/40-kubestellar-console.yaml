@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubestellar-console
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubestellar-console
+  namespace: kubestellar-console
+  labels:
+    app.kubernetes.io/name: kubestellar-console
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  selector:
+    app.kubernetes.io/name: kubestellar-console
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubestellar-console
+  namespace: kubestellar-console
+  labels:
+    app.kubernetes.io/name: kubestellar-console
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubestellar-console
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubestellar-console
+    spec:
+      containers:
+      - name: console
+        image: ghcr.io/kubestellar/console:v0.3.34
+        env:
+        - name: DEV_MODE
+          value: "true"
+        - name: ALLOW_DEV_MODE_IN_CLUSTER
+          value: "true"
+        ports:
+        - containerPort: 8080
+          hostPort: 8080
+          name: http

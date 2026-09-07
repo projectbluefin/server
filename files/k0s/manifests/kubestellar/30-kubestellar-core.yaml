@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubestellar
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubestellar-controller-manager
+  namespace: kubestellar
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubestellar-controller-manager
+  namespace: kubestellar
+  labels:
+    app.kubernetes.io/name: kubestellar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubestellar
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubestellar
+    spec:
+      serviceAccountName: kubestellar-controller-manager
+      containers:
+      - name: manager
+        image: ghcr.io/kubestellar/kubestellar/controller-manager:v0.25.0
+        command:
+        - /ko-app/controller-manager
+        args:
+        - --health-probe-bind-address=:8081
+        - --metrics-bind-address=127.0.0.1:8080
