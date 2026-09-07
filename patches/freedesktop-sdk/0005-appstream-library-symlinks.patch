@@ -1,0 +1,34 @@
+diff --git a/elements/components/appstream-minimal.bst b/elements/components/appstream-minimal.bst
+index a4585cd..217b625 100644
+--- a/elements/components/appstream-minimal.bst
++++ b/elements/components/appstream-minimal.bst
+@@ -37,3 +37,10 @@ variables:
+     -Dapidocs=false
+     -Dman=false
+     -Dblake3-support=false
++  meson-build: |
++    mkdir -p %{build-dir}/src %{build-dir}/compose
++    ln -sf libappstream.so.1.1.6 %{build-dir}/src/libappstream.so.5
++    ln -sf libappstream.so.5 %{build-dir}/src/libappstream.so
++    ln -sf libappstream-compose.so.1.1.6 %{build-dir}/compose/libappstream-compose.so.0
++    ln -sf libappstream-compose.so.0 %{build-dir}/compose/libappstream-compose.so
++    LD_LIBRARY_PATH="$(pwd)/%{build-dir}/src:$(pwd)/%{build-dir}/compose:${LD_LIBRARY_PATH:-}" ninja -v -j ${JOBS} -C %{build-dir}
+diff --git a/elements/components/appstream.bst b/elements/components/appstream.bst
+index c359e7d..03c8a66 100644
+--- a/elements/components/appstream.bst
++++ b/elements/components/appstream.bst
+@@ -38,6 +38,14 @@ variables:
+     -Dman=false
+     -Dblake3-support=false
+ 
++  meson-build: |
++    mkdir -p %{build-dir}/src %{build-dir}/compose
++    ln -sf libappstream.so.1.1.6 %{build-dir}/src/libappstream.so.5
++    ln -sf libappstream.so.5 %{build-dir}/src/libappstream.so
++    ln -sf libappstream-compose.so.1.1.6 %{build-dir}/compose/libappstream-compose.so.0
++    ln -sf libappstream-compose.so.0 %{build-dir}/compose/libappstream-compose.so
++    LD_LIBRARY_PATH="$(pwd)/%{build-dir}/src:$(pwd)/%{build-dir}/compose:${LD_LIBRARY_PATH:-}" ninja -v -j ${JOBS} -C %{build-dir}
++
+ public:
+   bst:
+     split-rules:
