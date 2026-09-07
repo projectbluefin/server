@@ -33,7 +33,7 @@
 **Interfaces:**
 - Produces: `include/k0s.yml` defining `%{k0s-upstream-tag}` and `%{k0s-version}`; `elements/k0s/k0s-bin.bst` staging `/usr/bin/k0s`.
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 Create `tests/unit/test_k0s_version.py`:
 ```python
@@ -62,12 +62,12 @@ def test_k0s_bin_element():
     assert "ca1e9e68107335846e8296777fce2ccd654284e6265b4b5d32c34ead872af98f" in content
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/unit/test_k0s_version.py -v`
 Expected: FAIL (files missing)
 
-- [ ] **Step 3: Implement `include/k0s.yml` and `elements/k0s/k0s-bin.bst`**
+- [x] **Step 3: Implement `include/k0s.yml` and `elements/k0s/k0s-bin.bst`**
 
 Create `include/k0s.yml`:
 ```yaml
@@ -118,12 +118,12 @@ config:
     - install -D -m 0755 k0s-%{k0s-upstream-tag}-amd64 "%{install-root}/usr/bin/k0s"
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/unit/test_k0s_version.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add include/k0s.yml elements/k0s/k0s-bin.bst tests/unit/test_k0s_version.py
@@ -149,7 +149,7 @@ git commit -m "feat(k0s): add k0s version include and binary import element"
 **Interfaces:**
 - Produces: Systemd unit, tmpfiles config, and raw YAML stacks in `files/k0s/`.
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 Create `tests/unit/test_k0s_manifests.py`:
 ```python
@@ -189,12 +189,12 @@ def test_k0s_manifest_files():
     assert (ks_dir / "40-kubestellar-console.yaml").is_file()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/unit/test_k0s_manifests.py -v`
 Expected: FAIL
 
-- [ ] **Step 3: Create files/k0s/sysext and files/k0s/manifests**
+- [x] **Step 3: Create files/k0s/sysext and files/k0s/manifests**
 
 1. Create `files/k0s/sysext/extension-release.k0s`:
 ```ini
@@ -236,12 +236,12 @@ C+ /var/lib/k0s/manifests/kubestellar - - - - /usr/share/k0s/manifests/kubestell
 
 4. Populate `files/k0s/manifests/argocd/install.yaml` and `files/k0s/manifests/kubestellar/*.yaml` with declarative YAMLs.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/unit/test_k0s_manifests.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add files/k0s/ tests/unit/test_k0s_manifests.py
@@ -260,7 +260,7 @@ git commit -m "feat(k0s): add k0s systemd unit, tmpfiles seeder, and manifest st
 - Consumes: `elements/k0s/k0s-bin.bst`, `files/k0s/sysext/`, `files/k0s/manifests/`.
 - Produces: `dist/sysext/k0s-<version>.raw` and `k0s-<version>.raw.zst`.
 
-- [ ] **Step 1: Write `elements/oci/k0s-sysext.bst`**
+- [x] **Step 1: Write `elements/oci/k0s-sysext.bst`**
 
 ```yaml
 kind: manual
@@ -351,12 +351,12 @@ config:
       )
 ```
 
-- [ ] **Step 2: Run tests to verify build dependencies invariant**
+- [x] **Step 2: Run tests to verify build dependencies invariant**
 
 Run: `pytest tests/unit/test_build_depends.py -v`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add elements/oci/k0s-sysext.bst
@@ -371,7 +371,7 @@ git commit -m "feat(k0s): add k0s-sysext assembly element"
 - Create: `files/os/sysupdate.d/70-k0s.transfer`
 - Delete: `files/os/sysupdate.d/70-k3s.transfer`
 
-- [ ] **Step 1: Create `files/os/sysupdate.d/70-k0s.transfer`**
+- [x] **Step 1: Create `files/os/sysupdate.d/70-k0s.transfer`**
 
 ```ini
 [Transfer]
@@ -389,13 +389,13 @@ CurrentSymlink=k0s.raw
 Mode=0644
 ```
 
-- [ ] **Step 2: Delete `files/os/sysupdate.d/70-k3s.transfer`**
+- [x] **Step 2: Delete `files/os/sysupdate.d/70-k3s.transfer`**
 
 ```bash
 git rm files/os/sysupdate.d/70-k3s.transfer
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add files/os/sysupdate.d/70-k0s.transfer
@@ -414,27 +414,27 @@ git commit -m "feat(sysupdate): replace 70-k3s.transfer with 70-k0s.transfer"
 - Create: `.github/scripts/check-k0s-version.py`
 - Delete: `.github/scripts/check-k3s-version.py`
 
-- [ ] **Step 1: Update `Justfile` sysext recipes**
+- [x] **Step 1: Update `Justfile` sysext recipes**
 
 Change `build-sysext` and `export-sysext` to target `oci/k0s-sysext.bst` and extract `k0s-*`.
 
-- [ ] **Step 2: Update `files/os/justfile` (`just k8s`)**
+- [x] **Step 2: Update `files/os/justfile` (`just k8s`)**
 
 Update `just k8s` to check `/var/lib/extensions/k0s.raw` and start `k0scontroller.service`.
 
-- [ ] **Step 3: Update `.github/workflows/build.yml`**
+- [x] **Step 3: Update `.github/workflows/build.yml`**
 
 Change step name to `Build and export k0s systemd-sysext`.
 
-- [ ] **Step 4: Create `.github/scripts/check-k0s-version.py` and delete check-k3s-version.py**
+- [x] **Step 4: Create `.github/scripts/check-k0s-version.py` and delete check-k3s-version.py**
 
 Create `check-k0s-version.py` verifying that `k0s-version` is defined in `include/k0s.yml` and consumers reference it.
 
-- [ ] **Step 5: Update `.pre-commit-config.yaml`**
+- [x] **Step 5: Update `.pre-commit-config.yaml`**
 
 Point hook entry to `.github/scripts/check-k0s-version.py`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Justfile files/os/justfile .github/ .pre-commit-config.yaml
@@ -452,13 +452,13 @@ git commit -m "chore(tooling): update Justfile, CI, and pre-commit hooks for k0s
 - Delete: `files/k3s/`
 - Delete: `tests/unit/test_k3s_version.py`
 
-- [ ] **Step 1: Remove k3s files from git**
+- [x] **Step 1: Remove k3s files from git**
 
 ```bash
 git rm -r include/k3s.yml elements/k3s/ elements/oci/k3s-sysext.bst files/k3s/ tests/unit/test_k3s_version.py
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git commit -m "chore(purge): remove deprecated k3s elements, configs, and tests"
@@ -478,19 +478,19 @@ git commit -m "chore(purge): remove deprecated k3s elements, configs, and tests"
 - Modify: `README.md`
 - Modify: cross-linking docs (`docs/skills/factory-integration.md`, `docs/skills/system-containers.md`, `docs/skills/systemd-sysext-extensions.md`, `docs/skills/gap-analysis-distros.md`, `SECURITY.md`)
 
-- [ ] **Step 1: Write `docs/skills/k0s-sysext.md` and `k0s-sysext-ops.md`**
+- [x] **Step 1: Write `docs/skills/k0s-sysext.md` and `k0s-sysext-ops.md`**
 
 Document k0s sysext build, layout, native manifest deployer (`/var/lib/k0s/manifests/`), and service management.
 
-- [ ] **Step 2: Update skill index and references**
+- [x] **Step 2: Update skill index and references**
 
 Update `docs/skills/index.md`, `AGENTS.md`, and `README.md` to reference `k0s-sysext.md`.
 
-- [ ] **Step 3: Update cross-linking skills and purge stale k3s links**
+- [x] **Step 3: Update cross-linking skills and purge stale k3s links**
 
 Update `factory-integration.md`, `system-containers.md`, `systemd-sysext-extensions.md`, and `SECURITY.md`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/ AGENTS.md README.md SECURITY.md
@@ -504,22 +504,22 @@ git commit -m "docs: document k0s sysext, update skill routing, and purge k3s re
 **Files:**
 - All touched files
 
-- [ ] **Step 1: Run pytest on all unit tests**
+- [x] **Step 1: Run pytest on all unit tests**
 
 Run: `pytest tests/unit/ -v`
 Expected: 100% PASS
 
-- [ ] **Step 2: Run docs link check**
+- [x] **Step 2: Run docs link check**
 
 Run: `python3 .github/scripts/docs-checks.py`
 Expected: 0 broken internal links
 
-- [ ] **Step 3: Run pre-commit checks**
+- [x] **Step 3: Run pre-commit checks**
 
 Run: `pre-commit run --all-files`
 Expected: All hooks PASS
 
-- [ ] **Step 4: Run merge-contract element graph validation**
+- [x] **Step 4: Run merge-contract element graph validation**
 
 Run: `just validate`
 Expected: PASS (zero dangling references, clean element graph)
