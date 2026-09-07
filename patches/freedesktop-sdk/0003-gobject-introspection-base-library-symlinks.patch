@@ -1,0 +1,16 @@
+diff --git a/elements/components/_private/gobject-introspection-base.bst b/elements/components/_private/gobject-introspection-base.bst
+index 79b32b5..61eecdf 100644
+--- a/elements/components/_private/gobject-introspection-base.bst
++++ b/elements/components/_private/gobject-introspection-base.bst
+@@ -23,6 +23,11 @@ variables:
+     -Dcairo=disabled
+     -Dgtk_doc=true
+     -Ddoctool=enabled
++  meson-build: |
++    mkdir -p %{build-dir}/girepository
++    ln -sf libgirepository-1.0.so.1.0.0 %{build-dir}/girepository/libgirepository-1.0.so.1
++    ln -sf libgirepository-1.0.so.1 %{build-dir}/girepository/libgirepository-1.0.so
++    LD_LIBRARY_PATH="$(pwd)/%{build-dir}/girepository:${LD_LIBRARY_PATH:-}" ninja -v -j ${JOBS} -C %{build-dir}
+ 
+ public:
+   bst:
