@@ -1,0 +1,20 @@
+# Single source of truth for the k0s version axis.
+#
+# k0s is an independently-pinned third-party payload, not an OS asset. Its
+# version therefore does NOT live on the OS `release-version` axis declared in
+# project.conf — that axis names the FSDK point release and is bumped by
+# unrelated OS work.
+#
+# Only the two atoms below are edited when k0s is bumped. Every other spelling
+# of the k0s version in this repository is derived from them:
+#
+#   %{k0s-k8s-version}    upstream Kubernetes version       1.36.4
+#   %{k0s-patch}          upstream k0s patch suffix number  0
+#   %{k0s-upstream-tag}   GitHub release tag, URL-escaped   v1.36.4%2Bk0s.0
+#   %{k0s-version}        asset / extension-release version 1.36.4-k0s.0
+variables:
+  k0s-k8s-version: "1.36.4"
+  k0s-patch: "0"
+
+  k0s-upstream-tag: "v%{k0s-k8s-version}%2Bk0s.%{k0s-patch}"
+  k0s-version: "%{k0s-k8s-version}-k0s.%{k0s-patch}"
