@@ -3,10 +3,11 @@
 [Source]
 Type=url-file
 Path=https://github.com/projectbluefin/server/releases/latest/download/
-MatchPattern=k3s-@v.raw.zst
+MatchPattern=k0s-@v.raw.zst
 
 [Target]
 Type=regular-file
 Path=/var/lib/extensions
-MatchPattern=k3s-@v.raw
-CurrentSymlink=k3s.raw
+MatchPattern=k0s-@v.raw
+CurrentSymlink=k0s.raw
+Mode=0644
