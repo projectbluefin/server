@@ -81,6 +81,7 @@ All `just` targets run BuildStream inside the FSDK `bst2` container via `just bs
 - Do not put Kubernetes or debug tooling in the base DDI if it can live in a sysext or system container.
 - Do not duplicate a fact already in a skill.
 - Never hardcode internal-only hostnames or IPs; use `<build-cache-host>` / `<registry-host>:30500` placeholders.
+- Never refer to counting or usage metrics as telemetry; call it countme.
 
 ## Verification
 

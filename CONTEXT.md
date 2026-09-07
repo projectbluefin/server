@@ -19,3 +19,7 @@ _Avoid_: addon, plugin, package, sidecar
 **Transfer**:
 A systemd-sysupdate definition mapping a remote release asset to a local target file or partition.
 _Avoid_: update manifest, download job, sync rule
+
+**countme**:
+Privacy-preserving counting mechanism for measuring adoption and system installations.
+_Avoid_: telemetry, tracking, spyware, metrics
