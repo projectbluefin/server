@@ -1,4 +1,4 @@
-kind: make
+kind: manual
 
 config:
   build-commands:
@@ -124,6 +124,7 @@ public:
     - /usr/bin/yes
 
 build-depends:
+- base/base-stack.bst
 - freedesktop-sdk.bst:components/rust.bst
 - freedesktop-sdk.bst:public-stacks/buildsystem-make.bst
 

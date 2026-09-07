@@ -22,6 +22,8 @@ export fsdk_ref := `grep -E '^\s*ref:' elements/freedesktop-sdk.bst | head -1 | 
 bst *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    export CONTAINERS_CONF="${CONTAINERS_CONF:-/dev/null}"
+    export CONTAINERS_CONF_OVERRIDE="${CONTAINERS_CONF_OVERRIDE:-/dev/null}"
     mkdir -p "${HOME}/.cache/buildstream"
     # shellcheck disable=SC2086
     {{sudo_cmd}} podman run --rm \
@@ -150,7 +152,6 @@ export-sysext: build-sysext
     cp dist/sysext-checkout/k0s-*.raw.zst dist/sysext/
     cp dist/sysext-checkout/SHA256SUMS dist/sysext/
     rm -rf dist/sysext-checkout
-    for f in dist/sysext/k0s-*.raw.zst; do [ -f "$f" ] && ln -sf "$(basename "$f")" "dist/sysext/k3s-${f#*dist/sysext/k0s-}"; done
     @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
 
 # Write the raw GPT installer image to a physical USB drive.
