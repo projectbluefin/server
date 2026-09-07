@@ -9,7 +9,8 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 
 1. Read this file.
 2. Load [`docs/skills/index.md`](docs/skills/index.md) to route to the skill for your task.
-3. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill.
+3. Cross-repo factory directives: follow [`projectbluefin/common:docs/factory/agentic-model.md`](https://github.com/projectbluefin/common/blob/main/docs/factory/agentic-model.md) — query `projectbluefin` MCP (`search_knowledge`) before investigating or implementing.
+4. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill.
 
 ## Hard rules
 
