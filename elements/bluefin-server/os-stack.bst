@@ -35,6 +35,9 @@ depends:
   # A/B System Update Configurations
   - bluefin-server/os-sysupdate.bst
 
+  # Activate the optional k0s sysext after installation
+  - bluefin-server/os-k0s-first-boot.bst
+
   # Public keyring for verifying SHA256SUMS manifests from GitHub Releases
   - bluefin-server/os-sysupdate-keys.bst
 
