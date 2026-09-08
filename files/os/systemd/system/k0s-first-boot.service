@@ -2,7 +2,7 @@
 Description=Activate k0s sysext after first installation
 ConditionPathExists=!/var/lib/k0s/.first-boot-complete
 Wants=network-online.target
-Requires=k0s-first-boot-fetch.service
+Wants=k0s-first-boot-fetch.service
 After=network-online.target
 After=k0s-first-boot-fetch.service
 AssertPathExists=/var/lib/extensions/k0s.raw
