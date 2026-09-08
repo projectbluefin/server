@@ -32,3 +32,4 @@ def test_k0s_manifest_files():
     assert (ks_dir / "20-postgres.yaml").is_file()
     assert (ks_dir / "30-kubestellar-core.yaml").is_file()
     assert (ks_dir / "40-kubestellar-console.yaml").is_file()
+    assert (ks_dir / "41-kubestellar-kiosk-proxy.yaml").is_file()

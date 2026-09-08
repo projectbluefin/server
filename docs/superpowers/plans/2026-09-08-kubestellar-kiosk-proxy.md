@@ -120,11 +120,9 @@ def test_kiosk_assets_are_packaged_and_seeded() -> None:
 def test_proxy_injects_only_csp_safe_same_origin_assets() -> None:
     nginx = KIOSK_CONF.read_text(encoding="utf-8")
 
-    assert "resolver kube-dns.kube-system.svc.cluster.local valid=10s;" in nginx
-    assert 'set $console_upstream "kubestellar-console.kubestellar-console.svc.cluster.local:8080";' in nginx
-    assert "proxy_pass http://$console_upstream;" in nginx
+    assert "proxy_pass http://kubestellar-console.kubestellar-console.svc.cluster.local:8080;" in nginx
     assert 'proxy_set_header Accept-Encoding "";' in nginx
-    assert "sub_filter_types text/html;" in nginx
+    assert "sub_filter_types" not in nginx
     assert 'sub_filter \'</head>\' \'<link rel="stylesheet" href="/kiosk-gate.css"></head>\';' in nginx
     assert 'sub_filter \'</body>\' \'<script defer src="/kiosk-gate.js"></script></body>\';' in nginx
     assert "Content-Security-Policy" not in nginx
@@ -169,11 +167,9 @@ events {
 http {
   include /etc/nginx/mime.types;
   default_type application/octet-stream;
-  resolver kube-dns.kube-system.svc.cluster.local valid=10s;
 
   server {
     listen 8080;
-    set $console_upstream "kubestellar-console.kubestellar-console.svc.cluster.local:8080";
 
     location = /kiosk-gate.js {
       alias /etc/kubestellar-kiosk/kiosk-gate.js;
@@ -186,7 +182,7 @@ http {
     }
 
     location / {
-      proxy_pass http://$console_upstream;
+      proxy_pass http://kubestellar-console.kubestellar-console.svc.cluster.local:8080;
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -194,7 +190,6 @@ http {
       proxy_set_header Accept-Encoding "";
       proxy_set_header Connection "";
       sub_filter_once on;
-      sub_filter_types text/html;
       sub_filter '</head>' '<link rel="stylesheet" href="/kiosk-gate.css"></head>';
       sub_filter '</body>' '<script defer src="/kiosk-gate.js"></script></body>';
     }
@@ -322,10 +317,11 @@ Run:
 
 ```sh
 python3 -m pytest tests/unit/test_kubestellar_kiosk.py tests/unit/test_k0s_manifests.py -q
-podman run --rm \
-  -v "$PWD/files/k0s/kiosk:/etc/kubestellar-kiosk:ro,Z" \
-  nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8 \
-  nginx -t -c /etc/kubestellar-kiosk/nginx.conf
+sed 's/kubestellar-console\.kubestellar-console\.svc\.cluster\.local/127.0.0.1/' \
+  files/k0s/kiosk/nginx.conf \
+  | podman run --rm --network=none -i \
+      nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8 \
+      /bin/sh -c 'cat > /tmp/nginx.conf && nginx -t -c /tmp/nginx.conf'
 just validate
 ```
 

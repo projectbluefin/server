@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubestellar-kiosk-proxy
+  namespace: kubestellar-console
+  labels:
+    app.kubernetes.io/name: kubestellar-kiosk-proxy
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubestellar-kiosk-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubestellar-kiosk-proxy
+    spec:
+      containers:
+      - name: kiosk-proxy
+        image: docker.io/library/nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+        command:
+        - nginx
+        args:
+        - -g
+        - daemon off;
+        - -c
+        - /etc/kubestellar-kiosk/nginx.conf
+        ports:
+        - containerPort: 8080
+          hostPort: 8080
+          name: http
+        volumeMounts:
+        - name: kiosk-assets
+          mountPath: /etc/kubestellar-kiosk
+          readOnly: true
+      volumes:
+      - name: kiosk-assets
+        hostPath:
+          path: /var/lib/k0s/kiosk
+          type: Directory

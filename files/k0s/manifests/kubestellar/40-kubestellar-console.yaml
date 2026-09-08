@@ -42,11 +42,18 @@ spec:
       - name: console
         image: ghcr.io/kubestellar/console:v0.3.34
         env:
-        - name: DEV_MODE
-          value: "true"
-        - name: ALLOW_DEV_MODE_IN_CLUSTER
-          value: "true"
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: kubestellar-console-github-oauth
+              key: client-id
+              optional: false
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: kubestellar-console-github-oauth
+              key: client-secret
+              optional: false
         ports:
         - containerPort: 8080
-          hostPort: 8080
           name: http
