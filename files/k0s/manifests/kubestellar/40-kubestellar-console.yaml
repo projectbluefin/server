@@ -54,6 +54,12 @@ spec:
               name: kubestellar-console-github-oauth
               key: client-secret
               optional: false
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: kubestellar-console-github-oauth
+              key: jwt-secret
+              optional: false
         ports:
         - containerPort: 8080
           name: http

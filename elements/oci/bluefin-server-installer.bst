@@ -197,7 +197,7 @@ config:
       done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
 
       # Check for unattended in kernel command line
-      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
+      CMDLINE="$(< /proc/cmdline)"
       if [[ " ${CMDLINE} " == *" unattended "* ]]; then
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then

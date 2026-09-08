@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 JUSTFILE = ROOT / "Justfile"
+CONSOLE_MANIFEST = ROOT / "files/k0s/manifests/kubestellar/40-kubestellar-console.yaml"
 
 
 def test_install_vm_keeps_state_and_forwards_only_loopback() -> None:
@@ -24,6 +25,7 @@ def test_install_vm_keeps_state_and_forwards_only_loopback() -> None:
 
 def test_show_me_the_future_proves_k0s_dashboard_smoke() -> None:
     justfile = JUSTFILE.read_text(encoding="utf-8")
+    console_manifest = CONSOLE_MANIFEST.read_text(encoding="utf-8")
     start = justfile.index("show-me-the-future:")
     end = justfile.index("install-vm:")
     recipe = justfile[start:end]
@@ -41,12 +43,19 @@ def test_show_me_the_future_proves_k0s_dashboard_smoke() -> None:
     assert "namespace: kubestellar-console" in recipe
     assert "client-id:" in recipe
     assert "client-secret:" in recipe
+    assert "jwt-secret:" in recipe
     assert "lib/k0s/manifests/kubestellar" in recipe
+    assert "name: JWT_SECRET" in console_manifest
+    assert "key: jwt-secret" in console_manifest
 
     # QEMU background execution with user NIC loopback forward, serial file, no monitor/display
     assert "hostfwd=tcp:127.0.0.1:8080-:8080" in recipe
     assert "-serial file:" in recipe
     assert "-monitor none" in recipe
+    assert (
+        "io.systemd.stub.kernel-cmdline-extra=systemd.log_level=debug"
+        in recipe
+    )
     assert "trap" in recipe
     assert "kill -0" in recipe
 
@@ -57,3 +66,13 @@ def test_show_me_the_future_proves_k0s_dashboard_smoke() -> None:
     assert "200" in recipe
     assert "tail" in recipe
 
+
+def test_show_me_the_future_retains_failure_artifacts() -> None:
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+    start = justfile.index("show-me-the-future:")
+    end = justfile.index("install-vm:")
+    recipe = justfile[start:end]
+
+    assert "EXIT_STATUS=$?" in recipe
+    assert '[ "$EXIT_STATUS" -eq 0 ]' in recipe
+    assert 'QEMU smoke failed; retaining artifacts at $WORKDIR' in recipe

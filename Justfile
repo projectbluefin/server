@@ -296,6 +296,7 @@ show-me-the-future:
       'stringData:' \
       '  client-id: dummy-client-id' \
       '  client-secret: dummy-client-secret' \
+      '  jwt-secret: smoke-only-jwt-secret-1234567890' \
       > "$VAR_STAGING/lib/k0s/manifests/kubestellar/00-kubestellar-console-github-oauth.yaml"
 
     REPART_DIR="$WORKDIR/repart.d"
@@ -322,11 +323,17 @@ show-me-the-future:
     SERIAL_LOG="$WORKDIR/serial.log"
     TARGET_QEMU_PID=""
     cleanup() {
+      EXIT_STATUS=$?
       if [ -n "${TARGET_QEMU_PID:-}" ] && kill -0 "$TARGET_QEMU_PID" 2>/dev/null; then
         kill "$TARGET_QEMU_PID" 2>/dev/null || true
         wait "$TARGET_QEMU_PID" 2>/dev/null || true
       fi
-      rm -rf "$WORKDIR"
+      if [ "$EXIT_STATUS" -eq 0 ]; then
+        rm -rf "$WORKDIR"
+      else
+        echo "ERROR: QEMU smoke failed; retaining artifacts at $WORKDIR" >&2
+      fi
+      exit "$EXIT_STATUS"
     }
     trap cleanup EXIT INT TERM
 
@@ -340,6 +347,7 @@ show-me-the-future:
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
         -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=systemd.log_level=debug" \
         -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
         -nographic \
         -serial file:"$SERIAL_LOG" \

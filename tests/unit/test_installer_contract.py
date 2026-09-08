@@ -41,6 +41,13 @@ def test_installer_runtime_and_boot_contracts() -> None:
     ) in justfile
 
 
+def test_installer_wrapper_reads_kernel_command_line_without_cat() -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+
+    assert 'CMDLINE="$(< /proc/cmdline)"' in installer_element
+    assert 'CMDLINE="$(cat /proc/cmdline' not in installer_element
+
+
 def test_installer_stages_uncompressed_k0s_before_packing_cpio() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
     data = yaml.safe_load(installer_element)
