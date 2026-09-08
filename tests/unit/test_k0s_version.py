@@ -33,3 +33,15 @@ def test_k0s_version_checker_reads_the_component_transfer():
     assert module.TRANSFER == (
         ROOT / "files" / "os" / "sysupdate.k0s.d" / "70-k0s.transfer"
     )
+
+
+def test_k0s_version_pre_commit_hook_selects_the_relocated_transfer():
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
+    hook = next(
+        hook
+        for repo in config["repos"]
+        if repo.get("repo") == "local"
+        for hook in repo.get("hooks", [])
+        if hook.get("id") == "check-k0s-version"
+    )
+    assert "files/os/sysupdate\\.k0s\\.d/70-k0s\\.transfer" in hook["files"]
