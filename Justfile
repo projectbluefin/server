@@ -276,3 +276,99 @@ show-me-the-future:
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
         -nographic \
         -serial mon:stdio
+
+# Interactively install and boot a persistent local KubeStellar kiosk VM.
+[group('test')]
+install-vm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/bluefin-server/vm-{{fsdk_version}}"
+    INSTALLER_RAW="$STATE_DIR/installer.raw"
+    TARGET_RAW="$STATE_DIR/target.raw"
+    OVMF_VARS="$STATE_DIR/ovmf-vars.fd"
+    INSTALL_COMPLETE="$STATE_DIR/installed"
+    mkdir -p "$STATE_DIR"
+
+    first_existing() {
+      for candidate in "$@"; do
+        if [ -f "$candidate" ]; then
+          echo "$candidate"
+          return 0
+        fi
+      done
+      return 1
+    }
+
+    OVMF_CODE=$(first_existing \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-code.fd \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-secure-code.fd \
+      /usr/share/edk2/ovmf/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE_4M.fd \
+      /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+      /usr/share/qemu/OVMF_CODE.fd) \
+      || { echo "ERROR: OVMF_CODE not found"; exit 1; }
+
+    if [ ! -f "$OVMF_VARS" ]; then
+      OVMF_TEMPLATE=$(first_existing \
+        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-vars.fd \
+        /usr/share/edk2/ovmf/OVMF_VARS.fd \
+        /usr/share/OVMF/OVMF_VARS.fd \
+        /usr/share/OVMF/OVMF_VARS_4M.fd \
+        /usr/share/edk2/x64/OVMF_VARS.4m.fd \
+        /usr/share/qemu/OVMF_VARS.fd) \
+        || { echo "ERROR: OVMF_VARS not found"; exit 1; }
+      cp "$OVMF_TEMPLATE" "$OVMF_VARS"
+    fi
+
+    if [ ! -f "$INSTALL_COMPLETE" ]; then
+      just export-installer
+      INSTALLER_ARCHIVE=$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-installer-*.raw.zst' -print -quit)
+      [ -n "$INSTALLER_ARCHIVE" ] || { echo "ERROR: No exported installer found in dist/." >&2; exit 1; }
+      zstd --decompress --force "$INSTALLER_ARCHIVE" --output "$INSTALLER_RAW"
+      truncate -s "${INSTALL_VM_DISK_SIZE:-16G}" "$TARGET_RAW"
+
+      echo "==> Booting the interactive installer in QEMU..."
+      qemu-system-x86_64 \
+        -enable-kvm \
+        -m 4096 \
+        -cpu host \
+        -smp 2 \
+        -drive file="$INSTALLER_RAW",format=raw,if=virtio,readonly=on \
+        -drive file="$TARGET_RAW",format=raw,if=virtio \
+        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+        -drive if=pflash,format=raw,file="$OVMF_VARS"
+      touch "$INSTALL_COMPLETE"
+    fi
+
+    echo "==> Booting the installed kiosk..."
+    qemu-system-x86_64 \
+      -enable-kvm \
+      -m 4096 \
+      -cpu host \
+      -smp 2 \
+      -drive file="$TARGET_RAW",format=raw,if=virtio \
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+      -drive if=pflash,format=raw,file="$OVMF_VARS" \
+      -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 &
+    QEMU_PID=$!
+    cleanup() {
+      if kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill "$QEMU_PID"
+        wait "$QEMU_PID" || true
+      fi
+    }
+    trap cleanup EXIT INT TERM
+
+    until curl --silent --show-error --max-time 2 --output /dev/null http://127.0.0.1:8080/; do
+      if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+        wait "$QEMU_PID"
+        exit 1
+      fi
+      sleep 2
+    done
+
+    xdg-open http://127.0.0.1:8080/
+    wait "$QEMU_PID"
+    trap - EXIT INT TERM
