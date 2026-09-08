@@ -1,10 +1,15 @@
 # Bluefin Server
+> Amargasaurus cazaui
 
 **An FSDK-based, image-based Linux server OS.**
 
 Bluefin Server targets the same use-case space as Flatcar Container Linux, Fedora CoreOS, and Talos, but is built from scratch with [BuildStream 2](https://buildstream.build/) from [freedesktop-sdk](https://freedesktop-sdk.freedesktop.org/) (FSDK 26.08) components and uutils coreutils.
 
 It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html): the OS payload is a compressed XFS DDI filesystem image that is deployed by an offline, systemd-native installer.
+
+> The only thing worse than a nightmare is a factory of nightmares that makes other nightmares
+
+![armargasaurus](https://en.wikipedia.org/wiki/Amargasaurus#/media/File:Dicraeosauridae_Scale.svg)
 
 ## Release status: Alpha
 
