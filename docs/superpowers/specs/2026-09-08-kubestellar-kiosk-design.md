@@ -9,9 +9,10 @@ kubeconfig.
 
 ## Scope
 
-The product uses a temporary, upstream-submittable Console derivative. The
-derivative is packaged and deployed only through the k0s sysext; it does not
-add Kubernetes, a GUI, or a shell to the base DDI.
+The product vendors a temporary, upstream-submittable kiosk proxy layer. It is
+packaged and deployed only through the k0s sysext; it does not add Kubernetes,
+a GUI, a shell, a Containerfile, or a custom OCI-image publishing path to the
+base DDI.
 
 The kiosk supports GitHub OAuth using a Kubernetes Secret supplied by the
 operator. It does not claim support for other login providers because the
@@ -48,30 +49,34 @@ never receives the client's kubeconfig.
 
 ## Deployment Design
 
-The vendored image starts from the currently pinned
-`ghcr.io/kubestellar/console:v0.3.34` source revision and receives one narrow
-`KIOSK_REQUIRE_AGENT` capability:
+The vendored proxy is an Nginx Deployment that owns `hostPort: 8080` and
+reverse-proxies the unmodified, internal `kubestellar-console` Service. The
+sysext stages its configuration and assets in `/usr/share/k0s/kiosk`, and the
+existing tmpfiles flow copies them to `/var/lib/k0s/kiosk` for the proxy to
+mount read-only. The assets implement a narrow kiosk overlay:
 
-- The frontend reads the capability from the Console runtime configuration.
-- When it is set, `AgentSetupDialog` opens automatically whenever local-agent
-  state is not `connected`.
-- Its close, snooze, and demo-data paths are not rendered in this mode.
-- The modal uses the existing in-cluster Homebrew and origin-aware CORS
-  instructions. It does not duplicate a separate Bluefin onboarding page.
-- Once local-agent health is connected, existing Console data refetching loads
-  the client cluster data.
+- The proxy injects only same-origin CSS and JavaScript assets, retaining the
+  upstream production Content Security Policy and its ban on inline scripts.
+- The script waits for Console's `kc-has-session` marker before it activates,
+  so the GitHub sign-in and callback flows remain usable.
+- On those routes, the overlay covers the page and captures pointer and
+  keyboard input while `http://127.0.0.1:8585/health` is unavailable.
+- It displays the upstream Homebrew `kc-agent` and origin-aware CORS commands.
+- On a successful local-agent health check, it removes itself and allows the
+  Console's existing local-agent hook to fetch client-cluster data.
+- If the agent disconnects, it returns and blocks Console input again.
 
-Bluefin builds the derivative with BuildStream, not a Containerfile, publishes
-it to the configured registry, and changes only
-`files/k0s/manifests/kubestellar/40-kubestellar-console.yaml` to use it.
+This is a temporary integration seam, not a fork. The desired steady state is
+an upstream `KIOSK_REQUIRE_AGENT` Console capability with the same behavior,
+at which point the proxy can be removed.
 
 The manifest must:
 
 - omit `DEV_MODE` and `ALLOW_DEV_MODE_IN_CLUSTER`;
-- set `KIOSK_REQUIRE_AGENT=true`;
 - reference a required Kubernetes Secret for `GITHUB_CLIENT_ID` and
   `GITHUB_CLIENT_SECRET`;
-- retain the Console's existing `hostPort: 8080`.
+- remove `hostPort: 8080` from the Console Deployment;
+- add the kiosk proxy and give only that Deployment `hostPort: 8080`.
 
 The OAuth application's callback must equal the deployment's stable Console
 origin. The application is not usable as an authenticated kiosk until an
@@ -91,12 +96,12 @@ operator provides that Secret and the matching callback registration.
 
 ## Verification
 
-1. A Console-source test proves `KIOSK_REQUIRE_AGENT` opens a non-dismissible
-   modal while agent status is disconnected, returns it on disconnect, and
-   releases dashboard controls only after connection.
-2. A BuildStream/manifest contract test proves the kiosk image is used, demo
-   variables are absent, the capability is present, and OAuth comes only from
-   the Secret reference.
+1. An Nginx configuration test proves HTML injection targets only the Console
+   page, upstream API and authentication paths are proxied unchanged, and the
+   proxy syntax loads successfully.
+2. A manifest contract test proves demo variables and the Console host port
+   are absent, the proxy owns `hostPort: 8080`, and OAuth comes only from the
+   Secret reference.
 3. A k0s integration test proves the Console starts without a client agent,
    the blocking setup modal appears, Homebrew-installed `kc-agent` connects
    with the displayed origin, and live kubeconfig-backed cluster data replaces
@@ -109,3 +114,4 @@ operator provides that Secret and the matching callback registration.
 - Shipping or storing client kubeconfigs in Bluefin Server.
 - Authentication providers beyond upstream GitHub OAuth.
 - A generic ingress or production DNS setup.
+- A custom Console image or OCI-image publishing pipeline.
