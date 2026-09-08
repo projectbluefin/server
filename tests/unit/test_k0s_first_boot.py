@@ -64,7 +64,11 @@ def test_missing_seed_fetches_before_activation_without_blocking_activation_retr
     assert "Wants=k0s-first-boot-fetch.service" in first_boot
     assert "Requires=k0s-first-boot-fetch.service" not in first_boot
     assert "After=k0s-first-boot-fetch.service" in first_boot
-    assert "AssertPathExists=/var/lib/extensions/k0s.raw" in first_boot
+    assert (
+        "ExecStartPre=/usr/bin/test -e /var/lib/extensions/k0s.raw"
+        in first_boot
+    )
+    assert "AssertPathExists=/var/lib/extensions/k0s.raw" not in first_boot
     assert "ExecStart=/usr/bin/systemd-sysext merge" in first_boot
 
 
