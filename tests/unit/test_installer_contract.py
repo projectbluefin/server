@@ -30,7 +30,6 @@ def test_installer_runtime_and_boot_contracts() -> None:
     justfile = JUSTFILE.read_text(encoding="utf-8")
     published_uki_cmdline = _published_uki_cmdline(installer_element)
 
-    assert "freedesktop-sdk.bst:components/bash.bst" in installer_stack
     assert "freedesktop-sdk.bst:bootstrap/bash.bst" in installer_stack
     assert 'console=ttyS0,115200 rw"' in installer_element
     assert "unattended" not in published_uki_cmdline

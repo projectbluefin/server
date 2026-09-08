@@ -62,11 +62,16 @@ session.
 Create `tests/unit/test_installer_contract.py`. Assert:
 
 ```python
-assert "freedesktop-sdk.bst:components/bash.bst" in installer_stack
+assert "freedesktop-sdk.bst:bootstrap/bash.bst" in installer_stack
 assert 'console=ttyS0,115200 rw"' in installer_element
 assert "unattended" not in published_uki_cmdline
 assert '-append "systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended"' in justfile
 ```
+
+The pinned FSDK 26.08 does not provide `components/bash.bst`; its canonical
+Bash element is `bootstrap/bash.bst`. This is an explicit Installer-only
+exception because the existing `/usr/bin/bluefin-sysinstall` wrapper has a
+`/bin/bash` interpreter. It must not add a shell dependency to the target DDI.
 
 Extract `published_uki_cmdline` from the `ukify build` command, not from the
 whole element, so the assertion permits the wrapper's `unattended` check.
@@ -89,8 +94,11 @@ line.
    `elements/installer/installer-stack.bst`:
 
    ```yaml
-   - freedesktop-sdk.bst:components/bash.bst
+   - freedesktop-sdk.bst:bootstrap/bash.bst
    ```
+
+   This is an explicit Installer-only exception for the wrapper's Bash
+   interpreter; the target DDI remains shell-free.
 
 2. Remove only the `unattended` token from the UKI `--cmdline` in
    `elements/oci/bluefin-server-installer.bst`. Keep both console arguments
