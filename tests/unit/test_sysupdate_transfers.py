@@ -1,4 +1,4 @@
-"""Unit coverage for ``files/os/sysupdate.d/*.transfer``.
+"""Unit coverage for the OS and component sysupdate transfer definitions.
 
 ``tests/unit/test_repart_layout.py`` already pins ``50-root.transfer`` against
 the installer repart config. The other two OTA transfer definitions —
@@ -25,6 +25,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.d"
+K0S_SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.k0s.d"
+K0S_TRANSFER = K0S_SYSUPDATE_DIR / "70-k0s.transfer"
 ELEMENTS_DIR = REPO_ROOT / "elements"
 EXTENSION_RELEASE = REPO_ROOT / "files" / "k0s" / "sysext" / "extension-release.k0s"
 
@@ -32,7 +34,9 @@ RELEASE_FEED = "https://github.com/projectbluefin/server/releases/latest/downloa
 
 
 def transfer_paths() -> list[Path]:
-    return sorted(SYSUPDATE_DIR.glob("*.transfer"))
+    return sorted(
+        (*SYSUPDATE_DIR.glob("*.transfer"), *K0S_SYSUPDATE_DIR.glob("*.transfer"))
+    )
 
 
 def load_transfer(path: Path) -> configparser.ConfigParser:
@@ -57,15 +61,11 @@ def split_match_pattern(pattern: str) -> tuple[str, str]:
     return prefix, suffix
 
 
-def test_sysupdate_directory_is_populated():
-    paths = transfer_paths()
-    assert paths, f"no .transfer files found under {SYSUPDATE_DIR}"
-    names = {p.name for p in paths}
-    assert names == {
-        "50-root.transfer",
-        "60-uki.transfer",
-        "70-k0s.transfer",
-    }, f"unexpected transfer set {sorted(names)}; update this test with the contract"
+def test_sysupdate_directories_are_populated():
+    generic = sorted(p.name for p in SYSUPDATE_DIR.glob("*.transfer"))
+    k0s = sorted(p.name for p in K0S_SYSUPDATE_DIR.glob("*.transfer"))
+    assert generic == ["50-root.transfer", "60-uki.transfer"]
+    assert k0s == ["70-k0s.transfer"]
 
 
 @pytest.mark.parametrize("path", transfer_paths(), ids=lambda p: p.name)
@@ -159,7 +159,7 @@ def test_uki_source_and_target_names_agree():
 
 
 def test_k0s_sysext_transfer_lands_in_the_system_extension_directory():
-    target = load_transfer(SYSUPDATE_DIR / "70-k0s.transfer")["Target"]
+    target = load_transfer(K0S_TRANSFER)["Target"]
     assert target.get("Type") == "regular-file", (
         "the k0s sysext is delivered as a decompressed regular file"
     )
@@ -174,7 +174,7 @@ def test_k0s_sysext_transfer_lands_in_the_system_extension_directory():
 
 
 def test_k0s_sysext_transfer_maintains_a_stable_current_symlink():
-    target = load_transfer(SYSUPDATE_DIR / "70-k0s.transfer")["Target"]
+    target = load_transfer(K0S_TRANSFER)["Target"]
     symlink = target.get("CurrentSymlink")
     assert symlink == "k0s.raw", (
         f"CurrentSymlink is {symlink!r}; systemd-sysext loads a fixed filename, "
@@ -188,7 +188,7 @@ def test_k0s_sysext_transfer_maintains_a_stable_current_symlink():
 
 
 def test_k0s_sysext_transfer_decompresses_the_release_asset():
-    parser = load_transfer(SYSUPDATE_DIR / "70-k0s.transfer")
+    parser = load_transfer(K0S_TRANSFER)
     source = parser["Source"]["MatchPattern"]
     target = parser["Target"]["MatchPattern"]
     assert source.endswith(".raw.zst"), f"k0s release asset {source!r} is not zstd"
@@ -211,7 +211,7 @@ def test_k0s_sysext_image_name_matches_its_extension_release_name():
         for line in EXTENSION_RELEASE.read_text().splitlines()
         if "=" in line and not line.startswith("#")
     )
-    symlink = load_transfer(SYSUPDATE_DIR / "70-k0s.transfer")["Target"][
+    symlink = load_transfer(K0S_TRANSFER)["Target"][
         "CurrentSymlink"
     ]
     image_name = symlink.removesuffix(".raw")
@@ -235,15 +235,15 @@ def test_every_source_artifact_is_staged_in_release_workflow(path: Path):
     prefix, _ = split_match_pattern(
         load_transfer(path)["Source"]["MatchPattern"]
     )
-    # k0s sysext may be staged directly or via the k3s compatibility symlink
-    staged_prefixes = [prefix]
-    if prefix == "k0s-":
-        staged_prefixes.append("k3s-")
     build_yml = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
-    assert any(
-        re.search(rf"cp\s+.*{re.escape(p)}\*.*dist/release/", build_yml)
-        for p in staged_prefixes
-    ), (
+    assert re.search(rf"cp\s+.*{re.escape(prefix)}\*.*dist/release/", build_yml), (
         f"{path.name} source asset prefix {prefix!r} is not staged to dist/release/ in .github/workflows/build.yml"
     )
 
+
+def test_k0s_release_staging_does_not_use_legacy_k3s_name() -> None:
+    build_yml = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
+    assert re.search(r"cp\s+.*k0s-\*\.raw\.zst.*dist/release/", build_yml)
+    assert not re.search(
+        r"cp\s+.*k3s-\*\.raw\.zst.*dist/release/", build_yml
+    )

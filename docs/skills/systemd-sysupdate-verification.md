@@ -16,7 +16,8 @@ the OS image.
 
 ## When to Use
 
-- Modifying `files/os/sysupdate.d/*.transfer` update definitions.
+- Modifying `files/os/sysupdate.d/*.transfer` or
+  `files/os/sysupdate.k0s.d/*.transfer` update definitions.
 - Rotating or replacing the release signing key.
 - Debugging `systemd-sysupdate` failures related to `SHA256SUMS.gpg` verification.
 
@@ -47,7 +48,12 @@ Key facts from `sysupdate.d(5)`:
 
 ## Current implementation status
 
-The current tree uses a single root/ESP slot and a single signed manifest flow for OTA delivery. Future work on dual-slot root partitions, dual UKIs, and broader rollback strategies is tracked in [architecture-roadmap.md](architecture-roadmap.md).
+The current tree uses a single root/ESP slot and a single signed manifest flow
+for OTA delivery. Root and UKI transfers live in `sysupdate.d`; the optional
+k0s sysext lives in the `k0s` component directory and is selected with
+`systemd-sysupdate --component=k0s update`. Future work on dual-slot root
+partitions, dual UKIs, and broader rollback strategies is tracked in
+[architecture-roadmap.md](architecture-roadmap.md).
 
 ## Repository Layout
 
@@ -59,9 +65,10 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
   signs it with the `SYSUPDATE_SIGNING_KEY` repository secret, producing
   `dist/release/SHA256SUMS.gpg`, and uploads `dist/release/*` to the GitHub
   Release.
-- `files/os/sysupdate.d/*.transfer` — each transfer points its static `Path=`
-  at `https://github.com/projectbluefin/server/releases/latest/download/` so
-  all transfers share the same signed manifest.
+- `files/os/sysupdate.d/*.transfer` and
+  `files/os/sysupdate.k0s.d/*.transfer` — each transfer points its static
+  `Path=` at `https://github.com/projectbluefin/server/releases/latest/download/`
+  so all transfers share the same signed manifest.
 
 ## Rotating the Signing Key
 
@@ -119,7 +126,8 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
 
 ## Verification
 
-- [ ] `files/os/sysupdate.d/*.transfer` does not contain `Verify=no`.
+- [ ] `files/os/sysupdate.d/*.transfer` and
+      `files/os/sysupdate.k0s.d/*.transfer` do not contain `Verify=no`.
 - [ ] `elements/bluefin-server/os-stack.bst` includes
       `bluefin-server/os-sysupdate-keys.bst`.
 - [ ] `files/os/sysupdate-keys/import-pubring.gpg` exists and contains the
@@ -128,8 +136,9 @@ The current tree uses a single root/ESP slot and a single signed manifest flow f
 - [ ] CI generates and signs exactly one combined `dist/release/SHA256SUMS`
       manifest, producing `dist/release/SHA256SUMS.gpg`.
 - [ ] CI uploads `dist/release/*` to the GitHub Release.
-- [ ] Every transfer in `files/os/sysupdate.d/*.transfer` uses a static `Path=`
-      with no `@v` placeholder.
+- [ ] Every transfer in `files/os/sysupdate.d/*.transfer` and
+      `files/os/sysupdate.k0s.d/*.transfer` uses a static `Path=` with no
+      `@v` placeholder.
 - [ ] Every transfer uses `@v` only inside `MatchPattern=`.
 
 ## See also

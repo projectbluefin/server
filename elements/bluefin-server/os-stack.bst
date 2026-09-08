@@ -35,6 +35,12 @@ depends:
   # A/B System Update Configurations
   - bluefin-server/os-sysupdate.bst
 
+  # k0s component system update configuration
+  - bluefin-server/os-k0s-sysupdate.bst
+
+  # Wired DHCP configuration for the installed OS
+  - bluefin-server/os-networkd.bst
+
   # Activate the optional k0s sysext after installation
   - bluefin-server/os-k0s-first-boot.bst
 
