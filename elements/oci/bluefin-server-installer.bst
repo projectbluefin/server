@@ -34,7 +34,8 @@ build-depends:
   - freedesktop-sdk.bst:components/dracut.bst
   - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/cpio.bst      # newc cpio archive creation
-  - freedesktop-sdk.bst:components/findutils.bst  # find for cpio pipe
+  - freedesktop-sdk.bst:components/findutils.bst # find for cpio pipe
+  - freedesktop-sdk.bst:components/gzip.bst      # gzip for initrd cpio
   # grep/sed are required by dracut/dracut-install even though our commands don't name them.
   - freedesktop-sdk.bst:components/grep.bst
   - freedesktop-sdk.bst:components/sed.bst
@@ -241,7 +242,7 @@ config:
         > /layer/etc/systemd/network/80-dhcp.network
     # ── Step 2: Wire default.target -> system-install.target ────────────
     - |
-      set -eu
+      set -eux
       if [ ! -f /layer/usr/lib/systemd/system/system-install.target ]; then
         echo "ERROR: system-install.target is missing from the staged rootfs! FSDK systemd must be version 261 or later." >&2
         exit 1
@@ -262,7 +263,7 @@ config:
     # find . from /layer gives paths like ./usr/bin/... which is exactly
     # the newc format the kernel expects. The kernel strips the leading dot.
     - |
-      set -eu
+      set -eux
 
       # Clean up bloat from /layer before packing (reduces initrd size from 1.4G to ~100M!)
       rm -rf /layer/usr/lib/debug /layer/usr/share/doc /layer/usr/share/man /layer/usr/include
@@ -311,7 +312,7 @@ config:
     # systemd-repart's CopyBlocks= (which resolves paths under --root=/layer)
     # can copy it into the installer media data partition.
     - |
-      set -eu
+      set -eux
       zstd -d /ddi/bluefin-server-ddi-*.raw.zst -o /layer/bluefin-server-ddi.raw
       ls -lh /layer/bluefin-server-ddi.raw
 
@@ -323,7 +324,7 @@ config:
     # At install time, systemd-sysinstall mounts the data partition to
     # locate the DDI at the path expected by repart.d/20-root-a.conf (CopyBlocks=).
     - |
-      set -eu
+      set -eux
       OUT="%{install-root}"
       FNAME="bluefin-server-installer-%{installer-version}.raw"
       mkdir -p /installer-media-repart.d

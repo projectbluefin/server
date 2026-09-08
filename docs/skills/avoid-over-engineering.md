@@ -53,7 +53,7 @@ existing repo convention already does the job.
 | "A forwarding recipe is harmless." | It duplicates the command surface and rots when the real recipe changes. |
 | "I don't need to re-validate after a tiny cut." | `just validate` is the merge contract. Run it every time. |
 | "This build dep isn't named in the commands, so it's unused." | `manual`/`script` element commands run in a sandbox that still needs `/bin/sh` and coreutils. Cutting the dep that supplies them breaks the build even if `make` itself is never called. |
-| "The tool I depend on doesn't need grep/sed/etc." | Build tools like `dracut` invoke `grep`, `sed`, `kmod` (`depmod`), and `ldconfig` internally. If the sandbox doesn't have them, the tool fails with opaque "command not found" or missing-library errors. |
+| "The tool I depend on doesn't need grep/sed/gzip/etc." | Build tools like `dracut` and archive pipelines invoke `grep`, `sed`, `gzip`, `kmod` (`depmod`), and `ldconfig` internally. If the sandbox doesn't have them, the tool fails with opaque "command not found" (exitcode 127) or missing-library errors. |
 
 ## Red Flags
 
