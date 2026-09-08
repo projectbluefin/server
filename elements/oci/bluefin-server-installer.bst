@@ -57,6 +57,10 @@ build-depends:
   - filename: bluefin-server/os-rootfs.bst
     config:
       location: /target-root
+  # Uncompressed k0s sysext staged into the installer initrd for offline install
+  - filename: oci/k0s-sysext.bst
+    config:
+      location: /k0s
 
 variables:
   installer-version: "%{release-version}"
@@ -258,6 +262,12 @@ config:
       rm -f /layer/usr/lib/systemd/system/default.target
       ln -sf system-install.target \
         /layer/usr/lib/systemd/system/default.target
+
+    # ── Step 2a: Stage the offline k0s sysext before packing the initrd ─
+    - |
+      set -eux
+      cp /k0s/k0s-*.raw /layer/k0s.raw
+      ls -lh /layer/k0s.raw
 
     # ── Step 3: Pack initrd cpio ─────────────────────────────────────────
     # find . from /layer gives paths like ./usr/bin/... which is exactly

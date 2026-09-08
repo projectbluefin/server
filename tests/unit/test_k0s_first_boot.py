@@ -41,7 +41,10 @@ def test_k0s_first_boot_retries_until_controller_starts() -> None:
     assert "Type=oneshot" in service
     assert "StateDirectory=k0s" in service
     assert "Restart=on-failure" in service
-    assert "ExecStart=/usr/bin/systemd-sysupdate --component=k0s update" in service
+    assert (
+        "ExecStart=/usr/bin/systemd-sysupdate --component=k0s update"
+        not in service
+    )
     assert "ExecStart=/usr/bin/systemd-sysupdate update" not in service
     assert (
         "ExecStart=/usr/bin/systemctl enable --now systemd-sysext.service"

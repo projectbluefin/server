@@ -9,7 +9,6 @@ Type=oneshot
 StateDirectory=k0s
 Restart=on-failure
 RestartSec=30s
-ExecStart=/usr/bin/systemd-sysupdate --component=k0s update
 ExecStart=/usr/bin/systemctl enable --now systemd-sysext.service
 ExecStart=/usr/bin/systemd-sysext merge
 ExecStart=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/k0s-manifests.conf
