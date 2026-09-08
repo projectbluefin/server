@@ -6,6 +6,14 @@ ROOT = Path(__file__).resolve().parents[2]
 SERVICE = (
     ROOT / "files" / "os" / "systemd" / "system" / "k0s-first-boot.service"
 )
+FETCH_SERVICE = (
+    ROOT
+    / "files"
+    / "os"
+    / "systemd"
+    / "system"
+    / "k0s-first-boot-fetch.service"
+)
 PRESET = (
     ROOT
     / "files"
@@ -29,6 +37,33 @@ K0S_UPDATE_ELEMENT = (
     ROOT / "elements" / "bluefin-server" / "os-k0s-sysupdate.bst"
 )
 STACK = ROOT / "elements" / "bluefin-server" / "os-stack.bst"
+
+
+def test_seeded_install_skips_the_network_fetch() -> None:
+    assert FETCH_SERVICE.is_file(), "the conditional k0s fetch unit is missing"
+    fetch_service = FETCH_SERVICE.read_text(encoding="utf-8")
+    first_boot = SERVICE.read_text(encoding="utf-8")
+
+    assert "ConditionPathExists=!/var/lib/extensions/k0s.raw" in fetch_service
+    assert (
+        "ExecStart=/usr/bin/systemd-sysupdate --component=k0s update"
+        in fetch_service
+    )
+    assert "systemd-sysupdate" not in first_boot
+
+
+def test_missing_seed_fetches_before_activation_and_requires_the_image() -> None:
+    assert FETCH_SERVICE.is_file(), "the conditional k0s fetch unit is missing"
+    fetch_service = FETCH_SERVICE.read_text(encoding="utf-8")
+    first_boot = SERVICE.read_text(encoding="utf-8")
+
+    assert "Type=oneshot" in fetch_service
+    assert "Restart=on-failure" in fetch_service
+    assert "Before=k0s-first-boot.service" in fetch_service
+    assert "Requires=k0s-first-boot-fetch.service" in first_boot
+    assert "After=k0s-first-boot-fetch.service" in first_boot
+    assert "AssertPathExists=/var/lib/extensions/k0s.raw" in first_boot
+    assert "ExecStart=/usr/bin/systemd-sysext merge" in first_boot
 
 
 def test_k0s_first_boot_retries_until_controller_starts() -> None:
