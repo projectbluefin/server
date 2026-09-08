@@ -98,6 +98,8 @@ The release process is driven by `.github/workflows/build.yml`:
 | Rationalization | Reality |
 |---|---|
 | "A bash script is simpler." | A bash script cannot run the systemd-native interactive installer TUI. Use `systemd-sysinstall`. |
+| "Kernel image is at `/boot/vmlinuz`." | FSDK installs kernels into `/usr/lib/modules/<kver>/vmlinuz`. Toolchains (dracut, ukify, PXE export) must point to `/usr/lib/modules/<kver>/vmlinuz`. |
+| "Initrd archive tools (gzip, cpio) are in base-stack." | In FSDK 26.08, gzip and cpio are standalone components; elements packing or unpacking initrds must explicitly declare `components/gzip.bst` and `components/cpio.bst` in `build-depends`. |
 | "Use knuckle instead." | knuckle is deprecated in favor of native `systemd-sysinstall` (systemd 261+). |
 | "Hardcode `root=/dev/vda2` for QEMU." | Bare metal has different device names. Always use PARTUUID. |
 | "Pull the DDI from the network at install time." | Network failures = broken installs. The DDI is embedded in the installer media. |
