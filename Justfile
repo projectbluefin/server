@@ -204,6 +204,8 @@ show-me-the-future:
     just export-installer
 
     cp dist/bluefin-server-installer-*.raw.zst "$WORKDIR/installer.raw.zst"
+    cp dist/bluefin-server-pxe-vmlinuz-* "$WORKDIR/installer.vmlinuz"
+    cp dist/bluefin-server-pxe-initrd-*.cpio.gz "$WORKDIR/installer.initrd"
     zstd -d "$WORKDIR/installer.raw.zst" -o "$WORKDIR/installer.raw"
     TARGET_SIZE="${SHOW_ME_THE_FUTURE_DISK_SIZE:-16G}"
     truncate -s "${TARGET_SIZE}" "$WORKDIR/target.raw"
@@ -256,6 +258,9 @@ show-me-the-future:
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
+        -kernel "$WORKDIR/installer.vmlinuz" \
+        -initrd "$WORKDIR/installer.initrd" \
+        -append "systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended" \
         -nographic \
         -serial mon:stdio \
         -no-reboot < /dev/null
