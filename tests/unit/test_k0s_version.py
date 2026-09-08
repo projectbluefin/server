@@ -1,4 +1,5 @@
 import importlib.util
+import re
 from pathlib import Path
 import yaml
 
@@ -44,4 +45,8 @@ def test_k0s_version_pre_commit_hook_selects_the_relocated_transfer():
         for hook in repo.get("hooks", [])
         if hook.get("id") == "check-k0s-version"
     )
-    assert "files/os/sysupdate\\.k0s\\.d/70-k0s\\.transfer" in hook["files"]
+    selector = re.compile(hook["files"])
+    assert (
+        selector.fullmatch("files/os/sysupdate.k0s.d/70-k0s.transfer") is not None
+    )
+    assert selector.fullmatch("files/os/sysupdate.d/70-k0s.transfer") is None
