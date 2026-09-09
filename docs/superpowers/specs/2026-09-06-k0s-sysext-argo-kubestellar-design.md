@@ -2,7 +2,7 @@
 
 ## Context & Purpose
 
-Bluefin Server produces an immutable, distroless Linux server OS payload (`bluefin-server-ddi.bst`), an offline installer (`bluefin-server-installer.bst`), and an optional decoupled Kubernetes system extension (`systemd-sysext`).
+Bluefin Server produces an immutable Linux server OS payload (`bluefin-server-ddi.bst`), an offline installer (`bluefin-server-installer.bst`), and an optional decoupled Kubernetes system extension (`systemd-sysext`).
 
 This specification defines the complete replacement ("purge") of k3s with **k0s** across the entire project repository. k0s provides a single statically-linked binary that embeds the Kubernetes control plane, worker runtime (`containerd`, `runc`), and a native manifest deployer that watches `/var/lib/k0s/manifests/`.
 

@@ -5,6 +5,7 @@ depends:
   # Base runtime & core libraries (minimal non-GNU base + uutils modern userspace)
   - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
   - bluefin-server/uutils-coreutils.bst
+  - freedesktop-sdk.bst:bootstrap/bash.bst
   - freedesktop-sdk.bst:components/ca-certificates.bst
   - freedesktop-sdk.bst:components/tzdata.bst
   - freedesktop-sdk.bst:integration/extra-fs.bst

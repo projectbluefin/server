@@ -10,9 +10,10 @@ metadata:
 ---
 # Extensibility via systemd-sysext
 
-Bluefin Server is distroless and read-only. For debugging, monitoring, or
-runtime modifications, use systemd-sysext to overlay package bundles into
-`/usr` and `/opt`, or systemd-confext to overlay files into `/etc`.
+Bluefin Server's base OS includes bash for login and bring-up, while heavy
+developer and debug tools live in sysexts or system containers. For debugging,
+monitoring, or runtime modifications, use systemd-sysext to overlay package
+bundles into `/usr` and `/opt`, or systemd-confext to overlay files into `/etc`.
 
 ## Canonical scope
 

@@ -21,10 +21,9 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 1. Compose from FSDK 26.08 `components/*`. Never use `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
 3. Installer must stay `systemd-sysinstall`-native and `systemd-repart`-based; no custom installer scripts or non-native installers.
-4. No shell in the running OS DDI image (temporary exception: SSH is enabled for bring-up and cluster boot tests; see [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md)).
-5. Deliver k0s as an optional `systemd-sysext`; never bundle Kubernetes or container runtimes into the base OS DDI.
-6. Boot entries use GPT `PARTUUID`; never hardcode device paths.
-7. One canonical source per fact; do not duplicate content across docs.
+4. Deliver k0s as an optional `systemd-sysext`; never bundle Kubernetes or container runtimes into the base OS DDI.
+5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
+6. One canonical source per fact; do not duplicate content across docs.
 
 ## Commit and attribution conventions
 

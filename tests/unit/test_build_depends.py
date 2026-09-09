@@ -117,4 +117,16 @@ def test_installer_stack_includes_uutils_and_dbus():
     )
 
 
+def test_os_stack_includes_bash():
+    """Bluefin Server OS must include bash for login and interactive access."""
+    os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
+    data = yaml.safe_load(os_stack.read_text(encoding="utf-8"))
+    depends = data.get("depends", [])
+
+    assert "freedesktop-sdk.bst:bootstrap/bash.bst" in depends, (
+        "os-stack.bst must include freedesktop-sdk.bst:bootstrap/bash.bst"
+    )
+
+
+
 

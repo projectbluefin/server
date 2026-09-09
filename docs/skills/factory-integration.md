@@ -26,7 +26,7 @@ The factory pattern is broader than a single host: a downstream CI lab or OS fac
                               ▼ runs on
 ┌─────────────────────────────────────────────────────────────┐
 │ Bluefin Server (this repo)                                  │
-│ Core server OS: DDI-first, image-updated, distroless        │
+│ Core server OS: DDI-first, image-updated                    │
 │ • systemd-sysupdate for atomic A/B updates                  │
 │ • systemd-sysext for optional layers (k0s, extensions)      │
 │ • podman for container workloads                            │
@@ -56,7 +56,7 @@ The workloads the factory tests and ships live in other repositories or image pi
 |---|---|
 | Fully automated, unattended installs | Offline DDI installer (`systemd-sysinstall`) |
 | Atomic, rollback-capable updates | Image-based A/B updates via `systemd-sysupdate` |
-| Minimal attack surface / no shell in OS | Distroless DDI; optional tools as sysexts |
+| Minimal attack surface / lean base OS | Streamlined DDI with bash; optional tools as sysexts |
 | Kubernetes control plane on every node | k0s delivered as `systemd-sysext` |
 | Container workloads | `podman` in the base OS stack |
 | Signed, verifiable release artifacts | GPG-signed `SHA256SUMS` + `import-pubring.gpg` |
@@ -84,7 +84,7 @@ The workloads the factory tests and ships live in other repositories or image pi
 |---|---|
 | “k0s should be in the base image.” | Keep the OS DDI minimal. k0s is optional and delivered OTA as a sysext. |
 | “We can pull the DDI at install time.” | Unattended installs must survive network loss; the DDI is embedded in the installer media. |
-| “Let’s add a shell for debugging.” | Shells belong in sysexts or system containers, not in the distroless DDI. (Temporary exception: SSH during bring-up; see above.) |
+| “Let’s add heavy debug tools.” | Base OS includes bash for login; heavy developer/debug tools belong in sysexts or system containers. |
 | “Package updates are small patches.” | Image-based updates are whole-OS replacements; the rollback unit is the OS image, not a package delta. |
 
 ## Red Flags

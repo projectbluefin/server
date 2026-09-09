@@ -14,7 +14,7 @@
 
 - k0s version: Kubernetes 1.36.4, k0s patch 0 (upstream tag `v1.36.4+k0s.0`, asset version `1.36.4-k0s.0`).
 - Upstream AMD64 binary SHA256: `ca1e9e68107335846e8296777fce2ccd654284e6265b4b5d32c34ead872af98f`.
-- Hard rule 4: No shell in the running OS DDI image.
+- Hard rule 4: Deliver k0s as an optional systemd-sysext; never bundle Kubernetes or container runtimes into the base OS DDI.
 - Single source of truth for version: `include/k0s.yml`.
 - All manual BST elements executing commands must depend on `base/base-stack.bst` for `/bin/sh` and coreutils under FSDK 26.08.
 - Sysupdate transfer target must declare `CurrentSymlink=k0s.raw` for `systemd-sysext` image name matching.

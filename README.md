@@ -23,9 +23,9 @@ Bluefin Server is currently in **Alpha**:
 
 - **Image-based updates and atomic rollbacks** via A/B partition slots and `systemd-sysupdate`.
 - **DDI-first delivery** — the installer embeds the OS payload as a data partition; no network is required at install time.
-- **Minimal, distroless OS image** — no shell in the running rootfs by default.
+- **Streamlined base OS image** — modern userspace with uutils coreutils and bash for interactive login and diagnostics.
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive terminal UI and `systemd-repart` handles partitioning and block-copy DDI placement.
-- **Optional k0s as a `systemd-sysext`** so the base image stays distroless.
+- **Optional k0s as a `systemd-sysext`** so the base image stays minimal.
 
 > **Temporary bring-up exception:** SSH is enabled for cluster boot tests and remote debugging. It is scheduled for removal once diagnostics move to serial logs or a guest agent. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 

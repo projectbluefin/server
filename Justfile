@@ -239,7 +239,6 @@ show-me-the-future:
       /usr/share/OVMF/OVMF_VARS_4M.fd \
       /usr/share/edk2/x64/OVMF_VARS.4m.fd \
       /usr/share/qemu/edk2-x86_64-vars.fd \
-      /usr/share/qemu/edk2-i386-vars.fd \
       /usr/share/qemu/OVMF_VARS.fd) \
       || true
     if [ -n "$OVMF_VARS" ]; then
@@ -248,15 +247,18 @@ show-me-the-future:
       truncate -s "$(stat -c '%s' "$OVMF_CODE")" "$WORKDIR/ovmf-vars.fd"
     fi
 
+    SMP_CPUS="${SHOW_ME_THE_FUTURE_SMP:-$(nproc)}"
+    MEM_SIZE="${SHOW_ME_THE_FUTURE_MEM:-8192}"
+
     echo "==> Booting installer media in QEMU..."
     # ponytail: we want QEMU to exit cleanly after install. Since QEMU's -no-reboot
     # suspends/halts on reboot signals, we override systemd-sysinstall.service SuccessAction/FailureAction
     # to poweroff. When the installer triggers poweroff, QEMU terminates, and we boot into the newly installed OS.
     qemu-system-x86_64 \
         -enable-kvm \
-        -m 4096 \
+        -m "${MEM_SIZE}" \
         -cpu host \
-        -smp 2 \
+        -smp "${SMP_CPUS}" \
         -drive file="$WORKDIR/installer.raw",format=raw,if=virtio,readonly=on \
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
@@ -343,9 +345,9 @@ show-me-the-future:
     echo "==> Booting the installed server in QEMU (background)..."
     qemu-system-x86_64 \
         -enable-kvm \
-        -m 4096 \
+        -m "${MEM_SIZE}" \
         -cpu host \
-        -smp 2 \
+        -smp "${SMP_CPUS}" \
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
@@ -437,42 +439,50 @@ install-vm:
         /usr/share/OVMF/OVMF_VARS_4M.fd \
         /usr/share/edk2/x64/OVMF_VARS.4m.fd \
         /usr/share/qemu/edk2-x86_64-vars.fd \
-        /usr/share/qemu/edk2-i386-vars.fd \
         /usr/share/qemu/OVMF_VARS.fd) \
-        || { echo "ERROR: OVMF_VARS not found"; exit 1; }
-      cp "$OVMF_TEMPLATE" "$OVMF_VARS"
+        || true
+      if [ -n "$OVMF_TEMPLATE" ]; then
+        cp "$OVMF_TEMPLATE" "$OVMF_VARS"
+      else
+        truncate -s "$(stat -c '%s' "$OVMF_CODE")" "$OVMF_VARS"
+      fi
     fi
+
+    SMP_CPUS="${INSTALL_VM_SMP:-$(nproc)}"
+    MEM_SIZE="${INSTALL_VM_MEM:-8192}"
 
     if [ ! -f "$INSTALL_COMPLETE" ]; then
       just export-installer
       INSTALLER_ARCHIVE=$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-installer-*.raw.zst' -print -quit)
       [ -n "$INSTALLER_ARCHIVE" ] || { echo "ERROR: No exported installer found in dist/." >&2; exit 1; }
-      zstd --decompress --force "$INSTALLER_ARCHIVE" --output "$INSTALLER_RAW"
+      zstd -d -f "$INSTALLER_ARCHIVE" -o "$INSTALLER_RAW"
       truncate -s "${INSTALL_VM_DISK_SIZE:-16G}" "$TARGET_RAW"
 
       echo "==> Booting the interactive installer in QEMU..."
       qemu-system-x86_64 \
         -enable-kvm \
-        -m 4096 \
+        -m "${MEM_SIZE}" \
         -cpu host \
-        -smp 2 \
+        -smp "${SMP_CPUS}" \
         -drive file="$INSTALLER_RAW",format=raw,if=virtio,readonly=on \
         -drive file="$TARGET_RAW",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
-        -drive if=pflash,format=raw,file="$OVMF_VARS"
+        -drive if=pflash,format=raw,file="$OVMF_VARS" \
+        -nographic \
+        -serial mon:stdio
       touch "$INSTALL_COMPLETE"
     fi
 
     echo "==> Booting the installed kiosk..."
     qemu-system-x86_64 \
       -enable-kvm \
-      -m 4096 \
+      -m "${MEM_SIZE}" \
       -cpu host \
-      -smp 2 \
+      -smp "${SMP_CPUS}" \
       -drive file="$TARGET_RAW",format=raw,if=virtio \
       -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
       -drive if=pflash,format=raw,file="$OVMF_VARS" \
-      -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 &
+      -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080,hostfwd=tcp:127.0.0.1:2222-:22 &
     QEMU_PID=$!
     cleanup() {
       if kill -0 "$QEMU_PID" 2>/dev/null; then

@@ -30,9 +30,10 @@ optional overlay for Bluefin Server.
 
 ## Architecture
 
-Bluefin Server's base DDI image is distroless and read-only. k0s is not baked
-into the OS stack. Instead it is delivered as a `systemd-sysext` EROFS image
-that overlays `/usr` at runtime.
+Bluefin Server's base DDI image includes bash for login and bring-up, while
+heavy developer and debug tools live in sysexts or system containers. k0s is not
+baked into the OS stack. Instead it is delivered as a `systemd-sysext` EROFS
+image that overlays `/usr` at runtime.
 
 Design choices:
 
