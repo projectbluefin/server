@@ -28,3 +28,37 @@ def test_core_login_elements_are_composed() -> None:
     assert "freedesktop-sdk.bst:components/sudo.bst" in depends
     assert "bluefin-server/os-tmpfiles.bst" in depends
     assert "bluefin-server/os-sudo.bst" in depends
+
+
+SSH_CONFIG = ROOT / "files/os/ssh/sshd_config.d/bluefin-server.conf"
+HOST_KEYS_SERVICE = ROOT / "files/os/systemd/system/bluefin-ssh-host-keys.service"
+CORE_ACCESS_SERVICE = ROOT / "files/os/systemd/system/bluefin-core-access.service"
+SSHD_DROP_IN = ROOT / "files/os/systemd/system/sshd.service.d/10-bluefin-access.conf"
+
+
+def test_ssh_is_key_only_and_never_accepts_root() -> None:
+    assert SSH_CONFIG.read_text(encoding="utf-8") == (
+        "PermitRootLogin no\n"
+        "PubkeyAuthentication yes\n"
+        "PasswordAuthentication no\n"
+        "KbdInteractiveAuthentication no\n"
+        "HostKey /var/lib/ssh/ssh_host_ed25519_key\n"
+        "HostKey /var/lib/ssh/ssh_host_rsa_key\n"
+    )
+
+
+def test_sshd_requires_persistent_host_keys_and_core_authorization() -> None:
+    host_keys = HOST_KEYS_SERVICE.read_text(encoding="utf-8")
+    access = CORE_ACCESS_SERVICE.read_text(encoding="utf-8")
+    drop_in = SSHD_DROP_IN.read_text(encoding="utf-8")
+
+    assert "StateDirectory=ssh" in host_keys
+    assert "After=var.mount" in host_keys
+    assert "Before=sshd.service" in host_keys
+    assert "/var/lib/ssh/ssh_host_ed25519_key" in host_keys
+    assert "/var/lib/ssh/ssh_host_rsa_key" in host_keys
+    assert "After=var.mount systemd-tmpfiles-setup.service" in access
+    assert "ExecStart=/usr/bin/test -s /var/home/core/.ssh/authorized_keys" in access
+    assert "Requires=bluefin-ssh-host-keys.service bluefin-core-access.service" in drop_in
+    assert "ExecStartPre=" in drop_in
+    assert "ExecStartPre=/usr/bin/test -s /var/lib/ssh/ssh_host_ed25519_key" in drop_in
