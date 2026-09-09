@@ -7,7 +7,7 @@ MatchPattern=k0s-@v.raw.zst
 
 [Target]
 Type=regular-file
-Path=/var/lib/extensions
+Path=/var/lib/k0s
 MatchPattern=k0s-@v.raw
 CurrentSymlink=k0s.raw
 Mode=0644

@@ -163,9 +163,9 @@ def test_k0s_sysext_transfer_lands_in_the_system_extension_directory():
     assert target.get("Type") == "regular-file", (
         "the k0s sysext is delivered as a decompressed regular file"
     )
-    assert target.get("Path") == "/var/lib/extensions", (
-        f"k0s sysext target path is {target.get('Path')!r}; systemd-sysext only "
-        "merges images from /var/lib/extensions on a mutable-var system"
+    assert target.get("Path") == "/var/lib/k0s", (
+        f"k0s sysext target path is {target.get('Path')!r}; the persistent "
+        "staging path must remain outside systemd-sysext's early scan"
     )
     assert target.get("Mode") == "0644", (
         f"k0s sysext mode is {target.get('Mode')!r}; the image must be readable "
@@ -177,8 +177,8 @@ def test_k0s_sysext_transfer_maintains_a_stable_current_symlink():
     target = load_transfer(K0S_TRANSFER)["Target"]
     symlink = target.get("CurrentSymlink")
     assert symlink == "k0s.raw", (
-        f"CurrentSymlink is {symlink!r}; systemd-sysext loads a fixed filename, "
-        "so without a stable symlink a version bump silently stops merging k0s"
+        f"CurrentSymlink is {symlink!r}; the boot activation unit requires a "
+        "stable filename, so a version bump otherwise stops merging k0s"
     )
     prefix, suffix = split_match_pattern(target["MatchPattern"])
     assert symlink == f"{prefix.rstrip('-')}{suffix}", (

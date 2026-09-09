@@ -7,7 +7,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/k0s controller --enable-worker --single --disable-components=helm
+ExecStart=/usr/bin/k0s controller --enable-worker --single --disable-components=helm,autopilot
 EnvironmentFile=-/etc/sysconfig/k0s
 
 StartLimitInterval=5

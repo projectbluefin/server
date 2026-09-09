@@ -44,7 +44,7 @@ def test_seeded_install_skips_the_network_fetch() -> None:
     fetch_service = FETCH_SERVICE.read_text(encoding="utf-8")
     first_boot = SERVICE.read_text(encoding="utf-8")
 
-    assert "ConditionPathExists=!/var/lib/extensions/k0s.raw" in fetch_service
+    assert "ConditionPathExists=!/var/lib/k0s/k0s.raw" in fetch_service
     assert (
         "ExecStart=/usr/bin/systemd-sysupdate --component=k0s update"
         in fetch_service
@@ -59,23 +59,26 @@ def test_missing_seed_fetches_before_activation_without_blocking_activation_retr
 
     assert "Type=oneshot" in fetch_service
     assert "Restart=on-failure" in fetch_service
-    assert "ConditionPathExists=!/var/lib/extensions/k0s.raw" in fetch_service
+    assert "ConditionPathExists=!/var/lib/k0s/k0s.raw" in fetch_service
     assert "Before=k0s-first-boot.service" in fetch_service
     assert "Wants=k0s-first-boot-fetch.service" in first_boot
     assert "Requires=k0s-first-boot-fetch.service" not in first_boot
     assert "After=k0s-first-boot-fetch.service" in first_boot
     assert (
-        "ExecStartPre=/usr/bin/test -e /var/lib/extensions/k0s.raw"
+        "ExecStartPre=/usr/bin/test -e /var/lib/k0s/k0s.raw"
         in first_boot
     )
-    assert "AssertPathExists=/var/lib/extensions/k0s.raw" not in first_boot
+    assert (
+        "ExecStart=/usr/bin/install -D -m 0644 "
+        "/var/lib/k0s/k0s.raw /run/extensions/k0s.raw"
+    ) in first_boot
     assert "ExecStart=/usr/bin/systemd-sysext merge" in first_boot
 
 
 def test_k0s_first_boot_retries_until_controller_starts() -> None:
     service = SERVICE.read_text(encoding="utf-8")
 
-    assert "ConditionPathExists=!/var/lib/k0s/.first-boot-complete" in service
+    assert "ConditionPathExists=" not in service
     assert "Wants=network-online.target" in service
     assert "After=network-online.target" in service
     assert "Before=multi-user.target" not in service
@@ -87,10 +90,7 @@ def test_k0s_first_boot_retries_until_controller_starts() -> None:
         not in service
     )
     assert "ExecStart=/usr/bin/systemd-sysupdate update" not in service
-    assert (
-        "ExecStart=/usr/bin/systemctl enable --now systemd-sysext.service"
-        in service
-    )
+    assert "ExecStart=/usr/bin/systemctl enable --now systemd-sysext.service" not in service
     assert "ExecStart=/usr/bin/systemd-sysext merge" in service
     assert (
         "ExecStart=/usr/bin/systemd-tmpfiles --create "
@@ -103,7 +103,7 @@ def test_k0s_first_boot_retries_until_controller_starts() -> None:
     )
     assert (
         "ExecStartPost=/usr/bin/touch /var/lib/k0s/.first-boot-complete"
-        in service
+        not in service
     )
     assert "ConditionFirstBoot" not in service
 

@@ -11,6 +11,7 @@ build-depends:
   - base/base-stack.bst
   - freedesktop-sdk.bst:components/xfsprogs.bst
   - freedesktop-sdk.bst:components/findutils.bst
+  - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/zstd.bst
   - filename: bluefin-server/os-stack.bst
     config:
@@ -29,6 +30,26 @@ config:
       rm -rf /layer/usr/lib/debug
       find /layer -type f -name '*.debug' -delete
 
+      KVER="$(basename "$(find /layer/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
+      if [ -z "${KVER}" ]; then
+        echo "ERROR: no target kernel module tree found under /layer/usr/lib/modules" >&2
+        exit 1
+      fi
+      depmod -b /layer "${KVER}"
+
+      # Stage extracted CA certificate bundle into target DDI rootfs
+      mkdir -p /layer/etc/pki/ca-trust/extracted /layer/etc/ssl/certs /layer/etc/pki/tls/certs
+      cp -a /etc/pki/ca-trust/extracted/* /layer/etc/pki/ca-trust/extracted/
+      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/ssl/certs/ca-certificates.crt
+      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/pki/tls/certs/ca-bundle.crt
+      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/pki/tls/cert.pem
+
+      # Mask systemd-firstboot to prevent interactive prompts on headless first boot
+      mkdir -p /layer/etc/systemd/system
+      ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
+
+      # Ensure standard /etc/hosts exists for container runtimes (containerd/podman)
+      printf '127.0.0.1   localhost\n::1         localhost ip6-localhost ip6-loopback\n' > /layer/etc/hosts
 
       # Sum actual file sizes across bind mounts (du -sb reports content bytes, not overlay blocks).
       ROOT_BYTES=$(du -sb /layer | cut -f1)

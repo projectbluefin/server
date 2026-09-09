@@ -125,7 +125,7 @@ config:
 
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS and VirtIO block/scsi storage drivers.
       dracut -v --reproducible --no-machineid --no-hostonly \
-        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs" \
+        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs erofs overlay" \
         --filesystems "xfs vfat" \
         --install /etc/ld.so.cache \
         --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \

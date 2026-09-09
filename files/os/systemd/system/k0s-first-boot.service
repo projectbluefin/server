@@ -1,6 +1,5 @@
 [Unit]
-Description=Activate k0s sysext after first installation
-ConditionPathExists=!/var/lib/k0s/.first-boot-complete
+Description=Activate k0s sysext on boot
 Wants=network-online.target
 Wants=k0s-first-boot-fetch.service
 After=network-online.target
@@ -11,13 +10,11 @@ Type=oneshot
 StateDirectory=k0s
 Restart=on-failure
 RestartSec=30s
-ExecStartPre=/usr/bin/test -e /var/lib/extensions/k0s.raw
-ExecStart=/usr/bin/systemctl enable --now systemd-sysext.service
+ExecStartPre=/usr/bin/test -e /var/lib/k0s/k0s.raw
+ExecStart=/usr/bin/install -D -m 0644 /var/lib/k0s/k0s.raw /run/extensions/k0s.raw
 ExecStart=/usr/bin/systemd-sysext merge
 ExecStart=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/k0s-manifests.conf
 ExecStart=/usr/bin/systemctl daemon-reload
 ExecStart=/usr/bin/systemctl enable --now k0scontroller.service
-ExecStartPost=/usr/bin/touch /var/lib/k0s/.first-boot-complete
-
 [Install]
 WantedBy=multi-user.target

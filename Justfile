@@ -277,9 +277,9 @@ show-me-the-future:
     [ -n "$K0S_RAW_ZST" ] || { echo "ERROR: k0s sysext not found in dist/sysext" >&2; exit 1; }
 
     VAR_STAGING="$WORKDIR/var-staging"
-    mkdir -p "$VAR_STAGING/lib/extensions"
+    mkdir -p "$VAR_STAGING/lib/k0s"
     mkdir -p "$VAR_STAGING/lib/k0s/manifests/kubestellar"
-    zstd -dc "$K0S_RAW_ZST" > "$VAR_STAGING/lib/extensions/k0s.raw"
+    zstd -dc "$K0S_RAW_ZST" > "$VAR_STAGING/lib/k0s/k0s.raw"
 
     printf '%s\n' \
       'apiVersion: v1' \
@@ -314,7 +314,7 @@ show-me-the-future:
 
     echo "==> Refreshing target /var partition using systemd-repart..."
     # systemd-repart operates on the target image directly without loopback/sudo when passed as the target operand.
-    systemd-repart \
+    unshare -r systemd-repart \
       --factory-reset=yes \
       --dry-run=no \
       --definitions="$REPART_DIR" \
@@ -347,8 +347,8 @@ show-me-the-future:
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
         -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 \
-        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=systemd.log_level=debug" \
         -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service" \
         -nographic \
         -serial file:"$SERIAL_LOG" \
         -monitor none &

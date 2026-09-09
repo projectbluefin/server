@@ -1,6 +1,6 @@
 [Unit]
 Description=Fetch the k0s sysext when installation did not seed it
-ConditionPathExists=!/var/lib/extensions/k0s.raw
+ConditionPathExists=!/var/lib/k0s/k0s.raw
 Wants=network-online.target
 After=network-online.target
 Before=k0s-first-boot.service

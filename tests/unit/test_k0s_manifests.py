@@ -7,7 +7,7 @@ def test_k0s_service_unit():
     unit = ROOT / "files" / "k0s" / "sysext" / "k0scontroller.service"
     assert unit.is_file(), "k0scontroller.service missing"
     text = unit.read_text()
-    assert "--disable-components=helm" in text
+    assert "--disable-components=helm,autopilot" in text
     assert "--enable-worker" in text
     assert "--single" in text
 

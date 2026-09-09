@@ -4,7 +4,7 @@ description: Operator runbook for the k0s systemd-sysext extension — provision
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-07"
+  last_updated: "2026-09-08"
   context7-sources:
     - /systemd/systemd
 ---
@@ -23,11 +23,11 @@ just k8s
 Or manually:
 
 ```bash
-# 1. Fetch extension image if not already present
-systemd-sysupdate update
+# 1. Fetch the extension image into persistent k0s staging.
+systemd-sysupdate --component=k0s update
 
-# 2. Merge extension into /usr
-systemctl enable --now systemd-sysext.service
+# 2. Copy it to the ephemeral sysext scan directory and merge into /usr.
+install -D -m 0644 /var/lib/k0s/k0s.raw /run/extensions/k0s.raw
 systemd-sysext merge
 
 # 3. Seed declarative manifest stacks into /var/lib/k0s/manifests/
@@ -48,7 +48,7 @@ k0s kubectl get pods -A
 
 ## Troubleshooting
 
-- **Extension not merged**: Check `systemd-sysext status`. Verify `/var/lib/extensions/k0s.raw` exists.
+- **Extension not merged**: Check `systemd-sysext status`. Verify the persistent image is `/var/lib/k0s/k0s.raw`; the boot activation unit copies it into `/run/extensions/k0s.raw`.
 - **Manifests not applied**: Check `/var/lib/k0s/manifests/`. Ensure files end in `.yaml` (not `.yml`).
 - **Service failed**: Check `journalctl -u k0scontroller -e`.
 

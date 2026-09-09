@@ -32,7 +32,7 @@ def test_show_me_the_future_proves_k0s_dashboard_smoke() -> None:
 
     # Sysext availability / extraction
     assert "k0s" in recipe
-    assert "lib/extensions/k0s.raw" in recipe
+    assert "lib/k0s/k0s.raw" in recipe
 
     # Repart temporary /var refresh with dummy secret injection
     assert "systemd-repart" in recipe
@@ -52,10 +52,6 @@ def test_show_me_the_future_proves_k0s_dashboard_smoke() -> None:
     assert "hostfwd=tcp:127.0.0.1:8080-:8080" in recipe
     assert "-serial file:" in recipe
     assert "-monitor none" in recipe
-    assert (
-        "io.systemd.stub.kernel-cmdline-extra=systemd.log_level=debug"
-        in recipe
-    )
     assert "trap" in recipe
     assert "kill -0" in recipe
 
