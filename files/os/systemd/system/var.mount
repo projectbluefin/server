@@ -1,0 +1,14 @@
+[Unit]
+Description=Persistent /var Storage
+DefaultDependencies=no
+Conflicts=umount.target
+Before=local-fs.target umount.target
+
+[Mount]
+What=/dev/disk/by-partlabel/var
+Where=/var
+Type=xfs
+Options=defaults
+
+[Install]
+WantedBy=local-fs.target

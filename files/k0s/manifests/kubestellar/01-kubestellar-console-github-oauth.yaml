@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubestellar-console
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubestellar-console-github-oauth
+  namespace: kubestellar-console
+type: Opaque
+stringData:
+  client-id: dummy-client-id
+  client-secret: dummy-client-secret
+  jwt-secret: smoke-only-jwt-secret-1234567890

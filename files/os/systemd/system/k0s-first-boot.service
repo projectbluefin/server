@@ -4,6 +4,7 @@ Wants=network-online.target
 Wants=k0s-first-boot-fetch.service
 After=network-online.target
 After=k0s-first-boot-fetch.service
+RequiresMountsFor=/var/lib/k0s
 
 [Service]
 Type=oneshot

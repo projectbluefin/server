@@ -1,3 +1,5 @@
 Bluefin Server (\l)
-KubeStellar Console: http://\4:8080/
+Default login: root / bluefin
+KubeStellar Console: http://\4:8080/ (or http://127.0.0.1:8080 from host)
+
 
