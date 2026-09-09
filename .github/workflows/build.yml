@@ -152,7 +152,7 @@ jobs:
   # pushes/dispatches to main, where the code is already reviewed, and is the
   # only job besides track-refs that holds contents: write.
   release:
-    if: github.ref == 'refs/heads/main'
+    if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
