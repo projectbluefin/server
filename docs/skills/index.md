@@ -4,7 +4,7 @@ description: Lazy-load manifest for Bluefin Server skills. Load this file after 
 metadata:
   type: index
   status: stable
-  last_updated: "2026-09-07"
+  last_updated: "2026-09-08"
 ---
 # docs/skills — Index
 

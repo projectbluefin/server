@@ -4,7 +4,7 @@ description: Build, export, flash, and release the Bluefin Server installer medi
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-07"
+  last_updated: "2026-09-08"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream

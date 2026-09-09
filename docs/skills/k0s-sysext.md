@@ -4,7 +4,7 @@ description: Build, ship, and enable the k0s systemd-sysext extension with nativ
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-07"
+  last_updated: "2026-09-08"
   context7-sources:
     - /systemd/systemd
 ---
@@ -41,8 +41,9 @@ Design choices:
 - **Pure declarative manifests (No Helm).** Declarative stacks for Argo CD and KubeStellar
   are shipped in `/usr/share/k0s/manifests/` and seeded into `/var/lib/k0s/manifests/` via
   `systemd-tmpfiles`. k0s's internal manifest deployer automatically reconciles them.
-- **Helm disabled.** `--disable-components=helm` ensures zero runtime Helm dependencies.
+- **Helm and autopilot disabled.** `--disable-components=helm,autopilot` ensures zero runtime Helm dependencies and prevents single-node controlnode timeout loops.
 - **Flatcar sysext pattern.** The extension uses `ID=_any` in its release metadata so it merges on any host image.
+- **First-boot background activation.** `k0s-first-boot.service` copies `/var/lib/k0s/k0s.raw` to `/run/extensions/k0s.raw`, merges the sysext, seeds declarative manifest stacks via `systemd-tmpfiles`, and enables `k0scontroller.service` on boot without holding up system startup.
 - **OTA delivery.** A k0s component `systemd-sysupdate` transfer file
   (`70-k0s.transfer`) is installed in the base OS so hosts can pull new k0s
   sysext releases from GitHub Releases without updating the root or UKI.
