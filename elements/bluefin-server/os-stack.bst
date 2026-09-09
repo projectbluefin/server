@@ -22,7 +22,6 @@ depends:
   - freedesktop-sdk.bst:components/openssh-systemd.bst
 
   # SSH enablement drop-ins
-  - bluefin-server/os-sshd-preset.bst
   - bluefin-server/os-sshd-config.bst
 
   # Stock FSDK Kernel & Server-Chiseled Firmware

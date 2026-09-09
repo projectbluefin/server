@@ -62,3 +62,20 @@ def test_sshd_requires_persistent_host_keys_and_core_authorization() -> None:
     assert "Requires=bluefin-ssh-host-keys.service bluefin-core-access.service" in drop_in
     assert "ExecStartPre=" in drop_in
     assert "ExecStartPre=/usr/bin/test -s /var/lib/ssh/ssh_host_ed25519_key" in drop_in
+
+
+DDI = ROOT / "elements/oci/bluefin-server-ddi.bst"
+ISSUE = ROOT / "files/os/issue.d/40-kubestellar.issue"
+SSHD_PRESET = ROOT / "files/os/systemd/system-preset/zz-enable-sshd.preset"
+
+
+def test_ddi_contains_no_root_credential_or_shared_host_key() -> None:
+    ddi = DDI.read_text(encoding="utf-8")
+    assert "bluefin123" not in ddi
+    assert "Default login: root / bluefin" not in ISSUE.read_text(encoding="utf-8")
+    assert "/layer/etc/securetty" not in ddi
+    assert "ssh-keygen -q -N" not in ddi
+    assert "root:!:" in ddi
+    assert "ln -sfn /var/home /layer/home" in ddi
+    assert "multi-user.target.wants/sshd.service" in ddi
+    assert not SSHD_PRESET.exists()
