@@ -66,11 +66,8 @@ def test_gate_waits_for_session_and_blocks_until_agent_health() -> None:
 
     assert "kc-has-session" in script
     assert "http://127.0.0.1:8585/health" in script
-    assert (
-        "brew tap kubestellar/tap && brew install kc-agent && kc-agent"
-        in script
-    )
-    assert "KC_ALLOWED_ORIGINS=${window.location.origin} kc-agent" in script
+    assert "brew tap kubestellar/tap && brew install kc-agent" in script
+    assert "kc-agent -allowed-origins ${window.location.origin}" in script
     assert "aria-modal" in script
     assert "addEventListener('keydown'" in script
     assert "pointer-events: auto" in css

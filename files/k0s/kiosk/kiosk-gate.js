@@ -22,8 +22,8 @@
           <h1>Connect the kc-agent</h1>
           <p>Monitor your real clusters from this console</p>
           <p>Run agent on machine access kubeconfig</p>
-          <code>brew tap kubestellar/tap && brew install kc-agent && kc-agent</code>
-          <code>KC_ALLOWED_ORIGINS=${window.location.origin} kc-agent</code>
+          <code>brew tap kubestellar/tap && brew install kc-agent</code>
+          <code>kc-agent -allowed-origins ${window.location.origin}</code>
         </div>
       </section>
     `)
