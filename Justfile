@@ -467,9 +467,7 @@ install-vm:
         -drive file="$INSTALLER_RAW",format=raw,if=virtio,readonly=on \
         -drive file="$TARGET_RAW",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
-        -drive if=pflash,format=raw,file="$OVMF_VARS" \
-        -nographic \
-        -serial mon:stdio
+        -drive if=pflash,format=raw,file="$OVMF_VARS"
       touch "$INSTALL_COMPLETE"
     fi
 

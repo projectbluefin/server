@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server DDI live installe
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-08"
+  last_updated: "2026-09-09"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -62,7 +62,9 @@ container runtime pod sandboxes.
 2. The live environment boots with `systemd.unit=system-install.target` as a
    kernel command-line option.
 3. systemd isolates `system-install.target` and starts
-   `systemd-sysinstall.service` directly on `/dev/console` (tty0).
+   `systemd-sysinstall.service` on `/dev/tty0`. Pinning `TTYPath` keeps the
+   interactive TUI on the attached display while boot diagnostics remain
+   available on the serial console.
 4. The live image overrides that service to run `/usr/bin/bluefin-sysinstall`,
    which calls `systemd-sysinstall` with the target OS UKI at
    `/usr/lib/bluefin-server/bluefin-server.efi` so `bootctl link` installs the
@@ -113,10 +115,9 @@ bluefin-sysinstall wrapper
      └─► [UNATTENDED Mode]
 ```
 
-The reference installer element currently bakes `unattended` into the installer
-UKI command line so headless tests can run without a human. To use the
-interactive TUI, remove `unattended` from the UKI `--cmdline` in the installer
-build element or invoke `systemd-sysinstall` directly on the console.
+The published installer starts the interactive TUI on `/dev/tty0`. Headless
+tests add `unattended` to the kernel command line and do not require console
+input.
 
 ## Initrd Assembly (cpio-native)
 
@@ -146,8 +147,8 @@ The installer build also publishes standalone PXE inputs:
 - `bluefin-server-pxe-vmlinuz-<ver>` — installer kernel.
 - `bluefin-server-pxe-initrd-<ver>.cpio.gz` — installer initrd.
 
-Both files are included in the installer artifact `SHA256SUMS`. PXE clients can
-boot them with the same command line used by the installer UKI, for example:
+Both files are included in the installer artifact `SHA256SUMS`. Unattended PXE
+clients can add `unattended` to the installer command line, for example:
 
 ```text
 systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended
@@ -183,6 +184,8 @@ offline installation.
 - [ ] `installer-stack.bst` explicitly includes XFS and vfat support.
 - [ ] `bluefin-server-installer.bst` overrides `systemd-sysinstall.service`
       with `SuccessAction=poweroff`/`FailureAction=poweroff` for clean shutdown.
+- [ ] The interactive installer service sets `TTYPath=/dev/tty0` so the TUI
+      appears on the attached display even when serial is the primary console.
 - [ ] `bluefin-server-installer.bst` decompresses the DDI after the cpio step.
 - [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
 

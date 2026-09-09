@@ -120,6 +120,12 @@ def test_installer_loads_nvme_and_settles_udev() -> None:
     assert "Wants=systemd-udev-settle.service" in installer_element
 
 
+def test_interactive_installer_uses_local_virtual_console() -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+
+    assert "TTYPath=/dev/tty0" in installer_element
+
+
 def test_installer_and_ddi_strip_vmlinux_and_static_archives() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
     ddi_element = DDI_ELEMENT.read_text(encoding="utf-8")
@@ -128,4 +134,3 @@ def test_installer_and_ddi_strip_vmlinux_and_static_archives() -> None:
     assert "find /layer -type f -name '*.a' -delete" in installer_element
     assert 'rm -f "/layer/usr/lib/modules/${KVER}/vmlinux"' in ddi_element
     assert "find /layer -type f -name '*.a' -delete" in ddi_element
-
