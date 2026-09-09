@@ -55,6 +55,9 @@ depends:
 
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
+  - freedesktop-sdk.bst:components/sudo.bst
+  - bluefin-server/os-tmpfiles.bst
+  - bluefin-server/os-sudo.bst
 
   # Reboot Coordination for Kured
   - bluefin-server/os-kured-hook.bst
