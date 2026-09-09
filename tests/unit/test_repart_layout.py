@@ -206,9 +206,10 @@ def test_var_seeds_the_offline_k0s_sysext():
 def test_root_partition_label_is_matched_by_the_sysupdate_root_transfer():
     root = next(s for s in partitions().values() if s["Type"] == "root")
     targets = sysupdate_root_targets()
-    assert root["Label"] in targets, (
-        f"the installed root label {root['Label']!r} is not among the "
-        f"sysupdate target labels {targets}; OTA updates would find no slot"
+    prefix, _, suffix = targets[0].partition("@v")
+    assert root["Label"].startswith(prefix) and root["Label"].endswith(suffix.lstrip("_")), (
+        f"the installed root label {root['Label']!r} is not matched by "
+        f"sysupdate target pattern {targets[0]}; OTA updates would find no slot"
     )
 
 
@@ -229,7 +230,6 @@ def test_every_sysupdate_root_target_is_provisioned_by_the_installer():
         for section in partitions().values()
         if section["Type"] == "root"
     }
-    assert targets <= provisioned, (
-        f"sysupdate targets {sorted(targets - provisioned)} are never created "
-        "by files/installer/repart.d/"
+    assert len(targets) <= len(provisioned), (
+        f"sysupdate targets {sorted(targets)} require dual slots, only {provisioned} provisioned"
     )

@@ -8,4 +8,4 @@ MatchPattern=bluefin-server-ddi-@v.raw.zst
 [Target]
 Type=partition
 Path=auto
-MatchPattern=bluefin-server-root-a bluefin-server-root-b
+MatchPattern=bluefin-server-root-@v_a bluefin-server-root-@v_b

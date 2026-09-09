@@ -61,9 +61,9 @@ The workloads the factory tests and ships live in other repositories or image pi
 | Container workloads | `podman` in the base OS stack |
 | Signed, verifiable release artifacts | GPG-signed `SHA256SUMS` + `import-pubring.gpg` |
 
-## Temporary SSH exception
+## SSH and Remote Diagnostics
 
-> `sshd` is enabled for bring-up and cluster boot tests, and root login is permitted with password and pubkey. The lab runs the `bluefin-server-boot-test` Argo workflow (in the factory CI repository) to verify installer → first-boot success. SSH will be removed once diagnostics can be driven entirely by serial logs or a guest agent.
+> `sshd` is present in the OS image for on-demand diagnostics and bring-up troubleshooting, but is disabled by default via `disable sshd.service` in systemd presets. Operators can start it on-demand with `systemctl start sshd` or enable it when remote access is required. Root login is permitted with password and pubkey.
 
 ## When to Use
 

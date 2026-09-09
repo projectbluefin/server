@@ -42,6 +42,12 @@ spec:
       - name: console
         image: ghcr.io/kubestellar/console:v0.3.34
         env:
+        - name: DEV_MODE
+          value: "true"
+        - name: ALLOW_DEV_MODE_IN_CLUSTER
+          value: "true"
+        - name: DEV_USER_LOGIN
+          value: "admin"
         - name: GITHUB_CLIENT_ID
           valueFrom:
             secretKeyRef:

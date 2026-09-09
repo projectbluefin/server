@@ -138,8 +138,8 @@ def test_every_source_artifact_is_produced_by_an_element(path: Path):
 
 def test_uki_transfer_installs_into_the_esp_boot_directory():
     target = load_transfer(SYSUPDATE_DIR / "60-uki.transfer")["Target"]
-    assert target.get("Type") == "file", (
-        "the UKI is a plain file drop-in, not a partition or directory"
+    assert target.get("Type") == "regular-file", (
+        "the UKI is a regular-file drop-in, not a partition or directory"
     )
     assert target.get("Path") == "/efi/EFI/Linux", (
         f"UKI target path is {target.get('Path')!r}; systemd-boot only discovers "
