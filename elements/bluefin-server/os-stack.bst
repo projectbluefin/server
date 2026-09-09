@@ -24,6 +24,9 @@ depends:
   # SSH enablement drop-ins
   - bluefin-server/os-sshd-config.bst
 
+  # systemd unit presets (networkd, k0s first boot, persistent /var mount)
+  - bluefin-server/os-systemd-presets.bst
+
   # Stock FSDK Kernel & Server-Chiseled Firmware
   - freedesktop-sdk.bst:components/linux.bst
   - bluefin-server/linux-firmware-split.bst

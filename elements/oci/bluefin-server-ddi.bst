@@ -73,6 +73,10 @@ config:
       ln -sfn /usr/lib/systemd/system/sshd.service \
         /layer/etc/systemd/system/multi-user.target.wants/sshd.service
 
+      # BuildStream strips setuid bits from artifacts; the key-only core operator
+      # cannot elevate through wheel unless sudo is restored to setuid root.
+      chmod 4755 /layer/usr/bin/sudo
+
       # Sum actual file sizes across bind mounts (du -sb reports content bytes, not overlay blocks).
       ROOT_BYTES=$(du -sb /layer | cut -f1)
       echo "Computed root filesystem size: ${ROOT_BYTES} bytes"
