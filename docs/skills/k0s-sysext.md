@@ -19,7 +19,8 @@ optional overlay for Bluefin Server.
 - Modifying the sysext image contents (`files/k0s/sysext/`).
 - Managing raw YAML manifest stacks (`files/k0s/manifests/argocd/` or `files/k0s/manifests/kubestellar/`).
 - Changing manifest seeding rules in `files/k0s/sysext/k0s-manifests.conf`.
-- Adding or changing the sysupdate transfer definition (`files/os/sysupdate.d/70-k0s.transfer`).
+- Adding or changing the sysupdate transfer definition
+  (`files/os/sysupdate.k0s.d/70-k0s.transfer`).
 - Debugging why a host cannot pull, merge, or start k0s.
 
 ## When NOT to Use
@@ -42,7 +43,9 @@ Design choices:
   `systemd-tmpfiles`. k0s's internal manifest deployer automatically reconciles them.
 - **Helm disabled.** `--disable-components=helm` ensures zero runtime Helm dependencies.
 - **Flatcar sysext pattern.** The extension uses `ID=_any` in its release metadata so it merges on any host image.
-- **OTA delivery.** A `systemd-sysupdate` transfer file (`70-k0s.transfer`) is installed in the base OS so hosts can pull new k0s sysext releases from GitHub Releases.
+- **OTA delivery.** A k0s component `systemd-sysupdate` transfer file
+  (`70-k0s.transfer`) is installed in the base OS so hosts can pull new k0s
+  sysext releases from GitHub Releases without updating the root or UKI.
 
 ## Repository Layout
 
@@ -56,7 +59,7 @@ Design choices:
 | `files/k0s/sysext/k0s-manifests.conf` | tmpfiles rule that copies declarative stacks to `/var/lib/k0s/manifests/`. |
 | `files/k0s/manifests/argocd/` | Raw YAML manifests for Argo CD. |
 | `files/k0s/manifests/kubestellar/` | Raw YAML manifests for KubeFlex, Postgres, KubeStellar core, and Console. |
-| `files/os/sysupdate.d/70-k0s.transfer` | sysupdate transfer track for the k0s sysext. |
+| `files/os/sysupdate.k0s.d/70-k0s.transfer` | sysupdate transfer track for the k0s sysext component. |
 | `Justfile` | `build-sysext` / `export-sysext` targets. |
 | `.github/workflows/build.yml` | Builds, signs, and publishes sysext assets. |
 | `.github/scripts/check-k0s-version.py` | Fails closed if any consumer restates the k0s version instead of deriving it. |

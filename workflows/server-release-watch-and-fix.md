@@ -31,7 +31,10 @@ While the remote build is compiling in CI, audit the local tree against the rele
 1. **Element Graph**: `just validate` (checks release version and k0s version alignment).
 2. **Unit Suite**: `pytest tests/unit` and `bats tests/unit`.
 3. **Docs & Skills**: `python3 .github/scripts/docs-checks.py`.
-4. **Sysupdate Asset Parity**: Verify every `.transfer` target pattern in `files/os/sysupdate.d/*.transfer` is emitted by an element under `elements/` AND staged into `dist/release/` in `.github/workflows/build.yml`.
+4. **Sysupdate Asset Parity**: Verify every `.transfer` target pattern in
+   `files/os/sysupdate.d/*.transfer` and `files/os/sysupdate.k0s.d/*.transfer`
+   is emitted by an element under `elements/` AND staged into `dist/release/`
+   in `.github/workflows/build.yml`.
 
 #### Stage C: Automated Remediation & Push
 If an issue or drift is found (e.g. missing asset copy in `build.yml`, broken link, test mismatch):

@@ -152,7 +152,6 @@ export-sysext: build-sysext
     cp dist/sysext-checkout/k0s-*.raw.zst dist/sysext/
     cp dist/sysext-checkout/SHA256SUMS dist/sysext/
     rm -rf dist/sysext-checkout
-    for f in dist/sysext/k0s-*.raw.zst; do [ -f "$f" ] && ln -sf "$(basename "$f")" "dist/sysext/k3s-${f#*dist/sysext/k0s-}"; done
     @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
 
 # Write the raw GPT installer image to a physical USB drive.
@@ -204,6 +203,8 @@ show-me-the-future:
     just export-installer
 
     cp dist/bluefin-server-installer-*.raw.zst "$WORKDIR/installer.raw.zst"
+    cp dist/bluefin-server-pxe-vmlinuz-* "$WORKDIR/installer.vmlinuz"
+    cp dist/bluefin-server-pxe-initrd-*.cpio.gz "$WORKDIR/installer.initrd"
     zstd -d "$WORKDIR/installer.raw.zst" -o "$WORKDIR/installer.raw"
     TARGET_SIZE="${SHOW_ME_THE_FUTURE_DISK_SIZE:-16G}"
     truncate -s "${TARGET_SIZE}" "$WORKDIR/target.raw"
@@ -226,6 +227,8 @@ show-me-the-future:
       /usr/share/OVMF/OVMF_CODE.fd \
       /usr/share/OVMF/OVMF_CODE_4M.fd \
       /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+      /usr/share/qemu/edk2-x86_64-code.fd \
+      /usr/share/qemu/edk2-x86_64-secure-code.fd \
       /usr/share/qemu/OVMF_CODE.fd) \
       || { echo "ERROR: OVMF_CODE not found"; exit 1; }
 
@@ -235,6 +238,8 @@ show-me-the-future:
       /usr/share/OVMF/OVMF_VARS.fd \
       /usr/share/OVMF/OVMF_VARS_4M.fd \
       /usr/share/edk2/x64/OVMF_VARS.4m.fd \
+      /usr/share/qemu/edk2-x86_64-vars.fd \
+      /usr/share/qemu/edk2-i386-vars.fd \
       /usr/share/qemu/OVMF_VARS.fd) \
       || true
     if [ -n "$OVMF_VARS" ]; then
@@ -256,11 +261,83 @@ show-me-the-future:
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
+        -kernel "$WORKDIR/installer.vmlinuz" \
+        -initrd "$WORKDIR/installer.initrd" \
+        -append "systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended" \
         -nographic \
         -serial mon:stdio \
         -no-reboot < /dev/null
 
-    echo "==> Rebooting into the installed server..."
+    echo "==> Preparing target /var refresh with offline k0s sysext and smoke secret..."
+    K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' 2>/dev/null | head -n 1)
+    if [ -z "$K0S_RAW_ZST" ]; then
+      just export-sysext
+      K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' | head -n 1)
+    fi
+    [ -n "$K0S_RAW_ZST" ] || { echo "ERROR: k0s sysext not found in dist/sysext" >&2; exit 1; }
+
+    VAR_STAGING="$WORKDIR/var-staging"
+    mkdir -p "$VAR_STAGING/lib/k0s"
+    mkdir -p "$VAR_STAGING/lib/k0s/manifests/kubestellar"
+    zstd -dc "$K0S_RAW_ZST" > "$VAR_STAGING/lib/k0s/k0s.raw"
+
+    printf '%s\n' \
+      'apiVersion: v1' \
+      'kind: Namespace' \
+      'metadata:' \
+      '  name: kubestellar-console' \
+      '---' \
+      'apiVersion: v1' \
+      'kind: Secret' \
+      'metadata:' \
+      '  name: kubestellar-console-github-oauth' \
+      '  namespace: kubestellar-console' \
+      'type: Opaque' \
+      'stringData:' \
+      '  client-id: dummy-client-id' \
+      '  client-secret: dummy-client-secret' \
+      '  jwt-secret: smoke-only-jwt-secret-1234567890' \
+      > "$VAR_STAGING/lib/k0s/manifests/kubestellar/00-kubestellar-console-github-oauth.yaml"
+
+    REPART_DIR="$WORKDIR/repart.d"
+    mkdir -p "$REPART_DIR"
+    printf '%s\n' \
+      '[Partition]' \
+      'Type=var' \
+      'Label=var' \
+      'UUID=296ed67f-37e5-4a1f-b86a-ec708a3128b8' \
+      'Format=xfs' \
+      'FactoryReset=yes' \
+      'GrowFileSystem=yes' \
+      "CopyFiles=${VAR_STAGING}:/" \
+      > "$REPART_DIR/30-var.conf"
+
+    echo "==> Refreshing target /var partition using systemd-repart..."
+    # systemd-repart operates on the target image directly without loopback/sudo when passed as the target operand.
+    unshare -r systemd-repart \
+      --factory-reset=yes \
+      --dry-run=no \
+      --definitions="$REPART_DIR" \
+      "$WORKDIR/target.raw"
+
+    SERIAL_LOG="$WORKDIR/serial.log"
+    TARGET_QEMU_PID=""
+    cleanup() {
+      EXIT_STATUS=$?
+      if [ -n "${TARGET_QEMU_PID:-}" ] && kill -0 "$TARGET_QEMU_PID" 2>/dev/null; then
+        kill "$TARGET_QEMU_PID" 2>/dev/null || true
+        wait "$TARGET_QEMU_PID" 2>/dev/null || true
+      fi
+      if [ "$EXIT_STATUS" -eq 0 ]; then
+        rm -rf "$WORKDIR"
+      else
+        echo "ERROR: QEMU smoke failed; retaining artifacts at $WORKDIR" >&2
+      fi
+      exit "$EXIT_STATUS"
+    }
+    trap cleanup EXIT INT TERM
+
+    echo "==> Booting the installed server in QEMU (background)..."
     qemu-system-x86_64 \
         -enable-kvm \
         -m 4096 \
@@ -269,5 +346,147 @@ show-me-the-future:
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
+        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 \
+        -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service" \
         -nographic \
-        -serial mon:stdio
+        -serial file:"$SERIAL_LOG" \
+        -monitor none &
+    TARGET_QEMU_PID=$!
+
+    DEADLINE_SECS="${SHOW_ME_THE_FUTURE_DEADLINE:-${SHOW_ME_THE_FUTURE_TIMEOUT:-600}}"
+    START_TIME=$(date +%s)
+    echo "==> Polling KubeStellar Console readiness at http://127.0.0.1:8080 (deadline: ${DEADLINE_SECS}s)..."
+
+    while true; do
+      if ! kill -0 "$TARGET_QEMU_PID" 2>/dev/null; then
+        echo "ERROR: Target QEMU process ($TARGET_QEMU_PID) died unexpectedly!" >&2
+        if [ -f "$SERIAL_LOG" ]; then
+          echo "==> Serial log tail (last 100 lines):" >&2
+          tail -n 100 "$SERIAL_LOG" >&2
+        fi
+        exit 1
+      fi
+
+      HEALTHZ_JSON=$(curl --silent --fail --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true)
+      if [ -n "$HEALTHZ_JSON" ] && echo "$HEALTHZ_JSON" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+        ROOT_CODE=$(curl --silent --fail --max-time 2 --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || true)
+        if [ "$ROOT_CODE" = "200" ]; then
+          echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
+          break
+        fi
+      fi
+
+      NOW=$(date +%s)
+      ELAPSED=$((NOW - START_TIME))
+      if [ "$ELAPSED" -ge "$DEADLINE_SECS" ]; then
+        echo "ERROR: Timed out after ${DEADLINE_SECS}s waiting for KubeStellar Console readiness!" >&2
+        if [ -f "$SERIAL_LOG" ]; then
+          echo "==> Serial log tail (last 100 lines):" >&2
+          tail -n 100 "$SERIAL_LOG" >&2
+        fi
+        exit 1
+      fi
+
+      sleep 2
+    done
+
+# Interactively install and boot a persistent local KubeStellar kiosk VM.
+[group('test')]
+install-vm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/bluefin-server/vm-{{fsdk_version}}"
+    INSTALLER_RAW="$STATE_DIR/installer.raw"
+    TARGET_RAW="$STATE_DIR/target.raw"
+    OVMF_VARS="$STATE_DIR/ovmf-vars.fd"
+    INSTALL_COMPLETE="$STATE_DIR/installed"
+    mkdir -p "$STATE_DIR"
+
+    first_existing() {
+      for candidate in "$@"; do
+        if [ -f "$candidate" ]; then
+          echo "$candidate"
+          return 0
+        fi
+      done
+      return 1
+    }
+
+    OVMF_CODE=$(first_existing \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-code.fd \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-secure-code.fd \
+      /usr/share/edk2/ovmf/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE_4M.fd \
+      /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+      /usr/share/qemu/edk2-x86_64-code.fd \
+      /usr/share/qemu/edk2-x86_64-secure-code.fd \
+      /usr/share/qemu/OVMF_CODE.fd) \
+      || { echo "ERROR: OVMF_CODE not found"; exit 1; }
+
+    if [ ! -f "$OVMF_VARS" ]; then
+      OVMF_TEMPLATE=$(first_existing \
+        /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-vars.fd \
+        /usr/share/edk2/ovmf/OVMF_VARS.fd \
+        /usr/share/OVMF/OVMF_VARS.fd \
+        /usr/share/OVMF/OVMF_VARS_4M.fd \
+        /usr/share/edk2/x64/OVMF_VARS.4m.fd \
+        /usr/share/qemu/edk2-x86_64-vars.fd \
+        /usr/share/qemu/edk2-i386-vars.fd \
+        /usr/share/qemu/OVMF_VARS.fd) \
+        || { echo "ERROR: OVMF_VARS not found"; exit 1; }
+      cp "$OVMF_TEMPLATE" "$OVMF_VARS"
+    fi
+
+    if [ ! -f "$INSTALL_COMPLETE" ]; then
+      just export-installer
+      INSTALLER_ARCHIVE=$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-installer-*.raw.zst' -print -quit)
+      [ -n "$INSTALLER_ARCHIVE" ] || { echo "ERROR: No exported installer found in dist/." >&2; exit 1; }
+      zstd --decompress --force "$INSTALLER_ARCHIVE" --output "$INSTALLER_RAW"
+      truncate -s "${INSTALL_VM_DISK_SIZE:-16G}" "$TARGET_RAW"
+
+      echo "==> Booting the interactive installer in QEMU..."
+      qemu-system-x86_64 \
+        -enable-kvm \
+        -m 4096 \
+        -cpu host \
+        -smp 2 \
+        -drive file="$INSTALLER_RAW",format=raw,if=virtio,readonly=on \
+        -drive file="$TARGET_RAW",format=raw,if=virtio \
+        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+        -drive if=pflash,format=raw,file="$OVMF_VARS"
+      touch "$INSTALL_COMPLETE"
+    fi
+
+    echo "==> Booting the installed kiosk..."
+    qemu-system-x86_64 \
+      -enable-kvm \
+      -m 4096 \
+      -cpu host \
+      -smp 2 \
+      -drive file="$TARGET_RAW",format=raw,if=virtio \
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+      -drive if=pflash,format=raw,file="$OVMF_VARS" \
+      -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 &
+    QEMU_PID=$!
+    cleanup() {
+      if kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill "$QEMU_PID"
+        wait "$QEMU_PID" || true
+      fi
+    }
+    trap cleanup EXIT INT TERM
+
+    until curl --silent --show-error --max-time 2 --output /dev/null http://127.0.0.1:8080/; do
+      if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+        wait "$QEMU_PID"
+        exit 1
+      fi
+      sleep 2
+    done
+
+    xdg-open http://127.0.0.1:8080/
+    wait "$QEMU_PID"
+    trap - EXIT INT TERM

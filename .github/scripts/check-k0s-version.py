@@ -34,7 +34,7 @@ K0S_INCLUDE = ROOT / "include" / "k0s.yml"
 K0S_BIN = ROOT / "elements" / "k0s" / "k0s-bin.bst"
 K0S_SYSEXT = ROOT / "elements" / "oci" / "k0s-sysext.bst"
 EXTENSION_RELEASE = ROOT / "files" / "k0s" / "sysext" / "extension-release.k0s"
-TRANSFER = ROOT / "files" / "os" / "sysupdate.d" / "70-k0s.transfer"
+TRANSFER = ROOT / "files" / "os" / "sysupdate.k0s.d" / "70-k0s.transfer"
 
 SAFE_VERSION_RE = re.compile(r"^[A-Za-z0-9._~^+-]+$")
 LITERAL_VERSION_RE = re.compile(r"v?[0-9]+\.[0-9]+\.[0-9]+(?:\+|%2B|-)k0s\.[0-9]+")

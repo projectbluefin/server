@@ -38,7 +38,8 @@ The factory pattern is broader than a single host: a downstream CI lab or OS fac
 Kubernetes is not baked into the OS DDI. The base image stays small and stateless; k0s is delivered as a `systemd-sysext` EROFS image that overlays `/usr/` at runtime.
 
 - `elements/oci/k0s-sysext.bst` builds the sysext.
-- `files/os/sysupdate.d/70-k0s.transfer` enables OTA updates of the sysext.
+- `files/os/sysupdate.k0s.d/70-k0s.transfer` enables component-scoped OTA
+  updates of the sysext.
 - `files/os/justfile` provides the `just k8s` entrypoint.
 
 See [k0s-sysext.md](k0s-sysext.md) for details.

@@ -57,6 +57,10 @@ build-depends:
   - filename: bluefin-server/os-rootfs.bst
     config:
       location: /target-root
+  # Uncompressed k0s sysext staged into the installer initrd for offline install
+  - filename: oci/k0s-sysext.bst
+    config:
+      location: /k0s
 
 variables:
   installer-version: "%{release-version}"
@@ -121,7 +125,7 @@ config:
 
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS and VirtIO block/scsi storage drivers.
       dracut -v --reproducible --no-machineid --no-hostonly \
-        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs" \
+        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs erofs overlay" \
         --filesystems "xfs vfat" \
         --install /etc/ld.so.cache \
         --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
@@ -193,7 +197,7 @@ config:
       done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
 
       # Check for unattended in kernel command line
-      CMDLINE="$(cat /proc/cmdline 2>/dev/null || true)"
+      CMDLINE="$(< /proc/cmdline)"
       if [[ " ${CMDLINE} " == *" unattended "* ]]; then
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then
@@ -259,6 +263,12 @@ config:
       ln -sf system-install.target \
         /layer/usr/lib/systemd/system/default.target
 
+    # ── Step 2a: Stage the offline k0s sysext before packing the initrd ─
+    - |
+      set -eux
+      cp /k0s/k0s-*.raw /layer/k0s.raw
+      ls -lh /layer/k0s.raw
+
     # ── Step 3: Pack initrd cpio ─────────────────────────────────────────
     # find . from /layer gives paths like ./usr/bin/... which is exactly
     # the newc format the kernel expects. The kernel strips the leading dot.
@@ -302,7 +312,7 @@ config:
       ukify build \
         --linux="${INSTALLER_KERNEL}" \
         --initrd=/installer.cpio.gz \
-        --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended" \
+        --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw" \
         --output=/layer/boot/efi/EFI/BOOT/BOOTX64.EFI
       ls -lh /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
 

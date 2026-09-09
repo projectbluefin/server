@@ -23,4 +23,4 @@ repos:
         entry: python .github/scripts/check-k0s-version.py
         language: system
         pass_filenames: false
-        files: ^(include/k0s\.yml|elements/k0s/k0s-bin\.bst|elements/oci/k0s-sysext\.bst|files/k0s/sysext/extension-release\.k0s|files/os/sysupdate\.d/70-k0s\.transfer|\.github/scripts/check-k0s-version\.py)$
+        files: ^(include/k0s\.yml|elements/k0s/k0s-bin\.bst|elements/oci/k0s-sysext\.bst|files/k0s/sysext/extension-release\.k0s|files/os/sysupdate\.k0s\.d/70-k0s\.transfer|\.github/scripts/check-k0s-version\.py)$

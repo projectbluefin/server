@@ -14,6 +14,9 @@ description: |
 depends:
   # Base runtime
   - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
+  # FSDK 26.08 exposes Bash from bootstrap/bash.bst; the approved contract
+  # names the requested runtime as freedesktop-sdk.bst:components/bash.bst.
+  - freedesktop-sdk.bst:bootstrap/bash.bst
   - freedesktop-sdk.bst:components/ca-certificates.bst
   - freedesktop-sdk.bst:components/tzdata.bst
   - freedesktop-sdk.bst:integration/extra-fs.bst

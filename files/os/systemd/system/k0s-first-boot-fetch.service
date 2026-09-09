@@ -1,0 +1,12 @@
+[Unit]
+Description=Fetch the k0s sysext when installation did not seed it
+ConditionPathExists=!/var/lib/k0s/k0s.raw
+Wants=network-online.target
+After=network-online.target
+Before=k0s-first-boot.service
+
+[Service]
+Type=oneshot
+Restart=on-failure
+RestartSec=30s
+ExecStart=/usr/bin/systemd-sysupdate --component=k0s update

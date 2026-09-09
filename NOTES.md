@@ -14,9 +14,9 @@
 
 ## Release & Sysupdate Lifecycle
 - **Version Source**: Pinned FSDK point release in `elements/freedesktop-sdk.bst` (e.g. `26.08.0`).
-- **Sysext Migration**: Migrated from legacy k3s to k0s (`oci/k0s-sysext.bst`). Emits `k0s-@v.raw.zst` and maintains a symlink for compatibility.
-- **Sysupdate Contracts** (`files/os/sysupdate.d/`):
+- **Sysext Migration**: Migrated from legacy k3s to k0s (`oci/k0s-sysext.bst`). Emits `k0s-@v.raw.zst`.
+- **Sysupdate Contracts** (`files/os/sysupdate.d/` plus the k0s component directory):
   - `50-root.transfer`: OS rootfs DDI (`bluefin-server-ddi-@v.raw.zst`).
   - `60-uki.transfer`: Boot UKI (`bluefin-server-@v.efi`).
-  - `70-k0s.transfer`: k0s sysext (`k0s-@v.raw.zst`).
+  - `files/os/sysupdate.k0s.d/70-k0s.transfer`: k0s sysext (`k0s-@v.raw.zst`).
 - **Signing & Manifest**: `dist/release/SHA256SUMS` signed via detached GPG (`SHA256SUMS.gpg`) using secret `SYSUPDATE_SIGNING_KEY`.

@@ -27,6 +27,9 @@ sources:
     path: files/k0s/manifests
     directory: manifests-src
   - kind: local
+    path: files/k0s/kiosk
+    directory: kiosk-src
+  - kind: local
     path: files/os/issue.d/40-kubestellar.issue
     directory: issue-src
 
@@ -51,6 +54,7 @@ config:
       mkdir -p sysext/usr/lib/tmpfiles.d
       mkdir -p sysext/usr/lib/issue.d
       mkdir -p sysext/usr/share/k0s/manifests
+      mkdir -p sysext/usr/share/k0s/kiosk
       mkdir -p "${OUT}"
 
       # Stage k0s binary
@@ -73,6 +77,9 @@ config:
 
       # Stage manifest stacks
       cp -a manifests-src/* sysext/usr/share/k0s/manifests/
+
+      # Stage Console kiosk proxy assets.
+      cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/
 
       # Build EROFS image
       mkfs.erofs -d0 "${OUT}/${FNAME}" sysext

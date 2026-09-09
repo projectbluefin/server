@@ -194,6 +194,11 @@ def test_var_is_a_growing_factory_resettable_xfs_tail():
     )
 
 
+def test_var_seeds_the_offline_k0s_sysext():
+    var = next(s for s in partitions().values() if s["Type"] == "var")
+    assert var["CopyFiles"] == "/k0s.raw:/lib/k0s/k0s.raw"
+
+
 def test_root_partition_label_is_matched_by_the_sysupdate_root_transfer():
     root = next(s for s in partitions().values() if s["Type"] == "root")
     targets = sysupdate_root_targets()
