@@ -131,13 +131,13 @@ config:
         --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
         --kernel-image "${TARGET_KERNEL}" \
         --kver "${TARGET_KVER}" \
-        --kernel-cmdline "rw console=ttyS0,115200 console=tty0" \
+        --kernel-cmdline "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
         /tmp/bluefin-server-target.initramfs
 
       ukify build \
         --linux="${TARGET_KERNEL}" \
         --initrd=/tmp/bluefin-server-target.initramfs \
-        --cmdline="rw console=ttyS0,115200 console=tty0" \
+        --cmdline="rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
         --output=/target-root/boot/EFI/Linux/bluefin-server.efi
       cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
 
@@ -165,6 +165,12 @@ config:
         /layer/usr/lib/systemd/system/system-install.target.wants/systemd-networkd.service
       ln -sf /usr/lib/systemd/system/systemd-resolved.service \
         /layer/usr/lib/systemd/system/system-install.target.wants/systemd-resolved.service
+
+      # Silence journal and audit spam on the installer console
+      mkdir -p /layer/etc/systemd/journald.conf.d /layer/etc/sysctl.d
+      printf '[Journal]\nForwardToConsole=no\nMaxLevelConsole=warning\n' > /layer/etc/systemd/journald.conf.d/10-console.conf
+      printf 'kernel.printk = 3 4 1 3\n' > /layer/etc/sysctl.d/10-console.conf
+      ln -sf /dev/null /layer/etc/systemd/system/systemd-journald-audit.socket
 
       # Mask systemd-firstboot to prevent interactive credential blocks on tty1
       mkdir -p /layer/etc/systemd/system
@@ -366,7 +372,7 @@ config:
       ukify build \
         --linux="${INSTALLER_KERNEL}" \
         --initrd=/installer.cpio.gz \
-        --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw" \
+        --cmdline="systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw quiet loglevel=3 audit=0" \
         --output=/layer/boot/efi/EFI/BOOT/BOOTX64.EFI
       ls -lh /layer/boot/efi/EFI/BOOT/BOOTX64.EFI
 

@@ -54,6 +54,12 @@ config:
       # Mask audit-rules to prevent failure on shell-free OS (augenrules requires /bin/sh)
       ln -sf /dev/null /layer/etc/systemd/system/audit-rules.service
 
+      # Silence kernel and audit log spam on the console
+      mkdir -p /layer/etc/systemd/journald.conf.d /layer/etc/sysctl.d
+      printf '[Journal]\nForwardToConsole=no\nMaxLevelConsole=warning\n' > /layer/etc/systemd/journald.conf.d/10-console.conf
+      printf 'kernel.printk = 3 4 1 3\n' > /layer/etc/sysctl.d/10-console.conf
+      ln -sf /dev/null /layer/etc/systemd/system/systemd-journald-audit.socket
+
       # Ensure standard /etc/hosts exists for container runtimes (containerd/podman)
       printf '127.0.0.1   localhost\n::1         localhost ip6-localhost ip6-loopback\n' > /layer/etc/hosts
 
