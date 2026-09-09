@@ -71,11 +71,14 @@ SSHD_PRESET = ROOT / "files/os/systemd/system-preset/zz-enable-sshd.preset"
 
 def test_ddi_contains_no_root_credential_or_shared_host_key() -> None:
     ddi = DDI.read_text(encoding="utf-8")
+    assert 'u root 0 "root" /root /bin/bash' in SYSUSERS.read_text(encoding="utf-8").splitlines()
+    assert "/etc/shadow" not in ddi
     assert "bluefin123" not in ddi
+    assert "$6$" not in ddi
+    assert "root:!:" not in ddi
     assert "Default login: root / bluefin" not in ISSUE.read_text(encoding="utf-8")
     assert "/layer/etc/securetty" not in ddi
     assert "ssh-keygen -q -N" not in ddi
-    assert "root:!:" in ddi
     assert "ln -sfn /var/home /layer/home" in ddi
     assert "multi-user.target.wants/sshd.service" in ddi
     assert not SSHD_PRESET.exists()

@@ -66,9 +66,6 @@ config:
       # Ensure persistent /var is mounted from its partition label
       printf '/dev/disk/by-partlabel/var /var xfs defaults 0 0\n' > /layer/etc/fstab
 
-      # Lock root account password field
-      sed -Ei 's/^root:[^:]*:/root:!:/g' /layer/etc/shadow
-
       # Persistent home alias and explicit SSH enablement
       rm -rf /layer/home
       ln -sfn /var/home /layer/home
