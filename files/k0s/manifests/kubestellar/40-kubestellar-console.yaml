@@ -53,13 +53,13 @@ spec:
             secretKeyRef:
               name: kubestellar-console-github-oauth
               key: client-id
-              optional: false
+              optional: true
         - name: GITHUB_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
               name: kubestellar-console-github-oauth
               key: client-secret
-              optional: false
+              optional: true
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:

@@ -10,6 +10,6 @@ metadata:
   namespace: kubestellar-console
 type: Opaque
 stringData:
-  client-id: dummy-client-id
-  client-secret: dummy-client-secret
-  jwt-secret: smoke-only-jwt-secret-1234567890
+  client-id: ""
+  client-secret: ""
+  jwt-secret: default-jwt-secret-123456789012345678901234

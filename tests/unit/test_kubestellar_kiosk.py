@@ -89,7 +89,7 @@ def test_console_provides_local_and_oauth_login_options() -> None:
     assert "name: kubestellar-console-github-oauth" in console
     assert "key: client-id" in console
     assert "key: client-secret" in console
-    assert "optional: false" in console
+    assert "optional: true" in console
 
 
 def test_proxy_is_the_only_public_console_endpoint() -> None:
