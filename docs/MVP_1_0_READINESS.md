@@ -53,7 +53,7 @@ Priority order. Each item depends on the ones above it.
 
 - [ ] Add `root-b` to installer repart recipes and verify `systemd-sysupdate` stages into the inactive slot.
 - [ ] Switch UKI cmdline from `rw` to `ro` and rely on `/var` for mutable state.
-- [ ] Consume `systemd-creds` for SSH authorized keys and static network config.
+- [ ] Consume `systemd-creds` for static network config.
 - [ ] Add boot menu entry to select the previous slot after a failed update.
 
 ### Phase D: release discipline
