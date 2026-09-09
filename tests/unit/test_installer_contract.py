@@ -96,6 +96,7 @@ def test_ddi_generates_module_indexes_for_runtime_filesystem_drivers() -> None:
     assert "cp -a /etc/pki/ca-trust/extracted/* /layer/etc/pki/ca-trust/extracted/" in ddi_element
     assert "tls-ca-bundle.pem" in ddi_element
     assert "ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service" in ddi_element
+    assert "ln -sf /dev/null /layer/etc/systemd/system/audit-rules.service" in ddi_element
     assert "printf '127.0.0.1   localhost" in ddi_element
     assert "> /layer/etc/hosts" in ddi_element
 

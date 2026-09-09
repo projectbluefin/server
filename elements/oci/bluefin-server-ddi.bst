@@ -50,6 +50,9 @@ config:
       mkdir -p /layer/etc/systemd/system
       ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
 
+      # Mask audit-rules to prevent failure on shell-free OS (augenrules requires /bin/sh)
+      ln -sf /dev/null /layer/etc/systemd/system/audit-rules.service
+
       # Ensure standard /etc/hosts exists for container runtimes (containerd/podman)
       printf '127.0.0.1   localhost\n::1         localhost ip6-localhost ip6-loopback\n' > /layer/etc/hosts
 

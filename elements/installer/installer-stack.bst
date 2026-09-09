@@ -14,6 +14,7 @@ description: |
 depends:
   # Base runtime
   - freedesktop-sdk.bst:public-stacks/runtime-minimal.bst
+  - bluefin-server/uutils-coreutils.bst
   # FSDK 26.08 exposes Bash from bootstrap/bash.bst; the approved contract
   # names the requested runtime as freedesktop-sdk.bst:components/bash.bst.
   - freedesktop-sdk.bst:bootstrap/bash.bst
@@ -24,6 +25,8 @@ depends:
 
   # systemd full (includes systemd-repart, systemd-firstboot, bootctl)
   - freedesktop-sdk.bst:components/systemd.bst
+  - freedesktop-sdk.bst:components/dbus.bst
+  - freedesktop-sdk.bst:components/dbus-broker.bst
   - freedesktop-sdk.bst:components/kmod.bst
 
   # Disk setup: LUKS partition support during install

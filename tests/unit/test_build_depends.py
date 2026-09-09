@@ -87,13 +87,33 @@ def test_os_stack_uses_uutils_not_gnu():
 
 
 def test_os_stack_includes_dbus_broker():
-    """Bluefin Server OS must include dbus-broker for system services."""
+    """Bluefin Server OS must include dbus and dbus-broker for system services."""
     os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
     data = yaml.safe_load(os_stack.read_text(encoding="utf-8"))
     depends = data.get("depends", [])
 
+    assert "freedesktop-sdk.bst:components/dbus.bst" in depends, (
+        "os-stack.bst must include freedesktop-sdk.bst:components/dbus.bst for dbus.socket"
+    )
     assert "freedesktop-sdk.bst:components/dbus-broker.bst" in depends, (
         "os-stack.bst must include freedesktop-sdk.bst:components/dbus-broker.bst"
+    )
+
+
+def test_installer_stack_includes_uutils_and_dbus():
+    """Installer stack must include uutils-coreutils, dbus, and dbus-broker."""
+    installer_stack = ELEMENTS_DIR / "installer" / "installer-stack.bst"
+    data = yaml.safe_load(installer_stack.read_text(encoding="utf-8"))
+    depends = data.get("depends", [])
+
+    assert "bluefin-server/uutils-coreutils.bst" in depends, (
+        "installer-stack.bst must include bluefin-server/uutils-coreutils.bst"
+    )
+    assert "freedesktop-sdk.bst:components/dbus.bst" in depends, (
+        "installer-stack.bst must include freedesktop-sdk.bst:components/dbus.bst for dbus.socket"
+    )
+    assert "freedesktop-sdk.bst:components/dbus-broker.bst" in depends, (
+        "installer-stack.bst must include freedesktop-sdk.bst:components/dbus-broker.bst"
     )
 
 

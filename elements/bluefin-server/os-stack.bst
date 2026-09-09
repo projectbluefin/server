@@ -12,6 +12,7 @@ depends:
 
   # System Initialization, Core, and Device Management
   - freedesktop-sdk.bst:components/systemd.bst
+  - freedesktop-sdk.bst:components/dbus.bst
   - freedesktop-sdk.bst:components/dbus-broker.bst
   - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/shadow.bst

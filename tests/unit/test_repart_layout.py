@@ -182,11 +182,15 @@ def test_root_slot_grows_and_is_bounded_below_the_var_partition():
     )
 
 
-def test_var_is_a_growing_factory_resettable_xfs_tail():
+def test_var_is_a_growing_xfs_tail():
     var = next(s for s in partitions().values() if s["Type"] == "var")
     assert var["Format"] == "xfs"
-    assert var["FactoryReset"] == "yes", (
-        "installer --factory-reset must be able to wipe /var"
+    # FactoryReset=yes must NOT be set on the installer var partition:
+    # systemd-sysinstall hardcodes deferPartitionsFactoryReset=true via
+    # Varlink io.systemd.Repart.Run, causing it to defer creating /var.
+    assert "FactoryReset" not in var, (
+        "FactoryReset must not be set on installer var partition or "
+        "systemd-sysinstall will defer creating it"
     )
     assert var["GrowFileSystem"] == "yes"
     assert "SizeMaxBytes" not in var, (
