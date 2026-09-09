@@ -482,7 +482,7 @@ install-vm:
       -drive file="$TARGET_RAW",format=raw,if=virtio \
       -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
       -drive if=pflash,format=raw,file="$OVMF_VARS" \
-      -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080,hostfwd=tcp:127.0.0.1:2222-:22 &
+      -nic user,model=virtio-net-pci,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 &
     QEMU_PID=$!
     cleanup() {
       if kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -490,7 +490,7 @@ install-vm:
         wait "$QEMU_PID" || true
       fi
     }
-    trap cleanup EXIT INT TERM
+    trap cleanup INT TERM
 
     until curl --silent --show-error --max-time 2 --output /dev/null http://127.0.0.1:8080/; do
       if ! kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -500,6 +500,9 @@ install-vm:
       sleep 2
     done
 
-    xdg-open http://127.0.0.1:8080/
+    HOST_IP="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+    echo "==> KubeStellar Console is ready!"
+    echo "==> Access URL (LAN): http://${HOST_IP:-localhost}:8080/"
+    echo "==> Access URL (Local): http://localhost:8080/"
+    xdg-open "http://${HOST_IP:-localhost}:8080/" || xdg-open http://localhost:8080/ || true
     wait "$QEMU_PID"
-    trap - EXIT INT TERM
