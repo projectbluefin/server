@@ -103,4 +103,28 @@ def test_ddi_generates_module_indexes_for_runtime_filesystem_drivers() -> None:
 def test_target_initramfs_preloads_sysext_filesystem_drivers() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
 
-    assert '--add-drivers "virtio virtio_blk virtio_pci virtio_scsi xfs erofs overlay"' in installer_element
+    assert (
+        '--add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay"'
+        in installer_element
+    )
+
+
+def test_installer_loads_nvme_and_settles_udev() -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+
+    assert "modprobe -q nvme || true" in installer_element
+    assert "modprobe -q nvme_core || true" in installer_element
+    assert "udevadm settle --timeout=15 || true" in installer_element
+    assert "After=systemd-udev-settle.service" in installer_element
+    assert "Wants=systemd-udev-settle.service" in installer_element
+
+
+def test_installer_and_ddi_strip_vmlinux_and_static_archives() -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    ddi_element = DDI_ELEMENT.read_text(encoding="utf-8")
+
+    assert 'rm -f "/layer/usr/lib/modules/${KVER}/vmlinux"' in installer_element
+    assert "find /layer -type f -name '*.a' -delete" in installer_element
+    assert 'rm -f "/layer/usr/lib/modules/${KVER}/vmlinux"' in ddi_element
+    assert "find /layer -type f -name '*.a' -delete" in ddi_element
+

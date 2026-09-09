@@ -269,7 +269,10 @@ show-me-the-future:
         -no-reboot < /dev/null
 
     echo "==> Preparing target /var refresh with offline k0s sysext and smoke secret..."
-    K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' 2>/dev/null | head -n 1)
+    K0S_RAW_ZST=""
+    if [ -d dist/sysext ]; then
+      K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' 2>/dev/null | head -n 1 || true)
+    fi
     if [ -z "$K0S_RAW_ZST" ]; then
       just export-sysext
       K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' | head -n 1)

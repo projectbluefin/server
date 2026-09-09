@@ -29,12 +29,14 @@ config:
 
       rm -rf /layer/usr/lib/debug
       find /layer -type f -name '*.debug' -delete
+      find /layer -type f -name '*.a' -delete
 
       KVER="$(basename "$(find /layer/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
       if [ -z "${KVER}" ]; then
         echo "ERROR: no target kernel module tree found under /layer/usr/lib/modules" >&2
         exit 1
       fi
+      rm -f "/layer/usr/lib/modules/${KVER}/vmlinux" "/layer/usr/lib/modules/${KVER}/System.map"
       depmod -b /layer "${KVER}"
 
       # Stage extracted CA certificate bundle into target DDI rootfs

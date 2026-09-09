@@ -86,4 +86,15 @@ def test_os_stack_uses_uutils_not_gnu():
     )
 
 
+def test_os_stack_includes_dbus_broker():
+    """Bluefin Server OS must include dbus-broker for system services."""
+    os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
+    data = yaml.safe_load(os_stack.read_text(encoding="utf-8"))
+    depends = data.get("depends", [])
+
+    assert "freedesktop-sdk.bst:components/dbus-broker.bst" in depends, (
+        "os-stack.bst must include freedesktop-sdk.bst:components/dbus-broker.bst"
+    )
+
+
 
