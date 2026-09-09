@@ -15,6 +15,7 @@ build-depends:
   - freedesktop-sdk.bst:components/erofs-utils.bst
   - freedesktop-sdk.bst:components/xz.bst
   - freedesktop-sdk.bst:components/zstd.bst
+  - freedesktop-sdk.bst:components/openssl.bst
   - filename: k0s/k0s-bin.bst
     config:
       location: /
@@ -80,6 +81,15 @@ config:
 
       # Stage Console kiosk proxy assets.
       cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/
+
+      # Generate self-signed TLS certificate for local kiosk proxy
+      openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout sysext/usr/share/k0s/kiosk/key.pem \
+        -out sysext/usr/share/k0s/kiosk/cert.pem \
+        -subj "/CN=KubeStellar Console" \
+        -addext "subjectAltName=DNS:localhost,DNS:*.local,IP:127.0.0.1,IP:10.0.2.15"
+      chmod 0600 sysext/usr/share/k0s/kiosk/key.pem
+      chmod 0644 sysext/usr/share/k0s/kiosk/cert.pem
 
       # Build EROFS image
       mkfs.erofs -d0 "${OUT}/${FNAME}" sysext

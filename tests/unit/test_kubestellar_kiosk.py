@@ -34,6 +34,8 @@ def test_kiosk_assets_are_packaged_and_seeded() -> None:
     assert KIOSK_CONF.is_file()
     assert KIOSK_JS.is_file()
     assert KIOSK_CSS.is_file()
+    assert "freedesktop-sdk.bst:components/openssl.bst" in sysext
+    assert "keyout sysext/usr/share/k0s/kiosk/key.pem" in sysext
     assert "path: files/k0s/kiosk" in sysext
     assert "directory: kiosk-src" in sysext
     assert "cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/" in sysext
