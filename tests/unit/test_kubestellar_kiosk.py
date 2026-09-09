@@ -47,6 +47,7 @@ def test_proxy_injects_only_csp_safe_same_origin_assets() -> None:
         "proxy_pass "
         "http://kubestellar-console.kubestellar-console.svc.cluster.local:8080;"
     ) in nginx
+    assert "proxy_redirect" in nginx
     assert 'proxy_set_header Accept-Encoding "";' in nginx
     assert "sub_filter_types" not in nginx
     assert (
