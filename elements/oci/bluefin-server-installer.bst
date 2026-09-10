@@ -294,6 +294,9 @@ config:
       FailureAction=poweroff
 
       [Service]
+      # Keep the interactive installer on the attached display. The kernel
+      # still uses the final serial console for boot diagnostics.
+      TTYPath=/dev/tty0
       ExecStart=
       ExecStart=/usr/bin/bluefin-sysinstall
       EOF

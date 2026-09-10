@@ -23,6 +23,16 @@ def test_install_vm_keeps_state_and_forwards_ports() -> None:
     assert "unattended" not in recipe
 
 
+def test_install_vm_shows_interactive_installer_on_virtual_console() -> None:
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+    start = justfile.index('echo "==> Booting the interactive installer in QEMU..."')
+    end = justfile.index('touch "$INSTALL_COMPLETE"', start)
+    installer_boot = justfile[start:end]
+
+    assert "-nographic" not in installer_boot
+    assert "-serial mon:stdio" not in installer_boot
+
+
 def test_show_me_the_future_proves_k0s_dashboard_smoke() -> None:
     justfile = JUSTFILE.read_text(encoding="utf-8")
     console_manifest = CONSOLE_MANIFEST.read_text(encoding="utf-8")
