@@ -8,6 +8,8 @@ on:
       - 'files/**'
       - 'tests/unit/**'
       - 'Justfile'
+      - 'renovate.json'
+      - 'elements/*.bst'
   push:
     branches: [main]
     paths:
@@ -16,6 +18,8 @@ on:
       - 'files/**'
       - 'tests/unit/**'
       - 'Justfile'
+      - 'renovate.json'
+      - 'elements/*.bst'
 
 permissions:
   contents: read
