@@ -66,24 +66,16 @@ config:
       # Ensure persistent /var is mounted from its partition label
       printf '/dev/disk/by-partlabel/var /var xfs defaults 0 0\n' > /layer/etc/fstab
 
-      # Ensure all standard virtual, serial, and hypervisor consoles allow root login
-      printf 'tty0\ntty1\ntty2\ntty3\ntty4\ntty5\ntty6\nttyS0\nttyS1\nconsole\nhvc0\n' > /layer/etc/securetty
+      # Persistent home alias and explicit SSH enablement
+      rm -rf /layer/home
+      ln -sfn /var/home /layer/home
+      mkdir -p /layer/etc/systemd/system/multi-user.target.wants
+      ln -sfn /usr/lib/systemd/system/sshd.service \
+        /layer/etc/systemd/system/multi-user.target.wants/sshd.service
 
-      # Seed default root password 'bluefin' into /etc/shadow for console and ssh login
-      mkdir -p /layer/etc
-      printf 'root:$6$bluefin123$o2pQjPN1n3ZCnYUROlA01xAdnGO7mhVRAVw98x4xc8LAUIJv7b44bBNoER6fM4P.rrj4ePYFfkx9WvZICU8nt/:19700:0:99999:7:::\n' > /layer/etc/shadow
-      chmod 0600 /layer/etc/shadow
-      printf 'root:x:0:0:root:/root:/bin/bash\n' > /layer/etc/passwd
-      chmod 0644 /layer/etc/passwd
-      printf 'root:x:0:\n' > /layer/etc/group
-      chmod 0644 /layer/etc/group
-
-      # Pre-generate SSH host keys for first boot remote diagnostics
-      mkdir -p /layer/etc/ssh
-      ssh-keygen -q -N "" -t ed25519 -f /layer/etc/ssh/ssh_host_ed25519_key
-      ssh-keygen -q -N "" -t rsa -b 3072 -f /layer/etc/ssh/ssh_host_rsa_key
-      chmod 0600 /layer/etc/ssh/ssh_host_*_key
-      chmod 0644 /layer/etc/ssh/ssh_host_*.pub
+      # BuildStream strips setuid bits from artifacts; the key-only core operator
+      # cannot elevate through wheel unless sudo is restored to setuid root.
+      chmod 4755 /layer/usr/bin/sudo
 
       # Sum actual file sizes across bind mounts (du -sb reports content bytes, not overlay blocks).
       ROOT_BYTES=$(du -sb /layer | cut -f1)

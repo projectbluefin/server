@@ -8,7 +8,7 @@ This audit tracks the gap between the current tree and a first public/usable MVP
 2. **Signed release artifacts** — combined `SHA256SUMS` + detached GPG signature published to GitHub Releases.
 3. **Automated boot verification** — at least one non-human test that proves the installer writes a bootable disk and the installed OS reaches a target.
 4. **Functional update path** — host can pull the signed manifest and apply an OS update without manual intervention.
-5. **Basic first-boot provisioning** — unattended way to set root credential and drop an SSH authorized key.
+5. **Basic first-boot provisioning** — unattended `core` operator key-provisioning model for SSH authorized keys.
 6. **Documented recovery** — A/B rollback or reinstall-from-media path for a failed update.
 
 ## Current state
@@ -22,7 +22,7 @@ This audit tracks the gap between the current tree and a first public/usable MVP
 | Automated boot test | 🔄 | Phase B in progress for Alpha; `bluefin-server-boot-test` workflow running on lab cluster |
 | A/B root rollback | ❌ | `50-root.transfer` names `root-a`/`root-b`, installer only creates `root-a` |
 | Root immutability | ❌ | DDI boots read/write (`rw` on cmdline) |
-| First-boot SSH keys | ❌ | Only root password credential path exists |
+| First-boot SSH keys | ✅ | Implemented `tmpfiles.extra` path writing `/var/home/core/.ssh/authorized_keys` |
 
 Competitor context: [gap-analysis-distros.md](skills/gap-analysis-distros.md)
 
@@ -53,13 +53,17 @@ Priority order. Each item depends on the ones above it.
 
 - [ ] Add `root-b` to installer repart recipes and verify `systemd-sysupdate` stages into the inactive slot.
 - [ ] Switch UKI cmdline from `rw` to `ro` and rely on `/var` for mutable state.
-- [ ] Consume `systemd-creds` for SSH authorized keys and static network config.
+- [ ] Consume `systemd-creds` for static network config.
 - [ ] Add boot menu entry to select the previous slot after a failed update.
 
 ### Phase D: release discipline
 
 - [ ] Tag `v1.0.0-MVP` once Phase B passes.
 - [ ] Publish release notes: verified boot path, trust model, known gaps.
+
+## Migration prerequisites
+
+Users of `root / bluefin` must provision the `core` key credential before booting the hardened release, and recovery is offline ESP replacement of `/loader/credentials/tmpfiles.extra.cred`. There is no password or root fallback.
 
 ## Open decisions
 
