@@ -25,6 +25,9 @@ PROXY_MANIFEST = (
     / "kubestellar"
     / "41-kubestellar-kiosk-proxy.yaml"
 )
+KIOSK_TLS_SERVICE = ROOT / "files" / "k0s" / "sysext" / "k0s-kiosk-tls.service"
+K0S_CONTROLLER_SERVICE = ROOT / "files" / "k0s" / "sysext" / "k0scontroller.service"
+OS_STACK = ROOT / "elements" / "bluefin-server" / "os-stack.bst"
 
 
 def test_kiosk_assets_are_packaged_and_seeded() -> None:
@@ -34,8 +37,9 @@ def test_kiosk_assets_are_packaged_and_seeded() -> None:
     assert KIOSK_CONF.is_file()
     assert KIOSK_JS.is_file()
     assert KIOSK_CSS.is_file()
-    assert "freedesktop-sdk.bst:components/openssl.bst" in sysext
-    assert "keyout sysext/usr/share/k0s/kiosk/key.pem" in sysext
+    assert "freedesktop-sdk.bst:components/openssl.bst" not in sysext
+    assert "keyout" not in sysext
+    assert "cp -a sysext-src/k0s-kiosk-tls.service sysext/usr/lib/systemd/system/" in sysext
     assert "path: files/k0s/kiosk" in sysext
     assert "directory: kiosk-src" in sysext
     assert "cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/" in sysext
@@ -104,3 +108,36 @@ def test_proxy_is_the_only_public_console_endpoint() -> None:
         "nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8"
         in proxy
     )
+
+
+def test_k0s_kiosk_tls_service_contract() -> None:
+    assert KIOSK_TLS_SERVICE.is_file(), "k0s-kiosk-tls.service is missing"
+    content = KIOSK_TLS_SERVICE.read_text(encoding="utf-8")
+
+    assert "Type=oneshot" in content
+    assert "Before=k0scontroller.service" in content
+    assert "RequiresMountsFor=/var/lib/k0s" in content
+    assert "StateDirectory=k0s" in content
+    assert "chmod 0600 /var/lib/k0s/kiosk/key.pem" in content
+    assert "chmod 0644 /var/lib/k0s/kiosk/cert.pem" in content
+    assert "/CN=KubeStellar Console" in content
+    assert "DNS:localhost,DNS:*.local,IP:127.0.0.1" in content
+    assert "ip -o addr show scope global" in content
+    assert (
+        "test -s /var/lib/k0s/kiosk/key.pem && "
+        "test -s /var/lib/k0s/kiosk/cert.pem && exit 0"
+    ) in content
+
+
+def test_k0scontroller_orders_after_kiosk_tls() -> None:
+    assert K0S_CONTROLLER_SERVICE.is_file(), "k0scontroller.service is missing"
+    content = K0S_CONTROLLER_SERVICE.read_text(encoding="utf-8")
+
+    assert "k0s-kiosk-tls.service" in content
+    assert "After=network-online.target k0s-kiosk-tls.service" in content
+    assert "Wants=network-online.target k0s-kiosk-tls.service" in content
+
+
+def test_os_stack_includes_openssl() -> None:
+    content = OS_STACK.read_text(encoding="utf-8")
+    assert "freedesktop-sdk.bst:components/openssl.bst" in content
