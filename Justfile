@@ -154,6 +154,32 @@ export-sysext: build-sysext
     rm -rf dist/sysext-checkout
     @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
 
+# -- Flatcar LTS kernel & ZFS --------------------------------------------------
+# Build the Flatcar LTS kernel and ZFS sysext.
+
+# Build the Flatcar LTS kernel binary and modules.
+[group('kernel')]
+build-kernel:
+    just bst build flatcar/flatcar-kernel.bst
+
+# Build the Flatcar ZFS system extension.
+[group('kernel')]
+build-zfs:
+    just bst build flatcar/flatcar-zfs.bst
+
+# Export the kernel and ZFS artifacts to dist/kernel/.
+[group('kernel')]
+export-kernel: build-kernel build-zfs
+    rm -rf dist/kernel dist/kernel-checkout dist/zfs-checkout
+    mkdir -p dist/kernel dist/kernel-checkout dist/zfs-checkout
+    just bst artifact checkout flatcar/flatcar-kernel.bst --directory /src/dist/kernel-checkout
+    just bst artifact checkout flatcar/flatcar-zfs.bst --directory /src/dist/zfs-checkout
+    cp -a dist/kernel-checkout/* dist/kernel/
+    cp -a dist/zfs-checkout/* dist/kernel/
+    rm -rf dist/kernel-checkout dist/zfs-checkout
+    (cd dist/kernel && find . -type f -exec sha256sum --binary {} + > SHA256SUMS)
+    @echo "==> wrote kernel & ZFS artifacts:" && ls -lh dist/kernel/
+
 # Write the raw GPT installer image to a physical USB drive.
 [group('installer')]
 flash-installer DEVICE="":

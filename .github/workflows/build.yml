@@ -102,16 +102,22 @@ jobs:
           just build-ddi
           just export-ddi
 
-      - name: Build and export live installer & target UKI
+      - name: Build and export live installer & target UKI, and PXE boot inputs
         run: |
           just build-installer
-          just export-installer
+          just export-pxe
 
       - name: Build and export k0s systemd-sysext
         run: |
           just build-sysext
           just export-sysext
 
+
+      - name: Build and export Flatcar LTS Kernel & ZFS
+        run: |
+          just build-kernel
+          just build-zfs
+          just export-kernel
       - name: Sign release SHA256SUMS manifest
         if: github.ref == 'refs/heads/main'
         env:
@@ -123,8 +129,11 @@ jobs:
           # flat manifest at the release root.
           mkdir -p dist/release
           cp dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/release/
+          cp dist/bluefin-server-pxe-vmlinuz-* dist/bluefin-server-pxe-initrd-*.cpio.gz dist/release/
           cp dist/ddi/bluefin-server-ddi-*.raw.zst dist/release/
-          cp dist/sysext/k0s-*.raw.zst dist/release/
+          if [ -d dist/kernel ]; then
+            cp dist/kernel/usr/lib/sysexts/*.raw dist/release/ 2>/dev/null || true
+          fi
           (cd dist/release && sha256sum --binary -- * > SHA256SUMS)
           GNUPGHOME=$(mktemp -d)
           export GNUPGHOME

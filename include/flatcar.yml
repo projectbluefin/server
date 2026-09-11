@@ -1,0 +1,7 @@
+# Single source of truth for Flatcar LTS kernel and sysext versioning.
+#
+# Flatcar LTS kernel and ZFS sysext must stay strictly in lockstep because
+# OpenZFS modules (spl.ko, zfs.ko) require matching kernel vermagic (6.12.102-flatcar).
+variables:
+  flatcar-version: "4593.2.5"
+  flatcar-kver: "6.12.102-flatcar"
