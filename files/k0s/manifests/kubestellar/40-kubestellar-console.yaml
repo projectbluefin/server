@@ -65,7 +65,7 @@ spec:
             secretKeyRef:
               name: kubestellar-console-github-oauth
               key: jwt-secret
-              optional: false
+              optional: true
         ports:
         - containerPort: 8080
           name: http
