@@ -105,7 +105,7 @@ def test_target_initramfs_preloads_sysext_filesystem_drivers() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
 
     assert (
-        '--add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay"'
+        '--add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay zfs spl"'
         in installer_element
     )
 

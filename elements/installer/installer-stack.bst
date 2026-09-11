@@ -35,7 +35,8 @@ depends:
   - freedesktop-sdk.bst:components/dosfstools.bst
 
   # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
-  - freedesktop-sdk.bst:components/linux.bst
+  - flatcar/flatcar-kernel.bst
+  - flatcar/flatcar-zfs.bst
 
   # repart.d configs describing the TARGET disk layout
   - installer/installer-repart.bst

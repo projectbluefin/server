@@ -95,8 +95,9 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
 | `track-refs` | `build.yml` | `pull_request` (`renovate/*` only) | Resolves BuildStream junction refs and pushes them back to the PR branch. Sole `contents: write` grant on `pull_request`. |
-| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile, and signs the release manifest on pushes to `main`. Read-only token. |
+| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile (including Flatcar LTS Kernel & ZFS), and signs the release manifest on pushes to `main`. Read-only token. |
 | `release` | `build.yml` | `push/main`, `workflow_dispatch` | Downloads the signed assets handed off by `build` and publishes them to the GitHub Release (`if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}`). `contents: write`. |
+| `build-kernel` | `kernel.yml` | `pull_request` (paths: `elements/flatcar/**`, `include/flatcar.yml`, `patches/flatcar-kernel/**`), `push/main`, `workflow_dispatch` | Standalone kernel & OpenZFS sysext BuildStream build and export. Emits `dist/kernel/` artifacts. Read-only token. |
 | `docs` | `docs-checks.yml` | `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. Read-only token. |
 | `unit` | `unit-tests.yml` | `pull_request`, `push/main` | Runs pytest and BATS unit test suites. Read-only token. |
 
