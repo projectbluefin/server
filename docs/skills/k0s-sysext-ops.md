@@ -48,7 +48,9 @@ k0s kubectl get pods -A
 
 ## KubeStellar Kiosk TLS Management
 
-The KubeStellar kiosk proxy TLS certificate (`cert.pem`) and private key (`key.pem`) are generated on first boot by `k0s-kiosk-tls.service` before `k0scontroller.service` starts. The private key is stored persistently in `/var/lib/k0s/kiosk/key.pem` with mode `0600`, and the certificate is configured with the host's actual IP addresses in the Subject Alternative Names (SAN).
+The KubeStellar kiosk proxy TLS certificate (`cert.pem`) and private key (`key.pem`) are generated on first boot by `k0s-kiosk-tls.service` before `k0scontroller.service` starts. The private key is stored persistently in `/var/lib/k0s/kiosk/key.pem` with mode `0600`, and the certificate is configured with the host's actual IP addresses in the Subject Alternative Names (SAN). `files/k0s/sysext/k0s-manifests.conf` seeds the kiosk static assets (`nginx.conf`, `kiosk-gate.js`, `kiosk-gate.css`) into this same directory on every boot, file-by-file rather than as a whole-directory copy, specifically so it never deletes `cert.pem`/`key.pem`.
+
+The SAN is computed once, at generation time, from whatever IP addresses the host has at that moment (3650-day validity, no periodic refresh). On a DHCP host whose address later changes, the certificate will not include the new address — rotate manually (below) after an address change if browser cert warnings start appearing.
 
 To rotate or regenerate the TLS certificate and private key:
 

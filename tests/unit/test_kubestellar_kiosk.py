@@ -43,7 +43,29 @@ def test_kiosk_assets_are_packaged_and_seeded() -> None:
     assert "path: files/k0s/kiosk" in sysext
     assert "directory: kiosk-src" in sysext
     assert "cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/" in sysext
-    assert "C+ /var/lib/k0s/kiosk - - - - /usr/share/k0s/kiosk" in tmpfiles
+    assert "C+ /var/lib/k0s/kiosk/nginx.conf - - - - /usr/share/k0s/kiosk/nginx.conf" in tmpfiles
+    assert "C+ /var/lib/k0s/kiosk/kiosk-gate.js - - - - /usr/share/k0s/kiosk/kiosk-gate.js" in tmpfiles
+    assert "C+ /var/lib/k0s/kiosk/kiosk-gate.css - - - - /usr/share/k0s/kiosk/kiosk-gate.css" in tmpfiles
+
+
+def test_tmpfiles_never_wipes_the_generated_tls_material() -> None:
+    """A directory-level `C+ /var/lib/k0s/kiosk` would delete-then-recopy the
+    whole tree from /usr/share/k0s/kiosk on every boot, which never contains
+    cert.pem/key.pem -- wiping the TLS material k0s-kiosk-tls.service
+    generates into that same directory. Regression guard for that collision.
+    """
+    directives = [
+        line for line in TMPFILES.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    assert not any("cert.pem" in line or "key.pem" in line for line in directives)
+    # No directive targets the bare directory (as opposed to a file inside it).
+    for line in directives:
+        if line.startswith("C+"):
+            assert line.split()[1] != "/var/lib/k0s/kiosk", (
+                f"whole-directory C+ rule would delete cert.pem/key.pem: {line!r}"
+            )
 
 
 def test_proxy_injects_only_csp_safe_same_origin_assets() -> None:
@@ -117,6 +139,7 @@ def test_k0s_kiosk_tls_service_contract() -> None:
     assert "Type=oneshot" in content
     assert "Before=k0scontroller.service" in content
     assert "RequiresMountsFor=/var/lib/k0s" in content
+    assert "After=network-online.target systemd-tmpfiles-setup.service" in content
     assert "StateDirectory=k0s" in content
     assert "chmod 0600 /var/lib/k0s/kiosk/key.pem" in content
     assert "chmod 0644 /var/lib/k0s/kiosk/cert.pem" in content

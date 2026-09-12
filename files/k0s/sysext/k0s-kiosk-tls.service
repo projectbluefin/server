@@ -1,14 +1,14 @@
 [Unit]
 Description=Generate persistent TLS certificate and key for KubeStellar kiosk
 RequiresMountsFor=/var/lib/k0s
-After=network-online.target
+After=network-online.target systemd-tmpfiles-setup.service
 Before=k0scontroller.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 StateDirectory=k0s
-ExecStart=/bin/bash -eu -c 'test -s /var/lib/k0s/kiosk/key.pem && test -s /var/lib/k0s/kiosk/cert.pem && exit 0; mkdir -p /var/lib/k0s/kiosk; SAN="DNS:localhost,DNS:*.local,IP:127.0.0.1"; if command -v hostname >/dev/null 2>&1; then HN=$$(hostname 2>/dev/null || true); if [ -n "$$HN" ] && [ "$$HN" != "localhost" ]; then SAN="$${SAN},DNS:$${HN}"; fi; fi; if command -v ip >/dev/null 2>&1; then for addr in $$(ip -o addr show scope global 2>/dev/null | awk "{print $$4}" | cut -d/ -f1); do SAN="$${SAN},IP:$${addr}"; done; fi; openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /var/lib/k0s/kiosk/key.pem -out /var/lib/k0s/kiosk/cert.pem -subj "/CN=KubeStellar Console" -addext "subjectAltName=$${SAN}"; chmod 0600 /var/lib/k0s/kiosk/key.pem; chmod 0644 /var/lib/k0s/kiosk/cert.pem'
+ExecStart=/bin/bash -eu -c 'test -s /var/lib/k0s/kiosk/key.pem && test -s /var/lib/k0s/kiosk/cert.pem && exit 0; mkdir -p /var/lib/k0s/kiosk; SAN="DNS:localhost,DNS:*.local,IP:127.0.0.1"; if command -v hostname >/dev/null 2>&1; then HN=$$(hostname 2>/dev/null || true); if [ -n "$$HN" ] && [ "$$HN" != "localhost" ]; then SAN="$${SAN},DNS:$${HN}"; fi; else echo "k0s-kiosk-tls: hostname command not found, SAN has no host DNS name" >&2; fi; if command -v ip >/dev/null 2>&1; then for addr in $$(ip -o addr show scope global 2>/dev/null | awk "{print $$4}" | cut -d/ -f1); do SAN="$${SAN},IP:$${addr}"; done; else echo "k0s-kiosk-tls: ip command not found, SAN has no host IP address" >&2; fi; openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /var/lib/k0s/kiosk/key.pem -out /var/lib/k0s/kiosk/cert.pem -subj "/CN=KubeStellar Console" -addext "subjectAltName=$${SAN}"; chmod 0600 /var/lib/k0s/kiosk/key.pem; chmod 0644 /var/lib/k0s/kiosk/cert.pem'
 
 [Install]
 WantedBy=k0scontroller.service multi-user.target
