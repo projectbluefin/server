@@ -28,9 +28,9 @@ metadata:
 
 ## Architecture
 
-The installer is offline, self-contained, and systemd-native. The OS DDI payload
-(`bluefin-server-ddi.bst`) is embedded as a data partition on the installer
-media at build time. No network access is required at install time.
+The installer is systemd-native and offline by default. The OS DDI payload
+(`bluefin-server-ddi.bst`) is embedded as a data partition on installer media
+at build time, while PXE users may opt into downloading it over HTTPS.
 
 The installer UI is systemd's built-in `systemd-sysinstall` which provides a
 terminal-based interactive installation that:
@@ -154,9 +154,28 @@ clients can add `unattended` to the installer command line, for example:
 systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended
 ```
 
-The DDI is still required on `bluefin-installer-data`; standalone network DDI
-fetching is not supported yet. Use the raw installer image for complete,
+For offline installs, the DDI remains on `bluefin-installer-data`; PXE installs
+may use `inst.ddi_url` instead. Use the raw installer image for complete,
 offline installation.
+
+## PXE network installs
+
+PXE clients may boot standalone kernel and initrd with optional kernel parameters:
+
+- `inst.ddi_url=<https-url>` downloads zstd-compressed DDI instead of using
+  embedded installer partition.
+- `inst.ddi_sha256=<hex>` verifies download before touching target disk.
+- `inst.target_disk=/dev/...` selects explicit target disk.
+
+Without `inst.ddi_url`, behavior remains unchanged and uses embedded DDI.
+Network or checksum failures abort before partitioning. Example:
+
+```text
+kernel bluefin-server-pxe-vmlinuz systemd.unit=system-install.target rw unattended \
+  inst.ddi_url=https://pxe.example/ddi.raw.zst inst.ddi_sha256=<sha256>
+initrd bluefin-server-pxe-initrd.cpio.gz
+boot
+```
 
 ## Common Rationalizations
 
@@ -168,7 +187,7 @@ offline installation.
 | "Initrd archive tools (gzip, cpio) are in base-stack." | In FSDK 26.08, gzip and cpio are standalone components; elements packing or unpacking initrds must explicitly declare `components/gzip.bst` and `components/cpio.bst` in `build-depends`. |
 | "Use knuckle instead." | knuckle is deprecated in favor of native `systemd-sysinstall` (systemd 261+). |
 | "Hardcode `root=/dev/vda2` for QEMU." | Bare metal has different device names. Always use PARTUUID. |
-| "Pull the DDI from the network at install time." | Network failures = broken installs. The DDI is embedded in the installer media. |
+| "Pull the DDI from the network at install time." | Network pull is opt-in; failures abort before disk changes, while embedded media remains default. |
 | "Put the DDI in the initrd cpio." | The DDI is 2 GiB+. The initrd cpio step must run before the DDI is placed in `/layer`. |
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |

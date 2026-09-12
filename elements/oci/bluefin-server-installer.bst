@@ -189,11 +189,58 @@ config:
       modprobe -q nvme_core || true
       udevadm settle --timeout=15 || true
 
+      CMDLINE="$(< /proc/cmdline)"
+      DDI_URL=""
+      DDI_SHA256=""
+      TARGET_DISK_OVERRIDE=""
+      for arg in ${CMDLINE}; do
+        case "${arg}" in
+          inst.ddi_url=*) DDI_URL="${arg#inst.ddi_url=}" ;;
+          inst.ddi_sha256=*) DDI_SHA256="${arg#inst.ddi_sha256=}" ;;
+          inst.target_disk=*) TARGET_DISK_OVERRIDE="${arg#inst.target_disk=}" ;;
+        esac
+      done
+
+      # PXE installs use a downloaded raw DDI and a temporary repart override.
+      if [ -n "${DDI_URL}" ]; then
+        mkdir -p /run/installer /usr/lib/repart.sysinstall.d
+        echo "==> Fetching DDI from ${DDI_URL}..."
+        if command -v systemd-networkd-wait-online >/dev/null 2>&1; then
+          systemd-networkd-wait-online --timeout=60 || {
+            echo "ERROR: Network did not become ready for DDI download." >&2
+            exit 1
+          }
+        fi
+        curl --fail --silent --show-error --location --retry 3 \
+          --output /run/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"
+        if [ -n "${DDI_SHA256}" ]; then
+          printf '%s  %s\n' "${DDI_SHA256}" /run/installer/bluefin-server-ddi.raw.zst \
+            | sha256sum --check --status || {
+              echo "ERROR: Downloaded DDI SHA256 mismatch." >&2
+              exit 1
+            }
+        fi
+        zstd --decompress --rm /run/installer/bluefin-server-ddi.raw.zst \
+          -o /run/installer/bluefin-server-ddi.raw
+        cp /usr/lib/repart.d/10-esp.conf /usr/lib/repart.sysinstall.d/
+        sed 's#CopyBlocks=/dev/disk/by-partlabel/bluefin-installer-data#CopyBlocks=/run/installer/bluefin-server-ddi.raw#' \
+          /usr/lib/repart.d/20-root-a.conf \
+          > /usr/lib/repart.sysinstall.d/20-root-a.conf
+        cp /usr/lib/repart.d/30-var.conf /usr/lib/repart.sysinstall.d/
+      fi
+
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
       TARGET_DISK=""
       INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"
+      if [ -n "${TARGET_DISK_OVERRIDE}" ]; then
+        if [ ! -b "${TARGET_DISK_OVERRIDE}" ]; then
+          echo "ERROR: inst.target_disk is not a block device: ${TARGET_DISK_OVERRIDE}" >&2
+          exit 1
+        fi
+        TARGET_DISK="${TARGET_DISK_OVERRIDE}"
+      fi
 
-      while read -r name type ro size; do
+      while [ -z "${TARGET_DISK}" ] && read -r name type ro size; do
         [ "${type}" = "disk" ] || continue
         [ "${ro}" = "0" ] || continue
         [ "${size}" -gt 0 ] || continue
@@ -247,9 +294,6 @@ config:
           fi
         fi
       }
-
-      # Check for unattended in kernel command line
-      CMDLINE="$(< /proc/cmdline)"
       if [[ " ${CMDLINE} " == *" unattended "* ]]; then
         echo "==> Running in UNATTENDED mode..."
         if [ -n "${TARGET_DISK}" ]; then
