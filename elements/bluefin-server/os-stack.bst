@@ -54,6 +54,9 @@ depends:
   # gpg binary required by systemd-sysupdate to verify SHA256SUMS.gpg
   - freedesktop-sdk.bst:components/gnupg.bst
 
+  # openssl CLI required for first-boot TLS certificate generation
+  - freedesktop-sdk.bst:components/openssl.bst
+
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
 

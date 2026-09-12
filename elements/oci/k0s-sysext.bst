@@ -3,8 +3,8 @@ description: |
   Produce a systemd-sysext extension image for k0s.
 
   Output: k0s-<k0s-version>.raw, k0s-<k0s-version>.raw.zst, and SHA256SUMS.
-  Contains /usr/bin/k0s, k0scontroller.service, tmpfiles.d/k0s-manifests.conf,
-  and /usr/share/k0s/manifests/ (Argo CD and KubeStellar).
+  Contains /usr/bin/k0s, k0scontroller.service, k0s-kiosk-tls.service,
+  tmpfiles.d/k0s-manifests.conf, and /usr/share/k0s/manifests/ (Argo CD and KubeStellar).
 
 (@):
   - include/arch.yml
@@ -15,7 +15,6 @@ build-depends:
   - freedesktop-sdk.bst:components/erofs-utils.bst
   - freedesktop-sdk.bst:components/xz.bst
   - freedesktop-sdk.bst:components/zstd.bst
-  - freedesktop-sdk.bst:components/openssl.bst
   - filename: k0s/k0s-bin.bst
     config:
       location: /
@@ -64,6 +63,7 @@ config:
 
       # Stage systemd service
       cp -a sysext-src/k0scontroller.service sysext/usr/lib/systemd/system/
+      cp -a sysext-src/k0s-kiosk-tls.service sysext/usr/lib/systemd/system/
 
       # Stage extension release metadata
       cp -a sysext-src/extension-release.k0s sysext/usr/lib/extension-release.d/
@@ -81,15 +81,6 @@ config:
 
       # Stage Console kiosk proxy assets.
       cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/
-
-      # Generate self-signed TLS certificate for local kiosk proxy
-      openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -keyout sysext/usr/share/k0s/kiosk/key.pem \
-        -out sysext/usr/share/k0s/kiosk/cert.pem \
-        -subj "/CN=KubeStellar Console" \
-        -addext "subjectAltName=DNS:localhost,DNS:*.local,IP:127.0.0.1,IP:10.0.2.15"
-      chmod 0600 sysext/usr/share/k0s/kiosk/key.pem
-      chmod 0644 sysext/usr/share/k0s/kiosk/cert.pem
 
       # Build EROFS image
       mkfs.erofs -d0 "${OUT}/${FNAME}" sysext
