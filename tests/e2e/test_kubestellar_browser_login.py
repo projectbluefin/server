@@ -43,15 +43,18 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 def wait_for_http_ready(url: str, timeout: int, check_healthz: bool = True) -> bool:
     print(f"==> Waiting for {url} to be ready (timeout: {timeout}s)...")
     start = time.time()
     endpoint = f"{url.rstrip('/')}/healthz" if check_healthz else f"{url.rstrip('/')}/health"
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
     while time.time() - start < timeout:
         try:
             req = urllib.request.Request(endpoint, headers={"Accept": "application/json"})
-            with urllib.request.urlopen(req, timeout=2) as resp:
+            with urllib.request.urlopen(req, context=ctx, timeout=2) as resp:
                 if resp.status == 200:
                     print(f"==> Endpoint {endpoint} is ready!")
                     return True
@@ -59,7 +62,7 @@ def wait_for_http_ready(url: str, timeout: int, check_healthz: bool = True) -> b
             # Fall back to root URL check if healthz endpoint is not implemented
             try:
                 root_req = urllib.request.Request(url.rstrip('/'), headers={"Accept": "text/html"})
-                with urllib.request.urlopen(root_req, timeout=2) as resp:
+                with urllib.request.urlopen(root_req, context=ctx, timeout=2) as resp:
                     if resp.status in (200, 302, 301):
                         print(f"==> Root URL {url} is ready (HTTP {resp.status})!")
                         return True
