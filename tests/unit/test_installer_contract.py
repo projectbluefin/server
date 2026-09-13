@@ -110,15 +110,16 @@ def test_target_initramfs_preloads_sysext_filesystem_drivers() -> None:
     )
 
 
-def test_installer_loads_nvme_and_settles_udev() -> None:
+def test_installer_loads_storage_drivers_and_settles_udev() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
 
     assert "modprobe -q nvme || true" in installer_element
     assert "modprobe -q nvme_core || true" in installer_element
+    assert "modprobe -q usb-storage || true" in installer_element
+    assert "modprobe -q uas || true" in installer_element
     assert "udevadm settle --timeout=15 || true" in installer_element
     assert "After=systemd-udev-settle.service" in installer_element
     assert "Wants=systemd-udev-settle.service" in installer_element
-
 
 def test_interactive_installer_uses_local_virtual_console() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
