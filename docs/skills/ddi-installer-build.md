@@ -33,17 +33,16 @@ just show-me-the-future    # end-to-end QEMU installer smoke test
 just tags                  # show FSDK-derived version tags
 ```
 
-## Preferred build path
+## Mandatory build path: ghost cluster
 
-For heavy builds, prefer the cluster build over a local workstation build:
+This project MUST always build on the ghost cluster using distributed BuildStream:
 
 ```bash
 just cluster-build
 ```
 
-This submits the `bluefin-server-build-pipeline` Argo workflow and uses the
-cluster cache rather than starving your local machine.
-
+This submits the `bluefin-server-build-pipeline` Argo workflow to the ghost cluster and uses the
+distributed cluster cache rather than building standalone OS artifacts locally on individual workstations.
 ## Local builds with a remote cache
 
 If you must build locally, point BuildStream at your cluster cache tunnel host (`<build-cache-host>`) by creating `~/.config/buildstream.conf` on your workstation. Operators must substitute `<build-cache-host>` with their specific cluster cache hostname or IP when setting up the SSH tunnel (e.g. `ssh -L 8980:<build-cache-host>:8980 ...`):
