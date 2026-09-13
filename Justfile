@@ -530,3 +530,36 @@ install-vm:
     echo "==> Access URL (Local): http://localhost:8080/"
     xdg-open "http://${HOST_IP:-localhost}:8080/" || xdg-open http://localhost:8080/ || true
     wait "$QEMU_PID"
+
+# Set up KubeStellar kc-agent for the user in ONE command.
+[group('test')]
+setup-kubestellar ORIGIN="http://localhost:8080,http://127.0.0.1:8080":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -x "files/bin/bluefin-kubestellar" ]; then
+      exec ./files/bin/bluefin-kubestellar start --origin "{{ORIGIN}}"
+    else
+      if ! command -v kc-agent >/dev/null 2>&1; then
+        echo "==> Installing kc-agent from kubestellar/tap..."
+        brew tap kubestellar/tap
+        brew install kc-agent
+      fi
+      export KAGENTI_CONTROLLER_URL="none"
+      kc-agent -kubeconfig "${KUBECONFIG:-$HOME/.kube/config}" -allowed-origins "{{ORIGIN}}" &
+    fi
+
+# Run fully automated headless browser test against the KubeStellar console.
+[group('test')]
+test-e2e-browser CONSOLE_URL="http://127.0.0.1:8080":
+    python3 tests/e2e/test_kubestellar_browser_login.py --console-url "{{CONSOLE_URL}}"
+
+# Complete end-to-end Lima VM orchestration test.
+[group('test')]
+test-e2e-lima:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    limactl validate files/lima/bluefin-server-kiosk.yaml
+    echo "==> Lima VM template validation passed: files/lima/bluefin-server-kiosk.yaml"
+    if [ "${RUN_LIMA_VM:-0}" = "1" ]; then
+      ./scripts/lima-e2e-kubestellar-test.sh
+    fi
