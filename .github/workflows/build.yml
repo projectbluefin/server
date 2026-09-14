@@ -102,15 +102,34 @@ jobs:
           just build-ddi
           just export-ddi
 
-      - name: Build and export live installer & target UKI
+      - name: Build and export live installer & target UKI, and PXE boot inputs
         run: |
           just build-installer
-          just export-installer
+          just export-pxe
 
       - name: Build and export k0s systemd-sysext
         run: |
           just build-sysext
           just export-sysext
+
+
+      - name: Build and export Flatcar LTS Kernel & ZFS
+        run: |
+          just build-kernel
+          just build-zfs
+          just export-kernel
+
+      - name: Upload installer test artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-installer-test
+          path: |
+            dist/bluefin-server-installer-*.raw.zst
+            dist/bluefin-server-pxe-vmlinuz-*
+            dist/bluefin-server-pxe-initrd-*.cpio.gz
+            dist/sysext/k0s-*.raw.zst
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Sign release SHA256SUMS manifest
         if: github.ref == 'refs/heads/main'
@@ -123,8 +142,12 @@ jobs:
           # flat manifest at the release root.
           mkdir -p dist/release
           cp dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/release/
+          cp dist/bluefin-server-pxe-vmlinuz-* dist/bluefin-server-pxe-initrd-*.cpio.gz dist/release/
           cp dist/ddi/bluefin-server-ddi-*.raw.zst dist/release/
           cp dist/sysext/k0s-*.raw.zst dist/release/
+          if [ -d dist/kernel ]; then
+            cp dist/kernel/usr/lib/sysexts/*.raw dist/release/ 2>/dev/null || true
+          fi
           (cd dist/release && sha256sum --binary -- * > SHA256SUMS)
           GNUPGHOME=$(mktemp -d)
           export GNUPGHOME
@@ -148,12 +171,22 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  installer-test:
+    needs: build
+    if: ${{ !failure() && !cancelled() }}
+    permissions:
+      actions: read
+      contents: read
+    uses: projectbluefin/actions/.github/workflows/server-installer-test.yml@7b1567226212b5304f4870c7cdbb7c4a0eefae71 # v1
+    with:
+      artifact-name: server-installer-test
+
   # Publishes the signed assets to the GitHub Release. Only runs on
   # pushes/dispatches to main, where the code is already reviewed, and is the
   # only job besides track-refs that holds contents: write.
   release:
     if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}
-    needs: build
+    needs: [build, installer-test]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

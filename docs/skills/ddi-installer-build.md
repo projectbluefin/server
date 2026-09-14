@@ -23,26 +23,27 @@ just validate              # resolve the BuildStream graph
 just cluster-build         # submit an Argo workflow to build/publish
 just build-installer       # build the installer locally
 just export-installer      # export installer + UKI + SHA256SUMS to dist/
+just export-pxe            # export standalone PXE vmlinuz/initrd to dist/
 just build-ddi             # build the OS DDI payload
 just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
 just build-sysext          # build the k0s sysext
 just export-sysext         # export sysext artifacts to dist/sysext/
 just flash-installer       # write the installer image to a USB device
 just show-me-the-future    # end-to-end QEMU installer smoke test
+just test-installer-artifact # test already-exported artifacts in QEMU without rebuilding
 just tags                  # show FSDK-derived version tags
 ```
 
-## Preferred build path
+## Mandatory build path: ghost cluster
 
-For heavy builds, prefer the cluster build over a local workstation build:
+This project MUST always build on the ghost cluster using distributed BuildStream:
 
 ```bash
 just cluster-build
 ```
 
-This submits the `bluefin-server-build-pipeline` Argo workflow and uses the
-cluster cache rather than starving your local machine.
-
+This submits the `bluefin-server-build-pipeline` Argo workflow to the ghost cluster and uses the
+distributed cluster cache rather than building standalone OS artifacts locally on individual workstations.
 ## Local builds with a remote cache
 
 If you must build locally, point BuildStream at your cluster cache tunnel host (`<build-cache-host>`) by creating `~/.config/buildstream.conf` on your workstation. Operators must substitute `<build-cache-host>` with their specific cluster cache hostname or IP when setting up the SSH tunnel (e.g. `ssh -L 8980:<build-cache-host>:8980 ...`):
@@ -87,11 +88,13 @@ Use direct I/O and full-block reads to avoid dirtying the page cache.
 The release process is driven by `.github/workflows/build.yml`:
 
 - Renovate point-release updates or direct pushes to `main` trigger a full build.
-- CI builds the DDI payload, installer, target UKI, and k0s sysext.
+- CI builds the DDI payload, installer, target UKI, k0s sysext, and standalone
+  PXE boot inputs (`bluefin-server-pxe-vmlinuz-*`, `bluefin-server-pxe-initrd-*.cpio.gz`).
 - CI uploads the versioned release assets to the corresponding
   `installer-v<release-version>` GitHub Release.
 - CI also produces a combined `dist/release/SHA256SUMS` manifest and signs it
-  to create `SHA256SUMS.gpg` for `systemd-sysupdate` verification.
+  to create `SHA256SUMS.gpg` for `systemd-sysupdate` verification. The PXE
+  inputs are included in this manifest, per `docs/skills/ddi-installer.md`.
 
 ## Common rationalizations
 

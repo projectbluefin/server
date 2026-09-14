@@ -35,7 +35,7 @@ configuration and credentials.
 4. It also supplies the existing origin-specific command:
 
    ```sh
-   KC_ALLOWED_ORIGINS=<current-console-origin> kc-agent
+   KAGENTI_CONTROLLER_URL="none" kc-agent -allowed-origins <current-console-origin>
    ```
 
 5. The client starts `kc-agent` on the machine holding its kubeconfig. The

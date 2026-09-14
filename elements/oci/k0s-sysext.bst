@@ -31,6 +31,9 @@ sources:
     path: files/k0s/kiosk
     directory: kiosk-src
   - kind: local
+    path: files/k0s/kubeflex
+    directory: kubeflex-src
+  - kind: local
     path: files/os/issue.d/40-kubestellar.issue
     directory: issue-src
 
@@ -81,6 +84,11 @@ config:
 
       # Stage Console kiosk proxy assets.
       cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/
+
+      # Stage KubeStellar first-boot credential helper.
+      mkdir -p sysext/usr/share/k0s/kubeflex
+      cp -a kubeflex-src/. sysext/usr/share/k0s/kubeflex/
+      chmod 0755 sysext/usr/share/k0s/kubeflex/generate-postgres-secret.sh
 
       # Generate self-signed TLS certificate for local kiosk proxy
       openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \

@@ -24,7 +24,7 @@ spec:
       serviceAccountName: kubeflex-controller-manager
       containers:
       - name: manager
-        image: ghcr.io/kubestellar/kubeflex/kubeflex-operator:v0.8.2
+        image: ghcr.io/kubestellar/kubeflex/manager:0.8.2
         command:
         - /manager
         args:

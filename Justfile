@@ -154,6 +154,32 @@ export-sysext: build-sysext
     rm -rf dist/sysext-checkout
     @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
 
+# -- Flatcar LTS kernel & ZFS --------------------------------------------------
+# Build the Flatcar LTS kernel and ZFS sysext.
+
+# Build the Flatcar LTS kernel binary and modules.
+[group('kernel')]
+build-kernel:
+    just bst build flatcar/flatcar-kernel.bst
+
+# Build the Flatcar ZFS system extension.
+[group('kernel')]
+build-zfs:
+    just bst build flatcar/flatcar-zfs.bst
+
+# Export the kernel and ZFS artifacts to dist/kernel/.
+[group('kernel')]
+export-kernel: build-kernel build-zfs
+    rm -rf dist/kernel dist/kernel-checkout dist/zfs-checkout
+    mkdir -p dist/kernel dist/kernel-checkout dist/zfs-checkout
+    just bst artifact checkout flatcar/flatcar-kernel.bst --directory /src/dist/kernel-checkout
+    just bst artifact checkout flatcar/flatcar-zfs.bst --directory /src/dist/zfs-checkout
+    cp -a dist/kernel-checkout/* dist/kernel/
+    cp -a dist/zfs-checkout/* dist/kernel/
+    rm -rf dist/kernel-checkout dist/zfs-checkout
+    (cd dist/kernel && find . -type f -exec sha256sum --binary {} + > SHA256SUMS)
+    @echo "==> wrote kernel & ZFS artifacts:" && ls -lh dist/kernel/
+
 # Write the raw GPT installer image to a physical USB drive.
 [group('installer')]
 flash-installer DEVICE="":
@@ -188,9 +214,17 @@ flash-installer DEVICE="":
     sudo sh -c "zstd -dc ${IMG} | dd of={{DEVICE}} bs=4M iflag=fullblock oflag=direct status=progress conv=fsync"
     echo "Successfully flashed the Bluefin Server installer to {{DEVICE}}!"
 
-# Build, install, and reboot the server in QEMU using the raw installer disk.
+# Build the installer artifacts, then run the reusable artifact smoke path.
 [group('test')]
 show-me-the-future:
+    just build-installer
+    just export-installer
+    just export-sysext
+    just test-installer-artifact
+
+# Install and reboot already-exported server artifacts in QEMU.
+[group('test')]
+test-installer-artifact:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -198,9 +232,6 @@ show-me-the-future:
     mkdir -p "$CACHE_DIR"
     WORKDIR="$(mktemp -d "${CACHE_DIR}/bluefin-show-future.XXXXXX")"
     trap 'rm -rf "$WORKDIR"' EXIT
-
-    just build-installer
-    just export-installer
 
     cp dist/bluefin-server-installer-*.raw.zst "$WORKDIR/installer.raw.zst"
     cp dist/bluefin-server-pxe-vmlinuz-* "$WORKDIR/installer.vmlinuz"
@@ -271,14 +302,7 @@ show-me-the-future:
         -no-reboot < /dev/null
 
     echo "==> Preparing target /var refresh with offline k0s sysext and smoke secret..."
-    K0S_RAW_ZST=""
-    if [ -d dist/sysext ]; then
-      K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' 2>/dev/null | head -n 1 || true)
-    fi
-    if [ -z "$K0S_RAW_ZST" ]; then
-      just export-sysext
-      K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' | head -n 1)
-    fi
+    K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' -print -quit 2>/dev/null || true)
     [ -n "$K0S_RAW_ZST" ] || { echo "ERROR: k0s sysext not found in dist/sysext" >&2; exit 1; }
 
     VAR_STAGING="$WORKDIR/var-staging"
@@ -480,7 +504,7 @@ install-vm:
       -drive file="$TARGET_RAW",format=raw,if=virtio \
       -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
       -drive if=pflash,format=raw,file="$OVMF_VARS" \
-      -nic user,model=virtio-net-pci,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 &
+      -nic user,model=virtio-net-pci,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22,hostfwd=tcp::6443-:6443 &
     QEMU_PID=$!
     cleanup() {
       if kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -504,3 +528,36 @@ install-vm:
     echo "==> Access URL (Local): http://localhost:8080/"
     xdg-open "http://${HOST_IP:-localhost}:8080/" || xdg-open http://localhost:8080/ || true
     wait "$QEMU_PID"
+
+# Set up KubeStellar kc-agent for the user in ONE command.
+[group('test')]
+setup-kubestellar ORIGIN="http://localhost:8080,http://127.0.0.1:8080":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -x "files/bin/bluefin-kubestellar" ]; then
+      exec ./files/bin/bluefin-kubestellar start --origin "{{ORIGIN}}"
+    else
+      if ! command -v kc-agent >/dev/null 2>&1; then
+        echo "==> Installing kc-agent from kubestellar/tap..."
+        brew tap kubestellar/tap
+        brew install kc-agent
+      fi
+      export KAGENTI_CONTROLLER_URL="none"
+      kc-agent -kubeconfig "${KUBECONFIG:-$HOME/.kube/config}" -allowed-origins "{{ORIGIN}}" &
+    fi
+
+# Run fully automated headless browser test against the KubeStellar console.
+[group('test')]
+test-e2e-browser CONSOLE_URL="http://127.0.0.1:8080":
+    python3 tests/e2e/test_kubestellar_browser_login.py --console-url "{{CONSOLE_URL}}"
+
+# Complete end-to-end Lima VM orchestration test.
+[group('test')]
+test-e2e-lima:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    limactl validate files/lima/bluefin-server-kiosk.yaml
+    echo "==> Lima VM template validation passed: files/lima/bluefin-server-kiosk.yaml"
+    if [ "${RUN_LIMA_VM:-0}" = "1" ]; then
+      ./scripts/lima-e2e-kubestellar-test.sh
+    fi

@@ -1,0 +1,71 @@
+name: Build Kernel & ZFS
+
+on:
+  pull_request:
+    paths:
+      - 'elements/flatcar/**'
+      - 'include/flatcar.yml'
+      - 'patches/flatcar-kernel/**'
+      - '.github/workflows/kernel.yml'
+      - 'Justfile'
+  push:
+    branches: [main]
+    paths:
+      - 'elements/flatcar/**'
+      - 'include/flatcar.yml'
+      - 'patches/flatcar-kernel/**'
+      - '.github/workflows/kernel.yml'
+      - 'Justfile'
+  workflow_dispatch:
+
+concurrency:
+  group: kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - name: Set up just
+        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2
+        with:
+          tool: just
+
+      - name: Validate Element Graph
+        run: just validate
+
+      - name: Set up runner disk space
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /mnt/podman /mnt/buildstream
+          sudo chown -R "$USER:$USER" /mnt/podman /mnt/buildstream
+          mkdir -p ~/.config/containers
+          cat > ~/.config/containers/storage.conf <<EOF
+          [storage]
+          driver = "overlay"
+          runroot = "/run/user/1001"
+          graphroot = "/mnt/podman"
+          EOF
+          mkdir -p ~/.cache
+          ln -sf /mnt/buildstream ~/.cache/buildstream
+
+      - name: Build and export Flatcar LTS Kernel & ZFS sysext
+        run: just export-kernel
+
+      - name: Upload Kernel & ZFS artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flatcar-kernel-zfs
+          path: dist/kernel/
+          if-no-files-found: error
+          retention-days: 7

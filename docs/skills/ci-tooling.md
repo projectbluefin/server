@@ -95,8 +95,10 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
 | `track-refs` | `build.yml` | `pull_request` (`renovate/*` only) | Resolves BuildStream junction refs and pushes them back to the PR branch. Sole `contents: write` grant on `pull_request`. |
-| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile, and signs the release manifest on pushes to `main`. Read-only token. |
+| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile (including Flatcar LTS Kernel & ZFS), and signs the release manifest on pushes to `main`. Read-only token. |
+| `installer-test` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Downloads the build job's exported installer/PXE/sysext artifact and calls the shared `projectbluefin/actions` QEMU workflow. No Lima or second BuildStream build. |
 | `release` | `build.yml` | `push/main`, `workflow_dispatch` | Downloads the signed assets handed off by `build` and publishes them to the GitHub Release (`if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}`). `contents: write`. |
+| `build-kernel` | `kernel.yml` | `pull_request` (paths: `elements/flatcar/**`, `include/flatcar.yml`, `patches/flatcar-kernel/**`), `push/main`, `workflow_dispatch` | Standalone kernel & OpenZFS sysext BuildStream build and export. Emits `dist/kernel/` artifacts. Read-only token. |
 | `docs` | `docs-checks.yml` | `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. Read-only token. |
 | `unit` | `unit-tests.yml` | `pull_request`, `push/main` | Runs pytest and BATS unit test suites. Read-only token. |
 
@@ -114,9 +116,10 @@ uploaded to a GitHub Release tagged `installer-v<FSDK-RELEASE>`.
    commits them back to the PR branch.
 3. **Full Compilation:** Builds the standalone DDI OS image, live installer, and
    k0s systemd-sysext on every pull request and push to `main`.
-4. **Version Derivation:** The release tag is derived with `just version`, which
+4. **Installer boot test:** Uploads the already-built installer, PXE, and k0s sysext artifacts and calls `projectbluefin/actions/.github/workflows/server-installer-test.yml`. The shared workflow prepares QEMU/KVM and runs this repository's `just test-installer-artifact`; Lima remains local-only.
+5. **Version Derivation:** The release tag is derived with `just version`, which
    parses the pinned FSDK point release from `elements/freedesktop-sdk.bst`.
-5. **Automated Publishing:** For pushes to `main` (including Renovate PR merges),
+6. **Automated Publishing:** For pushes to `main` (including Renovate PR merges),
    GitHub Actions creates a GitHub Release, uploads all compiled assets, and
    produces a combined `dist/release/SHA256SUMS` plus detached
    `SHA256SUMS.gpg` for `systemd-sysupdate` verification.

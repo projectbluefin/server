@@ -125,8 +125,8 @@ config:
 
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS, VirtIO, and NVMe storage drivers.
       dracut -v --reproducible --no-machineid --no-hostonly \
-        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay" \
-        --filesystems "xfs vfat" \
+        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay zfs spl" \
+        --filesystems "xfs vfat zfs" \
         --install /etc/ld.so.cache \
         --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
         --kernel-image "${TARGET_KERNEL}" \
@@ -184,11 +184,16 @@ config:
       #!/bin/bash
       set -euo pipefail
 
-      # Ensure NVMe modules are loaded and block devices enumerated before inspecting disks
+      # Ensure storage controller modules and filesystems are loaded before probing devices
       modprobe -q nvme || true
       modprobe -q nvme_core || true
+      modprobe -q usb-storage || true
+      modprobe -q uas || true
+      modprobe -q ahci || true
+      modprobe -q sd_mod || true
+      modprobe -q xfs || true
+      udevadm trigger --subsystem-match=block || true
       udevadm settle --timeout=15 || true
-
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
       TARGET_DISK=""
       INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"

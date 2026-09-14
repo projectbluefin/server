@@ -37,8 +37,8 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 
 ## Build / test commands
 
-All `just` targets run BuildStream inside the FSDK `bst2` container via `just bst`; BuildStream is not installed locally.
-
+Heavy builds MUST always run on the ghost cluster using BuildStream distributed builds (`just cluster-build` via Argo workflow); do not build standalone OS artifacts directly on local workstations.
+All local `just` targets run BuildStream inside the FSDK `bst2` container via `just bst`; BuildStream is not installed locally.
 | Command | Purpose |
 |---|---|
 | `just validate` | Merge-contract graph check — run this on every change. |

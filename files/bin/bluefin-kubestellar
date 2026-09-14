@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+# bluefin-kubestellar: Single-command launcher and manager for kc-agent
+#
+# Provides bulletproof setup and launch for connecting client workstations to the
+# Bluefin Server KubeStellar Console kiosk:
+# 1. Installs kc-agent via Homebrew (kubestellar/tap) if missing.
+# 2. Configures origin flags for the local console (default: http://localhost:8080,http://127.0.0.1:8080).
+# 3. Optimizes client environment by disabling in-cluster Kagenti DNS queries (KAGENTI_CONTROLLER_URL="none").
+# 4. Launches kc-agent backgrounded with health verification, or in foreground.
+# 5. Provides lifecycle management (status, stop, logs).
+
+set -euo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/bluefin-server"
+PID_FILE="${STATE_DIR}/kc-agent.pid"
+LOG_FILE="${STATE_DIR}/kc-agent.log"
+
+CMD="start"
+ORIGIN=""
+PORT="8585"
+FOREGROUND=0
+AUTO_INSTALL=1
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [command] [options]
+
+Commands:
+  start          Install (if needed), configure, and launch kc-agent (default)
+  stop           Stop background kc-agent instance
+  status         Check kc-agent process and health endpoint
+  logs           Display kc-agent log output
+  help           Show this help message
+
+Options:
+  -o, --origin <urls>  Allowed origin URL(s) (comma-separated)
+                       Default: http://localhost:8080,http://127.0.0.1:8080
+  -p, --port <port>    kc-agent local health/listen port (default: 8585)
+  -f, --foreground     Run kc-agent in foreground instead of backgrounding
+      --no-install     Do not attempt Homebrew installation if kc-agent is missing
+  -h, --help           Show this help message
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    start|stop|status|logs|help)
+      CMD="$1"
+      shift
+      ;;
+    -o|--origin)
+      [ $# -gt 1 ] || { echo "ERROR: --origin requires an argument" >&2; exit 1; }
+      ORIGIN="$2"
+      shift 2
+      ;;
+    --origin=*)
+      ORIGIN="${1#*=}"
+      shift
+      ;;
+    -p|--port)
+      [ $# -gt 1 ] || { echo "ERROR: --port requires an argument" >&2; exit 1; }
+      PORT="$2"
+      shift 2
+      ;;
+    --port=*)
+      PORT="${1#*=}"
+      shift
+      ;;
+    -f|--foreground)
+      FOREGROUND=1
+      shift
+      ;;
+    --no-install)
+      AUTO_INSTALL=0
+      shift
+      ;;
+    -h|--help)
+      CMD="help"
+      shift
+      ;;
+    *)
+      if [[ "$1" =~ ^https?:// ]]; then
+        ORIGIN="$1"
+        shift
+      else
+        echo "ERROR: Unknown option or command: $1" >&2
+        usage >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+case "$CMD" in
+  help)
+    usage
+    exit 0
+    ;;
+  stop)
+    if [ -f "$PID_FILE" ]; then
+      PID=$(<"$PID_FILE")
+      if kill -0 "$PID" 2>/dev/null; then
+        kill "$PID" 2>/dev/null || true
+        echo "==> Stopped kc-agent (PID: $PID)"
+      else
+        echo "==> kc-agent process ($PID) was not running"
+      fi
+      rm -f "$PID_FILE"
+    else
+      echo "==> No active kc-agent PID file found at $PID_FILE"
+    fi
+    exit 0
+    ;;
+  status)
+    HEALTH_URL="http://127.0.0.1:${PORT}/health"
+    if curl --silent --fail --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
+      echo "==> kc-agent is running and healthy at $HEALTH_URL"
+      if [ -f "$PID_FILE" ]; then
+        echo "==> Process PID: $(<"$PID_FILE")"
+      fi
+      exit 0
+    fi
+    if [ -f "$PID_FILE" ]; then
+      PID=$(<"$PID_FILE")
+      if kill -0 "$PID" 2>/dev/null; then
+        echo "==> kc-agent process $PID is running but $HEALTH_URL is not responding" >&2
+        exit 1
+      fi
+    fi
+    echo "==> kc-agent is not running"
+    exit 3
+    ;;
+  logs)
+    if [ -f "$LOG_FILE" ]; then
+      tail -n 50 "$LOG_FILE"
+    else
+      echo "==> No log file found at $LOG_FILE"
+    fi
+    exit 0
+    ;;
+  start)
+    ORIGIN="${ORIGIN:-http://localhost:8080,http://127.0.0.1:8080}"
+    mkdir -p "$STATE_DIR"
+
+    # Optimize client environment: disable in-cluster Kagenti DNS queries
+    export KAGENTI_CONTROLLER_URL="${KAGENTI_CONTROLLER_URL:-none}"
+    export KC_ALLOWED_ORIGINS="${ORIGIN}"
+
+    # Check if already running and healthy (background mode only)
+    if [ "$FOREGROUND" -eq 0 ]; then
+      if curl --silent --fail --max-time 1 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+        echo "==> kc-agent is already running and healthy at http://127.0.0.1:${PORT}/health"
+        echo "==> Allowed origin(s): ${ORIGIN}"
+        exit 0
+      fi
+    fi
+
+    # Ensure kc-agent is installed
+    if ! command -v kc-agent >/dev/null 2>&1; then
+      if [ "$AUTO_INSTALL" -eq 1 ] && command -v brew >/dev/null 2>&1; then
+        echo "==> kc-agent not found in PATH; installing from kubestellar/tap via Homebrew..."
+        brew tap kubestellar/tap
+        brew install kc-agent
+      else
+        echo "ERROR: kc-agent is not installed and cannot be auto-installed." >&2
+        echo "Please install Homebrew (https://brew.sh) or install kc-agent manually:" >&2
+        echo "  brew tap kubestellar/tap && brew install kc-agent" >&2
+        exit 1
+      fi
+    fi
+
+    # Foreground execution
+    if [ "$FOREGROUND" -eq 1 ]; then
+      echo "==> Starting kc-agent in foreground..."
+      echo "==> Allowed origins: ${ORIGIN}"
+      echo "==> KAGENTI_CONTROLLER_URL: ${KAGENTI_CONTROLLER_URL}"
+      exec kc-agent -allowed-origins "${ORIGIN}"
+    fi
+
+    # Clean up stale PID file if process died
+    if [ -f "$PID_FILE" ]; then
+      OLD_PID=$(<"$PID_FILE")
+      if kill -0 "$OLD_PID" 2>/dev/null; then
+        kill "$OLD_PID" 2>/dev/null || true
+        sleep 0.5
+      fi
+      rm -f "$PID_FILE"
+    fi
+
+    # Background execution
+    echo "==> Starting kc-agent in background..."
+    echo "==> Allowed origins: ${ORIGIN}"
+    echo "==> KAGENTI_CONTROLLER_URL: ${KAGENTI_CONTROLLER_URL}"
+    nohup kc-agent -allowed-origins "${ORIGIN}" > "$LOG_FILE" 2>&1 &
+    AGENT_PID=$!
+    echo "$AGENT_PID" > "$PID_FILE"
+
+    echo "==> Waiting for kc-agent health probe at http://127.0.0.1:${PORT}/health..."
+    DEADLINE=15
+    START_TIME=$(date +%s)
+    while true; do
+      if ! kill -0 "$AGENT_PID" 2>/dev/null; then
+        echo "ERROR: kc-agent process ($AGENT_PID) exited unexpectedly!" >&2
+        [ -f "$LOG_FILE" ] && tail -n 20 "$LOG_FILE" >&2
+        rm -f "$PID_FILE"
+        exit 1
+      fi
+      if curl --silent --fail --max-time 1 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+        echo "==> kc-agent is healthy and connected! (PID: $AGENT_PID)"
+        echo "==> Console client connectivity active for origin(s): ${ORIGIN}"
+        echo "==> Log file: ${LOG_FILE}"
+        break
+      fi
+      NOW=$(date +%s)
+      if [ $((NOW - START_TIME)) -ge "$DEADLINE" ]; then
+        echo "ERROR: Timed out waiting for kc-agent to become healthy on port ${PORT}." >&2
+        [ -f "$LOG_FILE" ] && tail -n 20 "$LOG_FILE" >&2
+        exit 1
+      fi
+      sleep 0.5
+    done
+    ;;
+esac

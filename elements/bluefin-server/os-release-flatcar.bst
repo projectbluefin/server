@@ -1,8 +1,9 @@
 kind: manual
 description: Create custom Flatcar-compatible os-release metadata to support Flatcar system extensions (sysext).
 
-# %{flatcar-board} — derived from the `arch` option, never hardcoded here.
-(@): include/arch.yml
+(@):
+  - include/arch.yml
+  - include/flatcar.yml
 
 build-depends:
   # Base runtime providing /bin/sh and coreutils (cat, ln, mkdir, sed) in the sandbox.
@@ -13,30 +14,13 @@ build-depends:
 variables:
   strip-binaries: ""
 
-sources:
-  # The FSDK point release is the source of truth for the OS image version.
-  - kind: local
-    path: elements/freedesktop-sdk.bst
-
 config:
   install-commands:
     - mkdir -p "%{install-root}/usr/lib"
     - |
-      # Extract the FSDK point release (e.g. 25.08.13) from the pinned junction ref.
-      FSDK_VERSION=""
-      while read -r line; do
-        if [[ "${line}" =~ ref:[[:space:]]+freedesktop-sdk-([0-9]+\.[0-9]+\.[0-9]+)- ]]; then
-          FSDK_VERSION="${BASH_REMATCH[1]}"
-          break
-        fi
-      done < freedesktop-sdk.bst
-      if [ -z "${FSDK_VERSION}" ]; then
-        echo "ERROR: Could not determine FSDK version from freedesktop-sdk.bst" >&2
-        exit 1
-      fi
-
-      # Flatcar-compatible version used by systemd-sysext / Flatcar Bakery matching.
-      FLATCAR_VERSION="4593.2.3"
+      # %{release-version} is declared in project.conf and enforced against
+      # the junction ref by check-release-version.py — no re-parsing needed.
+      FLATCAR_VERSION="%{flatcar-version}"
 
       cat <<EOF > "%{install-root}/usr/lib/os-release"
       NAME="Bluefin Server"
@@ -44,13 +28,13 @@ config:
       ID_LIKE=fedora
       VERSION="${FLATCAR_VERSION}-fsdk"
       VERSION_ID=${FLATCAR_VERSION}
-      PRETTY_NAME="Bluefin Server ${FSDK_VERSION}"
+      PRETTY_NAME="Bluefin Server %{release-version}"
       ANSI_COLOR="0;38;5;208"
       HOME_URL="https://github.com/projectbluefin/server"
       BUG_REPORT_URL="https://github.com/projectbluefin/server/issues"
       FLATCAR_BOARD="%{flatcar-board}"
       CPE_NAME="cpe:/o:flatcar-linux:flatcar_linux:${FLATCAR_VERSION}"
-      IMAGE_VERSION=${FSDK_VERSION}
+      IMAGE_VERSION=%{release-version}
       EOF
     - |
       mkdir -p "%{install-root}/etc"

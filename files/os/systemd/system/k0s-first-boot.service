@@ -15,6 +15,7 @@ ExecStartPre=/usr/bin/test -e /var/lib/k0s/k0s.raw
 ExecStart=/usr/bin/install -D -m 0644 /var/lib/k0s/k0s.raw /run/extensions/k0s.raw
 ExecStart=/usr/bin/systemd-sysext merge
 ExecStart=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/k0s-manifests.conf
+ExecStart=/usr/share/k0s/kubeflex/generate-postgres-secret.sh
 ExecStart=/usr/bin/systemctl daemon-reload
 ExecStart=/usr/bin/systemctl enable --now k0scontroller.service
 [Install]

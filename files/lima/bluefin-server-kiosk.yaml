@@ -1,0 +1,28 @@
+# Lima VM configuration template for Bluefin Server KubeStellar Kiosk appliance.
+#
+# Enables running Bluefin Server directly in Lima with hardware acceleration (KVM/QEMU)
+# and port forwarding for KubeStellar Console (8080) and Kubernetes API (6443).
+#
+# Note: The images section can be overridden at creation time with:
+#   limactl create --set '.images[0].location = "/path/to/target.raw"' files/lima/bluefin-server-kiosk.yaml
+images:
+  - location: "{{.Dir}}/target.raw"
+    arch: "x86_64"
+
+vmType: "qemu"
+arch: "x86_64"
+cpus: 4
+memory: "8GiB"
+disk: "20GiB"
+
+containerd:
+  system: false
+  user: false
+
+mounts: []
+
+portForwards:
+  - guestPort: 8080
+    hostPort: 8080
+  - guestPort: 6443
+    hostPort: 6443

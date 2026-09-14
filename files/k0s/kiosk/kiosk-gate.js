@@ -23,7 +23,7 @@
           <p>Monitor your real clusters from this console</p>
           <p>Run agent on machine access kubeconfig</p>
           <code>brew tap kubestellar/tap && brew install kc-agent</code>
-          <code>kc-agent -allowed-origins ${window.location.origin}</code>
+          <code>KAGENTI_CONTROLLER_URL="none" kc-agent -allowed-origins ${window.location.origin}</code>
         </div>
       </section>
     `)

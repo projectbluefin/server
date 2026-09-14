@@ -29,7 +29,7 @@ spec:
       serviceAccountName: kubestellar-controller-manager
       containers:
       - name: manager
-        image: ghcr.io/kubestellar/kubestellar/controller-manager:v0.25.0
+        image: ghcr.io/kubestellar/kubestellar/controller-manager:0.25.0
         command:
         - /ko-app/controller-manager
         args:

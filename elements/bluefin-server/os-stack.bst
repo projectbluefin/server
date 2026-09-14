@@ -25,8 +25,13 @@ depends:
   - bluefin-server/os-sshd-preset.bst
   - bluefin-server/os-sshd-config.bst
 
-  # Stock FSDK Kernel & Server-Chiseled Firmware
-  - freedesktop-sdk.bst:components/linux.bst
+  # Image identity and weekly first-party countme reporting
+  - bluefin-server/os-image-info.bst
+  - bluefin-server/os-countme.bst
+
+  # Flatcar LTS Kernel & Matching ZFS
+  - flatcar/flatcar-kernel.bst
+  - flatcar/flatcar-zfs.bst
   - bluefin-server/linux-firmware-split.bst
 
   # Filesystem resizing support for growing root/var on first boot
