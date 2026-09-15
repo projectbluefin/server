@@ -13,11 +13,11 @@ repos:
         language: system
         files: ^\.github/workflows/.*\.(yml|yaml)$
       - id: check-release-version
-        name: release-version matches pinned FSDK point release
+        name: release versions match pinned FSDK and Flatcar releases
         entry: python .github/scripts/check-release-version.py
         language: system
         pass_filenames: false
-        files: ^(project\.conf|elements/freedesktop-sdk\.bst|\.github/scripts/check-release-version\.py)$
+        files: ^(project\.conf|elements/freedesktop-sdk\.bst|include/flatcar\.yml|\.github/scripts/check-release-version\.py)$
       - id: check-k0s-version
         name: k0s version derived from include/k0s.yml, not restated
         entry: python .github/scripts/check-k0s-version.py

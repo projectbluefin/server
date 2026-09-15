@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """Enforce the release-version invariant for Bluefin Server.
 
-project.conf declares:
+project.conf declares the two release version axes:
 
     variables:
-      release-version: "X.Y.Z"   # must match the FSDK point release
+      installer-version: "X.Y.Z"   # must match the FSDK point release
+      flatcar-version: "X.Y.Z"     # must match the Flatcar LTS release
 
-That value names every published *OS* release asset
-(`bluefin-server-ddi-<v>.raw.zst`, `bluefin-server-<v>.efi`,
-`bluefin-server-installer-<v>.raw.zst`) and is the version
+The installer-version axis names the offline installer disk image and PXE boot
+inputs (bluefin-server-installer-<v>.raw.zst, bluefin-server-pxe-*), which
+compose their userspace from freedesktop-sdk.
+
+The flatcar-version axis names the OS payload release assets
+(bluefin-server-ddi-<v>.raw.zst, bluefin-server-<v>.efi) and is the version
 systemd-sysupdate extracts from those filenames via `@v`.
 
-The k0s sysext is deliberately *not* on this axis: it is an
-independently-pinned third-party payload versioned from `include/k0s.yml`
-and enforced separately by `.github/scripts/check-k0s-version.py`.
+The k0s sysext is on its own axis: an independently-pinned third-party
+payload versioned from `include/k0s.yml` and enforced separately by
+`.github/scripts/check-k0s-version.py`.
 
-The release *tag* is derived independently by the Justfile
-(`fsdk_version`), which greps the point release out of the pinned
-`elements/freedesktop-sdk.bst` junction ref. Renovate bumps that ref
-automatically; nothing bumps `release-version`. When the two drift, CI
-publishes a new tag containing assets that still carry the old version
-string, so `systemd-sysupdate` sees no version change and the fleet
-silently stops updating.
+This script validates both axes independently against their pins:
+  * installer-version against elements/freedesktop-sdk.bst
+  * flatcar-version against include/flatcar.yml
 
-This script fails closed on that drift.
+This script fails closed on any drift.
 """
 
 import re
@@ -33,11 +33,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT_CONF = ROOT / "project.conf"
 FSDK_JUNCTION = ROOT / "elements" / "freedesktop-sdk.bst"
+FLATCAR_PIN = ROOT / "include" / "flatcar.yml"
 
-RELEASE_VERSION_RE = re.compile(
-    r"^\s*release-version:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)[\"']?\s*$", re.MULTILINE
+INSTALLER_VERSION_RE = re.compile(
+    r"^\s*installer-version:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)[\"']?\s*$", re.MULTILINE
+)
+FLATCAR_VERSION_RE = re.compile(
+    r"^\s*flatcar-version:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)[\"']?\s*$", re.MULTILINE
 )
 FSDK_REF_RE = re.compile(r"freedesktop-sdk-([0-9]+\.[0-9]+\.[0-9]+)")
+FLATCAR_PIN_RE = re.compile(
+    r"^\s*flatcar-version:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)[\"']?\s*$", re.MULTILINE
+)
 
 
 def read(path):
@@ -49,39 +56,68 @@ def read(path):
 def main():
     conf = read(PROJECT_CONF)
     junction = read(FSDK_JUNCTION)
+    flatcar = read(FLATCAR_PIN)
 
-    conf_match = RELEASE_VERSION_RE.search(conf)
-    if not conf_match:
+    installer_match = INSTALLER_VERSION_RE.search(conf)
+    if not installer_match:
+        sys.exit(
+            "ERROR: project.conf does not declare an "
+            "'installer-version: X.Y.Z' variable."
+        )
+    installer_declared = installer_match.group(1)
+
+    flatcar_match = FLATCAR_VERSION_RE.search(conf)
+    if not flatcar_match:
         sys.exit(
             "ERROR: project.conf does not declare a "
-            "'release-version: X.Y.Z' variable."
+            "'flatcar-version: X.Y.Z' variable."
         )
-    declared = conf_match.group(1)
+    flatcar_declared = flatcar_match.group(1)
 
-    ref_match = FSDK_REF_RE.search(junction)
-    if not ref_match:
+    fsdk_match = FSDK_REF_RE.search(junction)
+    if not fsdk_match:
         sys.exit(
             "ERROR: elements/freedesktop-sdk.bst has no "
             "'freedesktop-sdk-X.Y.Z' point release in its ref."
         )
-    pinned = ref_match.group(1)
+    fsdk_pinned = fsdk_match.group(1)
 
-    if declared != pinned:
+    flatcar_pin_match = FLATCAR_PIN_RE.search(flatcar)
+    if not flatcar_pin_match:
         sys.exit(
-            "ERROR: release-version drift.\n"
-            f"  project.conf release-version          : {declared}\n"
-            f"  elements/freedesktop-sdk.bst pinned ref: {pinned}\n"
+            "ERROR: include/flatcar.yml does not declare a "
+            "'flatcar-version: X.Y.Z' variable."
+        )
+    flatcar_pinned = flatcar_pin_match.group(1)
+
+    if installer_declared != fsdk_pinned:
+        sys.exit(
+            "ERROR: installer-version drift.\n"
+            f"  project.conf installer-version        : {installer_declared}\n"
+            f"  elements/freedesktop-sdk.bst pinned ref: {fsdk_pinned}\n"
             "\n"
-            "The release tag is derived from the junction ref while asset\n"
-            "filenames are derived from release-version. While these differ,\n"
-            "a new GitHub Release publishes assets still named with the old\n"
-            "version, systemd-sysupdate reads the old version from '@v', and\n"
-            "deployed hosts never see an update.\n"
+            "The installer release tag and installer assets are derived from the\n"
+            "junction ref while project.conf declares installer-version.\n"
             "\n"
-            f"Fix: set release-version to \"{pinned}\" in project.conf."
+            f"Fix: set installer-version to \"{fsdk_pinned}\" in project.conf."
         )
 
-    print(f"OK: release-version {declared} matches the pinned FSDK point release.")
+    if flatcar_declared != flatcar_pinned:
+        sys.exit(
+            "ERROR: flatcar-version drift.\n"
+            f"  project.conf flatcar-version          : {flatcar_declared}\n"
+            f"  include/flatcar.yml pinned release    : {flatcar_pinned}\n"
+            "\n"
+            "The OS payload version and systemd-sysupdate assets are derived from\n"
+            "the Flatcar LTS pin while project.conf declares flatcar-version.\n"
+            "\n"
+            f"Fix: set flatcar-version to \"{flatcar_pinned}\" in project.conf."
+        )
+
+    print(
+        f"OK: installer-version {installer_declared} matches pinned FSDK point release.\n"
+        f"OK: flatcar-version {flatcar_declared} matches pinned Flatcar release."
+    )
 
 
 if __name__ == "__main__":

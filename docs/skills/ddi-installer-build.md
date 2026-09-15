@@ -91,7 +91,8 @@ The release process is driven by `.github/workflows/build.yml`:
 - CI builds the DDI payload, installer, target UKI, k0s sysext, and standalone
   PXE boot inputs (`bluefin-server-pxe-vmlinuz-*`, `bluefin-server-pxe-initrd-*.cpio.gz`).
 - CI uploads the versioned release assets to the corresponding
-  `installer-v<release-version>` GitHub Release.
+  `installer-v<installer-version>` GitHub Release. The release tag tracks the
+  installer axis, while the DDI and UKI inside it track the Flatcar payload axis (`flatcar-version`).
 - CI also produces a combined `dist/release/SHA256SUMS` manifest and signs it
   to create `SHA256SUMS.gpg` for `systemd-sysupdate` verification. The PXE
   inputs are included in this manifest, per `docs/skills/ddi-installer.md`.

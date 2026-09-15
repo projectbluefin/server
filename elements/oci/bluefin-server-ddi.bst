@@ -19,7 +19,7 @@ build-depends:
       location: /layer
 
 variables:
-  ddi-version: "%{release-version}"
+  ddi-version: "%{flatcar-version}"
 
 config:
   commands:
