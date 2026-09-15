@@ -72,32 +72,72 @@ def test_compose_elements_set_integrate_false():
         )
 
 
-def test_os_stack_uses_uutils_not_gnu():
-    """Bluefin Server OS must use uutils-coreutils, not GNU userspace."""
+def test_os_stack_uses_flatcar_base():
+    """Bluefin Server OS payload now lands on the Flatcar `/usr` base.
+
+    projectbluefin/server#131 cut os-stack.bst over to flatcar/flatcar-usr.bst
+    and deleted the displaced FSDK base-runtime components. The OS payload must
+    depend on flatcar-usr.bst and must NOT pull the FSDK base userspace it
+    replaced (the uutils-coreutils overlay, GNU runtime-minimal, etc.). The
+    installer keeps its own FSDK userspace (see test_installer_stack_...).
+    """
     os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
     data = yaml.safe_load(os_stack.read_text(encoding="utf-8"))
     depends = data.get("depends", [])
 
-    assert "bluefin-server/uutils-coreutils.bst" in depends, (
-        "os-stack.bst must include bluefin-server/uutils-coreutils.bst"
+    assert "flatcar/flatcar-usr.bst" in depends, (
+        "os-stack.bst must depend on flatcar/flatcar-usr.bst (projectbluefin/server#131)"
+    )
+    assert "bluefin-server/uutils-coreutils.bst" not in depends, (
+        "os-stack.bst must no longer ship the uutils-coreutils overlay; "
+        "Flatcar `/usr` provides coreutils (projectbluefin/server#131)"
     )
     assert "freedesktop-sdk.bst:public-stacks/runtime-gnu.bst" not in depends, (
         "os-stack.bst must NOT depend on GNU userspace (runtime-gnu.bst)"
     )
+    for displaced in (
+        "freedesktop-sdk.bst:public-stacks/runtime-minimal.bst",
+        "freedesktop-sdk.bst:components/systemd.bst",
+        "freedesktop-sdk.bst:components/dbus.bst",
+        "freedesktop-sdk.bst:components/dbus-broker.bst",
+        "freedesktop-sdk.bst:components/kmod.bst",
+        "freedesktop-sdk.bst:components/shadow.bst",
+        "freedesktop-sdk.bst:bootstrap/bash.bst",
+        "freedesktop-sdk.bst:components/openssh-systemd.bst",
+        "freedesktop-sdk.bst:components/podman.bst",
+        "freedesktop-sdk.bst:components/xfsprogs.bst",
+        "freedesktop-sdk.bst:components/gnupg.bst",
+        "freedesktop-sdk.bst:components/ca-certificates.bst",
+        "freedesktop-sdk.bst:components/tzdata.bst",
+        "bluefin-server/linux-firmware-split.bst",
+    ):
+        assert displaced not in depends, (
+            f"os-stack.bst must no longer depend on {displaced} "
+            "(projectbluefin/server#131)"
+        )
 
 
-def test_os_stack_includes_dbus_broker():
-    """Bluefin Server OS must include dbus and dbus-broker for system services."""
+def test_os_stack_userspace_comes_from_flatcar():
+    """dbus, dbus-broker, and bash now come from Flatcar `/usr`, not FSDK components.
+
+    projectbluefin/server#131 removed the FSDK dbus, dbus-broker, and
+    bootstrap/bash entries from os-stack.bst; flatcar/flatcar-usr.bst provides
+    them as part of the single-ABI Flatcar userspace. This test pins that the
+    old FSDK base-runtime entries are gone so a stray re-add is caught.
+    """
     os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
     data = yaml.safe_load(os_stack.read_text(encoding="utf-8"))
     depends = data.get("depends", [])
 
-    assert "freedesktop-sdk.bst:components/dbus.bst" in depends, (
-        "os-stack.bst must include freedesktop-sdk.bst:components/dbus.bst for dbus.socket"
-    )
-    assert "freedesktop-sdk.bst:components/dbus-broker.bst" in depends, (
-        "os-stack.bst must include freedesktop-sdk.bst:components/dbus-broker.bst"
-    )
+    for removed in (
+        "freedesktop-sdk.bst:components/dbus.bst",
+        "freedesktop-sdk.bst:components/dbus-broker.bst",
+        "freedesktop-sdk.bst:bootstrap/bash.bst",
+    ):
+        assert removed not in depends, (
+            f"os-stack.bst must no longer depend on {removed}; "
+            "Flatcar `/usr` provides it (projectbluefin/server#131)"
+        )
 
 
 def test_installer_stack_includes_uutils_and_dbus():
@@ -117,14 +157,27 @@ def test_installer_stack_includes_uutils_and_dbus():
     )
 
 
-def test_os_stack_includes_bash():
-    """Bluefin Server OS must include bash for login and interactive access."""
-    os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
-    data = yaml.safe_load(os_stack.read_text(encoding="utf-8"))
+def test_os_countme_depends_on_curl_and_jq():
+    """os-countme.bst must ship curl and jq through the freedesktop-sdk junction.
+
+    Regression test for projectbluefin/server#96: the curl dependency was
+    inferred rather than verified, so a wrong path would fail to resolve and
+    the minimal image (which ships neither curl nor jq) would not build.
+    Confirmed that the pinned freedesktop-sdk ref (freedesktop-sdk-26.08.0,
+    elements/freedesktop-sdk.bst) ships both elements/components/curl.bst and
+    elements/components/jq.bst, so the dependency must stay on this exact path.
+    """
+    countme = ELEMENTS_DIR / "bluefin-server" / "os-countme.bst"
+    data = yaml.safe_load(countme.read_text(encoding="utf-8"))
     depends = data.get("depends", [])
 
-    assert "freedesktop-sdk.bst:bootstrap/bash.bst" in depends, (
-        "os-stack.bst must include freedesktop-sdk.bst:bootstrap/bash.bst"
+    assert "freedesktop-sdk.bst:components/curl.bst" in depends, (
+        "os-countme.bst must include freedesktop-sdk.bst:components/curl.bst "
+        "(projectbluefin/server#96)"
+    )
+    assert "freedesktop-sdk.bst:components/jq.bst" in depends, (
+        "os-countme.bst must include freedesktop-sdk.bst:components/jq.bst "
+        "(projectbluefin/server#96)"
     )
 
 
