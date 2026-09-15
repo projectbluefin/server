@@ -18,7 +18,7 @@ variables:
 sources:
   - kind: remote
     url: flatcar:stable/%{flatcar-board}/%{flatcar-version}/flatcar-zfs.raw
-    ref: bed24d0a31b6c9ff0f1d59ec2b50d25585bf9bbcb8e9e96f5706f1a17948d971
+    ref: %{flatcar-zfs-sha256}
 
 config:
   install-commands:
