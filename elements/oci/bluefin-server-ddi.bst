@@ -1,14 +1,16 @@
 kind: script
 description: |
-  Produce the Bluefin Server OS DDI payload filesystem image.
+  Produce the Bluefin Server OS DDI payload filesystem image as a dm-verity
+  /usr image pinned by verity.usrhash.
 
-  Output: bluefin-server-ddi-<ver>.raw.zst + SHA256SUMS
+  Output: bluefin-server-ddi-<ver>.raw.zst + SHA256SUMS + verity root hash
 
   The output .raw is a filesystem image consumed by installer repart config:
   files/installer/repart.d/20-root-a.conf via CopyBlocks=.
 
 build-depends:
   - base/base-stack.bst
+  - freedesktop-sdk.bst:components/cryptsetup.bst
   - freedesktop-sdk.bst:components/xfsprogs.bst
   - freedesktop-sdk.bst:components/findutils.bst
   - freedesktop-sdk.bst:components/kmod.bst
@@ -85,24 +87,39 @@ config:
       chmod 0600 /layer/etc/ssh/ssh_host_*_key
       chmod 0644 /layer/etc/ssh/ssh_host_*.pub
 
-      # Sum actual file sizes across bind mounts (du -sb reports content bytes, not overlay blocks).
+      # Enforce the hard budget for the /usr payload: filesystem occupies the
+      # first 1,065,345,024 bytes; the verity hash tree follows in the same partition.
+      HASH_OFFSET=1065345024
+
       ROOT_BYTES=$(du -sb /layer | cut -f1)
-      echo "Computed root filesystem size: ${ROOT_BYTES} bytes"
+      echo "Computed root filesystem size: ${ROOT_BYTES} bytes (budget: ${HASH_OFFSET} bytes)"
+      if [ "${ROOT_BYTES}" -ge "${HASH_OFFSET}" ]; then
+        echo "ERROR: /usr payload size (${ROOT_BYTES} bytes) exceeds the hard verity budget of ${HASH_OFFSET} bytes" >&2
+        exit 1
+      fi
 
-      # 25% overhead and 100MB margin for XFS metadata, journal, and structures.
-      # ponytail: 25% overhead + 100MB margin for XFS.
-      TARGET_BYTES=$(( ROOT_BYTES + ROOT_BYTES / 4 + 100 * 1024 * 1024 ))
+      # Pre-allocate the raw file to the exact budget size for the XFS filesystem.
+      truncate -s "${HASH_OFFSET}" "${OUT}/${FNAME}"
 
-      # Align TARGET_BYTES to 4096-byte boundary (multiple of 512/4096) for sector compatibility
-      # ponytail: sector alignment is required by systemd-repart CopyBlocks=.
-      TARGET_BYTES=$(( (TARGET_BYTES + 4095) / 4096 * 4096 ))
+      echo "Allocating XFS image of ${HASH_OFFSET} bytes"
+      mkfs.xfs -f -L bluefin-usr -p /layer "${OUT}/${FNAME}"
 
-      # Pre-allocate the raw file to the exact target size.
-      # ponytail: pre-allocating is the standard way to enforce the target size of mkfs.xfs.
-      truncate -s "${TARGET_BYTES}" "${OUT}/${FNAME}"
+      # Append the dm-verity hash tree at offset 1,065,345,024.
+      # 1,065,345,024 bytes = 260,094 blocks of 4096 bytes.
+      DATA_BLOCKS=$(( HASH_OFFSET / 4096 ))
+      veritysetup format \
+        --hash=sha256 \
+        --data-block-size=4096 \
+        --hash-block-size=4096 \
+        --data-blocks="${DATA_BLOCKS}" \
+        --hash-offset="${HASH_OFFSET}" \
+        --root-hash-file="${OUT}/${FNAME}.verity" \
+        "${OUT}/${FNAME}" "${OUT}/${FNAME}"
 
-      echo "Allocating XFS image of ${TARGET_BYTES} bytes"
-      mkfs.xfs -f -L bluefin-root -p /layer "${OUT}/${FNAME}"
+      ROOT_HASH="$(cat "${OUT}/${FNAME}.verity")"
+      echo "Verity root hash: ${ROOT_HASH}"
+      cp "${OUT}/${FNAME}.verity" "${OUT}/verity.usrhash"
+      cp "${OUT}/${FNAME}.verity" "${OUT}/bluefin-server-ddi-%{ddi-version}.verity"
 
       zstd --rm -T0 -19 -q "${OUT}/${FNAME}" -o "${OUT}/${FNAME}.zst"
       (

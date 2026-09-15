@@ -48,7 +48,10 @@ def test_installer_runtime_and_boot_contracts() -> None:
     assert "freedesktop-sdk.bst:bootstrap/bash.bst" in installer_stack
     assert "console=ttyS0,115200 rw" in installer_element
     assert "unattended" not in published_uki_cmdline
-    assert target_uki_cmdline == "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0"
+    assert target_uki_cmdline == (
+        "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0 "
+        "verity.usr=PARTLABEL=USR-A verity.usrhash=${USR_HASH}"
+    )
     assert (
         '-append "systemd.unit=system-install.target '
         'console=tty0 console=ttyS0,115200 rw unattended"'

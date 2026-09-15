@@ -123,6 +123,13 @@ config:
       rm -f /target-root/tmp/ld.so.conf
       cp /target-root/etc/ld.so.cache /etc/ld.so.cache
 
+      # Read the verity root hash from the staged DDI payload
+      if [ ! -f /ddi/verity.usrhash ] && ! ls /ddi/*.verity >/dev/null 2>&1; then
+        echo "ERROR: verity root hash not found in /ddi" >&2
+        exit 1
+      fi
+      USR_HASH="$(cat /ddi/verity.usrhash 2>/dev/null || head -n1 /ddi/*.verity)"
+
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS, VirtIO, and NVMe storage drivers.
       dracut -v --reproducible --no-machineid --no-hostonly \
         --add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay zfs spl" \
@@ -131,13 +138,13 @@ config:
         --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
         --kernel-image "${TARGET_KERNEL}" \
         --kver "${TARGET_KVER}" \
-        --kernel-cmdline "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
+        --kernel-cmdline "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0 verity.usr=PARTLABEL=USR-A verity.usrhash=${USR_HASH}" \
         /tmp/bluefin-server-target.initramfs
 
       ukify build \
         --linux="${TARGET_KERNEL}" \
         --initrd=/tmp/bluefin-server-target.initramfs \
-        --cmdline="rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
+        --cmdline="rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0 verity.usr=PARTLABEL=USR-A verity.usrhash=${USR_HASH}" \
         --output=/target-root/boot/EFI/Linux/bluefin-server.efi
       cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
 

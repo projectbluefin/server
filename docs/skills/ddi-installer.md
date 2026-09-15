@@ -73,9 +73,11 @@ container runtime pod sandboxes.
    `/usr/lib/repart.sysinstall.d/` if it is populated; otherwise it falls back
    to `/usr/lib/repart.d/`. The target recipes are staged at
    `/usr/lib/repart.d/` (`10-esp.conf`, `20-root-a.conf`, `30-var.conf`).
-6. `20-root-a.conf` copies the DDI block-for-block from
+6. `20-root-a.conf` (or `20-usr-a.conf`) copies the DDI block-for-block from
    `/dev/disk/by-partlabel/bluefin-installer-data` (the embedded DDI data
-   partition on the installer media).
+   partition on the installer media). The DDI payload is built as a dm-verity
+   protected image with the verity hash tree appended at offset 1,065,345,024,
+   and its root hash is pinned by `verity.usrhash` on the target UKI command line.
 7. Target OS volume expansion is handled by `systemd-growfs`; the target OS
    stack includes `xfsprogs` so the root and `/var` filesystems can grow to fill
    their partitions on first boot.
