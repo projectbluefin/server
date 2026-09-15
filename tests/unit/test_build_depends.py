@@ -117,6 +117,30 @@ def test_installer_stack_includes_uutils_and_dbus():
     )
 
 
+def test_os_countme_depends_on_curl_and_jq():
+    """os-countme.bst must ship curl and jq through the freedesktop-sdk junction.
+
+    Regression test for projectbluefin/server#96: the curl dependency was
+    inferred rather than verified, so a wrong path would fail to resolve and
+    the minimal image (which ships neither curl nor jq) would not build.
+    Confirmed that the pinned freedesktop-sdk ref (freedesktop-sdk-26.08.0,
+    elements/freedesktop-sdk.bst) ships both elements/components/curl.bst and
+    elements/components/jq.bst, so the dependency must stay on this exact path.
+    """
+    countme = ELEMENTS_DIR / "bluefin-server" / "os-countme.bst"
+    data = yaml.safe_load(countme.read_text(encoding="utf-8"))
+    depends = data.get("depends", [])
+
+    assert "freedesktop-sdk.bst:components/curl.bst" in depends, (
+        "os-countme.bst must include freedesktop-sdk.bst:components/curl.bst "
+        "(projectbluefin/server#96)"
+    )
+    assert "freedesktop-sdk.bst:components/jq.bst" in depends, (
+        "os-countme.bst must include freedesktop-sdk.bst:components/jq.bst "
+        "(projectbluefin/server#96)"
+    )
+
+
 def test_os_stack_includes_bash():
     """Bluefin Server OS must include bash for login and interactive access."""
     os_stack = ELEMENTS_DIR / "bluefin-server" / "os-stack.bst"
