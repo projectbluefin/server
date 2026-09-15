@@ -1,0 +1,21 @@
+component,flatcar_version,flatcar_source,fsdk_version,fsdk_element,fsdk_source,gap,priority
+glibc,2.41-r6,flatcar_production_image_sbom.json,2.44-23,bootstrap/glibc.bst,bootstrap/include/glibc-source.yml,bootstrap,load-bearing
+kernel,4593.2.5 (6.12.102-flatcar),version.txt + include/flatcar.yml,n/a,flatcar/flatcar-kernel.bst,"imported, not FSDK-built",n/a,load-bearing
+systemd,257.9,flatcar_production_image_sbom.json,261.2,components/systemd.bst,include/systemd.yml,fsdk-newer,load-bearing
+bash,5.3_p3-r3,flatcar_production_image_sbom.json,5.3-16,bootstrap/bash.bst,bootstrap/bash.bst,none,important
+coreutils,9.8-r1,flatcar_production_image_sbom.json,9.11,bootstrap/coreutils.bst,bootstrap/coreutils-source.yml,fsdk-newer,important
+curl,8.16.0-r1,flatcar_production_image_sbom.json,8.21.0,components/curl.bst,components/curl.bst,fsdk-newer,important
+dbus,1.16.2,flatcar_production_image_sbom.json,1.16.2,components/dbus.bst,components/_private/dbus-base.bst,none,important
+glib,2.84.4,flatcar_production_image_sbom.json,2.88.3,components/glib.bst,include/glib-source.yml,fsdk-newer,important
+gnupg,2.5.16,flatcar_production_image_sbom.json,2.4.9,components/gnupg.bst,components/gnupg.bst,flatcar-newer,important
+kmod,34.2,flatcar_production_image_sbom.json,34.2,components/kmod.bst,components/kmod.bst,none,important
+libcap,2.76,flatcar_production_image_sbom.json,2.78,components/libcap.bst,components/libcap.bst,fsdk-newer,important
+libffi,3.5.2,flatcar_production_image_sbom.json,3.8.0,components/libffi.bst,components/libffi.bst,fsdk-newer,important
+openssh,10.4_p1-r1,flatcar_production_image_sbom.json,10.5.P1,components/openssh.bst,components/openssh.bst,fsdk-newer,important
+openssl,3.5.5,flatcar_production_image_sbom.json,3.5.8,components/openssl.bst,components/openssl.bst,fsdk-newer,important
+shadow,4.14.8-r1,flatcar_production_image_sbom.json,4.20.2,components/shadow.bst,components/shadow.bst,fsdk-newer,important
+util-linux,2.41.2,flatcar_production_image_sbom.json,2.42.2,components/util-linux.bst,components/_private/util-linux-base.bst,fsdk-newer,important
+zstd,1.5.7-r1,flatcar_production_image_sbom.json,1.5.7,components/zstd.bst,bootstrap/include/zstd-source.yml,none,important
+ca-certificates,3.126,flatcar_production_image_sbom.json,2010.63-3.fc14-175,components/ca-certificates.bst,components/ca-certificates.bst,different-scheme,deferred
+podman,prebuilt sysext (flatcar-podman.raw),flatcar_production_image (prebuilt sysext),6.1.0,components/podman.bst,components/podman.bst,imported,deferred
+xfsprogs,6.16.0,flatcar_production_image_sbom.json,7.1.1,components/xfsprogs.bst,components/xfsprogs.bst,fsdk-newer,deferred

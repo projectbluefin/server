@@ -1,0 +1,2827 @@
+{
+ "aardvark-dns": {
+  "element_path": "components/aardvark-dns.bst",
+  "source": "components/aardvark-dns.bst",
+  "version": "2.1.0"
+ },
+ "abseil-cpp": {
+  "element_path": "components/abseil-cpp.bst",
+  "source": "components/abseil-cpp.bst",
+  "version": "20260817.0"
+ },
+ "acl": {
+  "element_path": "bootstrap/acl.bst",
+  "source": "bootstrap/acl.bst",
+  "version": "2.4.0"
+ },
+ "acpica-tools": {
+  "element_path": "components/acpica-tools.bst",
+  "source": "components/acpica-tools.bst",
+  "version": "20240827"
+ },
+ "alsa-lib": {
+  "element_path": "components/alsa-lib.bst",
+  "source": "components/alsa-lib.bst",
+  "version": "1.2.16.1"
+ },
+ "alsa-plugins": {
+  "element_path": "components/alsa-plugins.bst",
+  "source": "components/alsa-plugins.bst",
+  "version": "1.2.12"
+ },
+ "aom": {
+  "element_path": "components/aom.bst",
+  "source": "components/aom.bst",
+  "version": "3.15.0"
+ },
+ "apparmor-base": {
+  "element_path": "components/_private/apparmor-base.bst",
+  "source": "components/_private/apparmor-base.bst",
+  "version": "4.1.8"
+ },
+ "appstream": {
+  "element_path": "components/appstream.bst",
+  "source": "include/appstream-source.yml",
+  "version": "1.1.6"
+ },
+ "asciidoc": {
+  "element_path": "components/asciidoc.bst",
+  "source": "components/asciidoc.bst",
+  "version": "10.2.1"
+ },
+ "asciidoctor": {
+  "element_path": "components/asciidoctor.bst",
+  "source": "components/asciidoctor.bst",
+  "version": "2.0.26"
+ },
+ "askalono": {
+  "element_path": "components/askalono.bst",
+  "source": "components/askalono.bst",
+  "version": "0.5.0"
+ },
+ "aspell": {
+  "element_path": "components/aspell.bst",
+  "source": "components/aspell.bst",
+  "version": "0.60.8.2"
+ },
+ "at-spi2-core": {
+  "element_path": "components/at-spi2-core.bst",
+  "source": "components/at-spi2-core.bst",
+  "version": "2.CORE.2.54.0"
+ },
+ "attr": {
+  "element_path": "bootstrap/attr.bst",
+  "source": "bootstrap/attr.bst",
+  "version": "2.6.0"
+ },
+ "audit": {
+  "element_path": "components/audit.bst",
+  "source": "components/audit.bst",
+  "version": "4.2.1"
+ },
+ "avahi-base": {
+  "element_path": "components/_private/avahi-base.bst",
+  "source": "components/_private/avahi-base.bst",
+  "version": "0.8"
+ },
+ "bash": {
+  "element_path": "bootstrap/bash.bst",
+  "source": "bootstrap/bash.bst",
+  "version": "5.3-16"
+ },
+ "bash-completion": {
+  "element_path": "components/bash-completion.bst",
+  "source": "components/bash-completion.bst",
+  "version": "2.18.0"
+ },
+ "binutils": {
+  "element_path": "components/binutils.bst",
+  "source": "bootstrap/include/binutils-source.yml",
+  "version": "2.47"
+ },
+ "bison": {
+  "element_path": "components/bison.bst",
+  "source": "components/bison.bst",
+  "version": "3.8.2"
+ },
+ "bluez": {
+  "element_path": "components/bluez.bst",
+  "source": "include/bluez.yml",
+  "version": "5.87"
+ },
+ "brotli": {
+  "element_path": "components/brotli.bst",
+  "source": "components/brotli.bst",
+  "version": "1.2.0"
+ },
+ "btrfs-progs": {
+  "element_path": "components/btrfs-progs.bst",
+  "source": "components/btrfs-progs.bst",
+  "version": "7.1"
+ },
+ "bubblewrap": {
+  "element_path": "components/bubblewrap.bst",
+  "source": "components/bubblewrap.bst",
+  "version": "0.12.0"
+ },
+ "buildbox": {
+  "element_path": "components/buildbox.bst",
+  "source": "components/buildbox.bst",
+  "version": "1.4.20"
+ },
+ "buildstream-plugins": {
+  "element_path": "plugins/buildstream-plugins.bst",
+  "source": "plugins/buildstream-plugins.bst",
+  "version": "2.5.0"
+ },
+ "buildstream-sbom": {
+  "element_path": "components/buildstream-sbom.bst",
+  "source": "components/buildstream-sbom.bst",
+  "version": "1.1"
+ },
+ "buildstream2": {
+  "element_path": "components/buildstream2.bst",
+  "source": "components/buildstream2.bst",
+  "version": "2.8.0"
+ },
+ "bzip2": {
+  "element_path": "components/bzip2.bst",
+  "source": "bootstrap/bzip2.bst",
+  "version": "2-1.0.8"
+ },
+ "c-ares": {
+  "element_path": "components/c-ares.bst",
+  "source": "components/c-ares.bst",
+  "version": "1.34.8"
+ },
+ "ca-certificates": {
+  "element_path": "components/ca-certificates.bst",
+  "source": "components/ca-certificates.bst",
+  "version": "2010.63-3.fc14-175"
+ },
+ "cairo": {
+  "element_path": "components/cairo.bst",
+  "source": "components/cairo.bst",
+  "version": "1.18.4"
+ },
+ "capnproto": {
+  "element_path": "components/capnproto.bst",
+  "source": "components/capnproto.bst",
+  "version": "1.5.0"
+ },
+ "cargo-c": {
+  "element_path": "components/cargo-c.bst",
+  "source": "components/cargo-c.bst",
+  "version": "0.10.25"
+ },
+ "catatonit": {
+  "element_path": "components/catatonit.bst",
+  "source": "components/catatonit.bst",
+  "version": "0.2.1"
+ },
+ "ccache": {
+  "element_path": "components/ccache.bst",
+  "source": "components/ccache.bst",
+  "version": "4.14"
+ },
+ "ccid": {
+  "element_path": "components/ccid.bst",
+  "source": "components/ccid.bst",
+  "version": "1.8.3"
+ },
+ "clinfo": {
+  "element_path": "extensions/clinfo/clinfo.bst",
+  "source": "extensions/clinfo/clinfo.bst",
+  "version": "3.0.25.02.14"
+ },
+ "cmake": {
+  "element_path": "components/cmake.bst",
+  "source": "include/cmake-source.yml",
+  "version": "4.4.3"
+ },
+ "colord": {
+  "element_path": "components/colord.bst",
+  "source": "components/colord.bst",
+  "version": "1.4.8"
+ },
+ "composefs": {
+  "element_path": "components/composefs.bst",
+  "source": "components/composefs.bst",
+  "version": "1.0.8"
+ },
+ "conmon": {
+  "element_path": "components/conmon.bst",
+  "source": "components/conmon.bst",
+  "version": "2.2.1"
+ },
+ "containers-common": {
+  "element_path": "components/containers-common.bst",
+  "source": "components/containers-common.bst",
+  "version": "0.69.1"
+ },
+ "coreutils": {
+  "element_path": "bootstrap/coreutils.bst",
+  "source": "bootstrap/coreutils-source.yml",
+  "version": "9.11"
+ },
+ "cpio": {
+  "element_path": "components/cpio.bst",
+  "source": "components/cpio.bst",
+  "version": "2.15"
+ },
+ "cracklib": {
+  "element_path": "components/cracklib.bst",
+  "source": "components/cracklib.bst",
+  "version": "2.10.3"
+ },
+ "crun": {
+  "element_path": "components/crun.bst",
+  "source": "components/crun.bst",
+  "version": "1.29.1"
+ },
+ "cryptsetup-base": {
+  "element_path": "components/_private/cryptsetup-base.bst",
+  "source": "components/_private/cryptsetup-base.bst",
+  "version": "2.8.7"
+ },
+ "cunit": {
+  "element_path": "components/cunit.bst",
+  "source": "components/cunit.bst",
+  "version": "3.5.5"
+ },
+ "cups-base": {
+  "element_path": "components/_private/cups-base.bst",
+  "source": "components/_private/cups-base.bst",
+  "version": "2.4.19"
+ },
+ "cups-filters": {
+  "element_path": "components/cups-filters.bst",
+  "source": "components/cups-filters.bst",
+  "version": "2.0.1"
+ },
+ "curl": {
+  "element_path": "components/curl.bst",
+  "source": "components/curl.bst",
+  "version": "8.21.0"
+ },
+ "cyrus-sasl": {
+  "element_path": "components/cyrus-sasl.bst",
+  "source": "components/cyrus-sasl.bst",
+  "version": "2.1.28"
+ },
+ "cython": {
+  "element_path": "components/cython.bst",
+  "source": "components/cython.bst",
+  "version": "3.3.0"
+ },
+ "dav1d": {
+  "element_path": "components/dav1d.bst",
+  "source": "components/dav1d.bst",
+  "version": "1.5.4"
+ },
+ "dbus": {
+  "element_path": "components/dbus.bst",
+  "source": "components/_private/dbus-base.bst",
+  "version": "1.16.2"
+ },
+ "dbus-broker": {
+  "element_path": "components/dbus-broker.bst",
+  "source": "components/dbus-broker.bst",
+  "version": "37"
+ },
+ "desktop-file-utils": {
+  "element_path": "components/desktop-file-utils.bst",
+  "source": "components/desktop-file-utils.bst",
+  "version": "0.28"
+ },
+ "dictionaries": {
+  "element_path": "components/dictionaries.bst",
+  "source": "components/dictionaries.bst",
+  "version": "26.8.0.3"
+ },
+ "dmidecode": {
+  "element_path": "components/dmidecode.bst",
+  "source": "components/dmidecode.bst",
+  "version": "3-7"
+ },
+ "doctest": {
+  "element_path": "components/doctest.bst",
+  "source": "components/doctest.bst",
+  "version": "2.5.3"
+ },
+ "dosfstools": {
+  "element_path": "components/dosfstools.bst",
+  "source": "components/dosfstools.bst",
+  "version": "4.2"
+ },
+ "doxygen": {
+  "element_path": "components/doxygen.bst",
+  "source": "components/doxygen.bst",
+  "version": "1.18.0"
+ },
+ "dracut": {
+  "element_path": "components/dracut.bst",
+  "source": "components/dracut.bst",
+  "version": "112"
+ },
+ "dtc": {
+  "element_path": "components/dtc.bst",
+  "source": "components/dtc.bst",
+  "version": "1.8.1"
+ },
+ "dwz": {
+  "element_path": "bootstrap/dwz.bst",
+  "source": "bootstrap/include/dwz-source.yml",
+  "version": "0.17"
+ },
+ "e2fsprogs": {
+  "element_path": "components/e2fsprogs.bst",
+  "source": "components/e2fsprogs.bst",
+  "version": "1.47.4"
+ },
+ "efivar": {
+  "element_path": "components/efivar.bst",
+  "source": "components/efivar.bst",
+  "version": "39"
+ },
+ "ell": {
+  "element_path": "components/ell.bst",
+  "source": "components/ell.bst",
+  "version": "0.83"
+ },
+ "erofs-utils": {
+  "element_path": "components/erofs-utils.bst",
+  "source": "components/erofs-utils.bst",
+  "version": "1.9.4"
+ },
+ "exfat-progs": {
+  "element_path": "components/exfat-progs.bst",
+  "source": "components/exfat-progs.bst",
+  "version": "1.4.3"
+ },
+ "expat": {
+  "element_path": "components/expat.bst",
+  "source": "components/expat.bst",
+  "version": "2.8.3"
+ },
+ "extra-cmake-modules": {
+  "element_path": "components/extra-cmake-modules.bst",
+  "source": "components/extra-cmake-modules.bst",
+  "version": "6.29.0"
+ },
+ "f2fs-tools": {
+  "element_path": "components/f2fs-tools.bst",
+  "source": "components/f2fs-tools.bst",
+  "version": "1.16.0"
+ },
+ "fcitx5-gtk": {
+  "element_path": "components/fcitx5-gtk.bst",
+  "source": "components/fcitx5-gtk.bst",
+  "version": "5.1.7"
+ },
+ "ffmpeg": {
+  "element_path": "components/ffmpeg.bst",
+  "source": "include/ffmpeg.yml",
+  "version": "8.1.2"
+ },
+ "file": {
+  "element_path": "components/file.bst",
+  "source": "bootstrap/include/file-source.yml",
+  "version": "5.48"
+ },
+ "flat-manager-client-base": {
+  "element_path": "components/_private/flat-manager-client-base.bst",
+  "source": "components/_private/flat-manager-client-base.bst",
+  "version": "0.5.3"
+ },
+ "flatpak": {
+  "element_path": "components/flatpak.bst",
+  "source": "include/flatpak.yml",
+  "version": "1.18.2"
+ },
+ "flatpak-builder": {
+  "element_path": "components/flatpak-builder.bst",
+  "source": "include/flatpak-builder-source.yml",
+  "version": "1.4.10"
+ },
+ "flatpak-xdg-utils": {
+  "element_path": "components/flatpak-xdg-utils.bst",
+  "source": "components/flatpak-xdg-utils.bst",
+  "version": "1.0.6"
+ },
+ "fmtlib": {
+  "element_path": "components/fmtlib.bst",
+  "source": "components/fmtlib.bst",
+  "version": "12.2.0"
+ },
+ "fontconfig": {
+  "element_path": "components/fontconfig.bst",
+  "source": "components/fontconfig.bst",
+  "version": "2.18.3"
+ },
+ "foomatic-db": {
+  "element_path": "components/foomatic-db.bst",
+  "source": "components/foomatic-db.bst",
+  "version": "20240504-8"
+ },
+ "freeglut": {
+  "element_path": "extensions/glxinfo/freeglut.bst",
+  "source": "extensions/glxinfo/freeglut.bst",
+  "version": "3.8.0"
+ },
+ "freetype": {
+  "element_path": "components/freetype.bst",
+  "source": "include/freetype.yml",
+  "version": "2-14-3"
+ },
+ "frei0r": {
+  "element_path": "components/frei0r.bst",
+  "source": "components/frei0r.bst",
+  "version": "3.5.0"
+ },
+ "fribidi": {
+  "element_path": "components/fribidi.bst",
+  "source": "components/fribidi.bst",
+  "version": "1.0.16"
+ },
+ "fscrypt": {
+  "element_path": "components/fscrypt.bst",
+  "source": "components/fscrypt.bst",
+  "version": "0.3.7"
+ },
+ "fuse-overlayfs": {
+  "element_path": "components/fuse-overlayfs.bst",
+  "source": "components/fuse-overlayfs.bst",
+  "version": "1.18"
+ },
+ "fuse3": {
+  "element_path": "components/fuse3.bst",
+  "source": "components/fuse3.bst",
+  "version": "3.18.2"
+ },
+ "fwupd": {
+  "element_path": "components/fwupd.bst",
+  "source": "components/fwupd.bst",
+  "version": "2.1.7"
+ },
+ "fwupd-efi": {
+  "element_path": "components/_private/fwupd-efi.bst",
+  "source": "components/_private/fwupd-efi.bst",
+  "version": "1.8"
+ },
+ "gamemode-base": {
+  "element_path": "components/_private/gamemode-base.bst",
+  "source": "components/_private/gamemode-base.bst",
+  "version": "1.8.2"
+ },
+ "gawk": {
+  "element_path": "components/gawk.bst",
+  "source": "bootstrap/gawk.bst",
+  "version": "5.4.1"
+ },
+ "gcab": {
+  "element_path": "components/gcab.bst",
+  "source": "components/gcab.bst",
+  "version": "1.6"
+ },
+ "gcc": {
+  "element_path": "components/gcc.bst",
+  "source": "include/gcc-source.yml",
+  "version": "16.2.0"
+ },
+ "gdb": {
+  "element_path": "components/gdb.bst",
+  "source": "components/gdb.bst",
+  "version": "17.2-release"
+ },
+ "gdk-pixbuf": {
+  "element_path": "components/gdk-pixbuf.bst",
+  "source": "components/gdk-pixbuf.bst",
+  "version": "2.44.7"
+ },
+ "genimage": {
+  "element_path": "components/genimage.bst",
+  "source": "components/genimage.bst",
+  "version": "20"
+ },
+ "genpeimg": {
+  "element_path": "components/genpeimg.bst",
+  "source": "components/genpeimg.bst",
+  "version": "14.0.0"
+ },
+ "geoclue-base": {
+  "element_path": "components/_private/geoclue-base.bst",
+  "source": "components/_private/geoclue-base.bst",
+  "version": "2.8.2"
+ },
+ "gflags": {
+  "element_path": "components/gflags.bst",
+  "source": "components/gflags.bst",
+  "version": "2.3.1"
+ },
+ "ghostscript": {
+  "element_path": "components/ghostscript.bst",
+  "source": "components/ghostscript.bst",
+  "version": "10.07.1"
+ },
+ "giflib": {
+  "element_path": "components/giflib.bst",
+  "source": "components/giflib.bst",
+  "version": "6.1.3"
+ },
+ "git": {
+  "element_path": "components/git.bst",
+  "source": "include/git.yml",
+  "version": "2.55.0"
+ },
+ "git-lfs": {
+  "element_path": "components/git-lfs.bst",
+  "source": "components/git-lfs.bst",
+  "version": "3.8.0"
+ },
+ "glib": {
+  "element_path": "components/glib.bst",
+  "source": "include/glib-source.yml",
+  "version": "2.88.3"
+ },
+ "glib-networking": {
+  "element_path": "components/glib-networking.bst",
+  "source": "components/glib-networking.bst",
+  "version": "2.80.1"
+ },
+ "glibc": {
+  "element_path": "bootstrap/glibc.bst",
+  "source": "bootstrap/include/glibc-source.yml",
+  "version": "2.44-23"
+ },
+ "glu": {
+  "element_path": "extensions/glxinfo/glu.bst",
+  "source": "extensions/glxinfo/glu.bst",
+  "version": "9.0.3"
+ },
+ "glycin": {
+  "element_path": "components/glycin.bst",
+  "source": "include/glycin-source.yml",
+  "version": "2.1.5"
+ },
+ "gmmlib": {
+  "element_path": "extensions/platform-vaapi-intel/gmmlib.bst",
+  "source": "extensions/platform-vaapi-intel/gmmlib.bst",
+  "version": "22.10.1"
+ },
+ "gnu-efi": {
+  "element_path": "components/_private/gnu-efi.bst",
+  "source": "components/_private/gnu-efi.bst",
+  "version": "4.0.4"
+ },
+ "gnupg": {
+  "element_path": "components/gnupg.bst",
+  "source": "components/gnupg.bst",
+  "version": "2.4.9"
+ },
+ "gnutls": {
+  "element_path": "components/gnutls.bst",
+  "source": "components/gnutls.bst",
+  "version": "3.8.13"
+ },
+ "go": {
+  "element_path": "components/go.bst",
+  "source": "include/go-source.yml",
+  "version": "1.27.0"
+ },
+ "go-md2man": {
+  "element_path": "components/go-md2man.bst",
+  "source": "components/go-md2man.bst",
+  "version": "2.0.7"
+ },
+ "gobject-introspection-base": {
+  "element_path": "components/_private/gobject-introspection-base.bst",
+  "source": "components/_private/gobject-introspection-base.bst",
+  "version": "1.86.0"
+ },
+ "gperf": {
+  "element_path": "components/gperf.bst",
+  "source": "components/gperf.bst",
+  "version": "3.3"
+ },
+ "gpgme": {
+  "element_path": "components/gpgme.bst",
+  "source": "components/gpgme.bst",
+  "version": "2.1.2"
+ },
+ "gpgmepp": {
+  "element_path": "components/gpgmepp.bst",
+  "source": "components/gpgmepp.bst",
+  "version": "2.1.0"
+ },
+ "graphene": {
+  "element_path": "components/graphene.bst",
+  "source": "components/graphene.bst",
+  "version": "1.10.8"
+ },
+ "graphite2": {
+  "element_path": "components/graphite2.bst",
+  "source": "components/graphite2.bst",
+  "version": "1.3.15"
+ },
+ "grpc": {
+  "element_path": "components/grpc.bst",
+  "source": "include/grpc-source.yml",
+  "version": "1.83.1"
+ },
+ "gsettings-desktop-schemas": {
+  "element_path": "components/gsettings-desktop-schemas.bst",
+  "source": "components/gsettings-desktop-schemas.bst",
+  "version": "50.1"
+ },
+ "gstreamer": {
+  "element_path": "components/gstreamer.bst",
+  "source": "include/gstreamer-source.yml",
+  "version": "1.28.6"
+ },
+ "gstreamer-plugins-rs": {
+  "element_path": "components/gstreamer-plugins-rs.bst",
+  "source": "components/gstreamer-plugins-rs.bst",
+  "version": "0.15.3"
+ },
+ "gtk-doc": {
+  "element_path": "components/gtk-doc.bst",
+  "source": "components/gtk-doc.bst",
+  "version": "1.36.1"
+ },
+ "gtk3": {
+  "element_path": "components/gtk3.bst",
+  "source": "components/gtk3.bst",
+  "version": "3.24.52"
+ },
+ "gyp": {
+  "element_path": "components/gyp.bst",
+  "source": "components/gyp.bst",
+  "version": "0.22.2"
+ },
+ "harfbuzz": {
+  "element_path": "components/harfbuzz.bst",
+  "source": "components/harfbuzz.bst",
+  "version": "14.3.1"
+ },
+ "hicolor-icon-theme": {
+  "element_path": "components/hicolor-icon-theme.bst",
+  "source": "components/hicolor-icon-theme.bst",
+  "version": "0.17"
+ },
+ "hidapi": {
+  "element_path": "components/hidapi.bst",
+  "source": "components/hidapi.bst",
+  "version": "0.15.0"
+ },
+ "highway": {
+  "element_path": "components/highway.bst",
+  "source": "components/highway.bst",
+  "version": "1.4.0"
+ },
+ "hunspell": {
+  "element_path": "components/hunspell.bst",
+  "source": "components/hunspell.bst",
+  "version": "1.7.3"
+ },
+ "hwdata": {
+  "element_path": "components/hwdata.bst",
+  "source": "components/hwdata.bst",
+  "version": "0.410"
+ },
+ "hyphen": {
+  "element_path": "components/hyphen.bst",
+  "source": "components/hyphen.bst",
+  "version": "2.8.9"
+ },
+ "iana-config": {
+  "element_path": "components/iana-config.bst",
+  "source": "components/iana-config.bst",
+  "version": "2019-07-16"
+ },
+ "iio-sensor-proxy": {
+  "element_path": "components/iio-sensor-proxy.bst",
+  "source": "components/iio-sensor-proxy.bst",
+  "version": "3.9"
+ },
+ "inih": {
+  "element_path": "components/inih.bst",
+  "source": "components/inih.bst",
+  "version": "62"
+ },
+ "intel-media-driver": {
+  "element_path": "extensions/platform-vaapi-intel/intel-media-driver.bst",
+  "source": "extensions/platform-vaapi-intel/intel-media-driver.bst",
+  "version": "26.3.2"
+ },
+ "iproute2": {
+  "element_path": "components/iproute2.bst",
+  "source": "components/iproute2.bst",
+  "version": "7.2.0"
+ },
+ "iptables": {
+  "element_path": "components/iptables.bst",
+  "source": "components/iptables.bst",
+  "version": "1.8.13"
+ },
+ "iputils": {
+  "element_path": "components/iputils.bst",
+  "source": "components/iputils.bst",
+  "version": "20250605"
+ },
+ "iso-codes": {
+  "element_path": "components/iso-codes.bst",
+  "source": "components/iso-codes.bst",
+  "version": "4.20.1"
+ },
+ "itstool": {
+  "element_path": "components/itstool.bst",
+  "source": "components/itstool.bst",
+  "version": "2.0.7"
+ },
+ "iwd": {
+  "element_path": "components/iwd.bst",
+  "source": "components/iwd.bst",
+  "version": "3.12"
+ },
+ "jansson": {
+  "element_path": "components/jansson.bst",
+  "source": "components/jansson.bst",
+  "version": "2.15.1"
+ },
+ "jpeg": {
+  "element_path": "components/jpeg.bst",
+  "source": "components/jpeg.bst",
+  "version": "3.2.0"
+ },
+ "jq": {
+  "element_path": "components/jq.bst",
+  "source": "components/jq.bst",
+  "version": "1.8.2"
+ },
+ "json-c": {
+  "element_path": "components/json-c.bst",
+  "source": "components/json-c.bst",
+  "version": "0.19-20260627"
+ },
+ "json-glib": {
+  "element_path": "components/json-glib.bst",
+  "source": "components/json-glib.bst",
+  "version": "1.10.8"
+ },
+ "kbd": {
+  "element_path": "components/kbd.bst",
+  "source": "components/kbd.bst",
+  "version": "2.10.0"
+ },
+ "keyutils": {
+  "element_path": "components/keyutils.bst",
+  "source": "components/keyutils.bst",
+  "version": "1.6.3"
+ },
+ "kmod": {
+  "element_path": "components/kmod.bst",
+  "source": "components/kmod.bst",
+  "version": "34.2"
+ },
+ "krb5": {
+  "element_path": "components/krb5.bst",
+  "source": "components/krb5.bst",
+  "version": "5-1.22.2-final"
+ },
+ "lcms": {
+  "element_path": "components/lcms.bst",
+  "source": "components/lcms.bst",
+  "version": "2.19.1"
+ },
+ "less": {
+  "element_path": "components/less.bst",
+  "source": "components/less.bst",
+  "version": "704-rel"
+ },
+ "libabigail": {
+  "element_path": "components/libabigail.bst",
+  "source": "components/libabigail.bst",
+  "version": "2.10"
+ },
+ "libarchive": {
+  "element_path": "components/libarchive.bst",
+  "source": "components/libarchive.bst",
+  "version": "3.8.9"
+ },
+ "libassuan": {
+  "element_path": "components/libassuan.bst",
+  "source": "components/libassuan.bst",
+  "version": "3.0.2"
+ },
+ "libatasmart": {
+  "element_path": "components/libatasmart.bst",
+  "source": "components/libatasmart.bst",
+  "version": "0.19"
+ },
+ "libavif": {
+  "element_path": "components/libavif.bst",
+  "source": "components/libavif.bst",
+  "version": "1.4.2"
+ },
+ "libblockdev": {
+  "element_path": "components/libblockdev.bst",
+  "source": "components/libblockdev.bst",
+  "version": "3.5.0"
+ },
+ "libbpf": {
+  "element_path": "components/libbpf.bst",
+  "source": "components/libbpf.bst",
+  "version": "1.7.0"
+ },
+ "libbytesize": {
+  "element_path": "components/libbytesize.bst",
+  "source": "components/libbytesize.bst",
+  "version": "2.12"
+ },
+ "libcamera": {
+  "element_path": "components/libcamera.bst",
+  "source": "components/libcamera.bst",
+  "version": "0.7.2"
+ },
+ "libcap": {
+  "element_path": "components/libcap.bst",
+  "source": "components/libcap.bst",
+  "version": "2.78"
+ },
+ "libcap-ng": {
+  "element_path": "components/libcap-ng.bst",
+  "source": "components/libcap-ng.bst",
+  "version": "0.9.5"
+ },
+ "libcbor": {
+  "element_path": "components/libcbor.bst",
+  "source": "components/libcbor.bst",
+  "version": "0.14.0"
+ },
+ "libconfuse": {
+  "element_path": "components/libconfuse.bst",
+  "source": "components/libconfuse.bst",
+  "version": "3.4"
+ },
+ "libcupsfilters": {
+  "element_path": "components/libcupsfilters.bst",
+  "source": "components/libcupsfilters.bst",
+  "version": "2.2.1"
+ },
+ "libdaemon": {
+  "element_path": "components/libdaemon.bst",
+  "source": "components/libdaemon.bst",
+  "version": "0.14"
+ },
+ "libdatrie": {
+  "element_path": "components/libdatrie.bst",
+  "source": "components/libdatrie.bst",
+  "version": "0.2.14"
+ },
+ "libde265": {
+  "element_path": "extensions/codecs-extra/libde265.bst",
+  "source": "extensions/codecs-extra/libde265.bst",
+  "version": "1.1.1"
+ },
+ "libdecor": {
+  "element_path": "components/libdecor.bst",
+  "source": "components/libdecor.bst",
+  "version": "0.2.5"
+ },
+ "libdisplay-info": {
+  "element_path": "components/libdisplay-info.bst",
+  "source": "components/libdisplay-info.bst",
+  "version": "0.4.0"
+ },
+ "libdrm": {
+  "element_path": "components/libdrm.bst",
+  "source": "components/libdrm.bst",
+  "version": "2.4.134"
+ },
+ "libebur128": {
+  "element_path": "components/libebur128.bst",
+  "source": "components/libebur128.bst",
+  "version": "1.2.6"
+ },
+ "libeconf": {
+  "element_path": "components/libeconf.bst",
+  "source": "components/libeconf.bst",
+  "version": "0.8.4"
+ },
+ "libei": {
+  "element_path": "components/libei.bst",
+  "source": "components/libei.bst",
+  "version": "1.6.0"
+ },
+ "libepoxy": {
+  "element_path": "components/libepoxy.bst",
+  "source": "components/libepoxy.bst",
+  "version": "1.5.10"
+ },
+ "libevdev": {
+  "element_path": "components/libevdev.bst",
+  "source": "components/libevdev.bst",
+  "version": "1.13.7"
+ },
+ "libevent": {
+  "element_path": "components/libevent.bst",
+  "source": "components/libevent.bst",
+  "version": "2.1.13-stable"
+ },
+ "libexif": {
+  "element_path": "components/libexif.bst",
+  "source": "components/libexif.bst",
+  "version": "0.6.26-release"
+ },
+ "libffi": {
+  "element_path": "components/libffi.bst",
+  "source": "components/libffi.bst",
+  "version": "3.8.0"
+ },
+ "libfido2": {
+  "element_path": "components/libfido2.bst",
+  "source": "components/libfido2.bst",
+  "version": "1.17.0"
+ },
+ "libflac": {
+  "element_path": "components/libflac.bst",
+  "source": "components/libflac.bst",
+  "version": "1.5.0"
+ },
+ "libfyaml": {
+  "element_path": "components/libfyaml.bst",
+  "source": "components/libfyaml.bst",
+  "version": "0.9.6"
+ },
+ "libgcrypt": {
+  "element_path": "components/libgcrypt.bst",
+  "source": "components/libgcrypt.bst",
+  "version": "1.12.3"
+ },
+ "libglvnd": {
+  "element_path": "components/libglvnd.bst",
+  "source": "components/libglvnd.bst",
+  "version": "1.7.0"
+ },
+ "libgpg-error": {
+  "element_path": "components/libgpg-error.bst",
+  "source": "components/libgpg-error.bst",
+  "version": "1.61"
+ },
+ "libgudev": {
+  "element_path": "components/libgudev.bst",
+  "source": "components/libgudev.bst",
+  "version": "238"
+ },
+ "libgusb": {
+  "element_path": "components/libgusb.bst",
+  "source": "components/libgusb.bst",
+  "version": "0.4.9"
+ },
+ "libheif": {
+  "element_path": "components/libheif.bst",
+  "source": "include/libheif.yml",
+  "version": "1.23.1"
+ },
+ "libibus": {
+  "element_path": "components/libibus.bst",
+  "source": "components/libibus.bst",
+  "version": "1.5.34"
+ },
+ "libical": {
+  "element_path": "components/libical.bst",
+  "source": "components/libical.bst",
+  "version": "4.0.5"
+ },
+ "libimobiledevice": {
+  "element_path": "components/libimobiledevice.bst",
+  "source": "components/libimobiledevice.bst",
+  "version": "1.4.0"
+ },
+ "libimobiledevice-glue": {
+  "element_path": "components/libimobiledevice-glue.bst",
+  "source": "components/libimobiledevice-glue.bst",
+  "version": "1.3.2"
+ },
+ "libinput": {
+  "element_path": "components/libinput.bst",
+  "source": "components/libinput.bst",
+  "version": "1.31.3"
+ },
+ "libjcat": {
+  "element_path": "components/libjcat.bst",
+  "source": "components/libjcat.bst",
+  "version": "0.2.6"
+ },
+ "libjxl": {
+  "element_path": "components/libjxl.bst",
+  "source": "components/libjxl.bst",
+  "version": "0.12.0"
+ },
+ "libksba": {
+  "element_path": "components/libksba.bst",
+  "source": "components/libksba.bst",
+  "version": "1.8.1"
+ },
+ "liblc3": {
+  "element_path": "components/liblc3.bst",
+  "source": "components/liblc3.bst",
+  "version": "1.1.3"
+ },
+ "libmbim": {
+  "element_path": "components/libmbim.bst",
+  "source": "components/libmbim.bst",
+  "version": "1.34.0"
+ },
+ "libmicrohttpd": {
+  "element_path": "components/libmicrohttpd.bst",
+  "source": "components/libmicrohttpd.bst",
+  "version": "1.0.10"
+ },
+ "libmnl": {
+  "element_path": "components/libmnl.bst",
+  "source": "components/libmnl.bst",
+  "version": "1.0.5"
+ },
+ "libmysofa": {
+  "element_path": "components/libmysofa.bst",
+  "source": "components/libmysofa.bst",
+  "version": "1.3.5"
+ },
+ "libndp": {
+  "element_path": "components/libndp.bst",
+  "source": "components/libndp.bst",
+  "version": "1.9"
+ },
+ "libnftnl": {
+  "element_path": "components/libnftnl.bst",
+  "source": "components/libnftnl.bst",
+  "version": "1.3.1"
+ },
+ "libnghttp2": {
+  "element_path": "components/libnghttp2.bst",
+  "source": "components/libnghttp2.bst",
+  "version": "1.70.0"
+ },
+ "libnghttp3": {
+  "element_path": "components/libnghttp3.bst",
+  "source": "components/libnghttp3.bst",
+  "version": "1.18.0"
+ },
+ "libngtcp2": {
+  "element_path": "components/libngtcp2.bst",
+  "source": "components/libngtcp2.bst",
+  "version": "1.25.0"
+ },
+ "libnice": {
+  "element_path": "components/libnice.bst",
+  "source": "components/libnice.bst",
+  "version": "0.1.23"
+ },
+ "libnl": {
+  "element_path": "components/libnl.bst",
+  "source": "components/libnl.bst",
+  "version": "3.12.0"
+ },
+ "libnotify": {
+  "element_path": "components/libnotify.bst",
+  "source": "components/libnotify.bst",
+  "version": "0.8.8"
+ },
+ "libnvme": {
+  "element_path": "components/libnvme.bst",
+  "source": "components/libnvme.bst",
+  "version": "1.16.2"
+ },
+ "libogg": {
+  "element_path": "components/libogg.bst",
+  "source": "components/libogg.bst",
+  "version": "1.3.6"
+ },
+ "libp11": {
+  "element_path": "components/libp11.bst",
+  "source": "components/libp11.bst",
+  "version": "11-0.4.20"
+ },
+ "libpaper": {
+  "element_path": "components/libpaper.bst",
+  "source": "components/libpaper.bst",
+  "version": "2.2.8"
+ },
+ "libpipeline": {
+  "element_path": "components/libpipeline.bst",
+  "source": "components/libpipeline.bst",
+  "version": "1.5.8"
+ },
+ "libplist": {
+  "element_path": "components/libplist.bst",
+  "source": "components/libplist.bst",
+  "version": "2.7.0"
+ },
+ "libpng": {
+  "element_path": "components/libpng.bst",
+  "source": "components/libpng.bst",
+  "version": "1.6.58"
+ },
+ "libppd": {
+  "element_path": "components/libppd.bst",
+  "source": "components/libppd.bst",
+  "version": "2.1.1"
+ },
+ "libproxy": {
+  "element_path": "components/libproxy.bst",
+  "source": "components/libproxy.bst",
+  "version": "0.5.12"
+ },
+ "libpsl": {
+  "element_path": "components/libpsl.bst",
+  "source": "components/libpsl.bst",
+  "version": "0.23.3"
+ },
+ "libpulse": {
+  "element_path": "components/libpulse.bst",
+  "source": "components/libpulse.bst",
+  "version": "17.0"
+ },
+ "libqmi": {
+  "element_path": "components/libqmi.bst",
+  "source": "components/libqmi.bst",
+  "version": "1.38.0"
+ },
+ "libqrencode": {
+  "element_path": "components/libqrencode.bst",
+  "source": "components/libqrencode.bst",
+  "version": "4.1.1"
+ },
+ "libqrtr-glib": {
+  "element_path": "components/libqrtr-glib.bst",
+  "source": "components/libqrtr-glib.bst",
+  "version": "1.4.0"
+ },
+ "librsvg": {
+  "element_path": "components/librsvg.bst",
+  "source": "components/librsvg.bst",
+  "version": "2.62.3"
+ },
+ "libsamplerate": {
+  "element_path": "components/libsamplerate.bst",
+  "source": "components/libsamplerate.bst",
+  "version": "0.2.2"
+ },
+ "libseat": {
+  "element_path": "components/libseat.bst",
+  "source": "components/libseat.bst",
+  "version": "0.9.3"
+ },
+ "libseccomp": {
+  "element_path": "components/libseccomp.bst",
+  "source": "components/libseccomp.bst",
+  "version": "2.6.1"
+ },
+ "libsecret": {
+  "element_path": "components/libsecret.bst",
+  "source": "components/libsecret.bst",
+  "version": "0.21.7"
+ },
+ "libselinux": {
+  "element_path": "bootstrap/libselinux.bst",
+  "source": "bootstrap/libselinux.bst",
+  "version": "3.11"
+ },
+ "libsepol": {
+  "element_path": "bootstrap/libsepol.bst",
+  "source": "bootstrap/libsepol.bst",
+  "version": "3.11"
+ },
+ "libslirp": {
+  "element_path": "components/libslirp.bst",
+  "source": "components/libslirp.bst",
+  "version": "4.9.4"
+ },
+ "libsmbios": {
+  "element_path": "components/_private/libsmbios.bst",
+  "source": "components/_private/libsmbios.bst",
+  "version": "2.4.3"
+ },
+ "libsoup": {
+  "element_path": "components/libsoup.bst",
+  "source": "components/libsoup.bst",
+  "version": "3.6.6"
+ },
+ "libsrtp2": {
+  "element_path": "components/libsrtp2.bst",
+  "source": "components/libsrtp2.bst",
+  "version": "2.8.0"
+ },
+ "libtasn1": {
+  "element_path": "components/libtasn1.bst",
+  "source": "components/libtasn1.bst",
+  "version": "4.21.0"
+ },
+ "libtatsu": {
+  "element_path": "components/libtatsu.bst",
+  "source": "components/libtatsu.bst",
+  "version": "1.0.5"
+ },
+ "libthai": {
+  "element_path": "components/libthai.bst",
+  "source": "components/libthai.bst",
+  "version": "0.1.30"
+ },
+ "libtheora": {
+  "element_path": "components/libtheora.bst",
+  "source": "components/libtheora.bst",
+  "version": "1.2.0"
+ },
+ "libtiff": {
+  "element_path": "components/libtiff.bst",
+  "source": "components/libtiff.bst",
+  "version": "4.7.2"
+ },
+ "libtraceevent": {
+  "element_path": "components/libtraceevent.bst",
+  "source": "components/libtraceevent.bst",
+  "version": "1.9.0"
+ },
+ "libtree": {
+  "element_path": "components/libtree.bst",
+  "source": "components/libtree.bst",
+  "version": "3.1.1"
+ },
+ "libunwind": {
+  "element_path": "components/libunwind.bst",
+  "source": "components/libunwind.bst",
+  "version": "1.8.3"
+ },
+ "liburcu": {
+  "element_path": "components/liburcu.bst",
+  "source": "components/liburcu.bst",
+  "version": "0.15.6"
+ },
+ "liburing": {
+  "element_path": "components/liburing.bst",
+  "source": "components/liburing.bst",
+  "version": "2.15"
+ },
+ "libusb": {
+  "element_path": "components/libusb.bst",
+  "source": "components/libusb.bst",
+  "version": "1.0.30"
+ },
+ "libusbmuxd": {
+  "element_path": "components/libusbmuxd.bst",
+  "source": "components/libusbmuxd.bst",
+  "version": "2.1.1"
+ },
+ "libva": {
+  "element_path": "components/libva.bst",
+  "source": "components/libva.bst",
+  "version": "2.24.1"
+ },
+ "libva-utils": {
+  "element_path": "extensions/vainfo/libva-utils.bst",
+  "source": "extensions/vainfo/libva-utils.bst",
+  "version": "2.24.0"
+ },
+ "libvdpau": {
+  "element_path": "components/libvdpau.bst",
+  "source": "components/libvdpau.bst",
+  "version": "1.5"
+ },
+ "libversion": {
+  "element_path": "components/libversion.bst",
+  "source": "components/libversion.bst",
+  "version": "3.0.4"
+ },
+ "libvorbis": {
+  "element_path": "components/libvorbis.bst",
+  "source": "components/libvorbis.bst",
+  "version": "1.3.7"
+ },
+ "libvpx": {
+  "element_path": "components/libvpx.bst",
+  "source": "components/libvpx.bst",
+  "version": "1.17.0"
+ },
+ "libwacom": {
+  "element_path": "components/libwacom.bst",
+  "source": "components/libwacom.bst",
+  "version": "2.19.1"
+ },
+ "libwebp": {
+  "element_path": "components/libwebp.bst",
+  "source": "components/libwebp.bst",
+  "version": "1.6.0"
+ },
+ "libx265": {
+  "element_path": "extensions/codecs-extra/libx265.bst",
+  "source": "extensions/codecs-extra/libx265.bst",
+  "version": "4.2"
+ },
+ "libxcrypt": {
+  "element_path": "bootstrap/libxcrypt.bst",
+  "source": "bootstrap/include/libxcrypt-source.yml",
+  "version": "4.5.2"
+ },
+ "libxkbcommon": {
+  "element_path": "components/libxkbcommon.bst",
+  "source": "components/libxkbcommon.bst",
+  "version": "1.13.2"
+ },
+ "libxml2": {
+  "element_path": "components/libxml2.bst",
+  "source": "components/libxml2.bst",
+  "version": "2.15.3"
+ },
+ "libxmlb": {
+  "element_path": "components/libxmlb.bst",
+  "source": "components/libxmlb.bst",
+  "version": "0.3.29"
+ },
+ "libxslt": {
+  "element_path": "components/libxslt.bst",
+  "source": "components/libxslt.bst",
+  "version": "1.1.45"
+ },
+ "libyaml": {
+  "element_path": "components/libyaml.bst",
+  "source": "components/libyaml.bst",
+  "version": "0.2.5"
+ },
+ "linux": {
+  "element_path": "components/linux.bst",
+  "source": "include/linux.yml",
+  "version": "7.2.2"
+ },
+ "linux-firmware": {
+  "element_path": "components/linux-firmware.bst",
+  "source": "components/linux-firmware.bst",
+  "version": "20260810"
+ },
+ "linux-headers": {
+  "element_path": "bootstrap/linux-headers.bst",
+  "source": "bootstrap/include/linux-headers-source.yml",
+  "version": "6.18.41"
+ },
+ "linux-pam-base": {
+  "element_path": "components/linux-pam-base.bst",
+  "source": "components/linux-pam-base.bst",
+  "version": "1.7.2"
+ },
+ "llvm": {
+  "element_path": "components/llvm.bst",
+  "source": "include/llvm.yml",
+  "version": "22.1.8"
+ },
+ "lvm2": {
+  "element_path": "components/lvm2.bst",
+  "source": "include/lvm2-source.yml",
+  "version": "2.03.42"
+ },
+ "lz4": {
+  "element_path": "components/lz4.bst",
+  "source": "components/lz4.bst",
+  "version": "1.10.0"
+ },
+ "man-db": {
+  "element_path": "components/man-db.bst",
+  "source": "components/man-db.bst",
+  "version": "2.13.1"
+ },
+ "man-pages": {
+  "element_path": "components/man-pages.bst",
+  "source": "components/man-pages.bst",
+  "version": "6.19"
+ },
+ "mdadm": {
+  "element_path": "components/mdadm.bst",
+  "source": "components/mdadm.bst",
+  "version": "4.6"
+ },
+ "mesa": {
+  "element_path": "extensions/mesa/mesa-sources.yml",
+  "source": "extensions/mesa/mesa-sources.yml",
+  "version": "26.1.8"
+ },
+ "mesa-demos": {
+  "element_path": "extensions/glxinfo/mesa-demos.bst",
+  "source": "extensions/glxinfo/mesa-demos.bst",
+  "version": "9.0.0"
+ },
+ "mesa-sdk": {
+  "element_path": "include/mesa-sdk.yml",
+  "source": "include/mesa-sdk.yml",
+  "version": "26.2.1"
+ },
+ "meson": {
+  "element_path": "components/meson.bst",
+  "source": "components/_private/meson.bst",
+  "version": "1.12.0"
+ },
+ "modemmanager": {
+  "element_path": "components/modemmanager.bst",
+  "source": "components/modemmanager.bst",
+  "version": "1.24.2"
+ },
+ "mpfr": {
+  "element_path": "components/mpfr.bst",
+  "source": "components/mpfr.bst",
+  "version": "4.2.2"
+ },
+ "mutool": {
+  "element_path": "components/mutool.bst",
+  "source": "components/mutool.bst",
+  "version": "1.27.2"
+ },
+ "mythes": {
+  "element_path": "components/mythes.bst",
+  "source": "components/mythes.bst",
+  "version": "1.2.6"
+ },
+ "nano": {
+  "element_path": "components/nano.bst",
+  "source": "components/nano.bst",
+  "version": "9.2"
+ },
+ "nasm": {
+  "element_path": "components/nasm.bst",
+  "source": "components/nasm.bst",
+  "version": "3.02"
+ },
+ "ncurses": {
+  "element_path": "bootstrap/ncurses.bst",
+  "source": "bootstrap/include/ncurses-sources.yml",
+  "version": "6.6"
+ },
+ "netavark": {
+  "element_path": "components/netavark.bst",
+  "source": "components/netavark.bst",
+  "version": "2.1.0"
+ },
+ "nettle": {
+  "element_path": "components/nettle.bst",
+  "source": "components/nettle.bst",
+  "version": "4.0.release.20260205"
+ },
+ "networkmanager": {
+  "element_path": "components/networkmanager.bst",
+  "source": "components/networkmanager.bst",
+  "version": "1.58.1"
+ },
+ "newt": {
+  "element_path": "components/newt.bst",
+  "source": "components/newt.bst",
+  "version": "0-52-25"
+ },
+ "nftables": {
+  "element_path": "components/nftables.bst",
+  "source": "include/nftables.yml",
+  "version": "1.1.6"
+ },
+ "ninja": {
+  "element_path": "components/ninja.bst",
+  "source": "components/ninja.bst",
+  "version": "1.13.2"
+ },
+ "noto-emoji": {
+  "element_path": "components/noto-emoji.bst",
+  "source": "components/noto-emoji.bst",
+  "version": "2.051"
+ },
+ "noto-fonts": {
+  "element_path": "components/noto-fonts.bst",
+  "source": "components/noto-fonts.bst",
+  "version": "2026.08.01"
+ },
+ "npth": {
+  "element_path": "components/npth.bst",
+  "source": "components/npth.bst",
+  "version": "1.8"
+ },
+ "nss": {
+  "element_path": "components/nss.bst",
+  "source": "components/nss.bst",
+  "version": "3.112.5.RTM"
+ },
+ "nv-codec-headers": {
+  "element_path": "components/nv-codec-headers.bst",
+  "source": "components/nv-codec-headers.bst",
+  "version": "13.1.15.0"
+ },
+ "nvidia-vaapi-driver": {
+  "element_path": "extensions/platform-vaapi-nvidia/nvidia-vaapi-driver.bst",
+  "source": "extensions/platform-vaapi-nvidia/nvidia-vaapi-driver.bst",
+  "version": "0.0.17"
+ },
+ "open-iscsi": {
+  "element_path": "components/open-iscsi.bst",
+  "source": "components/open-iscsi.bst",
+  "version": "2.1.12"
+ },
+ "open-isns": {
+  "element_path": "components/open-isns.bst",
+  "source": "components/open-isns.bst",
+  "version": "0.103"
+ },
+ "openal": {
+  "element_path": "components/openal.bst",
+  "source": "components/openal.bst",
+  "version": "1.25.2"
+ },
+ "opencl": {
+  "element_path": "components/opencl.bst",
+  "source": "components/opencl.bst",
+  "version": "2.3.5"
+ },
+ "openjpeg": {
+  "element_path": "components/openjpeg.bst",
+  "source": "components/openjpeg.bst",
+  "version": "2.5.4"
+ },
+ "opensbi": {
+  "element_path": "components/opensbi.bst",
+  "source": "components/opensbi.bst",
+  "version": "1.9"
+ },
+ "opensbi-u-boot": {
+  "element_path": "components/_private/opensbi-u-boot.bst",
+  "source": "components/_private/opensbi-u-boot.bst",
+  "version": "1.9"
+ },
+ "openssh": {
+  "element_path": "components/openssh.bst",
+  "source": "components/openssh.bst",
+  "version": "10.5.P1"
+ },
+ "openssl": {
+  "element_path": "components/openssl.bst",
+  "source": "components/openssl.bst",
+  "version": "3.5.8"
+ },
+ "opus": {
+  "element_path": "components/opus.bst",
+  "source": "components/opus.bst",
+  "version": "1.6.1"
+ },
+ "opusfile": {
+  "element_path": "components/opusfile.bst",
+  "source": "components/opusfile.bst",
+  "version": "0.12"
+ },
+ "orc": {
+  "element_path": "components/orc.bst",
+  "source": "components/orc.bst",
+  "version": "0.4.42"
+ },
+ "ostree": {
+  "element_path": "components/ostree.bst",
+  "source": "include/ostree-source.yml",
+  "version": "2026.4"
+ },
+ "ovmf": {
+  "element_path": "components/_private/ovmf.bst",
+  "source": "components/_private/ovmf.bst",
+  "version": "2-stable202608"
+ },
+ "p11-kit": {
+  "element_path": "components/p11-kit.bst",
+  "source": "components/p11-kit.bst",
+  "version": "0.26.5"
+ },
+ "pahole": {
+  "element_path": "components/pahole.bst",
+  "source": "components/pahole.bst",
+  "version": "1.31"
+ },
+ "pango": {
+  "element_path": "components/pango.bst",
+  "source": "components/pango.bst",
+  "version": "1.58.2"
+ },
+ "parallel": {
+  "element_path": "components/parallel.bst",
+  "source": "components/parallel.bst",
+  "version": "20260722"
+ },
+ "passt": {
+  "element_path": "components/passt.bst",
+  "source": "components/passt.bst",
+  "version": "2026.07.28.f8df3f1"
+ },
+ "patch": {
+  "element_path": "components/patch.bst",
+  "source": "components/patch.bst",
+  "version": "2.8"
+ },
+ "patchelf": {
+  "element_path": "components/patchelf.bst",
+  "source": "components/patchelf.bst",
+  "version": "0.19.1"
+ },
+ "pciutils": {
+  "element_path": "components/pciutils.bst",
+  "source": "components/pciutils.bst",
+  "version": "3.15.0"
+ },
+ "pcre2": {
+  "element_path": "bootstrap/pcre2.bst",
+  "source": "bootstrap/pcre2.bst",
+  "version": "2-10.47"
+ },
+ "pcsc-lite": {
+  "element_path": "components/pcsc-lite.bst",
+  "source": "components/pcsc-lite.bst",
+  "version": "2.5.1"
+ },
+ "pdfio": {
+  "element_path": "components/pdfio.bst",
+  "source": "components/pdfio.bst",
+  "version": "1.6.5"
+ },
+ "perl": {
+  "element_path": "components/perl.bst",
+  "source": "include/perl-source.yml",
+  "version": "5.44.0"
+ },
+ "perl-build": {
+  "element_path": "components/perl-build.bst",
+  "source": "components/perl-build.bst",
+  "version": "0.4234"
+ },
+ "pinentry-ncurses": {
+  "element_path": "components/pinentry-ncurses.bst",
+  "source": "components/pinentry-ncurses.bst",
+  "version": "1.3.3"
+ },
+ "pipewire-base": {
+  "element_path": "components/_private/pipewire-base.bst",
+  "source": "components/_private/pipewire-base.bst",
+  "version": "1.6.8"
+ },
+ "pixman": {
+  "element_path": "components/pixman.bst",
+  "source": "components/pixman.bst",
+  "version": "0.46.4"
+ },
+ "pkg-config": {
+  "element_path": "components/pkg-config.bst",
+  "source": "include/pkg-config-source.yml",
+  "version": "3.0.6"
+ },
+ "platform": {
+  "element_path": "flatpak-images/platform.bst",
+  "source": "flatpak-images/platform.bst",
+  "version": "1.4"
+ },
+ "plymouth": {
+  "element_path": "components/plymouth.bst",
+  "source": "components/plymouth.bst",
+  "version": "26.134.222"
+ },
+ "po4a": {
+  "element_path": "components/po4a.bst",
+  "source": "components/po4a.bst",
+  "version": "0.74"
+ },
+ "podman": {
+  "element_path": "components/podman.bst",
+  "source": "components/podman.bst",
+  "version": "6.1.0"
+ },
+ "polkit-base": {
+  "element_path": "components/_private/polkit-base.bst",
+  "source": "components/_private/polkit-base.bst",
+  "version": "127"
+ },
+ "poppler": {
+  "element_path": "components/poppler.bst",
+  "source": "components/poppler.bst",
+  "version": "26.08.0"
+ },
+ "popt": {
+  "element_path": "components/popt.bst",
+  "source": "components/popt.bst",
+  "version": "1.19-release"
+ },
+ "procps": {
+  "element_path": "components/procps.bst",
+  "source": "components/procps.bst",
+  "version": "4.0.7"
+ },
+ "protobuf": {
+  "element_path": "components/protobuf.bst",
+  "source": "components/protobuf.bst",
+  "version": "36.0"
+ },
+ "pwquality": {
+  "element_path": "components/pwquality.bst",
+  "source": "components/pwquality.bst",
+  "version": "1.4.5"
+ },
+ "pycairo": {
+  "element_path": "components/pycairo.bst",
+  "source": "components/pycairo.bst",
+  "version": "1.29.1"
+ },
+ "pygobject": {
+  "element_path": "components/pygobject.bst",
+  "source": "components/pygobject.bst",
+  "version": "3.58.0"
+ },
+ "python3": {
+  "element_path": "components/python3.bst",
+  "source": "include/python3.yml",
+  "version": "3.14.7"
+ },
+ "python3-aiohappyeyeballs": {
+  "element_path": "components/python3-aiohappyeyeballs.bst",
+  "source": "components/python3-aiohappyeyeballs.bst",
+  "version": "2.7.1"
+ },
+ "python3-aiosignal": {
+  "element_path": "components/python3-aiosignal.bst",
+  "source": "components/python3-aiosignal.bst",
+  "version": "1.4.0"
+ },
+ "python3-alabaster": {
+  "element_path": "components/python3-alabaster.bst",
+  "source": "components/python3-alabaster.bst",
+  "version": "1.0.0"
+ },
+ "python3-appdirs": {
+  "element_path": "components/python3-appdirs.bst",
+  "source": "components/python3-appdirs.bst",
+  "version": "1.4.4"
+ },
+ "python3-arpy": {
+  "element_path": "components/python3-arpy.bst",
+  "source": "components/python3-arpy.bst",
+  "version": "2.4.0"
+ },
+ "python3-asn1crypto": {
+  "element_path": "components/python3-asn1crypto.bst",
+  "source": "components/python3-asn1crypto.bst",
+  "version": "1.5.1"
+ },
+ "python3-attrs": {
+  "element_path": "components/python3-attrs.bst",
+  "source": "components/python3-attrs.bst",
+  "version": "26.1.0"
+ },
+ "python3-babel": {
+  "element_path": "components/python3-babel.bst",
+  "source": "components/python3-babel.bst",
+  "version": "2.18.0"
+ },
+ "python3-backports-entrypoints-selectable": {
+  "element_path": "components/python3-backports-entrypoints-selectable.bst",
+  "source": "components/python3-backports-entrypoints-selectable.bst",
+  "version": "1.3.0"
+ },
+ "python3-blessings": {
+  "element_path": "components/python3-blessings.bst",
+  "source": "components/python3-blessings.bst",
+  "version": "1.7"
+ },
+ "python3-build": {
+  "element_path": "components/python3-build.bst",
+  "source": "components/_private/python3-build.bst",
+  "version": "1.6.0"
+ },
+ "python3-calver": {
+  "element_path": "components/python3-calver.bst",
+  "source": "components/python3-calver.bst",
+  "version": "2025.10.20"
+ },
+ "python3-certifi": {
+  "element_path": "components/python3-certifi.bst",
+  "source": "components/python3-certifi.bst",
+  "version": "2026.07.22"
+ },
+ "python3-cffi": {
+  "element_path": "components/python3-cffi.bst",
+  "source": "components/python3-cffi.bst",
+  "version": "2.1.1"
+ },
+ "python3-chardet": {
+  "element_path": "components/python3-chardet.bst",
+  "source": "components/python3-chardet.bst",
+  "version": "6.0.0"
+ },
+ "python3-charset-normalizer": {
+  "element_path": "components/python3-charset-normalizer.bst",
+  "source": "components/python3-charset-normalizer.bst",
+  "version": "3.5.1"
+ },
+ "python3-contextlib2": {
+  "element_path": "components/python3-contextlib2.bst",
+  "source": "components/python3-contextlib2.bst",
+  "version": "21.6.0"
+ },
+ "python3-cryptography": {
+  "element_path": "components/python3-cryptography.bst",
+  "source": "components/python3-cryptography.bst",
+  "version": "50.0.1"
+ },
+ "python3-dbus": {
+  "element_path": "components/python3-dbus.bst",
+  "source": "components/python3-dbus.bst",
+  "version": "1.4.0"
+ },
+ "python3-dbus-deviation": {
+  "element_path": "components/python3-dbus-deviation.bst",
+  "source": "components/python3-dbus-deviation.bst",
+  "version": "0.6.1"
+ },
+ "python3-distlib": {
+  "element_path": "components/python3-distlib.bst",
+  "source": "components/python3-distlib.bst",
+  "version": "0.4.3"
+ },
+ "python3-dulwich": {
+  "element_path": "components/python3-dulwich.bst",
+  "source": "components/python3-dulwich.bst",
+  "version": "1.2.14"
+ },
+ "python3-editables": {
+  "element_path": "components/python3-editables.bst",
+  "source": "components/python3-editables.bst",
+  "version": "0.6"
+ },
+ "python3-expandvars": {
+  "element_path": "components/python3-expandvars.bst",
+  "source": "components/python3-expandvars.bst",
+  "version": "1.1.2"
+ },
+ "python3-faust-cchardet": {
+  "element_path": "components/python3-faust-cchardet.bst",
+  "source": "components/python3-faust-cchardet.bst",
+  "version": "2.1.20"
+ },
+ "python3-filelock": {
+  "element_path": "components/python3-filelock.bst",
+  "source": "components/python3-filelock.bst",
+  "version": "3.32.4"
+ },
+ "python3-flit-core": {
+  "element_path": "components/python3-flit-core.bst",
+  "source": "components/_private/python3-flit-core.bst",
+  "version": "3.12.0"
+ },
+ "python3-frozenlist": {
+  "element_path": "components/python3-frozenlist.bst",
+  "source": "components/python3-frozenlist.bst",
+  "version": "1.8.0"
+ },
+ "python3-gi-docgen": {
+  "element_path": "components/python3-gi-docgen.bst",
+  "source": "components/python3-gi-docgen.bst",
+  "version": "2026.1"
+ },
+ "python3-hatch-fancy-pypi-readme": {
+  "element_path": "components/python3-hatch-fancy-pypi-readme.bst",
+  "source": "components/python3-hatch-fancy-pypi-readme.bst",
+  "version": "25.1.0"
+ },
+ "python3-hatch-vcs": {
+  "element_path": "components/python3-hatch-vcs.bst",
+  "source": "components/python3-hatch-vcs.bst",
+  "version": "0.5.0"
+ },
+ "python3-hatchling": {
+  "element_path": "components/python3-hatchling.bst",
+  "source": "components/python3-hatchling.bst",
+  "version": "1.32.0"
+ },
+ "python3-idna": {
+  "element_path": "components/python3-idna.bst",
+  "source": "components/python3-idna.bst",
+  "version": "3.19"
+ },
+ "python3-imagesize": {
+  "element_path": "components/python3-imagesize.bst",
+  "source": "components/python3-imagesize.bst",
+  "version": "2.0.1"
+ },
+ "python3-installer": {
+  "element_path": "components/python3-installer.bst",
+  "source": "components/_private/python3-installer.bst",
+  "version": "1.0.1"
+ },
+ "python3-jinja2": {
+  "element_path": "components/python3-jinja2.bst",
+  "source": "components/python3-jinja2.bst",
+  "version": "3.1.6"
+ },
+ "python3-libversion": {
+  "element_path": "components/python3-libversion.bst",
+  "source": "components/python3-libversion.bst",
+  "version": "1.2.4"
+ },
+ "python3-lxml": {
+  "element_path": "components/python3-lxml.bst",
+  "source": "components/python3-lxml.bst",
+  "version": "6.1.2-1"
+ },
+ "python3-mako": {
+  "element_path": "components/python3-mako.bst",
+  "source": "components/python3-mako.bst",
+  "version": "1.4.1"
+ },
+ "python3-markdown": {
+  "element_path": "components/python3-markdown.bst",
+  "source": "components/python3-markdown.bst",
+  "version": "3.10.3"
+ },
+ "python3-markupsafe": {
+  "element_path": "components/python3-markupsafe.bst",
+  "source": "components/python3-markupsafe.bst",
+  "version": "3.0.3"
+ },
+ "python3-maturin": {
+  "element_path": "components/python3-maturin.bst",
+  "source": "components/python3-maturin.bst",
+  "version": "1.15.0"
+ },
+ "python3-multidict": {
+  "element_path": "components/python3-multidict.bst",
+  "source": "components/python3-multidict.bst",
+  "version": "6.7.1"
+ },
+ "python3-networkx": {
+  "element_path": "components/python3-networkx.bst",
+  "source": "components/python3-networkx.bst",
+  "version": "3.6.1"
+ },
+ "python3-packaging": {
+  "element_path": "components/python3-packaging.bst",
+  "source": "components/_private/python3-packaging.bst",
+  "version": "26.3"
+ },
+ "python3-pathlib2": {
+  "element_path": "components/python3-pathlib2.bst",
+  "source": "components/python3-pathlib2.bst",
+  "version": "2.3.7-post1"
+ },
+ "python3-pathspec": {
+  "element_path": "components/python3-pathspec.bst",
+  "source": "components/python3-pathspec.bst",
+  "version": "1.1.1"
+ },
+ "python3-pefile": {
+  "element_path": "components/python3-pefile.bst",
+  "source": "components/python3-pefile.bst",
+  "version": "2024.8.26"
+ },
+ "python3-pil": {
+  "element_path": "components/python3-pil.bst",
+  "source": "components/python3-pil.bst",
+  "version": "12.3.0"
+ },
+ "python3-pip": {
+  "element_path": "components/python3-pip.bst",
+  "source": "components/python3-pip.bst",
+  "version": "26.2.1"
+ },
+ "python3-pkcs11": {
+  "element_path": "components/python3-pkcs11.bst",
+  "source": "components/python3-pkcs11.bst",
+  "version": "0.9.5"
+ },
+ "python3-pkgconfig": {
+  "element_path": "components/python3-pkgconfig.bst",
+  "source": "components/python3-pkgconfig.bst",
+  "version": "1.6.0"
+ },
+ "python3-pluggy": {
+  "element_path": "components/python3-pluggy.bst",
+  "source": "components/python3-pluggy.bst",
+  "version": "1.6.0"
+ },
+ "python3-pluginbase": {
+  "element_path": "components/python3-pluginbase.bst",
+  "source": "components/python3-pluginbase.bst",
+  "version": "1.0.1"
+ },
+ "python3-ply": {
+  "element_path": "components/python3-ply.bst",
+  "source": "components/python3-ply.bst",
+  "version": "3.11"
+ },
+ "python3-poetry-core": {
+  "element_path": "components/python3-poetry-core.bst",
+  "source": "components/python3-poetry-core.bst",
+  "version": "2.4.1"
+ },
+ "python3-propcache": {
+  "element_path": "components/python3-propcache.bst",
+  "source": "components/python3-propcache.bst",
+  "version": "0.5.2"
+ },
+ "python3-psutil": {
+  "element_path": "components/python3-psutil.bst",
+  "source": "components/python3-psutil.bst",
+  "version": "7.2.2"
+ },
+ "python3-pyasn1": {
+  "element_path": "components/python3-pyasn1.bst",
+  "source": "components/python3-pyasn1.bst",
+  "version": "0.6.4"
+ },
+ "python3-pyasn1-modules": {
+  "element_path": "components/python3-pyasn1-modules.bst",
+  "source": "components/python3-pyasn1-modules.bst",
+  "version": "0.4.2"
+ },
+ "python3-pycparser": {
+  "element_path": "components/python3-pycparser.bst",
+  "source": "components/python3-pycparser.bst",
+  "version": "3.00"
+ },
+ "python3-pyelftools": {
+  "element_path": "components/python3-pyelftools.bst",
+  "source": "components/python3-pyelftools.bst",
+  "version": "0.33"
+ },
+ "python3-pygments": {
+  "element_path": "components/python3-pygments.bst",
+  "source": "components/python3-pygments.bst",
+  "version": "2.21.0"
+ },
+ "python3-pyparsing": {
+  "element_path": "components/python3-pyparsing.bst",
+  "source": "components/python3-pyparsing.bst",
+  "version": "3.3.2"
+ },
+ "python3-pyproject-hooks": {
+  "element_path": "components/python3-pyproject-hooks.bst",
+  "source": "components/_private/python3-pyproject-hooks.bst",
+  "version": "1.2.0"
+ },
+ "python3-pyroaring": {
+  "element_path": "components/python3-pyroaring.bst",
+  "source": "components/python3-pyroaring.bst",
+  "version": "1.1.0"
+ },
+ "python3-pyyaml": {
+  "element_path": "components/python3-pyyaml.bst",
+  "source": "components/python3-pyyaml.bst",
+  "version": "6.0.3"
+ },
+ "python3-requests": {
+  "element_path": "components/python3-requests.bst",
+  "source": "components/python3-requests.bst",
+  "version": "2.34.2"
+ },
+ "python3-roman-numerals": {
+  "element_path": "components/python3-roman-numerals.bst",
+  "source": "components/python3-roman-numerals.bst",
+  "version": "4.1.0"
+ },
+ "python3-ruamel-yaml-clib": {
+  "element_path": "components/python3-ruamel-yaml-clib.bst",
+  "source": "components/python3-ruamel-yaml-clib.bst",
+  "version": "0.2.15"
+ },
+ "python3-schema": {
+  "element_path": "components/python3-schema.bst",
+  "source": "components/python3-schema.bst",
+  "version": "0.7.8"
+ },
+ "python3-semantic-version": {
+  "element_path": "components/python3-semantic-version.bst",
+  "source": "components/python3-semantic-version.bst",
+  "version": "2.10.0"
+ },
+ "python3-setuptools": {
+  "element_path": "components/python3-setuptools.bst",
+  "source": "components/_private/python3-setuptools.bst",
+  "version": "83.0.0"
+ },
+ "python3-setuptools-git": {
+  "element_path": "components/python3-setuptools-git.bst",
+  "source": "components/python3-setuptools-git.bst",
+  "version": "1.2"
+ },
+ "python3-setuptools-rust": {
+  "element_path": "components/python3-setuptools-rust.bst",
+  "source": "components/python3-setuptools-rust.bst",
+  "version": "1.13.0"
+ },
+ "python3-setuptools-scm": {
+  "element_path": "components/python3-setuptools-scm.bst",
+  "source": "components/python3-setuptools-scm.bst",
+  "version": "10.2.1"
+ },
+ "python3-smartypants": {
+  "element_path": "components/python3-smartypants.bst",
+  "source": "components/python3-smartypants.bst",
+  "version": "2.0.2"
+ },
+ "python3-sphinx": {
+  "element_path": "components/python3-sphinx.bst",
+  "source": "components/python3-sphinx.bst",
+  "version": "9.1.0"
+ },
+ "python3-sphinx-rtd-theme": {
+  "element_path": "components/python3-sphinx-rtd-theme.bst",
+  "source": "components/python3-sphinx-rtd-theme.bst",
+  "version": "3.1.0"
+ },
+ "python3-sphinxcontrib-applehelp": {
+  "element_path": "components/python3-sphinxcontrib-applehelp.bst",
+  "source": "components/python3-sphinxcontrib-applehelp.bst",
+  "version": "2.0.0"
+ },
+ "python3-sphinxcontrib-devhelp": {
+  "element_path": "components/python3-sphinxcontrib-devhelp.bst",
+  "source": "components/python3-sphinxcontrib-devhelp.bst",
+  "version": "2.0.0"
+ },
+ "python3-sphinxcontrib-htmlhelp": {
+  "element_path": "components/python3-sphinxcontrib-htmlhelp.bst",
+  "source": "components/python3-sphinxcontrib-htmlhelp.bst",
+  "version": "2.1.0"
+ },
+ "python3-sphinxcontrib-jquery": {
+  "element_path": "components/python3-sphinxcontrib-jquery.bst",
+  "source": "components/python3-sphinxcontrib-jquery.bst",
+  "version": "4.1"
+ },
+ "python3-sphinxcontrib-jsmath": {
+  "element_path": "components/python3-sphinxcontrib-jsmath.bst",
+  "source": "components/python3-sphinxcontrib-jsmath.bst",
+  "version": "1.0.1"
+ },
+ "python3-sphinxcontrib-qthelp": {
+  "element_path": "components/python3-sphinxcontrib-qthelp.bst",
+  "source": "components/python3-sphinxcontrib-qthelp.bst",
+  "version": "2.0.0"
+ },
+ "python3-sphinxcontrib-serializinghtml": {
+  "element_path": "components/python3-sphinxcontrib-serializinghtml.bst",
+  "source": "components/python3-sphinxcontrib-serializinghtml.bst",
+  "version": "2.0.0"
+ },
+ "python3-tenacity": {
+  "element_path": "components/python3-tenacity.bst",
+  "source": "components/python3-tenacity.bst",
+  "version": "9.2.0"
+ },
+ "python3-tomlkit": {
+  "element_path": "components/python3-tomlkit.bst",
+  "source": "components/python3-tomlkit.bst",
+  "version": "0.15.1"
+ },
+ "python3-toposort": {
+  "element_path": "components/python3-toposort.bst",
+  "source": "components/python3-toposort.bst",
+  "version": "1.10"
+ },
+ "python3-tpm2-pytss": {
+  "element_path": "components/python3-tpm2-pytss.bst",
+  "source": "components/python3-tpm2-pytss.bst",
+  "version": "3.0.0"
+ },
+ "python3-trove-classifiers": {
+  "element_path": "components/python3-trove-classifiers.bst",
+  "source": "components/python3-trove-classifiers.bst",
+  "version": "2026.6.1.19"
+ },
+ "python3-typing-extensions": {
+  "element_path": "components/python3-typing-extensions.bst",
+  "source": "components/python3-typing-extensions.bst",
+  "version": "4.16.0"
+ },
+ "python3-typogrify": {
+  "element_path": "components/python3-typogrify.bst",
+  "source": "components/python3-typogrify.bst",
+  "version": "2.0.7"
+ },
+ "python3-ujson": {
+  "element_path": "components/python3-ujson.bst",
+  "source": "components/python3-ujson.bst",
+  "version": "5.13.0"
+ },
+ "python3-urllib3": {
+  "element_path": "components/python3-urllib3.bst",
+  "source": "components/python3-urllib3.bst",
+  "version": "2.7.0"
+ },
+ "python3-vcs-versioning": {
+  "element_path": "components/python3-vcs-versioning.bst",
+  "source": "components/python3-vcs-versioning.bst",
+  "version": "2.3.1"
+ },
+ "python3-virtualenv": {
+  "element_path": "components/python3-virtualenv.bst",
+  "source": "components/python3-virtualenv.bst",
+  "version": "21.7.7"
+ },
+ "python3-wheel": {
+  "element_path": "components/python3-wheel.bst",
+  "source": "components/_private/python3-wheel.bst",
+  "version": "0.48.0"
+ },
+ "python3-wheezy-template": {
+  "element_path": "components/python3-wheezy-template.bst",
+  "source": "components/python3-wheezy-template.bst",
+  "version": "3.2.5"
+ },
+ "python3-yarl": {
+  "element_path": "components/python3-yarl.bst",
+  "source": "components/python3-yarl.bst",
+  "version": "1.24.5"
+ },
+ "rdfind": {
+  "element_path": "components/rdfind.bst",
+  "source": "components/rdfind.bst",
+  "version": "1.8.0"
+ },
+ "readline": {
+  "element_path": "bootstrap/readline.bst",
+  "source": "bootstrap/readline.bst",
+  "version": "8.3-3"
+ },
+ "reference-abi": {
+  "element_path": "abi/reference-abi.bst",
+  "source": "abi/reference-abi.bst",
+  "version": "26.08rc.2"
+ },
+ "rr": {
+  "element_path": "components/_private/rr.bst",
+  "source": "components/_private/rr.bst",
+  "version": "5.9.0"
+ },
+ "rsync": {
+  "element_path": "components/rsync.bst",
+  "source": "include/rsync-source.yml",
+  "version": "3.5.0"
+ },
+ "rtkit": {
+  "element_path": "components/rtkit.bst",
+  "source": "components/rtkit.bst",
+  "version": "0.14"
+ },
+ "rust-bindgen": {
+  "element_path": "components/rust-bindgen.bst",
+  "source": "components/rust-bindgen.bst",
+  "version": "0.72.1"
+ },
+ "rust-cbindgen": {
+  "element_path": "components/rust-cbindgen.bst",
+  "source": "components/rust-cbindgen.bst",
+  "version": "0.29.4"
+ },
+ "sbc": {
+  "element_path": "components/sbc.bst",
+  "source": "components/sbc.bst",
+  "version": "2.2"
+ },
+ "sbsigntools": {
+  "element_path": "components/_private/sbsigntools.bst",
+  "source": "components/_private/sbsigntools.bst",
+  "version": "0.9.5"
+ },
+ "scdoc": {
+  "element_path": "components/scdoc.bst",
+  "source": "components/scdoc.bst",
+  "version": "1.11.5"
+ },
+ "sdk": {
+  "element_path": "flatpak-images/sdk.bst",
+  "source": "flatpak-images/sdk.bst",
+  "version": "1.4"
+ },
+ "sdl2-compat": {
+  "element_path": "components/sdl2-compat.bst",
+  "source": "components/sdl2-compat.bst",
+  "version": "2.32.70"
+ },
+ "sdl3": {
+  "element_path": "components/sdl3.bst",
+  "source": "components/sdl3.bst",
+  "version": "3.4.14"
+ },
+ "sdl3-image": {
+  "element_path": "components/sdl3-image.bst",
+  "source": "components/sdl3-image.bst",
+  "version": "3.4.4"
+ },
+ "sdl3-mixer": {
+  "element_path": "components/sdl3-mixer.bst",
+  "source": "components/sdl3-mixer.bst",
+  "version": "3.2.4"
+ },
+ "sdl3-net": {
+  "element_path": "components/sdl3-net.bst",
+  "source": "components/sdl3-net.bst",
+  "version": "3.2.0"
+ },
+ "sdl3-ttf": {
+  "element_path": "components/sdl3-ttf.bst",
+  "source": "components/sdl3-ttf.bst",
+  "version": "3.2.2"
+ },
+ "shaderc": {
+  "element_path": "components/shaderc.bst",
+  "source": "components/shaderc.bst",
+  "version": "2026.3"
+ },
+ "shadow": {
+  "element_path": "components/shadow.bst",
+  "source": "components/shadow.bst",
+  "version": "4.20.2"
+ },
+ "shared-mime-info": {
+  "element_path": "components/shared-mime-info.bst",
+  "source": "components/shared-mime-info.bst",
+  "version": "2.5.1"
+ },
+ "shim": {
+  "element_path": "components/_private/shim.bst",
+  "source": "components/_private/shim.bst",
+  "version": "16.1"
+ },
+ "skopeo": {
+  "element_path": "components/skopeo.bst",
+  "source": "components/skopeo.bst",
+  "version": "1.24.0"
+ },
+ "sndfile": {
+  "element_path": "components/sndfile.bst",
+  "source": "components/sndfile.bst",
+  "version": "1.2.2"
+ },
+ "speex": {
+  "element_path": "components/speex.bst",
+  "source": "components/speex.bst",
+  "version": "1.2.1"
+ },
+ "speexdsp": {
+  "element_path": "components/speexdsp.bst",
+  "source": "components/speexdsp.bst",
+  "version": "1.2.1"
+ },
+ "spirv-llvm-translator": {
+  "element_path": "components/spirv-llvm-translator.bst",
+  "source": "components/spirv-llvm-translator.bst",
+  "version": "22.1.5"
+ },
+ "sqlite": {
+  "element_path": "components/sqlite.bst",
+  "source": "components/sqlite.bst",
+  "version": "3.53.4"
+ },
+ "squashfs-tools": {
+  "element_path": "components/squashfs-tools.bst",
+  "source": "components/squashfs-tools.bst",
+  "version": "4.6.1"
+ },
+ "steam-devices": {
+  "element_path": "components/steam-devices.bst",
+  "source": "components/steam-devices.bst",
+  "version": "1.0.0.61"
+ },
+ "strace": {
+  "element_path": "components/strace.bst",
+  "source": "components/strace.bst",
+  "version": "7.2"
+ },
+ "sudo": {
+  "element_path": "components/sudo.bst",
+  "source": "components/sudo.bst",
+  "version": "1.9.16p2"
+ },
+ "svt-av1": {
+  "element_path": "components/svt-av1.bst",
+  "source": "components/svt-av1.bst",
+  "version": "4.2.0"
+ },
+ "swig": {
+  "element_path": "components/swig.bst",
+  "source": "components/swig.bst",
+  "version": "4.5.0"
+ },
+ "systemd": {
+  "element_path": "components/systemd.bst",
+  "source": "include/systemd.yml",
+  "version": "261.2"
+ },
+ "taglib": {
+  "element_path": "components/taglib.bst",
+  "source": "components/taglib.bst",
+  "version": "2.3.1"
+ },
+ "tomlplusplus": {
+  "element_path": "components/tomlplusplus.bst",
+  "source": "components/tomlplusplus.bst",
+  "version": "3.4.0"
+ },
+ "tpm2-pkcs11": {
+  "element_path": "components/tpm2-pkcs11.bst",
+  "source": "components/tpm2-pkcs11.bst",
+  "version": "1.10.1"
+ },
+ "tpm2-tools": {
+  "element_path": "components/tpm2-tools.bst",
+  "source": "components/tpm2-tools.bst",
+  "version": "5.8"
+ },
+ "tpm2-tss": {
+  "element_path": "components/tpm2-tss.bst",
+  "source": "components/tpm2-tss.bst",
+  "version": "4.2.0"
+ },
+ "tzdata": {
+  "element_path": "components/tzdata.bst",
+  "source": "components/tzdata.bst",
+  "version": "2026c"
+ },
+ "u-boot-qemu": {
+  "element_path": "components/_private/u-boot-qemu.bst",
+  "source": "components/_private/u-boot-qemu.bst",
+  "version": "2026.07"
+ },
+ "u-boot-unmatched": {
+  "element_path": "components/_private/u-boot-unmatched.bst",
+  "source": "components/_private/u-boot-unmatched.bst",
+  "version": "2026.07"
+ },
+ "udisks": {
+  "element_path": "components/udisks.bst",
+  "source": "components/udisks.bst",
+  "version": "2.11.2"
+ },
+ "upower": {
+  "element_path": "components/upower.bst",
+  "source": "components/upower.bst",
+  "version": "1.91.3"
+ },
+ "usbutils": {
+  "element_path": "components/usbutils.bst",
+  "source": "components/usbutils.bst",
+  "version": "019"
+ },
+ "utf8cpp": {
+  "element_path": "components/utf8cpp.bst",
+  "source": "components/utf8cpp.bst",
+  "version": "4.1.1"
+ },
+ "util-linux": {
+  "element_path": "components/util-linux.bst",
+  "source": "components/_private/util-linux-base.bst",
+  "version": "2.42.2"
+ },
+ "v4l-utils": {
+  "element_path": "components/v4l-utils.bst",
+  "source": "components/v4l-utils.bst",
+  "version": "4l-utils-1.32.0"
+ },
+ "vala": {
+  "element_path": "components/vala.bst",
+  "source": "components/vala.bst",
+  "version": "0.56.19"
+ },
+ "valgrind": {
+  "element_path": "components/_private/valgrind.bst",
+  "source": "components/_private/valgrind.bst",
+  "version": "3.27.1"
+ },
+ "vdpauinfo": {
+  "element_path": "extensions/vdpauinfo/vdpauinfo.bst",
+  "source": "extensions/vdpauinfo/vdpauinfo.bst",
+  "version": "1.5"
+ },
+ "vim": {
+  "element_path": "components/vim.bst",
+  "source": "components/vim.bst",
+  "version": "9.2.0967"
+ },
+ "volume-key": {
+  "element_path": "components/volume-key.bst",
+  "source": "components/volume-key.bst",
+  "version": "0.3.12"
+ },
+ "vulkan-stack": {
+  "element_path": "include/vulkan-stack.yml",
+  "source": "include/vulkan-stack.yml",
+  "version": "1.4.357.0"
+ },
+ "wavpack": {
+  "element_path": "components/wavpack.bst",
+  "source": "components/wavpack.bst",
+  "version": "5.9.0"
+ },
+ "wayland": {
+  "element_path": "components/wayland.bst",
+  "source": "components/wayland.bst",
+  "version": "1.26.0"
+ },
+ "wayland-protocols": {
+  "element_path": "components/wayland-protocols.bst",
+  "source": "components/wayland-protocols.bst",
+  "version": "1.49"
+ },
+ "webrtc-audio-processing": {
+  "element_path": "components/webrtc-audio-processing.bst",
+  "source": "components/webrtc-audio-processing.bst",
+  "version": "2.1"
+ },
+ "weston": {
+  "element_path": "components/weston.bst",
+  "source": "components/weston.bst",
+  "version": "16.0.0"
+ },
+ "wget2": {
+  "element_path": "components/wget2.bst",
+  "source": "components/wget2.bst",
+  "version": "2.2.1"
+ },
+ "wildmidi": {
+  "element_path": "components/wildmidi.bst",
+  "source": "components/wildmidi.bst",
+  "version": "0.5.0"
+ },
+ "wireless-regdb-bin": {
+  "element_path": "components/wireless-regdb-bin.bst",
+  "source": "components/wireless-regdb-bin.bst",
+  "version": "2023-09-01"
+ },
+ "wireplumber": {
+  "element_path": "components/wireplumber.bst",
+  "source": "components/wireplumber.bst",
+  "version": "0.5.16"
+ },
+ "wpa-supplicant": {
+  "element_path": "components/wpa-supplicant.bst",
+  "source": "components/wpa-supplicant.bst",
+  "version": "2.12"
+ },
+ "xcb-util": {
+  "element_path": "components/xcb-util.bst",
+  "source": "components/xcb-util.bst",
+  "version": "0.4.1-gitlab"
+ },
+ "xcb-util-cursor": {
+  "element_path": "components/xcb-util-cursor.bst",
+  "source": "components/xcb-util-cursor.bst",
+  "version": "0.1.6"
+ },
+ "xcb-util-image": {
+  "element_path": "components/xcb-util-image.bst",
+  "source": "components/xcb-util-image.bst",
+  "version": "0.4.1-gitlab"
+ },
+ "xcb-util-keysyms": {
+  "element_path": "components/xcb-util-keysyms.bst",
+  "source": "components/xcb-util-keysyms.bst",
+  "version": "0.4.1"
+ },
+ "xcb-util-renderutil": {
+  "element_path": "components/xcb-util-renderutil.bst",
+  "source": "components/xcb-util-renderutil.bst",
+  "version": "0.3.10"
+ },
+ "xcb-util-wm": {
+  "element_path": "components/xcb-util-wm.bst",
+  "source": "components/xcb-util-wm.bst",
+  "version": "0.4.2"
+ },
+ "xdg-dbus-proxy": {
+  "element_path": "components/xdg-dbus-proxy.bst",
+  "source": "components/xdg-dbus-proxy.bst",
+  "version": "0.1.8"
+ },
+ "xdg-desktop-portal-base": {
+  "element_path": "components/_private/xdg-desktop-portal-base.bst",
+  "source": "components/_private/xdg-desktop-portal-base.bst",
+  "version": "1.22.1"
+ },
+ "xdg-user-dirs": {
+  "element_path": "components/xdg-user-dirs.bst",
+  "source": "components/xdg-user-dirs.bst",
+  "version": "0.20"
+ },
+ "xfsprogs": {
+  "element_path": "components/xfsprogs.bst",
+  "source": "components/xfsprogs.bst",
+  "version": "7.1.1"
+ },
+ "xmlto": {
+  "element_path": "components/xmlto.bst",
+  "source": "components/xmlto.bst",
+  "version": "0.0.29"
+ },
+ "xmltoman": {
+  "element_path": "components/xmltoman.bst",
+  "source": "components/xmltoman.bst",
+  "version": "0.6"
+ },
+ "xorg-app-xkbcomp": {
+  "element_path": "components/xorg-app-xkbcomp.bst",
+  "source": "components/xorg-app-xkbcomp.bst",
+  "version": "1.5.0"
+ },
+ "xorg-data-xkeyboard-config": {
+  "element_path": "components/xorg-data-xkeyboard-config.bst",
+  "source": "components/xorg-data-xkeyboard-config.bst",
+  "version": "2.48"
+ },
+ "xorg-font-util": {
+  "element_path": "components/xorg-font-util.bst",
+  "source": "components/xorg-font-util.bst",
+  "version": "1.4.2"
+ },
+ "xorg-lib-fontenc": {
+  "element_path": "components/xorg-lib-fontenc.bst",
+  "source": "components/xorg-lib-fontenc.bst",
+  "version": "1.1.9"
+ },
+ "xorg-lib-ice": {
+  "element_path": "components/xorg-lib-ice.bst",
+  "source": "components/xorg-lib-ice.bst",
+  "version": "1.1.2"
+ },
+ "xorg-lib-pciaccess": {
+  "element_path": "components/xorg-lib-pciaccess.bst",
+  "source": "components/xorg-lib-pciaccess.bst",
+  "version": "0.19"
+ },
+ "xorg-lib-sm": {
+  "element_path": "components/xorg-lib-sm.bst",
+  "source": "components/xorg-lib-sm.bst",
+  "version": "1.2.6"
+ },
+ "xorg-lib-x11": {
+  "element_path": "components/xorg-lib-x11.bst",
+  "source": "components/xorg-lib-x11.bst",
+  "version": "11-1.8.13"
+ },
+ "xorg-lib-xau": {
+  "element_path": "components/xorg-lib-xau.bst",
+  "source": "components/xorg-lib-xau.bst",
+  "version": "1.0.12"
+ },
+ "xorg-lib-xcb": {
+  "element_path": "components/xorg-lib-xcb.bst",
+  "source": "components/xorg-lib-xcb.bst",
+  "version": "1.17.0"
+ },
+ "xorg-lib-xcomposite": {
+  "element_path": "components/xorg-lib-xcomposite.bst",
+  "source": "components/xorg-lib-xcomposite.bst",
+  "version": "0.4.7"
+ },
+ "xorg-lib-xcursor": {
+  "element_path": "components/xorg-lib-xcursor.bst",
+  "source": "components/xorg-lib-xcursor.bst",
+  "version": "1.2.3"
+ },
+ "xorg-lib-xcvt": {
+  "element_path": "components/xorg-lib-xcvt.bst",
+  "source": "components/xorg-lib-xcvt.bst",
+  "version": "0.1.3"
+ },
+ "xorg-lib-xdamage": {
+  "element_path": "components/xorg-lib-xdamage.bst",
+  "source": "components/xorg-lib-xdamage.bst",
+  "version": "1.1.7"
+ },
+ "xorg-lib-xdmcp": {
+  "element_path": "components/xorg-lib-xdmcp.bst",
+  "source": "components/xorg-lib-xdmcp.bst",
+  "version": "1.1.5"
+ },
+ "xorg-lib-xext": {
+  "element_path": "components/xorg-lib-xext.bst",
+  "source": "components/xorg-lib-xext.bst",
+  "version": "1.3.7"
+ },
+ "xorg-lib-xfixes": {
+  "element_path": "components/xorg-lib-xfixes.bst",
+  "source": "components/xorg-lib-xfixes.bst",
+  "version": "6.0.2"
+ },
+ "xorg-lib-xfont2": {
+  "element_path": "components/xorg-lib-xfont2.bst",
+  "source": "components/xorg-lib-xfont2.bst",
+  "version": "2-2.0.9"
+ },
+ "xorg-lib-xft": {
+  "element_path": "components/xorg-lib-xft.bst",
+  "source": "components/xorg-lib-xft.bst",
+  "version": "2.3.9"
+ },
+ "xorg-lib-xi": {
+  "element_path": "components/xorg-lib-xi.bst",
+  "source": "components/xorg-lib-xi.bst",
+  "version": "1.8.3"
+ },
+ "xorg-lib-xinerama": {
+  "element_path": "components/xorg-lib-xinerama.bst",
+  "source": "components/xorg-lib-xinerama.bst",
+  "version": "1.1.6"
+ },
+ "xorg-lib-xkbfile": {
+  "element_path": "components/xorg-lib-xkbfile.bst",
+  "source": "components/xorg-lib-xkbfile.bst",
+  "version": "1.2.0"
+ },
+ "xorg-lib-xpm": {
+  "element_path": "components/xorg-lib-xpm.bst",
+  "source": "components/xorg-lib-xpm.bst",
+  "version": "3.5.19"
+ },
+ "xorg-lib-xrandr": {
+  "element_path": "components/xorg-lib-xrandr.bst",
+  "source": "components/xorg-lib-xrandr.bst",
+  "version": "1.5.5"
+ },
+ "xorg-lib-xrender": {
+  "element_path": "components/xorg-lib-xrender.bst",
+  "source": "components/xorg-lib-xrender.bst",
+  "version": "0.9.12"
+ },
+ "xorg-lib-xscrnsaver": {
+  "element_path": "components/xorg-lib-xscrnsaver.bst",
+  "source": "components/xorg-lib-xscrnsaver.bst",
+  "version": "1.2.5"
+ },
+ "xorg-lib-xshmfence": {
+  "element_path": "components/xorg-lib-xshmfence.bst",
+  "source": "components/xorg-lib-xshmfence.bst",
+  "version": "1.3.3"
+ },
+ "xorg-lib-xt": {
+  "element_path": "components/xorg-lib-xt.bst",
+  "source": "components/xorg-lib-xt.bst",
+  "version": "1.3.1"
+ },
+ "xorg-lib-xtrans": {
+  "element_path": "components/xorg-lib-xtrans.bst",
+  "source": "components/xorg-lib-xtrans.bst",
+  "version": "1.6.0"
+ },
+ "xorg-lib-xtst": {
+  "element_path": "components/xorg-lib-xtst.bst",
+  "source": "components/xorg-lib-xtst.bst",
+  "version": "1.2.5"
+ },
+ "xorg-lib-xv": {
+  "element_path": "components/xorg-lib-xv.bst",
+  "source": "components/xorg-lib-xv.bst",
+  "version": "1.0.13"
+ },
+ "xorg-lib-xxf86vm": {
+  "element_path": "components/xorg-lib-xxf86vm.bst",
+  "source": "components/xorg-lib-xxf86vm.bst",
+  "version": "86vm-1.1.7"
+ },
+ "xorg-proto-xcb": {
+  "element_path": "components/xorg-proto-xcb.bst",
+  "source": "components/xorg-proto-xcb.bst",
+  "version": "1.17.0"
+ },
+ "xorg-proto-xorgproto": {
+  "element_path": "components/xorg-proto-xorgproto.bst",
+  "source": "components/xorg-proto-xorgproto.bst",
+  "version": "2025.1"
+ },
+ "xorg-util-macros": {
+  "element_path": "components/xorg-util-macros.bst",
+  "source": "components/xorg-util-macros.bst",
+  "version": "1.20.2"
+ },
+ "xwayland": {
+  "element_path": "components/xwayland.bst",
+  "source": "components/xwayland.bst",
+  "version": "24.1.13"
+ },
+ "xxhash": {
+  "element_path": "components/xxhash.bst",
+  "source": "bootstrap/include/xxhash-source.yml",
+  "version": "0.8.3"
+ },
+ "xz": {
+  "element_path": "components/xz.bst",
+  "source": "include/xz-source.yml",
+  "version": "5.8.3"
+ },
+ "zenity": {
+  "element_path": "components/zenity.bst",
+  "source": "components/zenity.bst",
+  "version": "3.44.5"
+ },
+ "zlib-ng": {
+  "element_path": "bootstrap/zlib-ng.bst",
+  "source": "bootstrap/zlib-ng.bst",
+  "version": "2.3.3"
+ },
+ "zstd": {
+  "element_path": "components/zstd.bst",
+  "source": "bootstrap/include/zstd-source.yml",
+  "version": "1.5.7"
+ }
+}
