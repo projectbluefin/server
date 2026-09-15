@@ -216,7 +216,7 @@ config:
         udevadm settle --timeout=10 || true
         local target="${TARGET_DISK:-}"
         if [ -z "${target}" ]; then
-          local root_part="$(readlink -f /dev/disk/by-partlabel/bluefin-server-root-a 2>/dev/null || true)"
+          local root_part="$(readlink -f /dev/disk/by-partlabel/ROOT 2>/dev/null || true)"
           if [ -n "${root_part}" ]; then
             target="$(lsblk -p -n -d -o PKNAME "${root_part}" 2>/dev/null || true)"
           fi
@@ -400,7 +400,7 @@ config:
     #   20-ddi-data.conf: Data (XFS) — bluefin-server-ddi.raw copied here block-for-block
     #
     # At install time, systemd-sysinstall mounts the data partition to
-    # locate the DDI at the path expected by repart.d/20-root-a.conf (CopyBlocks=).
+    # locate the DDI at the path expected by repart.d/20-usr-a.conf (CopyBlocks=).
     - |
       set -eux
       OUT="%{install-root}"

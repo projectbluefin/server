@@ -5,7 +5,7 @@ description: |
   Output: bluefin-server-ddi-<ver>.raw.zst + SHA256SUMS
 
   The output .raw is a filesystem image consumed by installer repart config:
-  files/installer/repart.d/20-root-a.conf via CopyBlocks=.
+  files/installer/repart.d/20-usr-a.conf via CopyBlocks=.
 
 build-depends:
   - base/base-stack.bst

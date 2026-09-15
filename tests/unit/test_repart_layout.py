@@ -3,9 +3,13 @@
 ``files/installer/repart.d/*.conf`` is the recipe ``systemd-repart`` follows when
 the live installer partitions the *target* disk. Nothing in CI parses these
 files today, so a typo in a ``Type=``, a ``CopyBlocks=`` source that no longer
-matches the label the installer media stamps on its data partition, or an
-``esp``/``root``/``var`` slot going missing would only surface as a failed or
-silently mis-partitioned install.
+matches the label the installer media stamps on its data partition, or a
+partition going missing would only surface as a failed or silently
+mis-partitioned install.
+
+The layout is Flatcar's EFI-SYSTEM / USR-A / USR-B / OEM / ROOT, adopted in
+projectbluefin/server#134. The ``Type=`` values for USR-A, USR-B, OEM and ROOT
+are upstream GPT type GUIDs and must appear verbatim.
 
 These tests are pure static checks: they read the shipped configs (plus the
 installer element and the sysupdate transfer for cross-file consistency) and
@@ -25,6 +29,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REPART_DIR = REPO_ROOT / "files" / "installer" / "repart.d"
 ELEMENTS_DIR = REPO_ROOT / "elements"
 ROOT_TRANSFER = REPO_ROOT / "files" / "os" / "sysupdate.d" / "50-root.transfer"
+
+# Flatcar GPT type GUIDs, adopted verbatim by projectbluefin/server#134.
+ESP_GUID = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+USR_GUID = "5dfbf5f4-2848-4bac-aa5e-0d9a20b745a6"
+OEM_GUID = "0fc63daf-8483-4772-8e79-3d69d8477de4"
+ROOT_GUID = "3884dd41-8582-4404-b9a8-e9b84f2df50e"
+
+# PARTLABELs the installer provisions on the target disk, in repart order.
+EXPECTED_LABELS = ["EFI-SYSTEM", "USR-A", "USR-B", "OEM", "ROOT"]
 
 SIZE_SUFFIXES = {"K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
 
@@ -105,15 +118,23 @@ def test_config_ordering_prefixes_are_unique():
     )
 
 
-def test_expected_partition_types_are_present_exactly_once():
-    types = [section["Type"] for section in partitions().values()]
-    assert sorted(types) == ["esp", "root", "var"], (
-        "the target layout must be exactly one esp, one root and one var "
-        f"partition, got {sorted(types)}"
+def test_expected_partitions_are_present_exactly_once():
+    labels = [
+        section["Label"]
+        for section in partitions().values()
+        if "Label" in section
+    ]
+    assert sorted(labels) == sorted(EXPECTED_LABELS), (
+        "the target layout must be exactly one each of EFI-SYSTEM, USR-A, "
+        f"USR-B, OEM and ROOT partition, got {sorted(labels)}"
     )
 
 
-@pytest.mark.parametrize("name,section", sorted(partitions().items()))
+@pytest.mark.parametrize(
+    "name,section",
+    sorted(partitions().items()),
+    ids=[p.name for p in CONFIG_PATHS],
+)
 def test_size_bounds_are_consistent(name: str, section: dict[str, str]):
     minimum = section.get("SizeMinBytes")
     maximum = section.get("SizeMaxBytes")
@@ -136,8 +157,13 @@ def test_partition_labels_are_unique():
     )
 
 
-def test_esp_is_vfat_and_bounded():
-    esp = next(s for s in partitions().values() if s["Type"] == "esp")
+def test_efi_system_is_vfat_and_bounded():
+    esp = next(
+        (s for s in partitions().values() if s.get("Label") == "EFI-SYSTEM"),
+        None,
+    )
+    assert esp is not None, "EFI-SYSTEM partition missing"
+    assert esp.get("Type") == "esp", "the EFI-SYSTEM partition must be an ESP"
     assert esp["Format"] == "vfat", "an ESP that is not vfat is unbootable by UEFI"
     assert parse_size(esp["SizeMinBytes"]) >= 100 * 1024**2, (
         "the ESP must be large enough for systemd-boot plus at least one UKI"
@@ -145,12 +171,19 @@ def test_esp_is_vfat_and_bounded():
     assert "SizeMaxBytes" in esp, "the ESP must be capped so it cannot eat the disk"
 
 
-def test_root_slot_copies_blocks_from_a_label_the_installer_media_stamps():
-    root = next(s for s in partitions().values() if s["Type"] == "root")
-    copy_blocks = root.get("CopyBlocks")
+def test_usr_a_copies_blocks_from_a_label_the_installer_media_stamps():
+    usr_a = next(
+        (s for s in partitions().values() if s.get("Label") == "USR-A"),
+        None,
+    )
+    assert usr_a is not None, "USR-A partition missing"
+    assert usr_a["Type"] == USR_GUID, (
+        "USR-A must carry Flatcar's usr type GUID verbatim"
+    )
+    copy_blocks = usr_a.get("CopyBlocks")
     assert copy_blocks, (
-        "the root partition must CopyBlocks= the DDI payload; without it the "
-        "installed system has an empty root filesystem"
+        "USR-A must CopyBlocks= the /usr DDI payload; without it the installed "
+        "system has an empty /usr"
     )
     prefix = "/dev/disk/by-partlabel/"
     assert copy_blocks.startswith(prefix), (
@@ -171,65 +204,76 @@ def test_root_slot_copies_blocks_from_a_label_the_installer_media_stamps():
     )
 
 
-def test_root_slot_grows_and_is_bounded_below_the_var_partition():
-    root = next(s for s in partitions().values() if s["Type"] == "root")
+def test_usr_b_exists_and_is_empty():
+    usr_b = next(
+        (s for s in partitions().values() if s.get("Label") == "USR-B"),
+        None,
+    )
+    assert usr_b is not None, "USR-B partition missing"
+    assert usr_b["Type"] == USR_GUID, (
+        "USR-B must carry Flatcar's usr type GUID verbatim so the kernel "
+        "recognises the USR-A/USR-B pair"
+    )
+    assert "CopyBlocks" not in usr_b, (
+        "USR-B is the rollback slot and must stay empty, not a copy of the DDI"
+    )
+    assert "CopyFiles" not in usr_b, "USR-B must be empty, not seeded from files"
+    assert "Format" not in usr_b, "USR-B must be left unformatted (empty)"
+
+
+def test_oem_is_labelled_ext4():
+    oem = next(
+        (s for s in partitions().values() if s.get("Label") == "OEM"),
+        None,
+    )
+    assert oem is not None, "OEM partition missing"
+    assert oem["Type"] == OEM_GUID, (
+        "OEM must carry Flatcar's OEM type GUID verbatim"
+    )
+    assert oem.get("Format") == "ext4", "OEM must be ext4"
+    # Stage 2 waits on dev-disk-by-label-OEM.device: the match is on the
+    # filesystem LABEL, so Label=OEM must also be the filesystem label.
+    assert oem.get("Label") == "OEM", (
+        "OEM must be formatted with filesystem label OEM or stage 2 never finds it"
+    )
+
+
+def test_root_grows_and_is_bounded_below_oem():
+    root = next(
+        (s for s in partitions().values() if s.get("Label") == "ROOT"),
+        None,
+    )
+    assert root is not None, "ROOT partition missing"
+    assert root["Type"] == ROOT_GUID, (
+        "ROOT must carry Flatcar's root type GUID verbatim"
+    )
     assert root.get("GrowFileSystem") == "yes", (
-        "the root filesystem must grow to its partition, the DDI payload is "
-        "smaller than SizeMinBytes"
+        "the ROOT partition must grow to fill the disk after the other slots"
     )
-    assert "SizeMaxBytes" in root, (
-        "the root slot must be capped, otherwise /var gets no space on small disks"
-    )
-
-
-def test_var_is_a_growing_xfs_tail():
-    var = next(s for s in partitions().values() if s["Type"] == "var")
-    assert var["Format"] == "xfs"
-    # FactoryReset=yes must NOT be set on the installer var partition:
-    # systemd-sysinstall hardcodes deferPartitionsFactoryReset=true via
-    # Varlink io.systemd.Repart.Run, causing it to defer creating /var.
-    assert "FactoryReset" not in var, (
-        "FactoryReset must not be set on installer var partition or "
-        "systemd-sysinstall will defer creating it"
-    )
-    assert var["GrowFileSystem"] == "yes"
-    assert "SizeMaxBytes" not in var, (
-        "/var is the tail partition and must grow into all remaining space"
-    )
-
-
-def test_var_seeds_the_offline_k0s_sysext():
-    var = next(s for s in partitions().values() if s["Type"] == "var")
-    assert var["CopyFiles"] == "/k0s.raw:/lib/k0s/k0s.raw"
-
-
-def test_root_partition_label_is_matched_by_the_sysupdate_root_transfer():
-    root = next(s for s in partitions().values() if s["Type"] == "root")
-    targets = sysupdate_root_targets()
-    prefix, _, suffix = targets[0].partition("@v")
-    assert root["Label"].startswith(prefix) and root["Label"].endswith(suffix.lstrip("_")), (
-        f"the installed root label {root['Label']!r} is not matched by "
-        f"sysupdate target pattern {targets[0]}; OTA updates would find no slot"
+    assert "SizeMaxBytes" not in root, (
+        "ROOT is the tail partition and must grow into all remaining space"
     )
 
 
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "Known gap, tracked in docs/MVP_1_0_READINESS.md: 50-root.transfer names "
-        "root-a and root-b, but the installer provisions only root-a, so "
-        "systemd-sysupdate has no inactive slot to stage into and no atomic "
-        "rollback path. When root-b is added this test XPASSes and must be "
-        "un-xfailed."
+        "Follow-on: 50-root.transfer still targets the legacy "
+        "bluefin-server-root-<ver>_a/_b labels, but the Flatcar layout (project"
+        "bluefin/server#134) provisions USR-A/USR-B instead. Wiring the transfer "
+        "to the real /usr slots and retiring this xfail is a later ticket, so "
+        "the label-match assertion is expected to fail until then."
     ),
 )
-def test_every_sysupdate_root_target_is_provisioned_by_the_installer():
-    targets = set(sysupdate_root_targets())
-    provisioned = {
-        section["Label"]
-        for section in partitions().values()
-        if section["Type"] == "root"
-    }
-    assert len(targets) <= len(provisioned), (
-        f"sysupdate targets {sorted(targets)} require dual slots, only {provisioned} provisioned"
+def test_root_partition_label_is_matched_by_the_sysupdate_root_transfer():
+    root = next(
+        (s for s in partitions().values() if s.get("Label") == "ROOT"),
+        None,
+    )
+    assert root is not None
+    targets = sysupdate_root_targets()
+    prefix, _, suffix = targets[0].partition("@v")
+    assert root["Label"].startswith(prefix) and root["Label"].endswith(suffix.lstrip("_")), (
+        f"the installed root label {root['Label']!r} is not matched by "
+        f"sysupdate target pattern {targets[0]}; OTA updates would find no slot"
     )

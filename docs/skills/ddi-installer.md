@@ -17,7 +17,7 @@ metadata:
 - Writing or refining `systemd-repart`, `bootctl`, or `ukify` configurations.
 - Packaging or publishing DDI assets to GitHub Releases.
 - Managing partition recipes for the target disk layout (`10-esp.conf`,
-  `20-root-a.conf`, `30-var.conf`).
+  `20-usr-a.conf`, `30-usr-b.conf`, `40-oem.conf`, `50-root.conf`).
 
 ## When NOT to Use
 
@@ -72,8 +72,9 @@ container runtime pod sandboxes.
 5. `systemd-sysinstall` reads partition recipes from
    `/usr/lib/repart.sysinstall.d/` if it is populated; otherwise it falls back
    to `/usr/lib/repart.d/`. The target recipes are staged at
-   `/usr/lib/repart.d/` (`10-esp.conf`, `20-root-a.conf`, `30-var.conf`).
-6. `20-root-a.conf` copies the DDI block-for-block from
+   `/usr/lib/repart.d/` (`10-esp.conf`, `20-usr-a.conf`, `30-usr-b.conf`,
+   `40-oem.conf`, `50-root.conf`).
+6. `20-usr-a.conf` copies the DDI block-for-block from
    `/dev/disk/by-partlabel/bluefin-installer-data` (the embedded DDI data
    partition on the installer media).
 7. Target OS volume expansion is handled by `systemd-growfs`; the target OS
@@ -93,9 +94,11 @@ container runtime pod sandboxes.
 
 | Partition | Type | Size | Contents |
 |---|---|---|---|
-| ESP | vfat | 500 MiB – 1 GiB | `systemd-boot` + target OS UKI (`bluefin-server.efi`) |
-| `bluefin-server-root-a` | XFS | 4 GiB – 16 GiB | OS root filesystem (copied from installer data partition) |
-| `var` | XFS | ≥ 4 GiB | Writable persistent `/var`; grows to fill remaining disk |
+| EFI-SYSTEM | vfat | 500 MiB – 1 GiB | `systemd-boot` + target OS UKI |
+| USR-A | Flatcar `usr` (5dfbf5f4-…) | ≥ 4 GiB | read-only `/usr` (DDI copied block-for-block from installer data partition) |
+| USR-B | Flatcar `usr` (5dfbf5f4-…) | ≥ 4 GiB | empty A/B rollback slot |
+| OEM | ext4 | 1 GiB | provider/first-boot state; filesystem label `OEM` |
+| ROOT | Flatcar `root` (3884dd41-…) | writable | writable state; grows to fill remaining disk |
 
 ## Installer Boot Flow
 
@@ -187,7 +190,7 @@ offline installation.
 - [ ] The interactive installer service sets `TTYPath=/dev/tty0` so the TUI
       appears on the attached display even when serial is the primary console.
 - [ ] `bluefin-server-installer.bst` decompresses the DDI after the cpio step.
-- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
+- [ ] `files/installer/repart.d/50-root.conf` has `GrowFileSystem=yes`.
 
 ## See also
 
