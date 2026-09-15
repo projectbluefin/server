@@ -342,8 +342,15 @@ test-installer-artifact:
       > "$REPART_DIR/30-var.conf"
 
     echo "==> Refreshing target /var partition using systemd-repart..."
-    # systemd-repart operates on the target image directly without loopback/sudo when passed as the target operand.
-    unshare -r systemd-repart \
+    REPART=(unshare -r systemd-repart)
+    if ! unshare -r true 2>/dev/null; then
+      if ! sudo -n true 2>/dev/null; then
+        echo "ERROR: systemd-repart needs unprivileged user namespaces or passwordless sudo" >&2
+        exit 1
+      fi
+      REPART=(sudo systemd-repart)
+    fi
+    "${REPART[@]}" \
       --factory-reset=yes \
       --dry-run=no \
       --definitions="$REPART_DIR" \

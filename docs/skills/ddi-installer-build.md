@@ -34,6 +34,8 @@ just test-installer-artifact # test already-exported artifacts in QEMU without r
 just tags                  # show FSDK-derived version tags
 ```
 
+`test-installer-artifact` uses an unprivileged user namespace for host-side `systemd-repart` when available. GitHub-hosted runners disable that facility, so the recipe falls back to passwordless `sudo` for `systemd-repart` only; QEMU remains rootless.
+
 ## Mandatory build path: ghost cluster
 
 This project MUST always build on the ghost cluster using distributed BuildStream:
