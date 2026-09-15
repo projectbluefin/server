@@ -41,7 +41,7 @@ spec:
       serviceAccountName: argocd-server
       containers:
       - name: argocd-server
-        image: quay.io/argoproj/argocd:v2.12.3
+        image: quay.io/argoproj/argocd:v2.12.3@sha256:68894064bc381c19ea951029510aa614bd26bf46c2ec65ea445c7d8d095a9417
         command: [argocd-server, --insecure, --staticassets, /shared/app]
         ports:
         - containerPort: 8080
