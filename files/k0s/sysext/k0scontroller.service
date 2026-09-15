@@ -2,8 +2,8 @@
 Description=k0s - Zero Friction Kubernetes
 Documentation=https://docs.k0sproject.io
 ConditionFileIsExecutable=/usr/bin/k0s
-After=network-online.target
-Wants=network-online.target
+After=network-online.target k0s-kiosk-tls.service
+Wants=network-online.target k0s-kiosk-tls.service
 
 [Service]
 Type=simple

@@ -46,6 +46,25 @@ k0s automatically applies all `.yaml` files under `/var/lib/k0s/manifests/argocd
 k0s kubectl get pods -A
 ```
 
+## KubeStellar Kiosk TLS Management
+
+The KubeStellar kiosk proxy TLS certificate (`cert.pem`) and private key (`key.pem`) are generated on first boot by `k0s-kiosk-tls.service` before `k0scontroller.service` starts. The private key is stored persistently in `/var/lib/k0s/kiosk/key.pem` with mode `0600`, and the certificate is configured with the host's actual IP addresses in the Subject Alternative Names (SAN). `files/k0s/sysext/k0s-manifests.conf` seeds the kiosk static assets (`nginx.conf`, `kiosk-gate.js`, `kiosk-gate.css`) into this same directory on every boot, file-by-file rather than as a whole-directory copy, specifically so it never deletes `cert.pem`/`key.pem`.
+
+The SAN is computed once, at generation time, from whatever IP addresses the host has at that moment (3650-day validity, no periodic refresh). On a DHCP host whose address later changes, the certificate will not include the new address — rotate manually (below) after an address change if browser cert warnings start appearing.
+
+To rotate or regenerate the TLS certificate and private key:
+
+```bash
+# Remove the existing certificate and key from persistent storage
+rm -f /var/lib/k0s/kiosk/key.pem /var/lib/k0s/kiosk/cert.pem
+
+# Trigger regeneration via the oneshot unit
+systemctl restart k0s-kiosk-tls.service
+
+# Restart the controller service to reload kiosk assets
+systemctl restart k0scontroller.service
+```
+
 ## Troubleshooting
 
 - **Extension not merged**: Check `systemd-sysext status`. Verify the persistent image is `/var/lib/k0s/k0s.raw`; the boot activation unit copies it into `/run/extensions/k0s.raw`.
