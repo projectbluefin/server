@@ -44,8 +44,6 @@ echo "==> Starting local kc-agent client connection..."
 ./files/bin/bluefin-kubestellar start --origin "http://localhost:8080,http://127.0.0.1:8080"
 
 echo "==> Running automated browser verification test..."
-python3 tests/e2e/test_kubestellar_browser_login.py --console-url "http://127.0.0.1:8080" --agent-url "http://127.0.0.1:8585" --timeout 15 || {
-  echo "==> Browser login verification completed (console readiness check handled)."
-}
+python3 tests/e2e/test_kubestellar_browser_login.py --console-url "http://127.0.0.1:8080" --agent-url "http://127.0.0.1:8585" --timeout 15
 
 echo "==> Lima VM end-to-end verification passed!"
