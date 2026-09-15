@@ -1,0 +1,14 @@
+[Unit]
+Description=Reboot Automatically After System Update
+Documentation=man:systemd-sysupdate-reboot.service(8)
+ConditionVirtualization=!container
+ConditionPathExists=!/run/reboot-lock
+ConditionPathExists=!/etc/reboot-lock
+ConditionPathExists=!/run/kured-active
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-sysupdate reboot
+
+[Install]
+Also=systemd-sysupdate-reboot.timer

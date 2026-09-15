@@ -1,0 +1,12 @@
+[Unit]
+Description=Reboot Automatically After System Update
+Documentation=man:systemd-sysupdate-reboot.service(8)
+ConditionVirtualization=!container
+
+[Timer]
+OnCalendar=*-*-* 04:10:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
