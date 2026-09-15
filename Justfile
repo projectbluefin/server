@@ -219,7 +219,6 @@ flash-installer DEVICE="":
 show-me-the-future:
     just build-installer
     just export-installer
-    just export-sysext
     just test-installer-artifact
 
 # Install and reboot already-exported server artifacts in QEMU.
@@ -300,61 +299,6 @@ test-installer-artifact:
         -nographic \
         -serial mon:stdio \
         -no-reboot < /dev/null
-
-    echo "==> Preparing target /var refresh with offline k0s sysext and smoke secret..."
-    K0S_RAW_ZST=$(find dist/sysext/ -maxdepth 1 -type f -name 'k0s-*.raw.zst' -print -quit 2>/dev/null || true)
-    [ -n "$K0S_RAW_ZST" ] || { echo "ERROR: k0s sysext not found in dist/sysext" >&2; exit 1; }
-
-    VAR_STAGING="$WORKDIR/var-staging"
-    mkdir -p "$VAR_STAGING/lib/k0s"
-    mkdir -p "$VAR_STAGING/lib/k0s/manifests/kubestellar"
-    zstd -dc "$K0S_RAW_ZST" > "$VAR_STAGING/lib/k0s/k0s.raw"
-
-    printf '%s\n' \
-      'apiVersion: v1' \
-      'kind: Namespace' \
-      'metadata:' \
-      '  name: kubestellar-console' \
-      '---' \
-      'apiVersion: v1' \
-      'kind: Secret' \
-      'metadata:' \
-      '  name: kubestellar-console-github-oauth' \
-      '  namespace: kubestellar-console' \
-      'type: Opaque' \
-      'stringData:' \
-      '  client-id: dummy-client-id' \
-      '  client-secret: dummy-client-secret' \
-      '  jwt-secret: smoke-only-jwt-secret-1234567890' \
-      > "$VAR_STAGING/lib/k0s/manifests/kubestellar/00-kubestellar-console-github-oauth.yaml"
-
-    REPART_DIR="$WORKDIR/repart.d"
-    mkdir -p "$REPART_DIR"
-    printf '%s\n' \
-      '[Partition]' \
-      'Type=var' \
-      'Label=var' \
-      'UUID=296ed67f-37e5-4a1f-b86a-ec708a3128b8' \
-      'Format=xfs' \
-      'FactoryReset=yes' \
-      'GrowFileSystem=yes' \
-      "CopyFiles=${VAR_STAGING}:/" \
-      > "$REPART_DIR/30-var.conf"
-
-    echo "==> Refreshing target /var partition using systemd-repart..."
-    REPART=(unshare -r systemd-repart)
-    if ! unshare -r true 2>/dev/null; then
-      if ! sudo -n true 2>/dev/null; then
-        echo "ERROR: systemd-repart needs unprivileged user namespaces or passwordless sudo" >&2
-        exit 1
-      fi
-      REPART=(sudo systemd-repart)
-    fi
-    "${REPART[@]}" \
-      --factory-reset=yes \
-      --dry-run=no \
-      --definitions="$REPART_DIR" \
-      "$WORKDIR/target.raw"
 
     SERIAL_LOG="$WORKDIR/serial.log"
     TARGET_QEMU_PID=""

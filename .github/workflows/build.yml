@@ -127,7 +127,6 @@ jobs:
             dist/bluefin-server-installer-*.raw.zst
             dist/bluefin-server-pxe-vmlinuz-*
             dist/bluefin-server-pxe-initrd-*.cpio.gz
-            dist/sysext/k0s-*.raw.zst
           if-no-files-found: error
           retention-days: 1
 
@@ -177,7 +176,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-    uses: projectbluefin/actions/.github/workflows/server-installer-test.yml@4d220f3f5448dd5f4a8f64a0ec1fad042b1dc85e # v1
+    uses: projectbluefin/actions/.github/workflows/server-installer-test.yml@6680f74bf167fa12f498db1c1e9e1183c0415bb9 # v1
     with:
       artifact-name: server-installer-test
 
