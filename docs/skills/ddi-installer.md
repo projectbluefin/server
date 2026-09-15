@@ -47,11 +47,18 @@ terminal-based interactive installation that:
 - Reboots into the installed system.
 
 User provisioning is handled on the target system's first boot via systemd
-system credentials (`systemd-sysusers`, `systemd-tmpfiles`) so the base image
-remains stateless. `systemd-firstboot.service` is masked on the target image
-(`/etc/systemd/system/systemd-firstboot.service -> /dev/null`) to guarantee
-unattended, prompt-free startup. The target DDI also pre-stages the extracted CA
-certificate bundle (`/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem` and
+system credentials so the base image remains stateless. `systemd-sysusers`
+consumes root and `core` account records, `systemd-tmpfiles` consumes
+`tmpfiles.extra` for files such as `core` SSH `authorized_keys`, and
+`systemd-network-generator` consumes `network.network.*` / `network.netdev.*`
+credentials before networkd starts. The stock interactive
+`systemd-firstboot.service` stays masked, but
+`bluefin-firstboot-credentials.service` runs `systemd-firstboot`
+non-interactively when `firstboot.locale`, `firstboot.timezone`,
+`firstboot.hostname`, or related credentials are present. With no credentials,
+the target keeps the default DHCP network and does not prompt. The target DDI
+also pre-stages the extracted CA certificate bundle
+(`/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem` and
 `/etc/ssl/certs/ca-certificates.crt`) and a standard `/etc/hosts` file for
 container runtime pod sandboxes.
 
