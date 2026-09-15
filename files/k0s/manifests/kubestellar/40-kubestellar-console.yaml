@@ -40,7 +40,9 @@ spec:
     spec:
       containers:
       - name: console
-        image: ghcr.io/kubestellar/console:v0.3.34
+        # v0.3.34, pinned by digest for supply-chain integrity (same pattern
+        # as the kiosk proxy's nginx image in 41-kubestellar-kiosk-proxy.yaml).
+        image: ghcr.io/kubestellar/console@sha256:f27adaf8d097a5403f60041615525497e0970151fcd10b90b7b6e903b395be32
         env:
         - name: DEV_MODE
           value: "true"
@@ -60,12 +62,19 @@ spec:
               name: kubestellar-console-github-oauth
               key: client-secret
               optional: true
+        # When unset, the image's own start.sh generates a random
+        # openssl rand -hex 32 secret (persisted to $INSTALL_DIR/data/
+        # .jwt_secret so it survives a plain container restart, but lost on
+        # pod recreation since no volume is mounted here) rather than
+        # falling back to an empty or compiled-in default -- verified
+        # against the pinned v0.3.34 tag:
+        # https://github.com/kubestellar/console/blob/v0.3.34/start.sh#L524-L541
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
               name: kubestellar-console-github-oauth
               key: jwt-secret
-              optional: false
+              optional: true
         ports:
         - containerPort: 8080
           name: http
