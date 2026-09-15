@@ -6,6 +6,7 @@ on:
       - '.github/scripts/**'
       - '.github/workflows/unit-tests.yml'
       - 'files/**'
+      - 'elements/**'
       - 'tests/unit/**'
       - 'Justfile'
   push:
@@ -14,6 +15,7 @@ on:
       - '.github/scripts/**'
       - '.github/workflows/unit-tests.yml'
       - 'files/**'
+      - 'elements/**'
       - 'tests/unit/**'
       - 'Justfile'
 

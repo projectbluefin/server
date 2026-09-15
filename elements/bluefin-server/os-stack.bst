@@ -34,6 +34,16 @@ depends:
   - flatcar/flatcar-zfs.bst
   - bluefin-server/linux-firmware-split.bst
 
+  # Container Runtime via Flatcar sysexts
+  # Upstream Flatcar publishes podman, containerd, and docker as systemd-sysext
+  # images (projectbluefin/server#127). This replaces the FSDK podman component
+  # below with these upstream sysexts, honoring hard rule 4 (no container
+  # runtime in the base DDI). Each element pins the .raw by sha256 and stages it
+  # under /usr/lib/sysexts so systemd-sysext attaches it on a booted image.
+  - flatcar/flatcar-podman.bst
+  - flatcar/containerd-flatcar.bst
+  - flatcar/docker-flatcar.bst
+
   # Filesystem resizing support for growing root/var on first boot
   - freedesktop-sdk.bst:components/xfsprogs.bst
 
@@ -63,9 +73,6 @@ depends:
 
   # Reboot Coordination for Kured
   - bluefin-server/os-kured-hook.bst
-
-  # Container Runtime support
-  - freedesktop-sdk.bst:components/podman.bst
 
   # System Management Justfile
   - bluefin-server/os-justfile.bst
