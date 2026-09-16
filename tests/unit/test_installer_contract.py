@@ -101,25 +101,34 @@ def test_ddi_generates_module_indexes_for_runtime_filesystem_drivers() -> None:
     assert "> /layer/etc/hosts" in ddi_element
 
 
-def test_target_initramfs_preloads_sysext_filesystem_drivers() -> None:
+def test_target_uki_build_does_not_invoke_dracut() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
-
-    assert (
-        '--add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay zfs spl"'
-        in installer_element
+    data = yaml.safe_load(installer_element)
+    dep_names = [
+        dep if isinstance(dep, str) else dep.get("filename", "")
+        for dep in data.get("build-depends", [])
+    ]
+    commands = data.get("config", {}).get("commands", [])
+    commands_text = "\n".join(
+        cmd if isinstance(cmd, str) else "\n".join(cmd) for cmd in commands
     )
 
+    assert "freedesktop-sdk.bst:components/dracut.bst" not in dep_names
+    assert "freedesktop-sdk.bst:components/grep.bst" not in dep_names
+    assert "freedesktop-sdk.bst:components/sed.bst" not in dep_names
+    assert "dracut" not in commands_text
+    assert "--add-drivers" not in commands_text
+    assert "ld.so.cache" not in commands_text
 
-def test_installer_loads_storage_drivers_and_settles_udev() -> None:
+
+def test_installer_omits_module_force_load_and_udev_settle_workarounds() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
 
-    assert "modprobe -q nvme || true" in installer_element
-    assert "modprobe -q nvme_core || true" in installer_element
-    assert "modprobe -q usb-storage || true" in installer_element
-    assert "modprobe -q uas || true" in installer_element
-    assert "udevadm settle --timeout=15 || true" in installer_element
-    assert "After=systemd-udev-settle.service" in installer_element
-    assert "Wants=systemd-udev-settle.service" in installer_element
+    assert "modprobe -q nvme" not in installer_element
+    assert "modprobe -q usb-storage" not in installer_element
+    assert "udevadm settle --timeout=15" not in installer_element
+    assert "After=systemd-udev-settle.service" not in installer_element
+    assert "Wants=systemd-udev-settle.service" not in installer_element
 
 def test_interactive_installer_uses_local_virtual_console() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")

@@ -31,14 +31,10 @@ description: |
 build-depends:
   # Toolchain for assembly
   - base/base-stack.bst
-  - freedesktop-sdk.bst:components/dracut.bst
   - freedesktop-sdk.bst:components/kmod.bst
   - freedesktop-sdk.bst:components/cpio.bst      # newc cpio archive creation
   - freedesktop-sdk.bst:components/findutils.bst # find for cpio pipe
   - freedesktop-sdk.bst:components/gzip.bst      # gzip for initrd cpio
-  # grep/sed are required by dracut/dracut-install even though our commands don't name them.
-  - freedesktop-sdk.bst:components/grep.bst
-  - freedesktop-sdk.bst:components/sed.bst
   - freedesktop-sdk.bst:components/zstd.bst       # compress initrd + final disk
   # ukify assembles the UKI (kernel + initrd + cmdline -> .efi)
   - freedesktop-sdk.bst:components/systemd-ukify.bst
@@ -87,7 +83,7 @@ config:
       mkdir -p /layer/boot
       mkdir -p /target-root/boot/EFI/Linux /tmp /var/tmp
 
-    # ── Step 1b: Generate target OS UKI (dracut + ukify) ────────────────
+    # ── Step 1b: Generate target OS UKI (ukify) ─────────────────────────
     - |
       set -eux
       TARGET_KVER="$(basename "$(find /target-root/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
@@ -105,38 +101,8 @@ config:
 
       depmod -b /target-root "${TARGET_KVER}" || true
 
-      # Configure dynamic linker search paths so ldconfig indexes FSDK libraries
-      # (e.g. libc.so.6, libgcc_s.so.1, libkmod.so) for dracut-install
-      printf '/usr/lib/x86_64-linux-gnu\n/usr/lib/x86_64-linux-gnu/systemd\n' > /etc/ld.so.conf
-      if [ -d /etc/ld.so.conf.d ]; then
-        echo 'include /etc/ld.so.conf.d/*.conf' >> /etc/ld.so.conf
-      fi
-      ldconfig
-
-      # Build target-root linker cache and stage it at /etc/ld.so.cache for dracut
-      mkdir -p /target-root/tmp /target-root/etc
-      printf '/usr/lib/x86_64-linux-gnu\n/usr/lib/x86_64-linux-gnu/systemd\n' > /target-root/tmp/ld.so.conf
-      if [ -d /target-root/etc/ld.so.conf.d ]; then
-        echo 'include /etc/ld.so.conf.d/*.conf' >> /target-root/tmp/ld.so.conf
-      fi
-      ldconfig -r /target-root -f /tmp/ld.so.conf
-      rm -f /target-root/tmp/ld.so.conf
-      cp /target-root/etc/ld.so.cache /etc/ld.so.cache
-
-      # Run dracut in generic (non-hostonly) mode and explicitly add XFS, VirtIO, and NVMe storage drivers.
-      dracut -v --reproducible --no-machineid --no-hostonly \
-        --add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay zfs spl" \
-        --filesystems "xfs vfat zfs" \
-        --install /etc/ld.so.cache \
-        --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
-        --kernel-image "${TARGET_KERNEL}" \
-        --kver "${TARGET_KVER}" \
-        --kernel-cmdline "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
-        /tmp/bluefin-server-target.initramfs
-
       ukify build \
         --linux="${TARGET_KERNEL}" \
-        --initrd=/tmp/bluefin-server-target.initramfs \
         --cmdline="rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
         --output=/target-root/boot/EFI/Linux/bluefin-server.efi
       cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
@@ -184,16 +150,6 @@ config:
       #!/bin/bash
       set -euo pipefail
 
-      # Ensure storage controller modules and filesystems are loaded before probing devices
-      modprobe -q nvme || true
-      modprobe -q nvme_core || true
-      modprobe -q usb-storage || true
-      modprobe -q uas || true
-      modprobe -q ahci || true
-      modprobe -q sd_mod || true
-      modprobe -q xfs || true
-      udevadm trigger --subsystem-match=block || true
-      udevadm settle --timeout=15 || true
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
       TARGET_DISK=""
       INSTALLER_PART="$(readlink -f /dev/disk/by-partlabel/bluefin-installer-data 2>/dev/null || true)"
@@ -293,8 +249,6 @@ config:
       mkdir -p /layer/etc/systemd/system/systemd-sysinstall.service.d
       cat > /layer/etc/systemd/system/systemd-sysinstall.service.d/override.conf << 'EOF'
       [Unit]
-      After=systemd-udev-settle.service
-      Wants=systemd-udev-settle.service
       SuccessAction=poweroff
       FailureAction=poweroff
 
