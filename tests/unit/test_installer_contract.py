@@ -14,6 +14,7 @@ INSTALLER_ELEMENT = (
 )
 JUSTFILE = REPO_ROOT / "Justfile"
 DDI_ELEMENT = REPO_ROOT / "elements" / "oci" / "bluefin-server-ddi.bst"
+FLATCAR_ZFS_ELEMENT = REPO_ROOT / "elements" / "flatcar" / "flatcar-zfs.bst"
 
 
 def _published_uki_cmdline(installer_element: str) -> str:
@@ -135,3 +136,33 @@ def test_installer_and_ddi_strip_vmlinux_and_static_archives() -> None:
     assert "find /layer -type f -name '*.a' -delete" in installer_element
     assert 'rm -f "/layer/usr/lib/modules/${KVER}/vmlinux"' in ddi_element
     assert "find /layer -type f -name '*.a' -delete" in ddi_element
+
+
+def test_flatcar_zfs_removes_udevd_sysext_ordering_dropin() -> None:
+    flatcar_zfs = FLATCAR_ZFS_ELEMENT.read_text(encoding="utf-8")
+
+    assert (
+        'rm -rf "%{install-root}/usr/lib/systemd/system/systemd-udevd.service.d"'
+        in flatcar_zfs
+    )
+
+
+def test_var_partition_contracts_use_consistent_partlabel() -> None:
+    import base64
+
+    repart_var = (
+        REPO_ROOT / "files" / "installer" / "repart.d" / "30-var.conf"
+    ).read_text(encoding="utf-8")
+    ddi_element = DDI_ELEMENT.read_text(encoding="utf-8")
+    var_mount = (
+        REPO_ROOT / "files" / "os" / "systemd" / "system" / "var.mount"
+    ).read_text(encoding="utf-8")
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+
+    assert "Label=var" in repart_var
+    assert "/dev/disk/by-partlabel/var /var xfs defaults 0 0" in ddi_element
+    assert "What=/dev/disk/by-partlabel/var" in var_mount
+    expected_b64 = base64.b64encode(
+        b"/dev/disk/by-partlabel/var /var xfs defaults 0 0\n"
+    ).decode("ascii")
+    assert expected_b64 in justfile

@@ -31,3 +31,11 @@ config:
       # Also preserve the raw sysext image under /usr/lib/sysexts for runtime sysext usage
       mkdir -p "%{install-root}/usr/lib/sysexts"
       install -D -m 0644 flatcar-zfs.raw "%{install-root}/usr/lib/sysexts/zfs.raw"
+
+      # Drop Flatcar's udevd sysext ordering override. In Flatcar, ZFS is loaded as
+      # a runtime sysext, so udevd was ordered After=systemd-sysext.service.
+      # In Bluefin Server, ZFS is extracted directly into the OS rootfs at build time.
+      # Leaving this drop-in causes systemd-udevd to wait for systemd-sysext.service,
+      # which waits for local-fs.target, which waits for var.mount, which waits for
+      # the udev device unit — creating a boot deadlock.
+      rm -rf "%{install-root}/usr/lib/systemd/system/systemd-udevd.service.d"
