@@ -201,82 +201,9 @@ These rules are enforced by `.github/scripts/docs-checks.py` and must be honored
 
 ## 6. `AGENTS.md` target contents
 
-The existing `AGENTS.md` is already AAIF-aligned. The target content below keeps the current shape, with only minor wording consistency polish.
+The existing `AGENTS.md` is already AAIF-aligned, and its current content *is* the target: project overview, “What agents should know first”, hard rules, build/test commands, skill routing, documentation conventions, boundaries, and a verification checklist.
 
-```markdown
-# Bluefin Server — Agent Entry Point
-
-Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
-- an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
-- an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
-- an optional k0s `systemd-sysext` (`oci/k0s-sysext.bst`)
-
-## What agents should know first
-
-1. Read this file.
-2. Load [`docs/skills/index.md`](docs/skills/index.md) to route to the skill for your task.
-3. Never guess label names, workflow secrets, or infrastructure hostnames — check the relevant skill.
-
-## Hard rules
-
-1. Compose from FSDK `components/*`. Never use `platform.bst`.
-2. Keep the CPU baseline broad: no `x86_64_v3`.
-3. Installer must stay `systemd-sysinstall`-native; no custom installer scripts or non-native installers.
-4. Deliver k0s as an optional `systemd-sysext`; never bundle Kubernetes or container runtimes into the base OS DDI.
-5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
-6. One canonical source per fact; do not duplicate content across docs.
-
-## Build / test commands
-
-All `just` targets run BuildStream inside the FSDK `bst2` container via `just bst`; BuildStream is not installed locally.
-
-| Command | Purpose |
-|---|---|
-| `just validate` | Merge-contract graph check — run this on every change. |
-| `just build-ddi` | Local OS DDI payload build. |
-| `just export-ddi` | Export DDI artifacts to `dist/ddi/`. |
-| `just build-installer` | Local full installer build. |
-| `just export-installer` | Export installer + UKI to `dist/`. |
-| `just build-sysext` | Build the k0s `systemd-sysext`. |
-| `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
-| `just show-me-the-future` | Local QEMU installer smoke test. |
-
-## Skill routing
-
-| Task | Skill |
-|---|---|
-| Build or debug the installer / DDI | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md), [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md) |
-| Factory role, k0s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
-| Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
-| Build or ship the k0s sysext | [`docs/skills/k0s-sysext.md`](docs/skills/k0s-sysext.md), [`docs/skills/k0s-sysext-ops.md`](docs/skills/k0s-sysext-ops.md) |
-| Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
-| CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
-| Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |
-| Credential sealing with TPM2 | [`docs/skills/tpm2-credential-sealing.md`](docs/skills/tpm2-credential-sealing.md) |
-| System containers (`machinectl`) | [`docs/skills/system-containers.md`](docs/skills/system-containers.md) |
-| Cut bloat / avoid over-engineering | [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md) |
-| Add or refactor skills | [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) |
-
-## Documentation conventions
-
-- Update only the skill that matches your change.
-- Keep `AGENTS.md` small; do not list deep context here.
-- Remove `TODO/FIXME` and work-in-progress markers before merging; move unfinished work to issues.
-- Use Conventional Commits. For doc-only changes: `docs:`.
-
-## Boundaries
-
-- Do not add Containerfiles or shell-based installers.
-- Do not hardcode block device paths in boot configuration.
-- Do not put Kubernetes or debug tooling in the base DDI if it can live in a sysext or system container.
-- Do not duplicate a fact already in a skill.
-
-## Verification
-
-- [ ] `just validate` passes.
-- [ ] Any changed skill is listed in [`docs/skills/index.md`](docs/skills/index.md).
-- [ ] No new internal-only hostnames or proprietary names appear in `AGENTS.md` or skills.
-```
+Per hard rule 6 in [`AGENTS.md`](../AGENTS.md), that content is not restated here; read the file directly, and land hard-rule changes only there.
 
 ---
 

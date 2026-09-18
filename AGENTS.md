@@ -1,6 +1,6 @@
 # Bluefin Server — Agent Entry Point
 
-Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
+Bluefin Server is an image-based Linux server OS. It produces:
 - an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
 - an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
 - an optional k0s `systemd-sysext` (`oci/k0s-sysext.bst`)
@@ -18,7 +18,7 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 
 ## Hard rules
 
-1. Compose from FSDK 26.08 `components/*`. Never use `platform.bst`.
+1. Installer image composes from FSDK 26.08 `components/*`; OS payload may import Flatcar binaries pinned by digest. Never use `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
 3. Installer must stay `systemd-sysinstall`-native and `systemd-repart`-based; no custom installer scripts or non-native installers.
 4. Deliver k0s as an optional `systemd-sysext`; never bundle Kubernetes or container runtimes into the base OS DDI.
