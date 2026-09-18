@@ -29,6 +29,11 @@ spec:
         - /etc/kubestellar-kiosk/nginx.conf
         ports:
         - containerPort: 8080
+          # Kiosk-only proxy: bind loopback so the console is not exposed on
+          # LAN interfaces over plaintext HTTP. The VM flow reaches it via the
+          # existing hostfwd of 127.0.0.1:8080; LAN access, if ever wanted,
+          # must go through a TLS-terminating, authenticated front end.
+          hostIP: 127.0.0.1
           hostPort: 8080
           name: http
         volumeMounts:
