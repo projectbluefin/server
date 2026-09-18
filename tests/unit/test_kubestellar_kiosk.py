@@ -45,10 +45,12 @@ def test_kiosk_assets_are_packaged_and_seeded() -> None:
 def test_proxy_injects_only_csp_safe_same_origin_assets() -> None:
     nginx = KIOSK_CONF.read_text(encoding="utf-8")
 
+    assert "proxy_pass $upstream_endpoint;" in nginx
     assert (
-        "proxy_pass "
+        "set $upstream_endpoint "
         "http://kubestellar-console.kubestellar-console.svc.cluster.local:8080;"
     ) in nginx
+    assert "resolver 10.96.0.10" in nginx
     assert "proxy_redirect" in nginx
     assert 'proxy_set_header Accept-Encoding "";' in nginx
     assert "sub_filter_types" not in nginx
