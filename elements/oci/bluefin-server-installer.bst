@@ -103,7 +103,7 @@ config:
       mkdir -p /target-root/boot
       ln -sf "../usr/lib/modules/${TARGET_KVER}/vmlinuz" /target-root/boot/vmlinuz
 
-      depmod -b /target-root "${TARGET_KVER}" || true
+      depmod -b /target-root/usr "${TARGET_KVER}" || true
 
       # Configure dynamic linker search paths so ldconfig indexes FSDK libraries
       # (e.g. libc.so.6, libgcc_s.so.1, libkmod.so) for dracut-install
@@ -360,7 +360,7 @@ config:
           rm -rf "${MOD_DIR}/drivers/infiniband"
         fi
         # Re-run depmod to update module dependencies after stripping unneeded modules
-        depmod -b /layer "${KVER}" || true
+        depmod -b /layer/usr "${KVER}" || true
       fi
 
       ( cd /layer && find . -print0 \

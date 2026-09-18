@@ -38,7 +38,7 @@ config:
         exit 1
       fi
       rm -f "/layer/usr/lib/modules/${KVER}/vmlinux" "/layer/usr/lib/modules/${KVER}/System.map"
-      depmod -b /layer "${KVER}"
+      depmod -b /layer/usr "${KVER}"
 
       # Stage extracted CA certificate bundle into target DDI rootfs
       mkdir -p /layer/etc/pki/ca-trust/extracted /layer/etc/ssl/certs /layer/etc/pki/tls/certs

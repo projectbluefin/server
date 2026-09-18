@@ -92,7 +92,7 @@ def test_ddi_generates_module_indexes_for_runtime_filesystem_drivers() -> None:
     ddi_element = DDI_ELEMENT.read_text(encoding="utf-8")
 
     assert "freedesktop-sdk.bst:components/kmod.bst" in ddi_element
-    assert 'depmod -b /layer "${KVER}"' in ddi_element
+    assert 'depmod -b /layer/usr "${KVER}"' in ddi_element
     assert "cp -a /etc/pki/ca-trust/extracted/* /layer/etc/pki/ca-trust/extracted/" in ddi_element
     assert "tls-ca-bundle.pem" in ddi_element
     assert "ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service" in ddi_element
