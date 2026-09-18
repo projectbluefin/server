@@ -28,6 +28,11 @@ config:
       # Extract the SquashFS sysext directly into the element install root
       unsquashfs -no-xattrs -f -d "%{install-root}" flatcar-zfs.raw
 
+      # Drop the Flatcar sysext udevd dropin (After=systemd-sysext.service).
+      # When extracted directly into the OS rootfs, this drop-in causes systemd-udevd
+      # to stop at early boot waiting for systemd-sysext.service, deadlocking udev
+      # device creation before /var and storage partitions are mounted.
+      rm -rf "%{install-root}/usr/lib/systemd/system/systemd-udevd.service.d"
       # Also preserve the raw sysext image under /usr/lib/sysexts for runtime sysext usage
       mkdir -p "%{install-root}/usr/lib/sysexts"
       install -D -m 0644 flatcar-zfs.raw "%{install-root}/usr/lib/sysexts/zfs.raw"
