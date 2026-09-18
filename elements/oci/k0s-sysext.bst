@@ -34,9 +34,11 @@ sources:
     path: files/k0s/kubeflex
     directory: kubeflex-src
   - kind: local
+    path: files/k0s/k0s.yaml
+    directory: k0s-config-src
+  - kind: local
     path: files/os/issue.d/40-kubestellar.issue
     directory: issue-src
-
 variables:
   strip-binaries: ""
 
@@ -81,6 +83,8 @@ config:
 
       # Stage manifest stacks
       cp -a manifests-src/* sysext/usr/share/k0s/manifests/
+      # Stage k0s cluster configuration
+      cp -a k0s-config-src/k0s.yaml sysext/usr/share/k0s/
 
       # Stage Console kiosk proxy assets.
       cp -a kiosk-src/. sysext/usr/share/k0s/kiosk/

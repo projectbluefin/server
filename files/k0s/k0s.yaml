@@ -1,0 +1,12 @@
+apiVersion: k0s.k0sproject.io/v1beta1
+kind: ClusterConfig
+metadata:
+  name: k0s
+  namespace: kube-system
+spec:
+  network:
+    provider: kuberouter
+    kuberouter:
+      autoMTU: true
+      hairpin: Enabled
+      metricsPort: 8088
