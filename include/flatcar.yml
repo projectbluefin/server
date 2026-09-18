@@ -1,7 +1,21 @@
 # Single source of truth for Flatcar LTS kernel and sysext versioning.
 #
 # Flatcar LTS kernel and ZFS sysext must stay strictly in lockstep because
-# OpenZFS modules (spl.ko, zfs.ko) require matching kernel vermagic (6.12.102-flatcar).
+# OpenZFS modules (spl.ko, zfs.ko) require matching kernel vermagic
+# (6.12.102-flatcar).
+#
+# This file is the ONLY place a Flatcar upstream version or sha256 is declared.
+# Every Flatcar element references these values through %{...} variable
+# substitution (see elements/flatcar/*.bst); no element or script restates a
+# Flatcar version or sha256. .github/scripts/check-flatcar-version.py fails the
+# build if a pinned literal is ever hardcoded outside this file.
 variables:
   flatcar-version: "4593.2.5"
   flatcar-kver: "6.12.102-flatcar"
+
+  # sha256 of the upstream Flatcar sources, pinned in lockstep with
+  # flatcar-version / flatcar-kver. Bump all three together on a Flatcar
+  # release.
+  flatcar-kernel-vmlinuz-sha256: "fe0b7ef1f9f98acc00e1db22937cdc57456df860a372fdc8eb806298f767b676"
+  flatcar-kernel-container-sha256: "c533ff576e128d11ce240e01f818c358d75b9ff118b2dd9199fbf4684547a32c"
+  flatcar-zfs-sha256: "bed24d0a31b6c9ff0f1d59ec2b50d25585bf9bbcb8e9e96f5706f1a17948d971"
