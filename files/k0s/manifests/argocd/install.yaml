@@ -6,6 +6,24 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  name: argocd-redis
+  namespace: argocd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: argocd-server
   namespace: argocd
 ---
@@ -19,6 +37,397 @@ metadata:
     app.kubernetes.io/part-of: argocd
 data:
   application.instanceLabelKey: argocd.argoproj.io/instance
+---
+# Namespace-scoped RBAC for the Argo CD components. The application controller
+# reconciles Application resources, so it needs CRUD on the argoproj.io kinds;
+# the server manages apps/config/secrets via the API; the repository server only
+# needs to read config/secrets that define repository credentials.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  - applicationsets
+  - appprojects
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - list
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-server
+  namespace: argocd
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  - appprojects
+  - applicationsets
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - delete
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-application-controller
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-repo-server
+subjects:
+- kind: ServiceAccount
+  name: argocd-repo-server
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-server
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-server
+subjects:
+- kind: ServiceAccount
+  name: argocd-server
+---
+# Cluster-scoped RBAC: the application controller may operate on apps/resources
+# that live in any namespace, and the server needs cluster-wide read + workflow
+# creation to answer API queries. Matches upstream Argo CD's RBAC model.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-application-controller
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- nonResourceURLs:
+  - '*'
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-server
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - delete
+  - get
+  - patch
+- apiGroups:
+  - '*'
+  resources:
+  - '*/finalizers'
+  verbs:
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/log
+  verbs:
+  - get
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  - applicationsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflows
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-application-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-application-controller
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-server
+subjects:
+- kind: ServiceAccount
+  name: argocd-server
+  namespace: argocd
+---
+# Redis backs Argo CD's internal cache/work queue. Exposed at its default
+# address (argocd-redis:6379) so every component finds it without extra config.
+# protected-mode is disabled and no password is set so the single-node cluster
+# components can connect over the pod network without secret bootstrap.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-redis
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-redis
+    app.kubernetes.io/part-of: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argocd-redis
+    spec:
+      serviceAccountName: argocd-redis
+      containers:
+      - name: redis
+        image: public.ecr.aws/docker/library/redis:7-alpine
+        args:
+        - --protected-mode
+        - "no"
+        ports:
+        - containerPort: 6379
+          name: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-redis
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-redis
+    app.kubernetes.io/part-of: argocd
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  selector:
+    app.kubernetes.io/name: argocd-redis
+---
+# The repository server clones and caches the git repos that hold Application
+# manifests and serves manifests to the server and application controller.
+# ---disable-tls keeps the internal gRPC endpoint plaintext, matching the
+# --insecure mode of the argocd-server below (see co-located clients).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-repo-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-repo-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argocd-repo-server
+    spec:
+      serviceAccountName: argocd-repo-server
+      containers:
+      - name: argocd-repo-server
+        image: quay.io/argoproj/argocd:v2.12.3
+        command:
+        - argocd-repo-server
+        - --disable-tls
+        env:
+        - name: NAMESPACE
+          value: argocd
+        - name: ARGOCD_GIT_SHARED_DIR
+          value: /shared/repos
+        ports:
+        - containerPort: 8081
+          name: server
+        volumeMounts:
+        - name: repos
+          mountPath: /shared/repos
+      volumes:
+      - name: repos
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-repo-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8081
+    targetPort: 8081
+    name: server
+  selector:
+    app.kubernetes.io/name: argocd-repo-server
+---
+# The application controller continuously reconciles Application resources to
+# their desired state defined in the repos served by the repository server.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application-controller
+    app.kubernetes.io/part-of: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-application-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argocd-application-controller
+    spec:
+      serviceAccountName: argocd-application-controller
+      containers:
+      - name: argocd-application-controller
+        image: quay.io/argoproj/argocd:v2.12.3
+        command:
+        - argocd-application-controller
+        env:
+        - name: NAMESPACE
+          value: argocd
+        - name: ARGOCD_APPLICATION_CONTROLLER_REPO_SERVER
+          value: argocd-repo-server:8081
+        - name: ARGOCD_APPLICATION_CONTROLLER_REPO_SERVER_PLAINTEXT
+          value: "true"
+        - name: ARGOCD_APPLICATION_CONTROLLER_REPO_SERVER_STRICT_TLS
+          value: "false"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -43,6 +452,15 @@ spec:
       - name: argocd-server
         image: quay.io/argoproj/argocd:v2.12.3
         command: [argocd-server, --insecure, --staticassets, /shared/app]
+        env:
+        - name: NAMESPACE
+          value: argocd
+        - name: ARGOCD_SERVER_REPO_SERVER
+          value: argocd-repo-server:8081
+        - name: ARGOCD_SERVER_REPO_SERVER_PLAINTEXT
+          value: "true"
+        - name: ARGOCD_SERVER_REPO_SERVER_STRICT_TLS
+          value: "false"
         ports:
         - containerPort: 8080
           name: server
@@ -67,5 +485,8 @@ spec:
   - port: 80
     targetPort: 8080
     name: http
+  - port: 443
+    targetPort: 8080
+    name: https
   selector:
     app.kubernetes.io/name: argocd-server
