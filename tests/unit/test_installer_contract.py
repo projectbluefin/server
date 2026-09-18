@@ -135,3 +135,20 @@ def test_installer_and_ddi_strip_vmlinux_and_static_archives() -> None:
     assert "find /layer -type f -name '*.a' -delete" in installer_element
     assert 'rm -f "/layer/usr/lib/modules/${KVER}/vmlinux"' in ddi_element
     assert "find /layer -type f -name '*.a' -delete" in ddi_element
+
+
+def test_installer_smoke_probes_the_kiosk_over_tls_from_inside_the_guest() -> None:
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+    recipe = justfile.split("\ntest-installer-artifact:\n", 1)[1].split(
+        "\n# Interactively install", 1
+    )[0]
+
+    # The kiosk proxy publishes hostPort 8080 on the guest's loopback, which a
+    # QEMU hostfwd never reaches, and it terminates TLS with a self-signed
+    # certificate. A host-side plaintext probe can therefore never go green.
+    assert "hostfwd=" not in recipe
+    assert "http://127.0.0.1:8080" not in recipe
+    assert "https://127.0.0.1:8080/healthz" in recipe
+    assert "--insecure" in recipe
+    assert "systemd.extra-unit.bluefin-kiosk-ready.service" in recipe
+    assert "systemd.wants=bluefin-kiosk-ready.service" in recipe

@@ -317,6 +317,29 @@ test-installer-artifact:
     }
     trap cleanup EXIT INT TERM
 
+    # The kiosk proxy publishes hostPort 8080 on the guest's loopback only
+    # (files/k0s/manifests/kubestellar/41-kubestellar-kiosk-proxy.yaml), and a
+    # QEMU hostfwd with an unspecified guest address is delivered to the guest's
+    # DHCP address, never to 127.0.0.1 — so no host-side probe can reach it
+    # without exposing the console on the guest's external interface. Probe from
+    # inside the guest instead and report the verdict on the system console,
+    # which is already captured in $SERIAL_LOG. The proxy terminates TLS with the
+    # self-signed certificate baked into the k0s sysext, so the probe speaks
+    # https and skips certificate verification, matching tests/e2e.
+    READY_MARKER="KIOSK_CONSOLE_READY"
+    READY_UNIT=$(base64 -w0 <<'UNIT'
+    [Unit]
+    Description=Report KubeStellar Console readiness on the system console
+    ConditionPathExists=!/etc/initrd-release
+    After=k0s-first-boot.service
+
+    [Service]
+    Type=oneshot
+    TimeoutStartSec=infinity
+    ExecStart=/usr/bin/bash -c 'echo "kiosk-ready: polling https://127.0.0.1:8080" >> /dev/console; until [ "$(curl --silent --fail --insecure --max-time 2 https://127.0.0.1:8080/healthz | jq -r .status)" = ok ] && [ "$(curl --silent --fail --insecure --max-time 2 --output /dev/null --write-out "%%{http_code}" https://127.0.0.1:8080/)" = 200 ]; do sleep 2; done; echo KIOSK_CONSOLE_READY >> /dev/console'
+    UNIT
+    )
+
     echo "==> Booting the installed server in QEMU (background)..."
     qemu-system-x86_64 \
         -enable-kvm \
@@ -326,9 +349,10 @@ test-installer-artifact:
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
-        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 \
+        -nic user,model=virtio-net-pci \
         -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
-        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service" \
+        -smbios "type=11,value=io.systemd.credential.binary:systemd.extra-unit.bluefin-kiosk-ready.service=${READY_UNIT}" \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service systemd.wants=bluefin-kiosk-ready.service" \
         -nographic \
         -serial file:"$SERIAL_LOG" \
         -monitor none &
@@ -336,7 +360,7 @@ test-installer-artifact:
 
     DEADLINE_SECS="${SHOW_ME_THE_FUTURE_DEADLINE:-${SHOW_ME_THE_FUTURE_TIMEOUT:-600}}"
     START_TIME=$(date +%s)
-    echo "==> Polling KubeStellar Console readiness at http://127.0.0.1:8080 (deadline: ${DEADLINE_SECS}s)..."
+    echo "==> Polling KubeStellar Console readiness from inside the guest (deadline: ${DEADLINE_SECS}s)..."
 
     while true; do
       if ! kill -0 "$TARGET_QEMU_PID" 2>/dev/null; then
@@ -348,13 +372,9 @@ test-installer-artifact:
         exit 1
       fi
 
-      HEALTHZ_JSON=$(curl --silent --fail --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true)
-      if [ -n "$HEALTHZ_JSON" ] && echo "$HEALTHZ_JSON" | jq -e '.status == "ok"' >/dev/null 2>&1; then
-        ROOT_CODE=$(curl --silent --fail --max-time 2 --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || true)
-        if [ "$ROOT_CODE" = "200" ]; then
-          echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
-          break
-        fi
+      if grep -q "$READY_MARKER" "$SERIAL_LOG" 2>/dev/null; then
+        echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
+        break
       fi
 
       NOW=$(date +%s)
