@@ -61,8 +61,9 @@ depends:
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
 
-  # Reboot Coordination for Kured
+  # Reboot Coordination
   - bluefin-server/os-kured-hook.bst
+  - bluefin-server/os-sysupdate-reboot.bst
 
   # Container Runtime support
   - freedesktop-sdk.bst:components/podman.bst

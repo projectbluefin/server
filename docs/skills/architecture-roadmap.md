@@ -27,7 +27,7 @@ Priorities are derived from [gap-analysis-distros.md](gap-analysis-distros.md).
 | 3 | Boot-time selection / automatic rollback of a failed update | No previous OS version is kept once a root update overwrites the slot. |
 | 4 | Broader `systemd-creds` integration for SSH keys and network configuration | Only `root` password credential path is shipped in `os-creds-prov.bst`. |
 | 5 | TPM2-bound credential delivery at first boot | Documented but not wired into the installed OS image. |
-| 6 | Native reboot coordination for non-Kubernetes and single-node hosts | Kured only covers Kubernetes nodes; no FleetLock/locksmith equivalent. |
+| 6 | Distributed reboot lock coordination for multi-node non-Kubernetes clusters | Single-node / maintenance window / lock-file reboot coordination is present via `systemd-sysupdate-reboot`; cluster-wide FleetLock/locksmith HTTP protocol is not implemented. |
 | 7 | Staged rollout behavior for larger fleets | Future after items 1-3 are implemented. |
 
 ## Status notes

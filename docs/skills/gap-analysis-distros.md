@@ -99,7 +99,7 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 | **Updates** | `systemd-sysupdate` reads root/UKI transfers from `files/os/sysupdate.d/` and the optional k0s transfer from the `k0s` component directory. Assets are published to GitHub Releases, and the combined `SHA256SUMS` manifest is signed in CI with a GPG key. `Verify=yes` is the default. Sources: [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md), [50-root.transfer](../../files/os/sysupdate.d/50-root.transfer), [60-uki.transfer](../../files/os/sysupdate.d/60-uki.transfer), [70-k0s.transfer](../../files/os/sysupdate.k0s.d/70-k0s.transfer), also `systemd-sysupdate(8)`. |
 | **Provisioning** | The installer is an offline `systemd-sysinstall` image that embeds the DDI as a data partition. First-boot configuration is intended to be delivered via `systemd-creds` through the ESP or hypervisor metadata. Today only `passwd.hashed-password.root` is consumed via `systemd-sysusers.d`; the documented `tmpfiles.extra` path for SSH keys and similar files is not implemented. Sources: [bluefin-server-installer.bst](../../elements/oci/bluefin-server-installer.bst), [10-root-creds.conf](../../files/os/sysusers.d/10-root-creds.conf), [os-creds-prov.bst](../../elements/bluefin-server/os-creds-prov.bst), [systemd-creds(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-creds.html). |
 | **Customization** | Adds software through `systemd-sysext` (overlay `/usr`) and `systemd-confext` (overlay `/etc`) images. The base OS `os-release` advertises `ID=flatcar` and a matching `VERSION_ID` so pre-built Flatcar Bakery extensions load. k0s is shipped as a separately built, optionally enabled sysext. Sources: [systemd-sysext-extensions.md](systemd-sysext-extensions.md), [k0s-sysext.md](k0s-sysext.md), [os-release-flatcar.bst](../../elements/bluefin-server/os-release-flatcar.bst), [systemd-sysext(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html). |
-| **Reboot coordination** | `systemd-sysupdate.service` has an `ExecStartPost` that touches `/run/reboot-required`. Rolling reboots across Kubernetes nodes rely on Kured reading that file. Sources: [os-kured-hook.bst](../../elements/bluefin-server/os-kured-hook.bst), [kured-hook.conf](../../files/os/systemd/systemd-sysupdate.service.d/kured-hook.conf), [Kured project](https://github.com/weaveworks/kured). |
+| **Reboot coordination** | `systemd-sysupdate.service` has an `ExecStartPost` that touches `/run/reboot-required` for Kured. For non-Kubernetes and single-node hosts, `systemd-sysupdate-reboot.timer` and `systemd-sysupdate-reboot.service` coordinate automated reboots using systemd primitives, supporting maintenance window timers and lock inhibition (`/run/reboot-lock`, `/etc/reboot-lock`). Sources: [os-kured-hook.bst](../../elements/bluefin-server/os-kured-hook.bst), [kured-hook.conf](../../files/os/systemd/systemd-sysupdate.service.d/kured-hook.conf), [os-sysupdate-reboot.bst](../../elements/bluefin-server/os-sysupdate-reboot.bst), [reboot-coordination.conf](../../files/os/systemd/systemd-sysupdate-reboot.service.d/reboot-coordination.conf), [zz-enable-sysupdate-reboot.preset](../../files/os/systemd/system-preset/zz-enable-sysupdate-reboot.preset), [Kured project](https://github.com/weaveworks/kured), also `systemd-sysupdate(8)`. |
 
 ## 4. Factual Gaps
 
@@ -120,7 +120,6 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 ### Update delivery
 
 - **Gap:** The root transfer uses `Type=partition Path=auto`, which requires `systemd-sysupdate` to discover a matching GPT partition label (`bluefin-server-root-a`/`root-b`). This is correct, but without a `root-b` partition the transfer effectively overwrites the running root in place.
-- **Gap:** `systemd-sysupdate-reboot.service`/`systemd-sysupdate-reboot.timer` are not enabled or configured; the only reboot signal today is the Kured hook.
 
 ### Customization
 
@@ -128,7 +127,8 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 
 ### Reboot coordination
 
-- **Gap:** Kured coordinates Kubernetes node reboots but requires Kubernetes to be running. There is no equivalent for single-node or non-Kubernetes Bluefin hosts, and there is no built-in cluster lock manager similar to Zincati's FleetLock or Flatcar's `locksmithd`/`etcd-lock`.
+- **Status:** Bluefin Server provides `systemd-sysupdate-reboot.timer` and `systemd-sysupdate-reboot.service` with maintenance window scheduling and lock-based inhibition (`/run/reboot-lock`, `/etc/reboot-lock`) for single-node and non-Kubernetes hosts, alongside the Kured hook for Kubernetes clusters.
+- **Gap:** While single-node and lock-file inhibition is supported via systemd primitives, there is no built-in cluster-wide HTTP lock manager client similar to Zincati's FleetLock or Flatcar's `locksmithd`/`etcd-lock`.
 
 ## 5. Summary of Biggest Gaps
 
@@ -195,3 +195,6 @@ These gaps drive the priorities in [architecture-roadmap.md](architecture-roadma
 - [files/os/sysupdate.k0s.d/70-k0s.transfer](../../files/os/sysupdate.k0s.d/70-k0s.transfer)
 - [files/os/sysusers.d/10-root-creds.conf](../../files/os/sysusers.d/10-root-creds.conf)
 - [files/os/systemd/systemd-sysupdate.service.d/kured-hook.conf](../../files/os/systemd/systemd-sysupdate.service.d/kured-hook.conf)
+- [elements/bluefin-server/os-sysupdate-reboot.bst](../../elements/bluefin-server/os-sysupdate-reboot.bst)
+- [files/os/systemd/systemd-sysupdate-reboot.service.d/reboot-coordination.conf](../../files/os/systemd/systemd-sysupdate-reboot.service.d/reboot-coordination.conf)
+- [files/os/systemd/system-preset/zz-enable-sysupdate-reboot.preset](../../files/os/systemd/system-preset/zz-enable-sysupdate-reboot.preset)
