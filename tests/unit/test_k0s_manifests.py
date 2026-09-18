@@ -24,6 +24,8 @@ def test_k0s_manifests_conf():
     assert "d /var/lib/k0s/manifests 0755 root root - -" in text
     assert "C+ /var/lib/k0s/manifests/argocd - - - - /usr/share/k0s/manifests/argocd" in text
     assert "C+ /var/lib/k0s/manifests/kubestellar - - - - /usr/share/k0s/manifests/kubestellar" in text
+    assert "d /etc/k0s 0755 root root - -" in text
+    assert "C+ /etc/k0s/k0s.yaml - - - - /usr/share/k0s/k0s.yaml" in text
 
 
 def test_k0s_manifest_files():
@@ -38,6 +40,16 @@ def test_k0s_manifest_files():
     assert (ks_dir / "30-kubestellar-core.yaml").is_file()
     assert (ks_dir / "40-kubestellar-console.yaml").is_file()
     assert (ks_dir / "41-kubestellar-kiosk-proxy.yaml").is_file()
+    k0s_yaml = ROOT / "files" / "k0s" / "k0s.yaml"
+    assert k0s_yaml.is_file(), "files/k0s/k0s.yaml missing"
+    data = yaml.safe_load(k0s_yaml.read_text())
+    assert data["spec"]["network"]["kuberouter"]["metricsPort"] == 8088
+
+
+def test_flatcar_zfs_includes_sed_build_dep():
+    zfs_bst = ROOT / "elements" / "flatcar" / "flatcar-zfs.bst"
+    data = yaml.safe_load(zfs_bst.read_text(encoding="utf-8"))
+    assert "freedesktop-sdk.bst:components/sed.bst" in data.get("build-depends", [])
 
 
 def test_postgres_password_not_hardcoded():
