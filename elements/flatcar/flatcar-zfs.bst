@@ -28,11 +28,15 @@ config:
       # Extract the SquashFS sysext directly into the element install root
       unsquashfs -no-xattrs -f -d "%{install-root}" flatcar-zfs.raw
 
-      # Drop the Flatcar sysext udevd dropin (After=systemd-sysext.service).
+      # Drop the Flatcar sysext udevd dropin (After=systemd-sysext.service)
+      # and the tmpfiles rule that copies it into /etc/systemd/system/systemd-udevd.service.d/.
       # When extracted directly into the OS rootfs, this drop-in causes systemd-udevd
       # to stop at early boot waiting for systemd-sysext.service, deadlocking udev
       # device creation before /var and storage partitions are mounted.
       rm -rf "%{install-root}/usr/lib/systemd/system/systemd-udevd.service.d"
+      if [ -f "%{install-root}/usr/lib/tmpfiles.d/10-zfs.conf" ]; then
+        sed -i '/systemd-udevd\.service\.d/d' "%{install-root}/usr/lib/tmpfiles.d/10-zfs.conf"
+      fi
       # Also preserve the raw sysext image under /usr/lib/sysexts for runtime sysext usage
       mkdir -p "%{install-root}/usr/lib/sysexts"
       install -D -m 0644 flatcar-zfs.raw "%{install-root}/usr/lib/sysexts/zfs.raw"
