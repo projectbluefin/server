@@ -358,9 +358,9 @@ test-installer-artifact:
       HEALTHZ_RESP=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 root@127.0.0.1 "curl --silent --insecure --max-time 2 https://127.0.0.1:8080/healthz 2>/dev/null || curl --silent --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true" 2>/dev/null || true)
       if [ -n "$HEALTHZ_RESP" ]; then
         ROOT_CODE=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 root@127.0.0.1 "curl --silent --insecure --max-time 2 --output /dev/null --write-out '%{http_code}' https://127.0.0.1:8080/ 2>/dev/null || curl --silent --max-time 2 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/ 2>/dev/null || true" 2>/dev/null || true)
-        if [ "$ROOT_CODE" = "200" ] || [ "$ROOT_CODE" = "503" ]; then
-          if echo "$HEALTHZ_RESP" | jq -e '.status == "ok"' >/dev/null 2>&1 || echo "$HEALTHZ_RESP" | grep -qi "KubeStellar Console"; then
-            echo "==> KubeStellar Console is healthy: /healthz responded, / returned HTTP ${ROOT_CODE}"
+        if [ "$ROOT_CODE" = "200" ]; then
+          if echo "$HEALTHZ_RESP" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+            echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
             break
           fi
         fi
