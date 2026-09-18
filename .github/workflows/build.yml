@@ -12,57 +12,15 @@ concurrency:
 
 # Least privilege by default: this workflow executes PR-controlled build code
 # (the Justfile and build scripts come from the PR head), so the workflow-wide
-# token is read-only. contents: write is granted per job only where genuinely
-# required (see track-refs and release below).
+# token is read-only. No job that runs on `pull_request` holds a write token;
+# contents: write is granted only to `release`, which is gated to main.
 permissions:
   contents: read
 
 jobs:
-  # Resolves BuildStream junction refs and pushes them back to the PR branch.
-  # This runs PR-controlled code (`just bst source track`) with a write token,
-  # so it keeps the pre-existing renovate/* branch gate. The push updates the
-  # PR branch tip; the build job below runs afterwards and checks out that
-  # updated tip.
-  track-refs:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: write # pushes resolved refs back to the renovate/* PR branch
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-
-      - name: Set up just
-        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2
-        with:
-          tool: just
-
-      - name: Track and Resolve BuildStream Refs
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          just bst source track freedesktop-sdk.bst || true
-          just bst source track gnome-build-meta.bst || true
-          if ! git diff --exit-code; then
-            git add elements/
-            git commit -m "chore: resolve BuildStream junction refs to git-describe format" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-            git push origin "HEAD:${HEAD_REF}"
-          fi
-
   build:
     # Read-only token (workflow default): on pull_request this job checks out
     # and executes PR-controlled code, so it must never hold a write token.
-    needs: track-refs
-    # track-refs is skipped for non-renovate PRs and pushes; only a failed or
-    # cancelled track job should stop the build.
-    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     outputs:
@@ -182,7 +140,7 @@ jobs:
 
   # Publishes the signed assets to the GitHub Release. Only runs on
   # pushes/dispatches to main, where the code is already reviewed, and is the
-  # only job besides track-refs that holds contents: write.
+  # only job in this workflow that holds contents: write.
   release:
     if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}
     needs: [build, installer-test]

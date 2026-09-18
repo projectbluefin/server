@@ -79,9 +79,9 @@ Before merging a bump:
 
 ## Automated Point-Release Bumps
 
-Point releases are fully automated via Renovate and GitHub Actions.
-- **Trigger:** Renovate bot scans `elements/freedesktop-sdk.bst` using a custom regex manager. When a new upstream point release is published, Renovate creates a Pull Request.
-- **Mechanism:** On the Renovate PR, a GHA job in `build.yml` automatically runs `just bst source track freedesktop-sdk.bst` to track and resolve the raw tag to the full `git-describe` ref, then commits and pushes it back to the PR branch.
+Point releases are delivered by the scheduled `track-junctions.yml` workflow.
+- **Trigger:** `track-junctions.yml` runs daily and resolves the junction's own `track: freedesktop-sdk-26.08*` glob; it does not wait on a Renovate PR.
+- **Mechanism:** `track-junctions.yml` runs `just bst source track freedesktop-sdk.bst` (alongside `gnome-build-meta.bst`, which overrides it), syncs `project.conf`'s `release-version` to the tracked point release, and opens its own PR on `auto/track-junctions`. It never runs on `pull_request`, so a junction bump can never be injected into an unrelated dependency PR.
 - **Build Loop:** When the PR is merged to `main`, GitHub Actions automatically compiles the standalone DDI OS and installer images, and publishes them directly to GitHub Releases under the new FSDK point-release version.
 
 ## See also

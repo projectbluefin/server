@@ -1,0 +1,162 @@
+name: Track junction refs
+
+# Resolves the BuildStream junction refs on a schedule and delivers the result
+# as its own titled pull request.
+#
+# This deliberately has NO `pull_request` trigger. The job this replaces
+# (`track-refs` in build.yml) ran on every `renovate/*` pull request and pushed
+# re-resolved junction refs onto that PR's branch, so unrelated dependency PRs
+# silently acquired freedesktop-sdk and gnome-build-meta bumps that appeared in
+# no title, body or Renovate table. Moving the work onto a schedule with its own
+# branch also removes the need for the old `startsWith(github.head_ref,
+# 'renovate/')` gate: a branch name is not an identity, and on a scheduled
+# trigger there is no PR-controlled head to gate in the first place.
+on:
+  schedule:
+    # Offset from dakota's trackers (06:00 and 20:00 UTC) to spread runner load.
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Tracking only queries upstream git remotes to resolve refs; it never builds
+# and never touches the CAS, so it has no reason to share the build group.
+concurrency:
+  group: track-junctions
+  cancel-in-progress: false
+
+jobs:
+  track-junctions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write # pushes the auto/track-junctions branch
+      pull-requests: write # opens/updates the junction bump PR
+    steps:
+      # A GitHub App token, not secrets.GITHUB_TOKEN: pushes and PRs made with
+      # GITHUB_TOKEN do not dispatch workflow runs, which is why the old job's
+      # github-actions[bot] commits left PRs sitting at `action_required` with
+      # zero jobs and no checks at all.
+      - name: Get mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set up just
+        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2
+        with:
+          tool: just
+
+      - name: Track and resolve BuildStream junction refs
+        run: |
+          set -euo pipefail
+          # No `|| true` here. The job this replaces swallowed both exit codes,
+          # which made an upstream outage indistinguishable from "nothing to
+          # track" and let the run report success having resolved nothing.
+          #
+          # gnome-build-meta.bst carries `overrides: freedesktop-sdk.bst`, so
+          # the pair is only valid together and is tracked and committed as one
+          # atomic change — same rationale as dakota's track-core-junctions.
+          just bst source track freedesktop-sdk.bst
+          just bst source track gnome-build-meta.bst
+
+      - name: Sync release-version to the tracked FSDK point release
+        run: |
+          set -euo pipefail
+          # project.conf's release-version names every published OS asset and
+          # must equal the FSDK point release; check-release-version.py fails
+          # closed on drift and is the first thing `just validate` runs. Without
+          # this step an FSDK bump would open a PR that dies in seconds at
+          # "Validate Element Graph" — exactly the failure the old job produced.
+          pinned=$(grep -oE 'freedesktop-sdk-[0-9]+\.[0-9]+\.[0-9]+' elements/freedesktop-sdk.bst | head -1 | sed 's/freedesktop-sdk-//')
+          if [ -z "$pinned" ]; then
+            echo "ERROR: tracked freedesktop-sdk.bst ref carries no X.Y.Z point release" >&2
+            exit 1
+          fi
+          sed -i -E "s|^([[:space:]]*release-version:[[:space:]]*).*|\1\"${pinned}\"|" project.conf
+          # Assert before opening the PR; a failure here means the sync broke.
+          python3 .github/scripts/check-release-version.py
+
+      - name: Create or update the junction bump PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: auto/track-junctions
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          old_fsdk=$(git show "HEAD:elements/freedesktop-sdk.bst" | awk '/^[[:space:]]*ref:/ { print $2; exit }')
+          old_gbm=$(git show "HEAD:elements/gnome-build-meta.bst" | awk '/^[[:space:]]*ref:/ { print $2; exit }')
+          new_fsdk=$(awk '/^[[:space:]]*ref:/ { print $2; exit }' elements/freedesktop-sdk.bst)
+          new_gbm=$(awk '/^[[:space:]]*ref:/ { print $2; exit }' elements/gnome-build-meta.bst)
+
+          git checkout -B "$BRANCH"
+          git add elements/freedesktop-sdk.bst elements/gnome-build-meta.bst project.conf
+          if git diff --cached --quiet; then
+            echo "Junction refs already current — nothing to propose."
+            exit 0
+          fi
+
+          title="chore(deps): update BuildStream junctions"
+          if [ "$old_fsdk" != "$new_fsdk" ]; then
+            title="${title} (freedesktop-sdk $(echo "$old_fsdk" | sed 's/^freedesktop-sdk-//;s/-[0-9]*-g[0-9a-f]*$//') -> $(echo "$new_fsdk" | sed 's/^freedesktop-sdk-//;s/-[0-9]*-g[0-9a-f]*$//'))"
+          elif [ "$old_gbm" != "$new_gbm" ]; then
+            title="${title} (gnome-build-meta)"
+          fi
+
+          {
+            echo "Scheduled resolution of the BuildStream junction refs to their"
+            echo "\`git-describe\` form. Opened by the tracker so the bump arrives as its own"
+            echo "reviewable change instead of being pushed into an unrelated pull request."
+            echo ""
+            echo "| Junction | From | To |"
+            echo "| --- | --- | --- |"
+            echo "| \`elements/freedesktop-sdk.bst\` | \`${old_fsdk}\` | \`${new_fsdk}\` |"
+            echo "| \`elements/gnome-build-meta.bst\` | \`${old_gbm}\` | \`${new_gbm}\` |"
+            echo ""
+            echo "\`project.conf\`'s \`release-version\` is synced to the pinned FSDK point"
+            echo "release in the same commit, because \`check-release-version.py\` fails closed"
+            echo "on drift between the two."
+            echo ""
+            echo "The two junctions move together: \`gnome-build-meta.bst\` overrides"
+            echo "\`freedesktop-sdk.bst\`, so a half-applied pair is not a valid graph."
+            echo ""
+            echo "---"
+            echo "*Generated by [Track junction refs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
+          } > /tmp/pr-body.md
+
+          # Deliberately no attribution trailers. This commit is a deterministic
+          # `bst source track` result plus a `sed` on project.conf — machine
+          # output with no AI authorship to attribute. The `Co-authored-by:
+          # Copilot` trailer inherited from the old track-refs job was a false
+          # attribution that would accumulate across every junction bump. Please
+          # do not re-add it; AGENTS.md's trailer requirement is about
+          # AI-authored commits, which this is not.
+          git commit -m "$title"
+          git push --force-with-lease origin "$BRANCH"
+
+          # No `|| true`: `gh pr list` already exits 0 and prints nothing when
+          # no PR matches, so a fallback buys nothing for the normal case and
+          # only converts an auth failure or API outage into an empty
+          # `existing` that falls through to `gh pr create` against a branch
+          # that may already have an open PR. `// empty` is the legitimate
+          # mechanism for "no open PR"; a failed query must abort the step.
+          existing=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "$title" --body-file /tmp/pr-body.md
+            echo "Updated PR: $(gh pr view "$existing" --json url --jq '.url')"
+          else
+            echo "Created PR: $(gh pr create --base main --head "$BRANCH" --title "$title" --body-file /tmp/pr-body.md)"
+          fi

@@ -20,7 +20,7 @@ Specifies the automated loop that monitors GitHub Actions release runs on `proje
    ```bash
    gh run list --workflow=build.yml --limit 3 --json databaseId,status,conclusion,headSha,event
    ```
-2. Track job-level progression (`build`, `track-refs`, `release`).
+2. Track job-level progression (`build`, `installer-test`, `release`).
 3. If run fails or is cancelled, fetch failed job logs immediately:
    ```bash
    gh run view --job=<failed-job-id> --log-failed
