@@ -62,9 +62,6 @@ build-depends:
     config:
       location: /k0s
 
-variables:
-  installer-version: "%{release-version}"
-
 config:
   commands:
     # ── Step 1a: Prepare rootfs directories and mount points ────────────
@@ -443,7 +440,7 @@ config:
       zstd --rm -T0 -19 -q "${FNAME}" -o "${FNAME}.zst"
 
       # Also export the target UKI (.efi) for GitHub Releases and systemd-sysupdate
-      cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{installer-version}.efi"
+      cp /layer/usr/lib/bluefin-server/bluefin-server.efi "bluefin-server-%{flatcar-version}.efi"
       # Export raw PXE inputs alongside the UKI. PXE users supply their own
       # kernel command line, so these remain separate from the fixed-cmdline UKI.
       INSTALLER_KVER="$(basename "$(find /layer/usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)")"
@@ -451,7 +448,7 @@ config:
       cp /installer.cpio.gz "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz"
 
       sha256sum --binary "${FNAME}.zst" > SHA256SUMS
-      sha256sum --binary "bluefin-server-%{installer-version}.efi" >> SHA256SUMS
+      sha256sum --binary "bluefin-server-%{flatcar-version}.efi" >> SHA256SUMS
       sha256sum --binary "bluefin-server-pxe-vmlinuz-%{installer-version}" >> SHA256SUMS
       sha256sum --binary "bluefin-server-pxe-initrd-%{installer-version}.cpio.gz" >> SHA256SUMS
       ls -lh

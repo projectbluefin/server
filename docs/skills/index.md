@@ -43,4 +43,4 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 - **Publish registry:** factory OCI registry at `<registry-host>:30500` (or configured by operator).
 - **Cluster build workflow:** `bluefin-server-build-pipeline` in the downstream factory CI repository.
 - **Cluster boot-test workflow:** `bluefin-server-boot-test` in the downstream factory CI repository.
-- **Version scheme:** FSDK-derived only; no separate application version axis.
+- **Version scheme:** two axes — `installer-version` (FSDK-derived, `project.conf`) and `flatcar-version` (OS payload, `include/flatcar.yml`); no application version axis.
