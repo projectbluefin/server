@@ -46,6 +46,33 @@ k0s automatically applies all `.yaml` files under `/var/lib/k0s/manifests/argocd
 k0s kubectl get pods -A
 ```
 
+## Configuring KubeStellar Console OAuth and JWT Secret
+
+By default, the KubeStellar console runs in local development mode without requiring OAuth credentials or a static JWT secret.
+
+To configure production GitHub OAuth credentials and a persistent JWT signing key, apply an operator-provided Secret to the `kubestellar-console` namespace:
+
+```bash
+cat <<'EOF' | k0s kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubestellar-console-github-oauth
+  namespace: kubestellar-console
+type: Opaque
+stringData:
+  client-id: "<github-client-id>"
+  client-secret: "<github-client-secret>"
+  jwt-secret: "<random-32-byte-or-longer-secret>"
+EOF
+```
+
+Restart the console deployment to pick up the configured credentials:
+
+```bash
+k0s kubectl rollout restart deployment/kubestellar-console -n kubestellar-console
+```
+
 ## Troubleshooting
 
 - **Extension not merged**: Check `systemd-sysext status`. Verify the persistent image is `/var/lib/k0s/k0s.raw`; the boot activation unit copies it into `/run/extensions/k0s.raw`.

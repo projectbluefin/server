@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 KIOSK = ROOT / "files" / "k0s" / "kiosk"
 KIOSK_CONF = KIOSK / "nginx.conf"
@@ -89,10 +91,23 @@ def test_console_provides_local_and_oauth_login_options() -> None:
     assert "hostPort:" not in console
     assert "name: GITHUB_CLIENT_ID" in console
     assert "name: GITHUB_CLIENT_SECRET" in console
+    assert "name: JWT_SECRET" in console
     assert "name: kubestellar-console-github-oauth" in console
     assert "key: client-id" in console
     assert "key: client-secret" in console
+    assert "key: jwt-secret" in console
     assert "optional: true" in console
+    deployment = next(
+        doc
+        for doc in yaml.safe_load_all(CONSOLE_MANIFEST.read_text(encoding="utf-8"))
+        if doc and doc.get("kind") == "Deployment"
+    )
+    jwt_secret = next(
+        env
+        for env in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        if env["name"] == "JWT_SECRET"
+    )
+    assert jwt_secret["valueFrom"]["secretKeyRef"]["optional"] is True
 
 
 def test_proxy_is_the_only_public_console_endpoint() -> None:

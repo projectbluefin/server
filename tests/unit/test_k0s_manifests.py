@@ -38,6 +38,7 @@ def test_k0s_manifest_files():
     assert (ks_dir / "30-kubestellar-core.yaml").is_file()
     assert (ks_dir / "40-kubestellar-console.yaml").is_file()
     assert (ks_dir / "41-kubestellar-kiosk-proxy.yaml").is_file()
+    assert not (ks_dir / "01-kubestellar-console-github-oauth.yaml").exists()
 
 
 def test_postgres_password_not_hardcoded():
