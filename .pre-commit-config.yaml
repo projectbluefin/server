@@ -18,6 +18,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(project\.conf|elements/freedesktop-sdk\.bst|\.github/scripts/check-release-version\.py)$
+      - id: check-renovate-series
+        name: Renovate version filters match the junction track series
+        entry: python .github/scripts/check-renovate-series.py
+        language: system
+        pass_filenames: false
+        files: ^(renovate\.json|elements/(freedesktop-sdk|gnome-build-meta)\.bst|\.github/scripts/check-renovate-series\.py)$
       - id: check-k0s-version
         name: k0s version derived from include/k0s.yml, not restated
         entry: python .github/scripts/check-k0s-version.py

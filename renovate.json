@@ -18,7 +18,7 @@
     {
       "matchDatasources": ["git-refs"],
       "matchPackageNames": ["https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git"],
-      "extractVersion": "^freedesktop-sdk-(?<version>25\\.08\\.[0-9]+)$",
+      "extractVersion": "^freedesktop-sdk-(?<version>26\\.08\\.[0-9]+)$",
       "versioning": "semver"
     },
     {
