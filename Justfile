@@ -84,9 +84,36 @@ build:
 
 # Build the OS DDI payload filesystem image (implicit dep of build-installer;
 # useful when you need the standalone artifact for release publishing).
+#
+# os-base selects the payload base for the FSDK-vs-Flatcar parity harness
+# (projectbluefin/server#129):
+#   fsdk            FSDK-composed payload, the shipped base (default).
+#   flatcar-reference Imported Flatcar reference tree, the known-good control.
+#                     Routes to bluefin-server-ddi-flatcar-reference.bst, added
+#                     alongside the #126 imported Flatcar reference tree.
 [group('installer')]
-build-ddi:
-    just bst build oci/bluefin-server-ddi.bst
+build-ddi OS_BASE="fsdk":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{OS_BASE}}" in
+        fsdk)
+            DDI_ELEMENT="oci/bluefin-server-ddi.bst"
+            ;;
+        flatcar-reference)
+            if [ ! -f "elements/oci/bluefin-server-ddi-flatcar-reference.bst" ]; then
+                echo "ERROR: os-base=flatcar-reference requires the imported Flatcar reference tree" >&2
+                echo "       (projectbluefin/server#126); element oci/bluefin-server-ddi-flatcar-reference.bst" >&2
+                echo "       does not exist yet. Add it alongside the #126 tree, then re-run." >&2
+                exit 1
+            fi
+            DDI_ELEMENT="oci/bluefin-server-ddi-flatcar-reference.bst"
+            ;;
+        *)
+            echo "ERROR: unknown os-base '{{OS_BASE}}' (expected 'fsdk' or 'flatcar-reference')" >&2
+            exit 1
+            ;;
+    esac
+    just bst build "${DDI_ELEMENT}"
 
 # Export the OS DDI payload + SHA256SUMS to dist/ddi/.
 [group('installer')]
