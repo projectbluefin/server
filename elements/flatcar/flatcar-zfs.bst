@@ -11,7 +11,7 @@ description: |
 build-depends:
   - base/base-stack.bst
   - freedesktop-sdk.bst:components/squashfs-tools.bst
-
+  - freedesktop-sdk.bst:components/sed.bst
 variables:
   strip-binaries: ""
 

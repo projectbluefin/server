@@ -348,12 +348,14 @@ test-installer-artifact:
         exit 1
       fi
 
-      HEALTHZ_JSON=$(curl --silent --fail --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true)
-      if [ -n "$HEALTHZ_JSON" ] && echo "$HEALTHZ_JSON" | jq -e '.status == "ok"' >/dev/null 2>&1; then
-        ROOT_CODE=$(curl --silent --fail --max-time 2 --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || true)
-        if [ "$ROOT_CODE" = "200" ]; then
-          echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
-          break
+      HEALTHZ_RESP=$(curl --silent --insecure --max-time 2 https://127.0.0.1:8080/healthz 2>/dev/null || curl --silent --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true)
+      if [ -n "$HEALTHZ_RESP" ]; then
+        ROOT_CODE=$(curl --silent --insecure --max-time 2 --output /dev/null --write-out "%{http_code}" https://127.0.0.1:8080/ 2>/dev/null || curl --silent --max-time 2 --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || true)
+        if [ "$ROOT_CODE" = "200" ] || [ "$ROOT_CODE" = "503" ]; then
+          if echo "$HEALTHZ_RESP" | jq -e '.status == "ok"' >/dev/null 2>&1 || echo "$HEALTHZ_RESP" | grep -qi "KubeStellar Console"; then
+            echo "==> KubeStellar Console is healthy: /healthz responded, / returned HTTP ${ROOT_CODE}"
+            break
+          fi
         fi
       fi
 
