@@ -25,7 +25,7 @@ jobs:
   # updated tip.
   track-refs:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: write # pushes resolved refs back to the renovate/* PR branch
@@ -63,7 +63,7 @@ jobs:
     # track-refs is skipped for non-renovate PRs and pushes; only a failed or
     # cancelled track job should stop the build.
     if: ${{ !failure() && !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 180
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -186,7 +186,7 @@ jobs:
   release:
     if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}
     needs: [build, installer-test]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: write # creates the GitHub Release and uploads its assets
