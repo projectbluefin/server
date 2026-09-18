@@ -63,7 +63,12 @@ The workloads the factory tests and ships live in other repositories or image pi
 
 ## SSH and Remote Diagnostics
 
-> `sshd` is present in the OS image for on-demand diagnostics and bring-up troubleshooting, but is disabled by default via `disable sshd.service` in systemd presets. Operators can start it on-demand with `systemctl start sshd` or enable it when remote access is required. Root login is permitted with password and pubkey.
+SSH access is key-only for the `core` operator account (`PermitRootLogin no`, `PasswordAuthentication no`). Root login and password authentication are completely disabled. `sshd` is enabled at boot and gated by `bluefin-core-access.service`, starting only after `core` authorization keys are provisioned via `tmpfiles.extra`. Operators connect as `core` and elevate with passwordless sudo:
+
+```sh
+ssh core@server.example
+sudo -i
+```
 
 ## When to Use
 

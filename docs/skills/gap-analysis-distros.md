@@ -97,7 +97,7 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 | **Philosophy** | Systemd-native, minimal, image-based server OS appliance; base DDI includes bash for login and bring-up while heavy developer/debug tools live in sysexts or system containers; intended to run container workloads and Kubernetes via optional sysexts. Sources: [AGENTS.md](../../AGENTS.md), [factory-integration.md](factory-integration.md). |
 | **State model** | Target OS DDI is an XFS filesystem image. A separate persistent `/var` partition is created by the installer. There is no second root slot provisioned today, and the UKI cmdline currently uses `rw`, so the root is not mounted read-only at runtime. Sources: [bluefin-server-ddi.bst](../../elements/oci/bluefin-server-ddi.bst), [20-root-a.conf](../../files/installer/repart.d/20-root-a.conf), [bluefin-server-installer.bst](../../elements/oci/bluefin-server-installer.bst). |
 | **Updates** | `systemd-sysupdate` reads root/UKI transfers from `files/os/sysupdate.d/` and the optional k0s transfer from the `k0s` component directory. Assets are published to GitHub Releases, and the combined `SHA256SUMS` manifest is signed in CI with a GPG key. `Verify=yes` is the default. Sources: [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md), [50-root.transfer](../../files/os/sysupdate.d/50-root.transfer), [60-uki.transfer](../../files/os/sysupdate.d/60-uki.transfer), [70-k0s.transfer](../../files/os/sysupdate.k0s.d/70-k0s.transfer), also `systemd-sysupdate(8)`. |
-| **Provisioning** | The installer is an offline `systemd-sysinstall` image that embeds the DDI as a data partition. First-boot configuration is intended to be delivered via `systemd-creds` through the ESP or hypervisor metadata. Today only `passwd.hashed-password.root` is consumed via `systemd-sysusers.d`; the documented `tmpfiles.extra` path for SSH keys and similar files is not implemented. Sources: [bluefin-server-installer.bst](../../elements/oci/bluefin-server-installer.bst), [10-root-creds.conf](../../files/os/sysusers.d/10-root-creds.conf), [os-creds-prov.bst](../../elements/bluefin-server/os-creds-prov.bst), [systemd-creds(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-creds.html). |
+| **Provisioning** | The installer is an offline `systemd-sysinstall` image that embeds the DDI as a data partition. First-boot configuration is delivered via `systemd-creds` through the ESP or hypervisor metadata. `core` keys are written by the `tmpfiles.extra` credential into persistent `/var/home/core/.ssh/authorized_keys`. Sources: [bluefin-server-installer.bst](../../elements/oci/bluefin-server-installer.bst), [10-core-user.conf](../../files/os/sysusers.d/10-core-user.conf), [os-creds-prov.bst](../../elements/bluefin-server/os-creds-prov.bst), [systemd-creds(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-creds.html). |
 | **Customization** | Adds software through `systemd-sysext` (overlay `/usr`) and `systemd-confext` (overlay `/etc`) images. The base OS `os-release` advertises `ID=flatcar` and a matching `VERSION_ID` so pre-built Flatcar Bakery extensions load. k0s is shipped as a separately built, optionally enabled sysext. Sources: [systemd-sysext-extensions.md](systemd-sysext-extensions.md), [k0s-sysext.md](k0s-sysext.md), [os-release-flatcar.bst](../../elements/bluefin-server/os-release-flatcar.bst), [systemd-sysext(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html). |
 | **Reboot coordination** | `systemd-sysupdate.service` has an `ExecStartPost` that touches `/run/reboot-required`. Rolling reboots across Kubernetes nodes rely on Kured reading that file. Sources: [os-kured-hook.bst](../../elements/bluefin-server/os-kured-hook.bst), [kured-hook.conf](../../files/os/systemd/systemd-sysupdate.service.d/kured-hook.conf), [Kured project](https://github.com/weaveworks/kured). |
 
@@ -112,8 +112,7 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 
 ### Provisioning
 
-- **Gap:** The documented `systemd-creds` first-boot provisioning for SSH keys (`tmpfiles.extra`) is not present in the build (`os-creds-prov.bst` only ships `sysusers.d`).
-  Operators can only pre-seed the root password today.
+- **Gap:** `core` keys are written by the `tmpfiles.extra` credential into persistent `/var/home/core/.ssh/authorized_keys`, but broader first-boot credential provisioning (such as network configuration or multiple operator identities) is not yet implemented.
 - **Gap:** `systemd-firstboot` is masked in the installer environment, so interactive first-boot questions are skipped; any further user/network/timezone configuration must be supplied through credentials that the build does not yet consume.
 - **Gap:** TPM2 sealing for credentials is documented in `docs/skills/tpm2-credential-sealing.md`, but there is no evidence in the OS build that sealed credentials are generated, shipped, or decrypted automatically during first boot.
 
@@ -134,7 +133,7 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 
 1. **A/B dual-slot rollback is not wired end-to-end.** The `sysupdate` transfer names `root-a`/`root-b`, but the installer only provisions `root-a`, so Bluefin cannot atomically stage and roll back a new root image today.
 2. **Root filesystem immutability is not enforced.** The DDI is built and booted read-write; the intended read-only `/usr` + overlay model depends entirely on optional sysext behavior rather than runtime policy.
-3. **First-boot credential provisioning is incomplete.** Only the `root` password credential path is shipped; SSH keys, network configuration, and other `systemd-creds`-based provisioning remain documented but not implemented.
+3. **First-boot credential provisioning is incomplete.** `core` keys are written by the `tmpfiles.extra` credential into persistent `/var/home/core/.ssh/authorized_keys`, but network configuration and other `systemd-creds`-based provisioning remain documented but not implemented.
 
 These gaps drive the priorities in [architecture-roadmap.md](architecture-roadmap.md).
 
@@ -193,5 +192,6 @@ These gaps drive the priorities in [architecture-roadmap.md](architecture-roadma
 - [files/os/sysupdate.d/50-root.transfer](../../files/os/sysupdate.d/50-root.transfer)
 - [files/os/sysupdate.d/60-uki.transfer](../../files/os/sysupdate.d/60-uki.transfer)
 - [files/os/sysupdate.k0s.d/70-k0s.transfer](../../files/os/sysupdate.k0s.d/70-k0s.transfer)
-- [files/os/sysusers.d/10-root-creds.conf](../../files/os/sysusers.d/10-root-creds.conf)
+- [files/os/sysusers.d/10-core-user.conf](../../files/os/sysusers.d/10-core-user.conf)
+- [files/os/tmpfiles.d/10-core-home.conf](../../files/os/tmpfiles.d/10-core-home.conf)
 - [files/os/systemd/systemd-sysupdate.service.d/kured-hook.conf](../../files/os/systemd/systemd-sysupdate.service.d/kured-hook.conf)
