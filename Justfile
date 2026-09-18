@@ -317,6 +317,11 @@ test-installer-artifact:
     }
     trap cleanup EXIT INT TERM
 
+    SSH_KEY="$WORKDIR/test_ssh_key"
+    rm -f "$SSH_KEY" "$SSH_KEY.pub"
+    ssh-keygen -t ed25519 -N "" -f "$SSH_KEY" >/dev/null 2>&1
+    SSH_PUB_B64=$(cat "$SSH_KEY.pub" | base64 -w0)
+
     echo "==> Booting the installed server in QEMU (background)..."
     qemu-system-x86_64 \
         -enable-kvm \
@@ -326,9 +331,10 @@ test-installer-artifact:
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
-        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 \
+        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080,hostfwd=tcp:127.0.0.1:2222-:22 \
         -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
-        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service systemd.mask=systemd-homed-firstboot.service" \
+        -smbios "type=11,value=io.systemd.credential.binary:ssh.authorized_keys.root=${SSH_PUB_B64}" \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service systemd.mask=systemd-homed-firstboot.service systemd.wants=sshd.service" \
         -nographic \
         -serial file:"$SERIAL_LOG" \
         -monitor none &
@@ -336,7 +342,7 @@ test-installer-artifact:
 
     DEADLINE_SECS="${SHOW_ME_THE_FUTURE_DEADLINE:-${SHOW_ME_THE_FUTURE_TIMEOUT:-600}}"
     START_TIME=$(date +%s)
-    echo "==> Polling KubeStellar Console readiness at http://127.0.0.1:8080 (deadline: ${DEADLINE_SECS}s)..."
+    echo "==> Polling KubeStellar Console readiness (deadline: ${DEADLINE_SECS}s)..."
 
     while true; do
       if ! kill -0 "$TARGET_QEMU_PID" 2>/dev/null; then
@@ -348,9 +354,10 @@ test-installer-artifact:
         exit 1
       fi
 
-      HEALTHZ_RESP=$(curl --silent --insecure --max-time 2 https://127.0.0.1:8080/healthz 2>/dev/null || curl --silent --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true)
+      # Probe guest directly over SSH tunnel or in-guest curl to 127.0.0.1:8080
+      HEALTHZ_RESP=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 root@127.0.0.1 "curl --silent --insecure --max-time 2 https://127.0.0.1:8080/healthz 2>/dev/null || curl --silent --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true" 2>/dev/null || true)
       if [ -n "$HEALTHZ_RESP" ]; then
-        ROOT_CODE=$(curl --silent --insecure --max-time 2 --output /dev/null --write-out "%{http_code}" https://127.0.0.1:8080/ 2>/dev/null || curl --silent --max-time 2 --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || true)
+        ROOT_CODE=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 root@127.0.0.1 "curl --silent --insecure --max-time 2 --output /dev/null --write-out '%{http_code}' https://127.0.0.1:8080/ 2>/dev/null || curl --silent --max-time 2 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/ 2>/dev/null || true" 2>/dev/null || true)
         if [ "$ROOT_CODE" = "200" ] || [ "$ROOT_CODE" = "503" ]; then
           if echo "$HEALTHZ_RESP" | jq -e '.status == "ok"' >/dev/null 2>&1 || echo "$HEALTHZ_RESP" | grep -qi "KubeStellar Console"; then
             echo "==> KubeStellar Console is healthy: /healthz responded, / returned HTTP ${ROOT_CODE}"
@@ -358,7 +365,6 @@ test-installer-artifact:
           fi
         fi
       fi
-
       NOW=$(date +%s)
       ELAPSED=$((NOW - START_TIME))
       if [ "$ELAPSED" -ge "$DEADLINE_SECS" ]; then
