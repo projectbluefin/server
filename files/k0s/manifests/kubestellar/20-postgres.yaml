@@ -36,17 +36,17 @@ spec:
       - name: postgresql
         image: docker.io/library/postgres:16-alpine
         env:
-        - name: POSTGRESQL_USERNAME
+        - name: POSTGRES_USER
           value: "postgres"
         # Superuser password lives in the kubeflex-postgres Secret (see
         # 15-kubeflex-postgres-secret.yaml, generated at first boot) so it is
         # never committed to git or exposed in the pod spec. See #98.
-        - name: POSTGRESQL_PASSWORD
+        - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
               name: kubeflex-postgres
               key: password
-        - name: POSTGRESQL_DATABASE
+        - name: POSTGRES_DB
           value: "postgres"
         ports:
         - name: postgresql

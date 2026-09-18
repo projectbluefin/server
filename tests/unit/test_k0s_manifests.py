@@ -47,7 +47,7 @@ def test_postgres_password_not_hardcoded():
     text = manifest.read_text()
     assert "kubeflex" not in text.lower().replace("kubeflex-system", "").replace("kubeflex-postgres", "")
     assert 'value: "kubeflex"' not in text
-    assert "POSTGRESQL_PASSWORD" in text
+    assert "POSTGRES_PASSWORD" in text
 
 
 def test_postgres_password_from_secret():
@@ -56,8 +56,8 @@ def test_postgres_password_from_secret():
     statefulset = next(d for d in docs if d and d.get("kind") == "StatefulSet")
     container = statefulset["spec"]["template"]["spec"]["containers"][0]
     env = {e["name"]: e for e in container["env"]}
-    assert "value" not in env["POSTGRESQL_PASSWORD"]
-    ref = env["POSTGRESQL_PASSWORD"]["valueFrom"]["secretKeyRef"]
+    assert "value" not in env["POSTGRES_PASSWORD"]
+    ref = env["POSTGRES_PASSWORD"]["valueFrom"]["secretKeyRef"]
     assert ref == {"name": "kubeflex-postgres", "key": "password"}
 
 
