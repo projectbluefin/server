@@ -328,7 +328,7 @@ test-installer-artifact:
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
         -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 \
         -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
-        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service" \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service systemd.mask=systemd-homed-firstboot.service" \
         -nographic \
         -serial file:"$SERIAL_LOG" \
         -monitor none &

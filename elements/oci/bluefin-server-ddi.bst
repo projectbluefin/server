@@ -47,10 +47,10 @@ config:
       ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/pki/tls/certs/ca-bundle.crt
       ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/pki/tls/cert.pem
 
-      # Mask systemd-firstboot to prevent interactive prompts on headless first boot
+      # Mask systemd-firstboot and systemd-homed-firstboot to prevent interactive prompts on headless first boot
       mkdir -p /layer/etc/systemd/system
       ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
-
+      ln -sf /dev/null /layer/etc/systemd/system/systemd-homed-firstboot.service
       # Mask audit-rules to prevent failure on shell-free OS (augenrules requires /bin/sh)
       ln -sf /dev/null /layer/etc/systemd/system/audit-rules.service
 
