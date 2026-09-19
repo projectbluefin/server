@@ -29,6 +29,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`ddi-installer-build.md`](ddi-installer-build.md) | Building the installer or DDI on the cluster | Cluster build pipeline and local installer/DDI build. |
 | [`ddi-installer.md`](ddi-installer.md) | Installer boot flow, `systemd-sysinstall`, `systemd-repart` | High-level DDI install architecture and local smoke test. |
 | [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |
+| [`flatcar-parity-matrix.md`](flatcar-parity-matrix.md) | Flatcar version audit, component parity, substitution order | Version parity matrix and gap audit against Flatcar 4593.2.5. |
 | [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |
 | [`k0s-sysext-ops.md`](k0s-sysext-ops.md) | Operating k0s on Bluefin Server | Runtime operation and reboot coordination for k0s. |
 | [`k0s-sysext.md`](k0s-sysext.md) | Building the k0s sysext | BuildStream element and publish steps for the k0s sysext. |
