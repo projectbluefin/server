@@ -4,16 +4,26 @@ on:
   pull_request:
     paths:
       - '.github/scripts/**'
+      - '.github/workflows/build.yml'
       - '.github/workflows/unit-tests.yml'
+      - '.pre-commit-config.yaml'
+      - 'elements/**'
       - 'files/**'
+      - 'include/**'
+      - 'project.conf'
       - 'tests/unit/**'
       - 'Justfile'
   push:
     branches: [main]
     paths:
       - '.github/scripts/**'
+      - '.github/workflows/build.yml'
       - '.github/workflows/unit-tests.yml'
+      - '.pre-commit-config.yaml'
+      - 'elements/**'
       - 'files/**'
+      - 'include/**'
+      - 'project.conf'
       - 'tests/unit/**'
       - 'Justfile'
 
