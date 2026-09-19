@@ -95,7 +95,7 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 | Axis | Bluefin Server (as-implemented) |
 |------|---------------------------------|
 | **Philosophy** | Systemd-native, minimal, image-based server OS appliance; base DDI includes bash for login and bring-up while heavy developer/debug tools live in sysexts or system containers; intended to run container workloads and Kubernetes via optional sysexts. Sources: [AGENTS.md](../../AGENTS.md), [factory-integration.md](factory-integration.md). |
-| **State model** | Target OS DDI is an XFS filesystem image. A separate persistent `/var` partition is created by the installer. There is no second root slot provisioned today, and the UKI cmdline currently uses `rw`, so the root is not mounted read-only at runtime. Sources: [bluefin-server-ddi.bst](../../elements/oci/bluefin-server-ddi.bst), [20-root-a.conf](../../files/installer/repart.d/20-root-a.conf), [bluefin-server-installer.bst](../../elements/oci/bluefin-server-installer.bst). |
+| **State model** | Target OS DDI is an XFS filesystem image mounted read-only as `/usr` from the `USR-A` slot. The installer provisions a separate writable `ROOT` state partition (ext4, grows into remaining disk) seeded at install time with the offline k0s sysext and `/etc`; `USR-B` is provisioned as an empty A/B rollback slot. The UKI cmdline carries `root=PARTLABEL=ROOT mount.usr=PARTLABEL=USR-A mount.usrfstype=xfs mount.usrflags=ro`, so the root is writable while `/usr` is mounted read-only at runtime. Sources: [bluefin-server-ddi.bst](../../elements/oci/bluefin-server-ddi.bst), [20-usr-a.conf](../../files/installer/repart.d/20-usr-a.conf), [50-root.conf](../../files/installer/repart.d/50-root.conf), [bluefin-server-installer.bst](../../elements/oci/bluefin-server-installer.bst). |
 | **Updates** | `systemd-sysupdate` reads root/UKI transfers from `files/os/sysupdate.d/` and the optional k0s transfer from the `k0s` component directory. Assets are published to GitHub Releases, and the combined `SHA256SUMS` manifest is signed in CI with a GPG key. `Verify=yes` is the default. Sources: [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md), [50-root.transfer](../../files/os/sysupdate.d/50-root.transfer), [60-uki.transfer](../../files/os/sysupdate.d/60-uki.transfer), [70-k0s.transfer](../../files/os/sysupdate.k0s.d/70-k0s.transfer), also `systemd-sysupdate(8)`. |
 | **Provisioning** | The installer is an offline `systemd-sysinstall` image that embeds the DDI as a data partition. First-boot configuration is intended to be delivered via `systemd-creds` through the ESP or hypervisor metadata. Today only `passwd.hashed-password.root` is consumed via `systemd-sysusers.d`; the documented `tmpfiles.extra` path for SSH keys and similar files is not implemented. Sources: [bluefin-server-installer.bst](../../elements/oci/bluefin-server-installer.bst), [10-root-creds.conf](../../files/os/sysusers.d/10-root-creds.conf), [os-creds-prov.bst](../../elements/bluefin-server/os-creds-prov.bst), [systemd-creds(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-creds.html). |
 | **Customization** | Adds software through `systemd-sysext` (overlay `/usr`) and `systemd-confext` (overlay `/etc`) images. The base OS `os-release` advertises `ID=flatcar` and a matching `VERSION_ID` so pre-built Flatcar Bakery extensions load. k0s is shipped as a separately built, optionally enabled sysext. Sources: [systemd-sysext-extensions.md](systemd-sysext-extensions.md), [k0s-sysext.md](k0s-sysext.md), [os-release-flatcar.bst](../../elements/bluefin-server/os-release-flatcar.bst), [systemd-sysext(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html). |
@@ -105,10 +105,13 @@ Bluefin Server is a BuildStream 2-based, image-based Linux server OS built from 
 
 ### Root filesystem and A/B rollback
 
-- **Gap:** Bluefin's `systemd-sysupdate` root transfer already names two target partitions (`root-a` and `root-b`) in `50-root.transfer`, but the installer only creates one root partition (`20-root-a.conf`).
-  There is no `root-b` partition yet, so `systemd-sysupdate` cannot stage an update into an inactive slot and the OS has no atomic rollback path comparable to Flatcar/Fedora CoreOS/Talos today.
-- **Gap:** The DDI filesystem is created as a writable XFS image and the installed UKI boots it with `rw`. A read-only `/usr` state model, as intended by the sysext-first design, is not enforced at runtime.
+- **Gap:** Bluefin's `systemd-sysupdate` root transfer names legacy target partition labels (`bluefin-server-root-<ver>_a/_b`) in `50-root.transfer`, but the Flatcar layout installed since #134 provisions `USR-A`/`USR-B` instead and the transfer has not been rewired to those slots.
+  `USR-B` is provisioned empty, so `systemd-sysupdate` cannot stage an update into an inactive slot and the OS has no atomic rollback path comparable to Flatcar/Fedora CoreOS/Talos today.
 - **Gap:** There is no mechanism to select the previous OS version at boot if an update fails; recovery currently depends on reinstalling from media.
+
+### Update delivery
+
+- **Gap:** The root transfer uses `Type=partition Path=auto`, which requires `systemd-sysupdate` to discover a matching GPT partition label. The shipped `50-root.transfer` patterns (`bluefin-server-root-a`/`root-b`) no longer match any partition the installer provisions (#134 replaced them with `USR-A`/`USR-B`), so OTA updates resolve to no slot until the transfer is rewired.
 
 ### Provisioning
 
@@ -189,7 +192,8 @@ These gaps drive the priorities in [architecture-roadmap.md](architecture-roadma
 - [elements/bluefin-server/os-release-flatcar.bst](../../elements/bluefin-server/os-release-flatcar.bst)
 - [elements/bluefin-server/os-creds-prov.bst](../../elements/bluefin-server/os-creds-prov.bst)
 - [elements/bluefin-server/os-kured-hook.bst](../../elements/bluefin-server/os-kured-hook.bst)
-- [files/installer/repart.d/20-root-a.conf](../../files/installer/repart.d/20-root-a.conf)
+- [files/installer/repart.d/20-usr-a.conf](../../files/installer/repart.d/20-usr-a.conf)
+- [files/installer/repart.d/50-root.conf](../../files/installer/repart.d/50-root.conf)
 - [files/os/sysupdate.d/50-root.transfer](../../files/os/sysupdate.d/50-root.transfer)
 - [files/os/sysupdate.d/60-uki.transfer](../../files/os/sysupdate.d/60-uki.transfer)
 - [files/os/sysupdate.k0s.d/70-k0s.transfer](../../files/os/sysupdate.k0s.d/70-k0s.transfer)

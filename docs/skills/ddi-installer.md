@@ -17,7 +17,7 @@ metadata:
 - Writing or refining `systemd-repart`, `bootctl`, or `ukify` configurations.
 - Packaging or publishing DDI assets to GitHub Releases.
 - Managing partition recipes for the target disk layout (`10-esp.conf`,
-  `20-root-a.conf`, `30-var.conf`).
+  `20-usr-a.conf`, `30-usr-b.conf`, `40-oem.conf`, `50-root.conf`).
 
 ## When NOT to Use
 
@@ -72,13 +72,20 @@ container runtime pod sandboxes.
 5. `systemd-sysinstall` reads partition recipes from
    `/usr/lib/repart.sysinstall.d/` if it is populated; otherwise it falls back
    to `/usr/lib/repart.d/`. The target recipes are staged at
-   `/usr/lib/repart.d/` (`10-esp.conf`, `20-root-a.conf`, `30-var.conf`).
-6. `20-root-a.conf` copies the DDI block-for-block from
+   `/usr/lib/repart.d/` (`10-esp.conf`, `20-usr-a.conf`, `30-usr-b.conf`,
+   `40-oem.conf`, `50-root.conf`).
+6. `20-usr-a.conf` copies the DDI payload block-for-block from
    `/dev/disk/by-partlabel/bluefin-installer-data` (the embedded DDI data
-   partition on the installer media).
-7. Target OS volume expansion is handled by `systemd-growfs`; the target OS
-   stack includes `xfsprogs` so the root and `/var` filesystems can grow to fill
-   their partitions on first boot.
+   partition on the installer media). The payload is mounted read-only as
+   `/usr` via the target UKI cmdline (`mount.usr=PARTLABEL=USR-A`).
+7. `50-root.conf` formats ROOT (ext4) and seeds it via `CopyFiles=`: the
+   offline k0s sysext at `/var/lib/k0s/k0s.raw` and the target `/etc` from
+   `/usr/lib/bluefin-server/etc-seed` (assembled by the installer element —
+   the DDI payload is `/usr`-only, so its `/etc` is not visible on the
+   installed system).
+8. Target OS volume expansion is handled by `systemd-growfs`; the target OS
+   stack includes `xfsprogs` so the `/usr` filesystem can be grown on first
+   boot.
 
 ## Partition Layout
 
@@ -93,9 +100,17 @@ container runtime pod sandboxes.
 
 | Partition | Type | Size | Contents |
 |---|---|---|---|
-| ESP | vfat | 500 MiB – 1 GiB | `systemd-boot` + target OS UKI (`bluefin-server.efi`) |
-| `bluefin-server-root-a` | XFS | 4 GiB – 16 GiB | OS root filesystem (copied from installer data partition) |
-| `var` | XFS | ≥ 4 GiB | Writable persistent `/var`; grows to fill remaining disk |
+| `EFI-SYSTEM` | vfat (ESP GUID `c12a7328-…`) | 500 MiB – 1 GiB | `systemd-boot` + target OS UKI (`bluefin-server.efi`) |
+| `USR-A` | Flatcar usr GUID `5dfbf5f4-…` | ≥ 4 GiB | read-only `/usr` (DDI payload copied block-for-block) |
+| `USR-B` | Flatcar usr GUID `5dfbf5f4-…` | ≥ 4 GiB | empty A/B rollback slot |
+| `OEM` | Flatcar OEM GUID `0fc63daf-…` (ext4) | 1 GiB | provider/first-boot state; filesystem label `OEM` (Flatcar stage 2 waits on `dev-disk-by-label-OEM.device`) |
+| `ROOT` | Flatcar root GUID `3884dd41-…` (ext4) | ≥ 4 GiB | writable state: `/etc` (seeded via `CopyFiles=`), `/var`, `/home`; grows to fill remaining disk |
+
+The target UKI cmdline places the filesystems explicitly:
+`root=PARTLABEL=ROOT mount.usr=PARTLABEL=USR-A mount.usrfstype=xfs
+mount.usrflags=ro`. `root=` is mandatory because the Flatcar ROOT GUID is not
+a Discoverable Partitions Specification type, so
+`systemd-gpt-auto-generator` cannot discover it.
 
 ## Installer Boot Flow
 
@@ -187,7 +202,7 @@ offline installation.
 - [ ] The interactive installer service sets `TTYPath=/dev/tty0` so the TUI
       appears on the attached display even when serial is the primary console.
 - [ ] `bluefin-server-installer.bst` decompresses the DDI after the cpio step.
-- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
+- [ ] `files/installer/repart.d/50-root.conf` has `GrowFileSystem=yes`.
 
 ## See also
 

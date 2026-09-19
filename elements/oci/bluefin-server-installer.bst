@@ -87,6 +87,50 @@ config:
       mkdir -p /layer/boot
       mkdir -p /target-root/boot/EFI/Linux /tmp /var/tmp
 
+    # ── Step 1a-2: Assemble the target /etc seed for the ROOT partition ─
+    # The Flatcar layout mounts the DDI payload (USR-A) at /usr only, so the
+    # DDI's own /etc is invisible on the installed system. ROOT is formatted
+    # empty by repart and seeded via CopyFiles= from this directory: the OS
+    # stack's /etc facts staged at /target-root/etc (sshd config, the system
+    # justfile) plus the first-boot conveniences formerly stamped into the DDI
+    # root filesystem (root password, CA bundle, hosts, securetty, console
+    # quieting, unit masks). 50-root.conf unpacks it at install time with
+    # CopyFiles=/usr/lib/bluefin-server/etc-seed:/etc.
+    - |
+      set -eux
+      SEED="/layer/usr/lib/bluefin-server/etc-seed"
+      mkdir -p "${SEED}"
+      # OS stack /etc facts: sshd configuration drop-ins, the system justfile
+      cp -a /target-root/etc/. "${SEED}/"
+      # CA certificate bundle for TLS (systemd-sysupdate verify, curl, podman)
+      mkdir -p "${SEED}/pki/ca-trust/extracted" "${SEED}/ssl/certs" "${SEED}/pki/tls/certs"
+      cp -a /etc/pki/ca-trust/extracted/* "${SEED}/pki/ca-trust/extracted/"
+      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem "${SEED}/ssl/certs/ca-certificates.crt"
+      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem "${SEED}/pki/tls/certs/ca-bundle.crt"
+      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem "${SEED}/pki/tls/cert.pem"
+      # Mask units that cannot run on the headless target (repart CopyFiles=
+      # preserves symlinks on ext4, matching the masks formerly stamped into
+      # the DDI rootfs)
+      mkdir -p "${SEED}/systemd/system"
+      ln -sf /dev/null "${SEED}/systemd/system/systemd-firstboot.service"
+      ln -sf /dev/null "${SEED}/systemd/system/audit-rules.service"
+      ln -sf /dev/null "${SEED}/systemd/system/systemd-journald-audit.socket"
+      # Silence kernel and audit log spam on the console
+      mkdir -p "${SEED}/systemd/journald.conf.d" "${SEED}/sysctl.d"
+      printf '[Journal]\nForwardToConsole=no\nMaxLevelConsole=warning\n' > "${SEED}/systemd/journald.conf.d/10-console.conf"
+      printf 'kernel.printk = 3 4 1 3\n' > "${SEED}/sysctl.d/10-console.conf"
+      # Standard /etc/hosts for container runtimes (containerd/podman)
+      printf '127.0.0.1   localhost\n::1         localhost ip6-localhost ip6-loopback\n' > "${SEED}/hosts"
+      # All standard virtual, serial, and hypervisor consoles allow root login
+      printf 'tty0\ntty1\ntty2\ntty3\ntty4\ntty5\ntty6\nttyS0\nttyS1\nconsole\nhvc0\n' > "${SEED}/securetty"
+      # Default root password 'bluefin' for console and ssh login
+      printf 'root:$6$bluefin123$o2pQjPN1n3ZCnYUROlA01xAdnGO7mhVRAVw98x4xc8LAUIJv7b44bBNoER6fM4P.rrj4ePYFfkx9WvZICU8nt/:19700:0:99999:7:::\n' > "${SEED}/shadow"
+      chmod 0600 "${SEED}/shadow"
+      printf 'root:x:0:0:root:/root:/bin/bash\n' > "${SEED}/passwd"
+      chmod 0644 "${SEED}/passwd"
+      printf 'root:x:0:\n' > "${SEED}/group"
+      chmod 0644 "${SEED}/group"
+
     # ── Step 1b: Generate target OS UKI (dracut + ukify) ────────────────
     - |
       set -eux
@@ -124,6 +168,13 @@ config:
       cp /target-root/etc/ld.so.cache /etc/ld.so.cache
 
       # Run dracut in generic (non-hostonly) mode and explicitly add XFS, VirtIO, and NVMe storage drivers.
+      # The cmdline is duplicated in the ukify call below; keep both in sync.
+      # root= is mandatory: the Flatcar ROOT type GUID (3884dd41-…) is not a
+      # Discoverable Partitions Specification type, so systemd-gpt-auto-generator
+      # cannot discover it. PARTLABEL=ROOT is the build-time-stable GPT identity
+      # (PARTUUID is generated per install and cannot be baked into a UKI).
+      # mount.usr= mounts USR-A read-only as /usr; the writable ROOT (ext4)
+      # carries /etc, /var and /home, seeded at install time by repart CopyFiles.
       dracut -v --reproducible --no-machineid --no-hostonly \
         --add-drivers "virtio virtio_blk virtio_pci virtio_scsi nvme nvme_core xfs erofs overlay zfs spl" \
         --filesystems "xfs vfat zfs" \
@@ -131,13 +182,13 @@ config:
         --kmoddir "/target-root/usr/lib/modules/${TARGET_KVER}" \
         --kernel-image "${TARGET_KERNEL}" \
         --kver "${TARGET_KVER}" \
-        --kernel-cmdline "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
+        --kernel-cmdline "rw root=PARTLABEL=ROOT mount.usr=PARTLABEL=USR-A mount.usrfstype=xfs mount.usrflags=ro console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
         /tmp/bluefin-server-target.initramfs
 
       ukify build \
         --linux="${TARGET_KERNEL}" \
         --initrd=/tmp/bluefin-server-target.initramfs \
-        --cmdline="rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
+        --cmdline="rw root=PARTLABEL=ROOT mount.usr=PARTLABEL=USR-A mount.usrfstype=xfs mount.usrflags=ro console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
         --output=/target-root/boot/EFI/Linux/bluefin-server.efi
       cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
 
@@ -216,7 +267,7 @@ config:
         udevadm settle --timeout=10 || true
         local target="${TARGET_DISK:-}"
         if [ -z "${target}" ]; then
-          local root_part="$(readlink -f /dev/disk/by-partlabel/bluefin-server-root-a 2>/dev/null || true)"
+          local root_part="$(readlink -f /dev/disk/by-partlabel/ROOT 2>/dev/null || true)"
           if [ -n "${root_part}" ]; then
             target="$(lsblk -p -n -d -o PKNAME "${root_part}" 2>/dev/null || true)"
           fi
@@ -400,7 +451,7 @@ config:
     #   20-ddi-data.conf: Data (XFS) — bluefin-server-ddi.raw copied here block-for-block
     #
     # At install time, systemd-sysinstall mounts the data partition to
-    # locate the DDI at the path expected by repart.d/20-root-a.conf (CopyBlocks=).
+    # locate the DDI at the path expected by repart.d/20-usr-a.conf (CopyBlocks=).
     - |
       set -eux
       OUT="%{install-root}"

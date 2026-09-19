@@ -48,7 +48,10 @@ def test_installer_runtime_and_boot_contracts() -> None:
     assert "freedesktop-sdk.bst:bootstrap/bash.bst" in installer_stack
     assert "console=ttyS0,115200 rw" in installer_element
     assert "unattended" not in published_uki_cmdline
-    assert target_uki_cmdline == "rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0"
+    assert target_uki_cmdline == (
+        "rw root=PARTLABEL=ROOT mount.usr=PARTLABEL=USR-A mount.usrfstype=xfs "
+        "mount.usrflags=ro console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0"
+    )
     assert (
         '-append "systemd.unit=system-install.target '
         'console=tty0 console=ttyS0,115200 rw unattended"'
@@ -93,12 +96,22 @@ def test_ddi_generates_module_indexes_for_runtime_filesystem_drivers() -> None:
 
     assert "freedesktop-sdk.bst:components/kmod.bst" in ddi_element
     assert 'depmod -b /layer "${KVER}"' in ddi_element
-    assert "cp -a /etc/pki/ca-trust/extracted/* /layer/etc/pki/ca-trust/extracted/" in ddi_element
-    assert "tls-ca-bundle.pem" in ddi_element
-    assert "ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service" in ddi_element
-    assert "ln -sf /dev/null /layer/etc/systemd/system/audit-rules.service" in ddi_element
-    assert "printf '127.0.0.1   localhost" in ddi_element
-    assert "> /layer/etc/hosts" in ddi_element
+    # The DDI payload is mounted at /usr only (#134), so the target /etc state
+    # is no longer stamped into it — the installer element assembles it.
+    assert "cp -a /etc/pki/ca-trust/extracted/*" not in ddi_element
+
+
+def test_target_etc_seed_carries_firstboot_state() -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    seed = "/layer/usr/lib/bluefin-server/etc-seed"
+
+    assert f"mkdir -p {seed}" in installer_element or f"SEED=\"{seed}\"" in installer_element
+    assert "cp -a /etc/pki/ca-trust/extracted/*" in installer_element
+    assert "tls-ca-bundle.pem" in installer_element
+    assert 'ln -sf /dev/null "${SEED}/systemd/system/systemd-firstboot.service"' in installer_element
+    assert 'ln -sf /dev/null "${SEED}/systemd/system/audit-rules.service"' in installer_element
+    assert "printf '127.0.0.1   localhost" in installer_element
+    assert '"${SEED}/hosts"' in installer_element
 
 
 def test_target_initramfs_preloads_sysext_filesystem_drivers() -> None:

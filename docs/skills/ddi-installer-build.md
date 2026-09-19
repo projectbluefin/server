@@ -131,7 +131,7 @@ The release process is driven by `.github/workflows/build.yml`:
 - [ ] The live installer does not bake hardcoded SSH keys or pre-hashed root
       passwords.
 - [ ] The DDI is decompressed after the cpio step.
-- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
+- [ ] `files/installer/repart.d/50-root.conf` has `GrowFileSystem=yes`.
 
 ## See also
 

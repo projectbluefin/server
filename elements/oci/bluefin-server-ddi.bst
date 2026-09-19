@@ -5,7 +5,12 @@ description: |
   Output: bluefin-server-ddi-<ver>.raw.zst + SHA256SUMS
 
   The output .raw is a filesystem image consumed by installer repart config:
-  files/installer/repart.d/20-root-a.conf via CopyBlocks=.
+  files/installer/repart.d/20-usr-a.conf via CopyBlocks= — the Flatcar layout
+  (projectbluefin/server#134) mounts this payload read-only as the system's
+  /usr (mount.usr=PARTLABEL=USR-A). Only /usr is visible on the target; the
+  writable ROOT partition is a fresh ext4 filesystem seeded with /etc state by
+  the installer element (files/installer/repart.d/50-root.conf CopyFiles=),
+  so this payload carries no target /etc content.
 
 build-depends:
   - base/base-stack.bst
@@ -40,50 +45,12 @@ config:
       rm -f "/layer/usr/lib/modules/${KVER}/vmlinux" "/layer/usr/lib/modules/${KVER}/System.map"
       depmod -b /layer "${KVER}"
 
-      # Stage extracted CA certificate bundle into target DDI rootfs
-      mkdir -p /layer/etc/pki/ca-trust/extracted /layer/etc/ssl/certs /layer/etc/pki/tls/certs
-      cp -a /etc/pki/ca-trust/extracted/* /layer/etc/pki/ca-trust/extracted/
-      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/ssl/certs/ca-certificates.crt
-      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/pki/tls/certs/ca-bundle.crt
-      ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/pki/tls/cert.pem
-
-      # Mask systemd-firstboot to prevent interactive prompts on headless first boot
-      mkdir -p /layer/etc/systemd/system
-      ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service
-
-      # Mask audit-rules to prevent failure on shell-free OS (augenrules requires /bin/sh)
-      ln -sf /dev/null /layer/etc/systemd/system/audit-rules.service
-
-      # Silence kernel and audit log spam on the console
-      mkdir -p /layer/etc/systemd/journald.conf.d /layer/etc/sysctl.d
-      printf '[Journal]\nForwardToConsole=no\nMaxLevelConsole=warning\n' > /layer/etc/systemd/journald.conf.d/10-console.conf
-      printf 'kernel.printk = 3 4 1 3\n' > /layer/etc/sysctl.d/10-console.conf
-      ln -sf /dev/null /layer/etc/systemd/system/systemd-journald-audit.socket
-
-      # Ensure standard /etc/hosts exists for container runtimes (containerd/podman)
-      printf '127.0.0.1   localhost\n::1         localhost ip6-localhost ip6-loopback\n' > /layer/etc/hosts
-
-      # Ensure persistent /var is mounted from its partition label
-      printf '/dev/disk/by-partlabel/var /var xfs defaults 0 0\n' > /layer/etc/fstab
-
-      # Ensure all standard virtual, serial, and hypervisor consoles allow root login
-      printf 'tty0\ntty1\ntty2\ntty3\ntty4\ntty5\ntty6\nttyS0\nttyS1\nconsole\nhvc0\n' > /layer/etc/securetty
-
-      # Seed default root password 'bluefin' into /etc/shadow for console and ssh login
-      mkdir -p /layer/etc
-      printf 'root:$6$bluefin123$o2pQjPN1n3ZCnYUROlA01xAdnGO7mhVRAVw98x4xc8LAUIJv7b44bBNoER6fM4P.rrj4ePYFfkx9WvZICU8nt/:19700:0:99999:7:::\n' > /layer/etc/shadow
-      chmod 0600 /layer/etc/shadow
-      printf 'root:x:0:0:root:/root:/bin/bash\n' > /layer/etc/passwd
-      chmod 0644 /layer/etc/passwd
-      printf 'root:x:0:\n' > /layer/etc/group
-      chmod 0644 /layer/etc/group
-
-      # Pre-generate SSH host keys for first boot remote diagnostics
-      mkdir -p /layer/etc/ssh
-      ssh-keygen -q -N "" -t ed25519 -f /layer/etc/ssh/ssh_host_ed25519_key
-      ssh-keygen -q -N "" -t rsa -b 3072 -f /layer/etc/ssh/ssh_host_rsa_key
-      chmod 0600 /layer/etc/ssh/ssh_host_*_key
-      chmod 0644 /layer/etc/ssh/ssh_host_*.pub
+      # Note: no /etc content is stamped here. Under the Flatcar layout
+      # (projectbluefin/server#134) this image is mounted read-only at /usr, so
+      # anything written to /layer/etc would be invisible on the installed
+      # system. The writable ROOT partition is seeded instead — see the /etc
+      # seed assembly in elements/oci/bluefin-server-installer.bst and the
+      # CopyFiles= lines in files/installer/repart.d/50-root.conf.
 
       # Sum actual file sizes across bind mounts (du -sb reports content bytes, not overlay blocks).
       ROOT_BYTES=$(du -sb /layer | cut -f1)
