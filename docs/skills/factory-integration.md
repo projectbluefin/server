@@ -29,7 +29,7 @@ The factory pattern is broader than a single host: a downstream CI lab or OS fac
 │ Core server OS: DDI-first, image-updated                    │
 │ • systemd-sysupdate for atomic A/B updates                  │
 │ • systemd-sysext for optional layers (k0s, extensions)      │
-│ • podman for container workloads                            │
+│ • container runtimes as systemd-sysexts                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -46,7 +46,10 @@ See [k0s-sysext.md](k0s-sysext.md) for details.
 
 ## Workloads are containers
 
-The workloads the factory tests and ships live in other repositories or image pipelines. Bluefin Server hosts them via `podman`.
+The workloads the factory tests and ships live in other repositories or image
+pipelines. Container runtimes ship as optional `systemd-sysext`s rather than in
+the base DDI (projectbluefin/server#131 moved podman out of the base OS onto a
+sysext, per hard rule 4 which forbids container runtimes in the base DDI).
 
 > Bluefin Server is the factory floor; optional workloads and variant images run on that floor.
 
@@ -58,7 +61,7 @@ The workloads the factory tests and ships live in other repositories or image pi
 | Atomic, rollback-capable updates | Image-based A/B updates via `systemd-sysupdate` |
 | Minimal attack surface / lean base OS | Streamlined DDI with bash; optional tools as sysexts |
 | Kubernetes control plane on every node | k0s delivered as `systemd-sysext` |
-| Container workloads | `podman` in the base OS stack |
+| Container workloads | `podman` (and other runtimes) as optional `systemd-sysext`s |
 | Signed, verifiable release artifacts | GPG-signed `SHA256SUMS` + `import-pubring.gpg` |
 
 ## SSH and Remote Diagnostics

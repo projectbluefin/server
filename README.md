@@ -1,9 +1,9 @@
 # Bluefin Server
 > Amargasaurus cazaui
 
-**An FSDK-based, image-based Linux server OS.**
+**An image-based Linux server OS built on a Flatcar base.**
 
-Bluefin Server targets the same use-case space as Flatcar Container Linux, Fedora CoreOS, and Talos, but is built from scratch with [BuildStream 2](https://buildstream.build/) from [freedesktop-sdk](https://freedesktop-sdk.freedesktop.org/) (FSDK 26.08) components and uutils coreutils.
+Bluefin Server targets the same use-case space as Flatcar Container Linux, Fedora CoreOS, and Talos, and is built with [BuildStream 2](https://buildstream.build/). The installed OS payload lands on a single-ABI [Flatcar](https://flatcar-linux.net/) `/usr` (projectbluefin/server#131); the offline installer still composes its userspace from [freedesktop-sdk](https://freedesktop-sdk.freedesktop.org/) (FSDK 26.08) so it keeps `systemd-sysinstall`, which Flatcar does not ship.
 
 It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html): the OS payload is a compressed XFS DDI filesystem image that is deployed by an offline, systemd-native installer.
 
@@ -23,7 +23,7 @@ Bluefin Server is currently in **Alpha**:
 
 - **Image-based updates and atomic rollbacks** via A/B partition slots and `systemd-sysupdate`.
 - **DDI-first delivery** — the installer embeds the OS payload as a data partition; no network is required at install time.
-- **Streamlined base OS image** — modern userspace with uutils coreutils and bash for interactive login and diagnostics.
+- **Streamlined base OS image** — modern Flatcar userspace with bash for interactive login and diagnostics.
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive terminal UI and `systemd-repart` handles partitioning and block-copy DDI placement.
 - **Optional k0s as a `systemd-sysext`** so the base image stays minimal.
 
