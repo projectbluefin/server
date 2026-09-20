@@ -10,8 +10,8 @@ class KcAgent < Formula
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/kubestellar/console/releases/download/v0.3.41/kc-agent_0.3.41_darwin_amd64.tar.gz"
-      sha256 "238d15ca0e710f5f709cc776c664989fb16ebc1c6e7ac3d68c378d14f4ed0482"
+      url "https://github.com/kubestellar/console/archive/refs/tags/v0.3.42.tar.gz"
+      sha256 "12566937cc249eabe21221d9273de349d14791adb31d577b3ebd64900d2f7846"
 
       def install
         bin.install "kc-agent"
