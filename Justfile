@@ -352,8 +352,12 @@ test-installer-artifact:
       if [ -n "$HEALTHZ_JSON" ] && echo "$HEALTHZ_JSON" | jq -e '.status == "ok"' >/dev/null 2>&1; then
         ROOT_CODE=$(curl --silent --fail --max-time 2 --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || true)
         if [ "$ROOT_CODE" = "200" ]; then
-          echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
-          break
+          CLUSTERS_JSON=$(curl --silent --fail --max-time 2 http://127.0.0.1:8080/api/mcp/clusters 2>/dev/null || true)
+          # Ensure actual cluster discovery is active and not silently passing on synthetic demo mode
+          if [ -n "$CLUSTERS_JSON" ] && echo "$CLUSTERS_JSON" | jq -e '.source != "demo" and ((.clusters | length) > 0 or .source == "k8s" or .source == "mcp")' >/dev/null 2>&1; then
+            echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200, and live cluster telemetry verified"
+            break
+          fi
         fi
       fi
 

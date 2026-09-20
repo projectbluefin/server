@@ -37,3 +37,13 @@ def test_justfile_defines_setup_kubestellar_and_e2e_targets() -> None:
     justfile = JUSTFILE.read_text(encoding="utf-8")
     assert "test-e2e-browser" in justfile
     assert "test-e2e-lima:" in justfile
+
+
+def test_e2e_browser_test_script_verifies_live_cluster_telemetry_and_rejects_demo_mode() -> None:
+    content = E2E_SCRIPT.read_text(encoding="utf-8")
+    assert "verify_live_cluster_resources" in content
+    assert "kc-demo-mode" in content
+    assert "kind-local" in content
+    assert "minikube" in content
+    assert "No clusters connected" in content
+

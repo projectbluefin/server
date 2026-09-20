@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -135,3 +136,46 @@ def test_installer_and_ddi_strip_vmlinux_and_static_archives() -> None:
     assert "find /layer -type f -name '*.a' -delete" in installer_element
     assert 'rm -f "/layer/usr/lib/modules/${KVER}/vmlinux"' in ddi_element
     assert "find /layer -type f -name '*.a' -delete" in ddi_element
+
+
+def test_installer_smoke_probes_live_cluster_telemetry_and_rejects_demo_mode() -> None:
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+    start = justfile.index("test-installer-artifact:")
+    end = justfile.index("install-vm:", start)
+    recipe = justfile[start:end]
+
+    assert "/api/mcp/clusters" in recipe
+    assert '.source != "demo"' in recipe
+    assert "/healthz" in recipe
+    assert "200" in recipe
+
+
+def test_smoke_gate_jq_filter_accepts_live_telemetry_and_rejects_demo_mode() -> None:
+    filter_expr = '.source != "demo" and ((.clusters | length) > 0 or .source == "k8s" or .source == "mcp")'
+
+    def eval_filter(payload: str) -> int:
+        proc = subprocess.run(
+            ["jq", "-e", filter_expr],
+            input=payload,
+            capture_output=True,
+            text=True,
+        )
+        return proc.returncode
+
+    # Demo mode with synthetic clusters must be rejected
+    demo_payload = '{"clusters": [{"name": "kind-local"}], "source": "demo"}'
+    assert eval_filter(demo_payload) != 0
+
+    # Service unavailable / No cluster access must be rejected
+    error_payload = '{"error": "No cluster access"}'
+    assert eval_filter(error_payload) != 0
+
+    # Live k8s cluster telemetry must be accepted
+    k8s_payload = '{"clusters": [{"name": "in-cluster", "healthy": true}], "source": "k8s"}'
+    assert eval_filter(k8s_payload) == 0
+
+    # Live mcp cluster telemetry must be accepted
+    mcp_payload = '{"clusters": [{"name": "its1"}], "source": "mcp"}'
+    assert eval_filter(mcp_payload) == 0
+
+

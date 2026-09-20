@@ -4,7 +4,7 @@
 Tests:
 1. Console availability at http://127.0.0.1:8080/
 2. Automated login flow (Cluster Access / GitHub OAuth / Dev Mode / Token Login)
-3. Dashboard navigation and DOM rendering
+3. Dashboard navigation and DOM rendering of live cluster resources (rejecting demo mode)
 4. Kiosk gate overlay and kc-agent interaction on port 8585
 """
 
@@ -72,6 +72,75 @@ def wait_for_http_ready(url: str, timeout: int, check_healthz: bool = True) -> b
     return False
 
 
+def verify_live_cluster_resources(driver: webdriver.Chrome, timeout: int = 15) -> None:
+    """Verify that actual Kubernetes cluster resources are discovered and rendered in the DOM,
+    ensuring unconfigured demo placeholders or synthetic dev mode do not pass silently.
+    """
+    print("==> Verifying live cluster resources are rendered in the DOM (rejecting demo mode)...")
+
+    # 1. Reject synthetic demo mode flag in localStorage if explicitly active
+    try:
+        demo_mode_flag = driver.execute_script("return window.localStorage.getItem('kc-demo-mode')")
+        if demo_mode_flag == "true":
+            raise AssertionError("Console is running in synthetic demo mode (kc-demo-mode=true in localStorage)")
+    except Exception as e:
+        if "synthetic demo mode" in str(e):
+            raise
+
+    # 2. Reject synthetic demo cluster mock names in the page
+    # Upstream demo data injects synthetic clusters: "kind-local", "minikube", "k3s-edge", "eks-prod-us-east-1"
+    demo_clusters = ["kind-local", "minikube", "k3s-edge", "eks-prod-us-east-1"]
+    page_text = driver.find_element(By.TAG_NAME, "body").text
+    for demo_name in demo_clusters:
+        if demo_name in page_text:
+            raise AssertionError(f"Detected synthetic demo cluster '{demo_name}' in console DOM; demo mode was not rejected!")
+
+    # 3. Wait for real cluster resource elements, cards, or metrics in the DOM
+    cluster_resource_selectors = [
+        "[data-testid='cluster-card']",
+        "[data-testid='clusters-page']",
+        "[data-testid='card-cluster-health']",
+        "[data-testid='card-node-status']",
+        "[data-testid='card-resource-usage']",
+        "[data-testid='card-top-pods']",
+        "[data-testid='stat-block-healthy-count']",
+        "[data-testid='stat-block-total-nodes']",
+        "[data-testid='stat-block-total-pods']",
+        "[data-testid='node-row']",
+        "[data-testid='pod-row']",
+    ]
+
+    start = time.time()
+    found_resource = False
+    while time.time() - start < timeout:
+        for selector in cluster_resource_selectors:
+            elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            if elements and any(el.is_displayed() for el in elements):
+                found_resource = True
+                print(f"==> Found live cluster resource element: {selector}")
+                break
+        if found_resource:
+            break
+
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        # Look for live cluster/controlplane identifiers or node/pod telemetry
+        if any(term in body_text for term in ["its1", "wds1", "in-cluster", "Node Status", "Cluster Health", "ControlPlane", "Top Pods"]):
+            if "No clusters connected" not in body_text:
+                found_resource = True
+                print("==> Discovered live cluster workload indicators in DOM text.")
+                break
+
+        time.sleep(1)
+
+    if not found_resource:
+        raise AssertionError(
+            "Timed out waiting for live Kubernetes cluster resources (nodes, pods, or initialized ControlPlanes) "
+            "to be rendered in the DOM."
+        )
+
+    print("==> Live cluster workload DOM rendering verified successfully!")
+
+
 def run_browser_verification(console_url: str, agent_url: str) -> None:
     chrome_opts = Options()
     chrome_opts.add_argument("--headless=new")
@@ -129,7 +198,10 @@ def run_browser_verification(console_url: str, agent_url: str) -> None:
         )
         print(f"==> Successfully verified console UI! Page title: {driver.title}")
 
-        # 3. Check kiosk gate behavior
+        # 3. Verify actual Kubernetes cluster resources are rendered (rejecting demo mode)
+        verify_live_cluster_resources(driver, timeout=15)
+
+        # 4. Check kiosk gate behavior
         gate_elements = driver.find_elements(By.ID, "kubestellar-kiosk-gate")
         agent_healthy = False
         try:
