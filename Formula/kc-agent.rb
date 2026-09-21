@@ -47,7 +47,7 @@ class KcAgent < Formula
   end
 
   service do
-    run [opt_bin/"kc-agent", "-allowed-origins", "http://localhost:8080,http://127.0.0.1:8080"]
+    run [opt_bin/"kc-agent", "-allowed-origins", "https://localhost:8080,https://127.0.0.1:8080"]
     keep_alive true
     environment_variables KAGENTI_CONTROLLER_URL: "none"
     log_path var/"log/kc-agent.log"

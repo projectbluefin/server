@@ -62,25 +62,27 @@ def test_installer_wrapper_reads_kernel_command_line_without_cat() -> None:
     assert 'CMDLINE="$(cat /proc/cmdline' not in installer_element
 
 
-def test_installer_stages_uncompressed_k0s_before_packing_cpio() -> None:
+def test_installer_stages_uncompressed_sysext_before_packing_cpio() -> None:
+    """The sysext has to be in /layer before the initrd is packed, or the
+    offline installer ships no Kubernetes at all."""
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
     data = yaml.safe_load(installer_element)
-    k0s_dependency = next(
+    sysext_dependency = next(
         (
             dependency
             for dependency in data["build-depends"]
             if isinstance(dependency, dict)
-            and dependency.get("filename") == "oci/k0s-sysext.bst"
+            and dependency.get("filename") == "oci/kubernetes-sysext.bst"
         ),
         None,
     )
 
-    assert k0s_dependency == {
-        "filename": "oci/k0s-sysext.bst",
-        "config": {"location": "/k0s"},
+    assert sysext_dependency == {
+        "filename": "oci/kubernetes-sysext.bst",
+        "config": {"location": "/kubernetes"},
     }
 
-    seed_command = "cp /k0s/k0s-*.raw /layer/k0s.raw"
+    seed_command = "cp /kubernetes/kubernetes-*.raw /layer/kubernetes.raw"
     cpio_command = "| cpio --null --create --format=newc"
     assert seed_command in installer_element
     assert installer_element.index(seed_command) < installer_element.index(
@@ -92,10 +94,19 @@ def test_ddi_generates_module_indexes_for_runtime_filesystem_drivers() -> None:
     ddi_element = DDI_ELEMENT.read_text(encoding="utf-8")
 
     assert "freedesktop-sdk.bst:components/kmod.bst" in ddi_element
-    assert 'depmod -b /layer "${KVER}"' in ddi_element
+    assert 'depmod -b /layer/usr "${KVER}"' in ddi_element
     assert "cp -a /etc/pki/ca-trust/extracted/* /layer/etc/pki/ca-trust/extracted/" in ddi_element
     assert "tls-ca-bundle.pem" in ddi_element
     assert "ln -sf /dev/null /layer/etc/systemd/system/systemd-firstboot.service" in ddi_element
+    assert "ln -sf /dev/null /layer/etc/systemd/system/systemd-homed-firstboot.service" in ddi_element
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+    assert "systemd.mask=systemd-homed-firstboot.service" in justfile
+    assert "hostfwd=tcp:127.0.0.1:2222-:22" in justfile
+    assert "systemd.wants=sshd.service" in justfile
+    assert "ssh.authorized_keys.root=" in justfile
+    assert "find dist/ -maxdepth 1 -type f -name 'bluefin-server-installer-*.raw.zst'" in justfile
+    assert 'if [ "$ROOT_CODE" = "200" ]; then' in justfile
+    assert '[ "$ROOT_CODE" = "503" ]' not in justfile
     assert "ln -sf /dev/null /layer/etc/systemd/system/audit-rules.service" in ddi_element
     assert "printf '127.0.0.1   localhost" in ddi_element
     assert "> /layer/etc/hosts" in ddi_element

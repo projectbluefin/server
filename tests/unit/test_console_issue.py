@@ -15,7 +15,7 @@ def test_issue_file_exists_and_contains_kubestellar_url() -> None:
     assert ISSUE_FILE.is_file(), f"{ISSUE_FILE} must exist"
     content = ISSUE_FILE.read_text(encoding="utf-8")
     assert "Bluefin Server" in content
-    assert "KubeStellar Console: http://\\4:8080/" in content
+    assert "KubeStellar Console: https://\\4:8080/" in content
 
 
 def test_os_issue_element_target_usr_lib_issue_d() -> None:

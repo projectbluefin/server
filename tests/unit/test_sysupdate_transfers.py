@@ -2,9 +2,9 @@
 
 ``tests/unit/test_repart_layout.py`` already pins ``50-root.transfer`` against
 the installer repart config. The other two OTA transfer definitions —
-``60-uki.transfer`` (the boot UKI) and ``70-k0s.transfer`` (the k0s sysext) —
-have no coverage at all, and neither does the source-side artifact naming that
-systemd-sysupdate matches against.
+``60-uki.transfer`` (the boot UKI) and ``70-kubernetes.transfer`` (the
+Kubernetes sysext) — have no coverage at all, and neither does the source-side
+artifact naming that systemd-sysupdate matches against.
 
 These tests assert the drift-prone contracts:
 
@@ -12,9 +12,10 @@ These tests assert the drift-prone contracts:
 * every source pulls from this repo's own release feed over https
 * every source ``MatchPattern`` corresponds to an artifact name that some
   element under ``elements/`` actually emits (``bluefin-server-ddi-<v>.raw.zst``,
-  ``bluefin-server-<v>.efi``, ``k0s-<v>.raw.zst``)
-* the k0s sysext transfer lands in ``/var/lib/extensions`` under a name that
-  ``files/k0s/sysext/extension-release.k0s`` (``NAME=k0s``) can merge
+  ``bluefin-server-<v>.efi``, ``kubernetes-<v>.raw.zst``)
+* the Kubernetes sysext transfer lands in ``/var/lib/extensions`` under a name
+  that ``files/kubernetes/sysext/extension-release.kubernetes``
+  (``NAME=kubernetes``) can merge
 """
 
 import configparser
@@ -25,17 +26,22 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.d"
-K0S_SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.k0s.d"
-K0S_TRANSFER = K0S_SYSUPDATE_DIR / "70-k0s.transfer"
+KUBERNETES_SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.kubernetes.d"
+KUBERNETES_TRANSFER = KUBERNETES_SYSUPDATE_DIR / "70-kubernetes.transfer"
 ELEMENTS_DIR = REPO_ROOT / "elements"
-EXTENSION_RELEASE = REPO_ROOT / "files" / "k0s" / "sysext" / "extension-release.k0s"
+EXTENSION_RELEASE = (
+    REPO_ROOT / "files" / "kubernetes" / "sysext" / "extension-release.kubernetes"
+)
 
 RELEASE_FEED = "https://github.com/projectbluefin/server/releases/latest/download/"
 
 
 def transfer_paths() -> list[Path]:
     return sorted(
-        (*SYSUPDATE_DIR.glob("*.transfer"), *K0S_SYSUPDATE_DIR.glob("*.transfer"))
+        (
+            *SYSUPDATE_DIR.glob("*.transfer"),
+            *KUBERNETES_SYSUPDATE_DIR.glob("*.transfer"),
+        )
     )
 
 
@@ -63,9 +69,11 @@ def split_match_pattern(pattern: str) -> tuple[str, str]:
 
 def test_sysupdate_directories_are_populated():
     generic = sorted(p.name for p in SYSUPDATE_DIR.glob("*.transfer"))
-    k0s = sorted(p.name for p in K0S_SYSUPDATE_DIR.glob("*.transfer"))
+    kubernetes = sorted(
+        p.name for p in KUBERNETES_SYSUPDATE_DIR.glob("*.transfer")
+    )
     assert generic == ["50-root.transfer", "60-uki.transfer"]
-    assert k0s == ["70-k0s.transfer"]
+    assert kubernetes == ["70-kubernetes.transfer"]
 
 
 @pytest.mark.parametrize("path", transfer_paths(), ids=lambda p: p.name)
@@ -126,7 +134,7 @@ def test_every_source_artifact_is_produced_by_an_element(path: Path):
         load_transfer(path)["Source"]["MatchPattern"]
     )
     # Elements name artifacts with a BuildStream variable in the version slot,
-    # e.g. FNAME="k0s-%{k0s-version}.raw" plus a .zst compression step.
+    # e.g. FNAME="kubernetes-%{k8s-version}.raw" plus a .zst compression step.
     produced = re.compile(
         re.escape(prefix) + r"%\{[a-z0-9-]+\}" + re.escape(suffix.removesuffix(".zst"))
     )
@@ -158,27 +166,33 @@ def test_uki_source_and_target_names_agree():
     )
 
 
-def test_k0s_sysext_transfer_lands_in_the_system_extension_directory():
-    target = load_transfer(K0S_TRANSFER)["Target"]
+def test_kubernetes_sysext_transfer_lands_where_systemd_sysext_scans() -> None:
+    """The image must be merged by systemd-sysext.service, not by a copy step.
+
+    ``/var/lib/extensions`` is one of systemd-sysext's own search paths, so an
+    image landing there is merged at boot with no unit shuffling it into
+    ``/run/extensions`` first.
+    """
+    target = load_transfer(KUBERNETES_TRANSFER)["Target"]
     assert target.get("Type") == "regular-file", (
-        "the k0s sysext is delivered as a decompressed regular file"
+        "the Kubernetes sysext is delivered as a decompressed regular file"
     )
-    assert target.get("Path") == "/var/lib/k0s", (
-        f"k0s sysext target path is {target.get('Path')!r}; the persistent "
-        "staging path must remain outside systemd-sysext's early scan"
+    assert target.get("Path") == "/var/lib/extensions", (
+        f"sysext target path is {target.get('Path')!r}; anywhere else and "
+        "systemd-sysext.service never sees the image"
     )
     assert target.get("Mode") == "0644", (
-        f"k0s sysext mode is {target.get('Mode')!r}; the image must be readable "
+        f"sysext mode is {target.get('Mode')!r}; the image must be readable "
         "by systemd-sysext at merge time"
     )
 
 
-def test_k0s_sysext_transfer_maintains_a_stable_current_symlink():
-    target = load_transfer(K0S_TRANSFER)["Target"]
+def test_kubernetes_sysext_transfer_maintains_a_stable_current_symlink():
+    target = load_transfer(KUBERNETES_TRANSFER)["Target"]
     symlink = target.get("CurrentSymlink")
-    assert symlink == "k0s.raw", (
-        f"CurrentSymlink is {symlink!r}; the boot activation unit requires a "
-        "stable filename, so a version bump otherwise stops merging k0s"
+    assert symlink == "kubernetes.raw", (
+        f"CurrentSymlink is {symlink!r}; the merge name must be stable, so a "
+        "version bump otherwise stops merging the sysext"
     )
     prefix, suffix = split_match_pattern(target["MatchPattern"])
     assert symlink == f"{prefix.rstrip('-')}{suffix}", (
@@ -187,23 +201,28 @@ def test_k0s_sysext_transfer_maintains_a_stable_current_symlink():
     )
 
 
-def test_k0s_sysext_transfer_decompresses_the_release_asset():
-    parser = load_transfer(K0S_TRANSFER)
+def test_kubernetes_sysext_transfer_decompresses_the_release_asset():
+    parser = load_transfer(KUBERNETES_TRANSFER)
     source = parser["Source"]["MatchPattern"]
     target = parser["Target"]["MatchPattern"]
-    assert source.endswith(".raw.zst"), f"k0s release asset {source!r} is not zstd"
+    assert source == "kubernetes-@v.raw.zst", (
+        f"release asset pattern is {source!r}; "
+        ".github/scripts/check-kubernetes-version.py cross-checks this exact "
+        "spelling against the name elements/oci/kubernetes-sysext.bst emits"
+    )
     assert target == source.removesuffix(".zst"), (
-        f"k0s sysext installs as {target!r} but downloads {source!r}; a still "
+        f"sysext installs as {target!r} but downloads {source!r}; a still "
         "compressed image cannot be mounted by systemd-sysext"
     )
 
 
-def test_k0s_sysext_image_name_matches_its_extension_release_name():
+def test_kubernetes_sysext_image_name_matches_its_extension_release_name():
     """systemd-sysext requires ``extension-release.<image-name>`` to agree.
 
-    The image installed by ``70-k0s.transfer`` is merged through the stable
-    ``k0s.raw`` symlink, so ``NAME=`` in ``files/k0s/sysext/extension-release.k0s``
-    must be ``k0s`` or the merge is rejected at boot.
+    The image installed by ``70-kubernetes.transfer`` is merged through the
+    stable ``kubernetes.raw`` symlink, so ``NAME=`` in
+    ``files/kubernetes/sysext/extension-release.kubernetes`` must be
+    ``kubernetes`` or the merge is rejected at boot.
     """
     assert EXTENSION_RELEASE.is_file(), f"{EXTENSION_RELEASE} missing"
     fields = dict(
@@ -211,9 +230,7 @@ def test_k0s_sysext_image_name_matches_its_extension_release_name():
         for line in EXTENSION_RELEASE.read_text().splitlines()
         if "=" in line and not line.startswith("#")
     )
-    symlink = load_transfer(K0S_TRANSFER)["Target"][
-        "CurrentSymlink"
-    ]
+    symlink = load_transfer(KUBERNETES_TRANSFER)["Target"]["CurrentSymlink"]
     image_name = symlink.removesuffix(".raw")
     assert EXTENSION_RELEASE.name == f"extension-release.{image_name}", (
         f"{EXTENSION_RELEASE.name} does not match the installed image name "
@@ -238,12 +255,4 @@ def test_every_source_artifact_is_staged_in_release_workflow(path: Path):
     build_yml = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
     assert re.search(rf"cp\s+.*{re.escape(prefix)}\*.*dist/release/", build_yml), (
         f"{path.name} source asset prefix {prefix!r} is not staged to dist/release/ in .github/workflows/build.yml"
-    )
-
-
-def test_k0s_release_staging_does_not_use_legacy_k3s_name() -> None:
-    build_yml = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
-    assert re.search(r"cp\s+.*k0s-\*\.raw\.zst.*dist/release/", build_yml)
-    assert not re.search(
-        r"cp\s+.*k3s-\*\.raw\.zst.*dist/release/", build_yml
     )

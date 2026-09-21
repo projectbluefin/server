@@ -28,11 +28,11 @@ Specifies the automated loop that monitors GitHub Actions release runs on `proje
 
 #### Stage B: Release Staging & Contract Audit
 While the remote build is compiling in CI, audit the local tree against the release contract:
-1. **Element Graph**: `just validate` (checks release version and k0s version alignment).
+1. **Element Graph**: `just validate` (checks release version and Kubernetes version alignment).
 2. **Unit Suite**: `pytest tests/unit` and `bats tests/unit`.
 3. **Docs & Skills**: `python3 .github/scripts/docs-checks.py`.
 4. **Sysupdate Asset Parity**: Verify every `.transfer` target pattern in
-   `files/os/sysupdate.d/*.transfer` and `files/os/sysupdate.k0s.d/*.transfer`
+   `files/os/sysupdate.d/*.transfer` and `files/os/sysupdate.kubernetes.d/*.transfer`
    is emitted by an element under `elements/` AND staged into `dist/release/`
    in `.github/workflows/build.yml`.
 
@@ -66,7 +66,7 @@ Once the GitHub Actions `release` job finishes:
    - `bluefin-server-installer-*.raw.zst`
    - `bluefin-server-*.efi`
    - `bluefin-server-ddi-*.raw.zst`
-   - `k0s-*.raw.zst`
+   - `kubernetes-*.raw.zst`
    - `SHA256SUMS`
    - `SHA256SUMS.gpg`
 3. Verify GPG signature against `SHA256SUMS`.

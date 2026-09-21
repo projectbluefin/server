@@ -17,7 +17,7 @@ the OS image.
 ## When to Use
 
 - Modifying `files/os/sysupdate.d/*.transfer` or
-  `files/os/sysupdate.k0s.d/*.transfer` update definitions.
+  `files/os/sysupdate.kubernetes.d/*.transfer` update definitions.
 - Rotating or replacing the release signing key.
 - Debugging `systemd-sysupdate` failures related to `SHA256SUMS.gpg` verification.
 
@@ -50,8 +50,8 @@ Key facts from `sysupdate.d(5)`:
 
 The current tree uses a single root/ESP slot and a single signed manifest flow
 for OTA delivery. Root and UKI transfers live in `sysupdate.d`; the optional
-k0s sysext lives in the `k0s` component directory and is selected with
-`systemd-sysupdate --component=k0s update`. Future work on dual-slot root
+Kubernetes sysext lives in the `kubernetes` component directory and is selected
+with `systemd-sysupdate --component=kubernetes update`. Future work on dual-slot root
 partitions, dual UKIs, and broader rollback strategies is tracked in
 [architecture-roadmap.md](architecture-roadmap.md).
 
@@ -66,7 +66,7 @@ partitions, dual UKIs, and broader rollback strategies is tracked in
   `dist/release/SHA256SUMS.gpg`, and uploads `dist/release/*` to the GitHub
   Release.
 - `files/os/sysupdate.d/*.transfer` and
-  `files/os/sysupdate.k0s.d/*.transfer` — each transfer points its static
+  `files/os/sysupdate.kubernetes.d/*.transfer` — each transfer points its static
   `Path=` at `https://github.com/projectbluefin/server/releases/latest/download/`
   so all transfers share the same signed manifest.
 
@@ -127,7 +127,7 @@ partitions, dual UKIs, and broader rollback strategies is tracked in
 ## Verification
 
 - [ ] `files/os/sysupdate.d/*.transfer` and
-      `files/os/sysupdate.k0s.d/*.transfer` do not contain `Verify=no`.
+      `files/os/sysupdate.kubernetes.d/*.transfer` do not contain `Verify=no`.
 - [ ] `elements/bluefin-server/os-stack.bst` includes
       `bluefin-server/os-sysupdate-keys.bst`.
 - [ ] `files/os/sysupdate-keys/import-pubring.gpg` exists and contains the
@@ -137,7 +137,7 @@ partitions, dual UKIs, and broader rollback strategies is tracked in
       manifest, producing `dist/release/SHA256SUMS.gpg`.
 - [ ] CI uploads `dist/release/*` to the GitHub Release.
 - [ ] Every transfer in `files/os/sysupdate.d/*.transfer` and
-      `files/os/sysupdate.k0s.d/*.transfer` uses a static `Path=` with no
+      `files/os/sysupdate.kubernetes.d/*.transfer` uses a static `Path=` with no
       `@v` placeholder.
 - [ ] Every transfer uses `@v` only inside `MatchPattern=`.
 

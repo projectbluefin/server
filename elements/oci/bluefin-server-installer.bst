@@ -57,10 +57,17 @@ build-depends:
   - filename: bluefin-server/os-rootfs.bst
     config:
       location: /target-root
-  # Uncompressed k0s sysext staged into the installer initrd for offline install
-  - filename: oci/k0s-sysext.bst
+  # Uncompressed Kubernetes sysext staged into the installer initrd for
+  # offline install; systemd-repart seeds it onto /var at install time.
+  - filename: oci/kubernetes-sysext.bst
     config:
-      location: /k0s
+      location: /kubernetes
+  # Flatcar's containerd sysext, seeded the same way. kubeadm-init.service has
+  # a hard Requires=containerd.service and FSDK ships no containerd component,
+  # so without this the control plane never starts.
+  - filename: flatcar/containerd-sysext.bst
+    config:
+      location: /containerd
 
 variables:
   installer-version: "%{release-version}"
@@ -103,7 +110,7 @@ config:
       mkdir -p /target-root/boot
       ln -sf "../usr/lib/modules/${TARGET_KVER}/vmlinuz" /target-root/boot/vmlinuz
 
-      depmod -b /target-root "${TARGET_KVER}" || true
+      depmod -b /target-root/usr "${TARGET_KVER}" || true
 
       # Configure dynamic linker search paths so ldconfig indexes FSDK libraries
       # (e.g. libc.so.6, libgcc_s.so.1, libkmod.so) for dracut-install
@@ -329,11 +336,21 @@ config:
       ln -sf system-install.target \
         /layer/usr/lib/systemd/system/default.target
 
-    # ── Step 2a: Stage the offline k0s sysext before packing the initrd ─
+    # ── Step 2a: Stage the offline sysexts before packing cpio ───────────
+    # Both are seeded onto /var by systemd-repart at install time
+    # (files/installer/repart.d/30-var.conf), so first boot merges them with
+    # no network fetch.
+    #
+    # Each filename must keep the stem its extension-release is named for:
+    # systemd-sysext merges <name>.raw only if the image carries
+    # extension-release.<name>. kubernetes-<version>.raw -> kubernetes.raw is
+    # safe (extension-release.kubernetes); containerd-flatcar.raw must stay
+    # containerd-flatcar.raw (extension-release.containerd-flatcar).
     - |
       set -eux
-      cp /k0s/k0s-*.raw /layer/k0s.raw
-      ls -lh /layer/k0s.raw
+      cp /kubernetes/kubernetes-*.raw /layer/kubernetes.raw
+      cp /containerd/containerd-flatcar.raw /layer/containerd-flatcar.raw
+      ls -lh /layer/kubernetes.raw /layer/containerd-flatcar.raw
 
     # ── Step 3: Pack initrd cpio ─────────────────────────────────────────
     # find . from /layer gives paths like ./usr/bin/... which is exactly
@@ -360,7 +377,7 @@ config:
           rm -rf "${MOD_DIR}/drivers/infiniband"
         fi
         # Re-run depmod to update module dependencies after stripping unneeded modules
-        depmod -b /layer "${KVER}" || true
+        depmod -b /layer/usr "${KVER}" || true
       fi
 
       ( cd /layer && find . -print0 \

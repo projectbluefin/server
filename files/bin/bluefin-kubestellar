@@ -4,7 +4,7 @@
 # Provides bulletproof setup and launch for connecting client workstations to the
 # Bluefin Server KubeStellar Console kiosk:
 # 1. Installs kc-agent via Homebrew (kubestellar/tap) if missing.
-# 2. Configures origin flags for the local console (default: http://localhost:8080,http://127.0.0.1:8080).
+# 2. Configures origin flags for the local console (default: https://localhost:8080,https://127.0.0.1:8080).
 # 3. Optimizes client environment by disabling in-cluster Kagenti DNS queries (KAGENTI_CONTROLLER_URL="none").
 # 4. Launches kc-agent backgrounded with health verification, or in foreground.
 # 5. Provides lifecycle management (status, stop, logs).
@@ -34,7 +34,7 @@ Commands:
 
 Options:
   -o, --origin <urls>  Allowed origin URL(s) (comma-separated)
-                       Default: http://localhost:8080,http://127.0.0.1:8080
+                       Default: https://localhost:8080,https://127.0.0.1:8080
   -p, --port <port>    kc-agent local health/listen port (default: 8585)
   -f, --foreground     Run kc-agent in foreground instead of backgrounding
       --no-install     Do not attempt Homebrew installation if kc-agent is missing
@@ -139,7 +139,7 @@ case "$CMD" in
     exit 0
     ;;
   start)
-    ORIGIN="${ORIGIN:-http://localhost:8080,http://127.0.0.1:8080}"
+    ORIGIN="${ORIGIN:-https://localhost:8080,https://127.0.0.1:8080}"
     mkdir -p "$STATE_DIR"
 
     # Optimize client environment: disable in-cluster Kagenti DNS queries

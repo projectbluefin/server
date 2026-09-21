@@ -165,7 +165,7 @@ run_isolated() {
   stub_kc_agent_foreground
   run_isolated --foreground
   [ "$status" -eq 0 ]
-  [[ "$output" =~ "Allowed origins: http://localhost:8080,http://127.0.0.1:8080" ]]
+  [[ "$output" =~ "Allowed origins: https://localhost:8080,https://127.0.0.1:8080" ]]
 }
 
 @test "foreground start execs kc-agent with -allowed-origins" {

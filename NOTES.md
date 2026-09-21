@@ -2,7 +2,7 @@
 
 ## Domain & Repository
 - **Repository**: `projectbluefin/server` (upstream of Bluefin Server OS).
-- **Core Architecture**: FSDK 26.08 (`components/*`), immutable XFS DDI OS (`oci/bluefin-server-ddi.bst`), systemd-sysinstall offline raw disk installer (`oci/bluefin-server-installer.bst`), and optional k0s `systemd-sysext` (`oci/k0s-sysext.bst`).
+- **Core Architecture**: FSDK 26.08 (`components/*`), immutable XFS DDI OS (`oci/bluefin-server-ddi.bst`), systemd-sysinstall offline raw disk installer (`oci/bluefin-server-installer.bst`), and optional Kubernetes `systemd-sysext` (`oci/kubernetes-sysext.bst`).
 - **Release Automation**: Driven by Renovate dependency updates and merges to `main`. Pushes trigger `.github/workflows/build.yml`.
 
 ## Tooling Stack
@@ -14,9 +14,9 @@
 
 ## Release & Sysupdate Lifecycle
 - **Version Source**: Pinned FSDK point release in `elements/freedesktop-sdk.bst` (e.g. `26.08.0`).
-- **Sysext Migration**: Migrated from legacy k3s to k0s (`oci/k0s-sysext.bst`). Emits `k0s-@v.raw.zst`.
-- **Sysupdate Contracts** (`files/os/sysupdate.d/` plus the k0s component directory):
+- **Kubernetes Sysext**: Upstream `kubeadm`/`kubelet`/`kubectl` plus CNI plugins (`oci/kubernetes-sysext.bst`). Emits `kubernetes-@v.raw.zst`. Version axis lives in `include/kubernetes.yml`.
+- **Sysupdate Contracts** (`files/os/sysupdate.d/` plus the `kubernetes` component directory):
   - `50-root.transfer`: OS rootfs DDI (`bluefin-server-ddi-@v.raw.zst`).
   - `60-uki.transfer`: Boot UKI (`bluefin-server-@v.efi`).
-  - `files/os/sysupdate.k0s.d/70-k0s.transfer`: k0s sysext (`k0s-@v.raw.zst`).
+  - `files/os/sysupdate.kubernetes.d/70-kubernetes.transfer`: Kubernetes sysext (`kubernetes-@v.raw.zst`), on a minor-pinned track.
 - **Signing & Manifest**: `dist/release/SHA256SUMS` signed via detached GPG (`SHA256SUMS.gpg`) using secret `SYSUPDATE_SIGNING_KEY`.

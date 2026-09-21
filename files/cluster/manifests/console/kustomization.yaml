@@ -1,0 +1,12 @@
+# The KubeStellar console: the appliance's only dashboard.
+#
+# Argo CD Core ships no web UI and no argocd CLI, so this is the single
+# authenticated web surface on the machine. DEV_MODE, ALLOW_DEV_MODE_IN_CLUSTER
+# and DEV_USER_LOGIN are gone: they turned that surface into an unauthenticated
+# one on every installed appliance.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - auth-secret.yaml
+  - console.yaml

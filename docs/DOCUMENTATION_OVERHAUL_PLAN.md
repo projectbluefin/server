@@ -5,6 +5,16 @@
 
 This plan is the executable artifact. It inventories the current docs, prescribes the target structure, defines lazy-loading and token-efficiency rules, drafts the canonical `AGENTS.md`, and gives a file-by-file cleanup sequence.
 
+> **Historical record — completed.** This plan captures the documentation
+> inventory and `AGENTS.md` text as they stood when the overhaul was executed.
+> Its file listings, line counts, and the embedded `AGENTS.md` block are a
+> point-in-time snapshot and are deliberately **not** updated as the tree moves
+> on. The k0s skills it inventories were replaced by
+> [`docs/skills/kubernetes-sysext.md`](skills/kubernetes-sysext.md) and
+> [`docs/skills/kubernetes-sysext-ops.md`](skills/kubernetes-sysext-ops.md) in
+> the upstream Kubernetes cutover; read those, and the live `AGENTS.md`, for
+> current state. The rules and conventions in sections 2-5 remain in force.
+
 ---
 
 ## 1. Research basis & sources

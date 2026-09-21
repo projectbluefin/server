@@ -173,6 +173,102 @@ offline installation.
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |
 
+## What the smoke tests do not cover
+
+`just test-installer-artifact` and the CI `installer-test` job attach
+`installer.raw` as a read-only data disk and inject the kernel directly with
+`-kernel`/`-initrd` from the PXE artifacts. The medium's ESP is never executed:
+they prove the installer **installs**, never that the medium **boots**.
+
+`just test-installer-boot` closes that gap — it writes the exported image into
+a sparse file larger than itself, relocates the GPT backup header the way
+`flash-installer` does, and boots it through OVMF.
+
+Note its scope: it boots an **exported artifact** from `dist/`. It does not
+build, and `just validate` only resolves the graph without building. A green
+run is evidence about those bytes, not the current element state; the recipe
+warns when sources are newer than the artifact. Re-export before treating it
+as a gate on an element change.
+
+Its success criterion is systemd's OSC 3008 identity record, which PID 1 writes
+regardless of log verbosity and which firmware cannot forge:
+
+```
+ESC ]3008;start=<id>;user=root;hostname=<h>;machineid=<id>;bootid=<id>;
+     pid=1;comm=systemd;type=boot
+```
+
+### A working medium is silent; a broken one is noisy
+
+This inversion is the most expensive thing in this document, and the easiest to
+forget because it is counter-intuitive.
+
+A **correct** boot prints essentially nothing. `quiet loglevel=3` suppresses
+the kernel, and the medium deliberately omits `unattended`, so it comes up and
+waits for an operator. A **failing** boot is loud: dracut emergency mode,
+"Cannot find /usr", and `Dependency failed for ...` all print *through*
+`quiet`, because error paths bypass it.
+
+So silence is not evidence of failure and output is not evidence of success —
+both readings are backwards, and reading them that way cost a day spent
+reverting a healthy installer.
+
+Two habits make it unambiguous:
+
+1. **Never `cat` the serial log.** It is nearly all ANSI and OSC escapes, which
+   the terminal swallows, so a healthy boot renders as two firmware lines and
+   apparent silence. Use `strings serial.log` or `hexdump -C serial.log`; the
+   systemd identity record is plainly visible that way.
+2. **Force verbosity when in doubt:**
+
+   ```
+   INSTALLER_BOOT_CMDLINE_EXTRA=loglevel=7 just test-installer-boot
+   ```
+
+   `systemd-stub` reads this as an SMBIOS type-11 string and appends it to the
+   UKI's embedded cmdline, so it needs no rebuild. A healthy medium then
+   produces tens of kilobytes of ordinary boot log.
+
+## Writing the medium
+
+`dd` copies the image verbatim, which places the GPT **backup header at the end
+of the image** rather than at the end of the device. On any medium larger than
+the image — every real USB stick — the table is then only half valid:
+
+```
+$ sfdisk --verify /dev/sdX
+The backup GPT table is not on the end of the device.
+MyLBA mismatch with real position at backup header.
+
+$ parted -s /dev/sdX print
+Warning: Not all of the space available to /dev/sdX appears to be used ...
+```
+
+**It does not stop the medium booting.** UEFI reads the *primary* GPT at LBA 1,
+which `dd` writes correctly; the backup is a redundancy copy consulted only
+when the primary is damaged. Verified: the image written to a 58.6 GB sparse
+file without relocating reproduces the `sfdisk` error exactly and still boots
+to systemd PID 1.
+
+What it breaks is tooling — `lsblk` and `udisksctl` disagreeing about partition
+sizes, disk utilities showing most of the device unaccounted for. Partition-
+table health says nothing about boot health in either direction; reading it as
+a boot failure sends you chasing a defect that isn't there.
+
+`just flash-installer` repairs it with `sfdisk --relocate gpt-bak-std` after
+the write, and also reads the device back and compares digests, so a medium
+that silently fails to retain the image is caught. For a medium written with
+plain `dd`, relocate by hand:
+
+```
+sudo sfdisk --relocate gpt-bak-std /dev/sdX
+sudo partprobe /dev/sdX
+sudo sfdisk --verify /dev/sdX     # expect: No errors detected.
+```
+
+Invisible to CI: the smoke tests attach a virtual disk sized exactly to the
+image, so device size always equals image size and the condition cannot arise.
+
 ## Verification
 
 - [ ] `just validate` resolves the BuildStream graph without errors.
@@ -188,6 +284,10 @@ offline installation.
       appears on the attached display even when serial is the primary console.
 - [ ] `bluefin-server-installer.bst` decompresses the DDI after the cpio step.
 - [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
+- [ ] `just test-installer-boot` passes — the medium boots through firmware,
+      not just installs when the kernel is injected.
+- [ ] A medium written to real media has its GPT backup header relocated;
+      `sfdisk --verify` reports `No errors detected.`
 
 ## See also
 

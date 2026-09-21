@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubestellar-console
+  namespace: kubestellar-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubestellar-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "pods", "services", "events", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["tenancy.kflex.kubestellar.org"]
+    resources: ["controlplanes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubestellar-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubestellar-console
+subjects:
+  - kind: ServiceAccount
+    name: kubestellar-console
+    namespace: kubestellar-console
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubestellar-console
+  namespace: kubestellar-console
+  labels:
+    app.kubernetes.io/name: kubestellar-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app.kubernetes.io/name: kubestellar-console
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubestellar-console
+  namespace: kubestellar-console
+  labels:
+    app.kubernetes.io/name: kubestellar-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubestellar-console
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubestellar-console
+    spec:
+      serviceAccountName: kubestellar-console
+      # Matches the numeric owner of /app/data and /app/.kc in the image
+      # (appuser, 1001). runAsNonRoot alone is not enough: the image declares
+      # USER by name, and the kubelet refuses to start a container it cannot
+      # prove is non-root, so the uid has to be spelled out here.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: console
+          image: ghcr.io/kubestellar/console@sha256:f27adaf8d097a5403f60041615525497e0970151fcd10b90b7b6e903b395be32
+          env:
+            # GitHub OAuth is opt-in and site-specific. Nothing in this tree
+            # creates kubestellar-console-github-oauth; an operator who wants
+            # OAuth creates it, and the console starts fine without it.
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: kubestellar-console-github-oauth
+                  key: client-id
+                  optional: true
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kubestellar-console-github-oauth
+                  key: client-secret
+                  optional: true
+            # Generated in-cluster at sync wave 3. Mandatory: a console that
+            # signs sessions with a key it did not generate is a console whose
+            # sessions anyone can forge.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kubestellar-console-auth
+                  key: jwt-secret
+                  optional: false
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            # readOnlyRootFilesystem is the one piece of the baseline this
+            # workload does not take, and it is an exception rather than an
+            # oversight: the image writes its SQLite database to
+            # DATABASE_PATH=/app/data/console.db and a crash log beside it, on
+            # its own root filesystem. Nothing in this tree redirects those
+            # paths, so a read-only rootfs would leave the console unable to
+            # start. The data is ephemeral either way — there is no volume and
+            # the Deployment uses Recreate.
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL

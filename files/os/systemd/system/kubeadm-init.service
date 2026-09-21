@@ -1,0 +1,102 @@
+[Unit]
+Description=Initialise the Kubernetes control plane with kubeadm
+Documentation=https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/
+# The idempotency guard belongs here and nowhere else. A unit whose condition
+# fails is marked *skipped*, and systemd treats a skipped unit as satisfied for
+# everything ordered after it, so bluefin-cluster-bootstrap.service still runs.
+ConditionPathExists=!/etc/kubernetes/admin.conf
+# Both /usr/bin/kubeadm and containerd.service arrive with the sysext merge, but
+# from two different extensions, each seeded to /var/lib/extensions by
+# files/installer/repart.d/30-var.conf:
+#
+#   kubernetes.raw  elements/oci/kubernetes-sysext.bst — kubeadm, kubelet,
+#                   kubectl, CNI plugins.
+#   containerd-flatcar.raw  elements/flatcar/containerd-sysext.bst — Flatcar's containerd
+#                   sysext: containerd, runc, ctr, containerd-shim-runc-v2, and
+#                   containerd.service itself. FSDK 26.08 ships no containerd
+#                   component, so this import is the only provider.
+#
+# containerd-flatcar.raw carries its own multi-user.target.wants symlink, so the merge
+# enables the service; no preset of ours is involved.
+Requires=systemd-sysext.service
+After=systemd-sysext.service
+# Wants=, not Requires=, and the distinction is load-bearing.
+#
+# systemd resolves dependencies when it computes the boot transaction. At that
+# moment containerd.service does not exist: it lives inside containerd-flatcar.raw
+# and only appears once systemd-sysext merges /usr. Observed ordering on a real
+# first boot:
+#
+#   12:06:10.283  Applying preset policy
+#   12:06:11.751  Merged extensions into '/usr'     <- containerd.service appears
+#   12:06:13.141  Reached target Multi-User System
+#
+# With Requires=, the unresolvable dependency made systemd drop this unit's job
+# from the transaction outright. It was never re-enqueued after the merge, so
+# its conditions were never even evaluated (ConditionTimestamp empty), kubeadm
+# never ran, and bluefin-cluster-bootstrap.service never ran either because it
+# declares Requires=kubeadm-init.service. The machine booted to multi-user with
+# no control plane and nothing in `systemctl list-units --failed` to show for it.
+#
+# kubelet.service survived the same boot precisely because it only declares
+# After=containerd.service: a pure ordering edge on a unit that does not yet
+# exist is ignored rather than fatal.
+#
+# Wants= is ignored the same way when unresolvable. Be clear about what After=
+# then buys: nothing, at boot. containerd.service is absent from the boot
+# transaction on *every* boot, not just the first, because the sysext merges
+# mid-boot each time and the drop-in on systemd-sysext.service starts containerd
+# imperatively rather than as a queued job. An After= against a unit that is not
+# in the transaction orders nothing.
+#
+# It is kept because it costs nothing and is correct whenever containerd does
+# enter a transaction — a later `systemctl restart containerd`, for instance.
+# The ordering this unit actually relies on at boot is the ExecStartPre socket
+# wait below.
+Wants=containerd.service
+After=containerd.service
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/lib/kubelet
+
+[Service]
+Type=oneshot
+# RemainAfterExit is what makes the ordering edge useful: the unit stays active
+# after kubeadm exits, so dependents see a control plane that is still up.
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=30s
+TimeoutStartSec=900
+# Wait for the CRI socket rather than assuming After=containerd.service ordered
+# us. It cannot: containerd.service arrives with the sysext merge, so it is not
+# in the boot transaction when systemd computes ordering, and After= against a
+# unit that is not in the transaction orders nothing. Observed without this:
+#
+#   12:18:13  [ERROR CRI]: dial unix /run/containerd/containerd.sock:
+#                          connect: no such file or directory
+#   12:18:43  Scheduled restart job, restart counter is at 1
+#   12:18:59  Finished Initialise the Kubernetes control plane
+#
+# kubeadm recovered on its own 30s later, but the damage was already done:
+# bluefin-cluster-bootstrap.service declares Requires=kubeadm-init.service, and
+# that first failure killed its job permanently with result 'dependency'. It is
+# never re-queued when kubeadm later succeeds, so the node came up with a
+# control plane and no CNI, no Argo, and no console — and nothing in
+# `systemctl list-units --failed` to explain it.
+#
+# Waiting here makes the first attempt succeed, which keeps the Wants=/Requires=
+# edges in the dependents honest.
+#
+# Bounded at 300 attempts (300s) rather than open-ended. An unbounded `until`
+# shares TimeoutStartSec=900 with kubeadm itself, so a containerd that never
+# arrives would burn the whole window in silence and the eventual systemd kill
+# would look like "kubeadm was slow" rather than "there was no container
+# runtime". Exiting non-zero hands it to Restart=on-failure with a line that
+# names the cause, and still leaves kubeadm the larger share of the budget.
+ExecStartPre=/usr/bin/bash -c 'for i in $(seq 300); do [ -S /run/containerd/containerd.sock ] && exit 0; sleep 1; done; echo "no CRI socket at /run/containerd/containerd.sock after 300s; containerd.service did not start" >&2; exit 1'
+# Cilium provides the kube-proxy replacement; installing kube-proxy as well
+# would leave two datapaths fighting over the same Services.
+ExecStart=/usr/bin/kubeadm init --config /usr/share/bluefin/kubeadm.yaml --skip-phases=addon/kube-proxy
+
+[Install]
+WantedBy=multi-user.target

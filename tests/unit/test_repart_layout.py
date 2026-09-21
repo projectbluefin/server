@@ -38,7 +38,21 @@ def parse_size(value: str) -> int:
 
 
 def load_config(path: Path) -> configparser.ConfigParser:
-    parser = configparser.ConfigParser(strict=True)
+    """Parse a systemd-style config file.
+
+    ``strict=False`` is required, not laxity: systemd documents several
+    directives as repeatable, and ``CopyFiles=`` in ``30-var.conf`` is one of
+    them — the installer seeds both the Kubernetes and the containerd sysext
+    onto ``/var``. ``configparser`` defaults to ``strict=True``, which raises
+    ``DuplicateOptionError`` on valid systemd input.
+
+    With ``strict=False`` the last occurrence wins for single-value lookups,
+    which is fine for the size and label assertions in this module. Anything
+    asserting over a repeatable directive must read every occurrence instead —
+    see ``tests/unit/test_seeded_sysext_names.py``, which scans the raw text for
+    that reason.
+    """
+    parser = configparser.ConfigParser(strict=False)
     # systemd drop-ins are case-sensitive; configparser lowercases keys by default.
     parser.optionxform = str
     parser.read_string(path.read_text(encoding="utf-8"))
@@ -218,9 +232,33 @@ def test_var_is_a_growing_xfs_tail():
     )
 
 
-def test_var_seeds_the_offline_k0s_sysext():
-    var = next(s for s in partitions().values() if s["Type"] == "var")
-    assert var["CopyFiles"] == "/k0s.raw:/lib/k0s/k0s.raw"
+def test_var_seeds_every_sysext_into_the_systemd_sysext_scan_directory():
+    """An offline install must boot into a working cluster with no fetch.
+
+    The destination is relative to the /var partition root, so
+    ``/lib/extensions/<name>.raw`` is ``/var/lib/extensions/<name>.raw`` on the
+    running system — one of systemd-sysext's own search paths, which is why no
+    unit has to copy the image anywhere before the merge.
+
+    ``CopyFiles=`` is repeatable and there is more than one seed, so this reads
+    every occurrence out of the raw text rather than through configparser, which
+    keeps only the last. The naming contract between a seeded image and its
+    extension-release lives in tests/unit/test_seeded_sysext_names.py.
+    """
+    text = (REPART_DIR / "30-var.conf").read_text(encoding="utf-8")
+    seeds = dict(
+        re.findall(r"^CopyFiles=([^:]+):(.+)$", text, re.MULTILINE)
+    )
+
+    assert seeds.get("/kubernetes.raw") == "/lib/extensions/kubernetes.raw", (
+        "the Kubernetes sysext must be seeded for an offline first boot"
+    )
+    assert seeds.get("/containerd-flatcar.raw") == (
+        "/lib/extensions/containerd-flatcar.raw"
+    ), (
+        "the containerd sysext must be seeded: kubeadm-init.service hard-requires "
+        "containerd.service and FSDK ships no containerd component"
+    )
 
 
 def test_root_partition_label_is_matched_by_the_sysupdate_root_transfer():

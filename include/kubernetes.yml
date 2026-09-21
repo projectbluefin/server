@@ -1,0 +1,29 @@
+# Single source of truth for the Kubernetes version axis.
+#
+# Kubernetes is an independently-pinned third-party payload, not an OS asset.
+# Its version therefore does NOT live on the OS `release-version` axis declared
+# in project.conf — that axis names the FSDK point release and is bumped by
+# unrelated OS work.
+#
+# Only the two atoms below are edited when Kubernetes is bumped. Every other
+# spelling of the Kubernetes version in this repository is derived from them:
+#
+#   %{k8s-version}         upstream Kubernetes version        1.36.4
+#   %{cni-version}         containernetworking/plugins tag    1.9.1
+#   %{k8s-upstream-tag}    dl.k8s.io release directory        v1.36.4
+#   %{cni-upstream-tag}    CNI plugins GitHub release tag     v1.9.1
+#
+# The sysext asset is named `kubernetes-%{k8s-version}.raw`, which is the
+# version oracle systemd-sysupdate parses back out through the `@v` wildcard
+# in files/os/sysupdate.kubernetes.d/70-kubernetes.transfer.
+#
+# Included by:
+#   elements/kubernetes/kubernetes-bin.bst   -> %{k8s-upstream-tag}
+#   elements/kubernetes/cni-plugins.bst      -> %{cni-upstream-tag}
+#   elements/oci/kubernetes-sysext.bst       -> %{k8s-version}, %{cni-version}
+variables:
+  k8s-version: "1.36.4"
+  cni-version: "1.9.1"
+
+  k8s-upstream-tag: "v%{k8s-version}"
+  cni-upstream-tag: "v%{cni-version}"

@@ -1,0 +1,73 @@
+# kubelet serving-certificate approver.
+#
+# kubeadm.yaml sets serverTLSBootstrap: true, so kubelets request their serving
+# certificates through the certificates API. kube-controller-manager
+# auto-approves kubelet *client* CSRs but deliberately never auto-approves
+# *serving* CSRs, because it cannot verify that the requested SANs belong to the
+# node. Without this component those CSRs sit Pending forever, the kubelet falls
+# back to a self-signed serving certificate, and `kubectl logs` and
+# `kubectl exec` fail TLS verification. It is mandatory, not optional.
+#
+# RBAC below is upstream's, from
+# charts/kubelet-csr-approver/templates/clusterrole.yaml at v1.2.15. The approve
+# permission is scoped to the kubernetes.io/kubelet-serving signer by
+# resourceNames, so this ServiceAccount cannot approve any other kind of CSR.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubelet-csr-approver
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: kubelet-csr-approver
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubelet-csr-approver
+  labels:
+    app.kubernetes.io/name: kubelet-csr-approver
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+rules:
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - certificatesigningrequests
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - certificatesigningrequests/approval
+    verbs:
+      - update
+  - apiGroups:
+      - certificates.k8s.io
+    resourceNames:
+      - kubernetes.io/kubelet-serving
+    resources:
+      - signers
+    verbs:
+      - approve
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubelet-csr-approver
+  labels:
+    app.kubernetes.io/name: kubelet-csr-approver
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubelet-csr-approver
+subjects:
+  - kind: ServiceAccount
+    name: kubelet-csr-approver
+    namespace: kube-system

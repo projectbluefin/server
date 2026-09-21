@@ -14,7 +14,7 @@ It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html): t
 ## Release status: Alpha
 
 Bluefin Server is currently in **Alpha**:
-- **Milestone status**: Phase A (reproducible build path, uutils, k0s sysext, graph validation) is complete. Phase B (automated boot verification on lab cluster) is in progress.
+- **Milestone status**: Phase A (reproducible build path, uutils, Kubernetes sysext, graph validation) is complete. Phase B (automated boot verification on lab cluster) is in progress.
 - **Trust model**: Releases include cryptographic provenance with GPG-signed `SHA256SUMS` manifests and in-tree `systemd-sysupdate` verification configurations.
 - **Suitability**: Alpha builds are intended for evaluation, testing, and factory validation. Not yet recommended for production workloads.
 - **Readiness roadmap**: Track completed criteria and remaining gates toward 1.0 in [`docs/MVP_1_0_READINESS.md`](docs/MVP_1_0_READINESS.md).
@@ -25,7 +25,7 @@ Bluefin Server is currently in **Alpha**:
 - **DDI-first delivery** — the installer embeds the OS payload as a data partition; no network is required at install time.
 - **Streamlined base OS image** — modern userspace with uutils coreutils and bash for interactive login and diagnostics.
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive terminal UI and `systemd-repart` handles partitioning and block-copy DDI placement.
-- **Optional k0s as a `systemd-sysext`** so the base image stays minimal.
+- **Optional upstream Kubernetes as a `systemd-sysext`** so the base image stays minimal.
 
 > **Remote diagnostics:** OpenSSH is installed for on-demand diagnostics, but is disabled by default via systemd presets. It can be started manually with `systemctl start sshd` when remote access is needed. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 

@@ -1,0 +1,42 @@
+# Scopes what the root Application is allowed to touch.
+#
+# The tree it syncs installs cluster-scoped CRDs and webhooks and spans several
+# namespaces, so the destination and cluster-resource allowlists are wide. They
+# are still narrower than "*": a project that cannot create a new AppProject or
+# a new Application cannot be used to escalate out of itself.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: bluefin
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: bluefin-server
+spec:
+  description: Bluefin Server appliance workload
+  sourceRepos:
+    - git://bluefin-git-daemon.bluefin-system.svc.cluster.local/cluster.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: cert-manager.io
+      kind: ClusterIssuer
+    - group: tenancy.kflex.kubestellar.org
+      kind: ControlPlane
+  namespaceResourceBlacklist:
+    - group: argoproj.io
+      kind: AppProject
+    - group: argoproj.io
+      kind: Application

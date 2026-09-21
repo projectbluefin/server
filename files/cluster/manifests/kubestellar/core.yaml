@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubestellar
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubestellar-controller-manager
+  namespace: kubestellar
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubestellar-controller-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+rules:
+  - apiGroups: ["tenancy.kflex.kubestellar.org"]
+    resources: ["controlplanes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["tenancy.kflex.kubestellar.org"]
+    resources: ["controlplanes/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["namespaces", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubestellar-controller-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubestellar-controller-manager
+subjects:
+  - kind: ServiceAccount
+    name: kubestellar-controller-manager
+    namespace: kubestellar
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubestellar-controller-manager
+  namespace: kubestellar
+  labels:
+    app.kubernetes.io/name: kubestellar
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubestellar
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubestellar
+    spec:
+      serviceAccountName: kubestellar-controller-manager
+      containers:
+        - name: manager
+          image: ghcr.io/kubestellar/kubestellar/controller-manager@sha256:53db459bc17af77e644fe34f1469a425cd4c089939567029fe4e96ef5b80a7ab
+          command:
+            - /ko-app/controller-manager
+          args:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=127.0.0.1:8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL

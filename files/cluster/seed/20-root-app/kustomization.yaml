@@ -1,0 +1,12 @@
+# Seed phase 20 — hand-off to Argo.
+#
+# Last seed phase. After this the seed is done: everything else in the
+# appliance is reconciled by Argo CD Core from the git bridge.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  - appproject.yaml
+  - application.yaml

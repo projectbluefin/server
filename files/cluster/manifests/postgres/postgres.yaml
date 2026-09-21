@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-postgresql
+  namespace: kubeflex-system
+  labels:
+    app.kubernetes.io/name: postgresql
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-postgresql
+  namespace: kubeflex-system
+  labels:
+    app.kubernetes.io/name: postgresql
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  serviceName: postgres-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgresql
+    spec:
+      securityContext:
+        fsGroup: 70
+      containers:
+        - name: postgresql
+          image: docker.io/library/postgres@sha256:3c5c8892d184f738f4fe282d14ddaa613a38f00f4189d2d94725ebe6f2909ddb
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            # The superuser password lives in the kubeflex-postgres Secret,
+            # generated in-cluster by the Job in ../kubeflex/postgres-secret.yaml
+            # at sync wave 0, so it is never committed to git and never appears
+            # in this pod spec. See projectbluefin/server#98.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeflex-postgres
+                  key: password
+            - name: POSTGRES_DB
+              value: "postgres"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgresql
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        # Deliberately ephemeral. The appliance ships no CSI driver and no
+        # default StorageClass, so a volumeClaimTemplate would leave this
+        # StatefulSet Pending forever and the root Application would never
+        # report Healthy. Postgres re-initialises from POSTGRES_PASSWORD on
+        # restart, and that password survives in the kubeflex-postgres Secret,
+        # so the database comes back consistent — just empty. Durable storage
+        # is gated on a storage provisioner landing in this tree.
+        - name: data
+          emptyDir: {}

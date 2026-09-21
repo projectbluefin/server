@@ -1,0 +1,4 @@
+enable kubelet.service
+enable kubeadm-init.service
+enable bluefin-cluster-repo.service
+enable bluefin-cluster-bootstrap.service

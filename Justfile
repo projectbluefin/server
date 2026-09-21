@@ -54,11 +54,11 @@ tags:
 [group('dev')]
 validate:
     python3 .github/scripts/check-release-version.py
-    python3 .github/scripts/check-k0s-version.py
+    python3 .github/scripts/check-kubernetes-version.py
     python3 .github/scripts/check-renovate-series.py
     just bst show --deps all oci/bluefin-server-ddi.bst
     just bst show --deps all oci/bluefin-server-installer.bst
-    just bst show --deps all oci/k0s-sysext.bst
+    just bst show --deps all oci/kubernetes-sysext.bst
 
 # Run the unit test suite (pytest + bats).
 [group('dev')]
@@ -124,7 +124,37 @@ export-installer: build-installer
     just bst artifact checkout oci/bluefin-server-installer.bst --directory /src/dist/installer-checkout
     mv dist/installer-checkout/* dist/
     rm -rf dist/installer-checkout
+    # Record what this artifact was built from. mtimes cannot answer that: a
+    # fresh clone stamps every file at checkout time, and a rebase rewrites
+    # commit dates, so both signals lie. A content hash of the build inputs
+    # does not.
+    @just _record-provenance
     @echo "==> wrote:" && ls -lh dist/
+
+# Write the provenance sidecar naming the sources an export was built from.
+[private]
+_record-provenance:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    IMG=$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-installer-*.raw.zst' -print -quit)
+    [ -n "${IMG}" ] || exit 0
+    {
+        echo "commit $(git rev-parse HEAD 2>/dev/null || echo unknown)"
+        echo "tree $(just _inputs-hash)"
+    } > "${IMG}.provenance"
+    echo "==> provenance: $(sed -n 2p "${IMG}.provenance")"
+
+# Content hash of everything the installer image is built from. Deterministic
+# across clones and rebases, unlike mtimes or commit dates.
+[private]
+_inputs-hash:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    find elements include files project.conf -type f 2>/dev/null \
+        | LC_ALL=C sort \
+        | xargs -r sha256sum \
+        | sha256sum \
+        | cut -d' ' -f1
 
 # Export standalone kernel and initrd for PXE boot. The DDI remains embedded
 # in the raw installer image; network DDI fetching is not enabled.
@@ -134,26 +164,27 @@ export-pxe: export-installer
     @test -n "$(find dist/ -maxdepth 1 -type f -name 'bluefin-server-pxe-initrd-*.cpio.gz' -print -quit)" || { echo "ERROR: PXE initrd was not exported." >&2; exit 1; }
     @echo "==> wrote PXE artifacts:" && ls -lh dist/bluefin-server-pxe-*
 
-# -- k0s systemd-sysext -------------------------------------------------------
-# Produces a systemd-sysext extension image for k0s.
+# -- Kubernetes systemd-sysext ------------------------------------------------
+# Produces a systemd-sysext extension image carrying kubeadm, kubelet, kubectl
+# and the CNI plugins.
 
-# Build the k0s systemd-sysext image.
+# Build the Kubernetes systemd-sysext image.
 [group('sysext')]
 build-sysext:
-    just bst build oci/k0s-sysext.bst
+    just bst build oci/kubernetes-sysext.bst
 
-# Export the k0s systemd-sysext image + SHA256SUMS to dist/sysext/.
+# Export the Kubernetes systemd-sysext image + SHA256SUMS to dist/sysext/.
 # The artifact checkout also emits an uncompressed .raw; only the
 # versioned .raw.zst release asset and its SHA256SUMS are published.
 [group('sysext')]
 export-sysext: build-sysext
     rm -rf dist/sysext dist/sysext-checkout
     mkdir -p dist/sysext-checkout dist/sysext
-    just bst artifact checkout oci/k0s-sysext.bst --directory /src/dist/sysext-checkout
-    cp dist/sysext-checkout/k0s-*.raw.zst dist/sysext/
+    just bst artifact checkout oci/kubernetes-sysext.bst --directory /src/dist/sysext-checkout
+    cp dist/sysext-checkout/kubernetes-*.raw.zst dist/sysext/
     cp dist/sysext-checkout/SHA256SUMS dist/sysext/
     rm -rf dist/sysext-checkout
-    @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
+    @echo "==> wrote kubernetes sysext:" && ls -lh dist/sysext/
 
 # -- Flatcar LTS kernel & ZFS --------------------------------------------------
 # Build the Flatcar LTS kernel and ZFS sysext.
@@ -196,10 +227,72 @@ flash-installer DEVICE="":
         echo "ERROR: {{DEVICE}} is not a valid block device!" >&2
         exit 1
     fi
-    IMG=$(find dist/ -type f -name 'bluefin-server-installer-*.raw.zst' | head -n1)
-    if [ -z "${IMG}" ]; then
+    # Refuse the disk backing the running system outright. A single mistyped
+    # character here is unrecoverable, and the y/N prompt below is not a
+    # meaningful defence against a typo the operator has already committed to.
+    #
+    # `/` is not always on a block device. On composefs/ostree hosts — including
+    # Bluefin itself, which is what a developer runs this from — `findmnt / `
+    # reports a composefs digest, and the real device is mounted at /sysroot.
+    # Check both, so the guard is not silently inert on exactly the systems this
+    # project targets.
+    TARGET_NAME=$(lsblk -no KNAME "{{DEVICE}}" 2>/dev/null | head -n1 || true)
+    for mp in / /sysroot; do
+        SRC=$(findmnt -no SOURCE "${mp}" 2>/dev/null | head -n1 || true)
+        case "${SRC}" in /dev/*) ;; *) continue ;; esac
+        # PKNAME is the parent disk of a partition, and is empty when the
+        # filesystem sits directly on a whole-disk device (no partition table,
+        # or a device-mapper/loop node). Falling back to KNAME keeps the guard
+        # live on those hosts instead of silently skipping the comparison.
+        SRC_DISK=$(lsblk -no PKNAME "${SRC}" 2>/dev/null | head -n1 || true)
+        if [ -z "${SRC_DISK}" ]; then
+            SRC_DISK=$(lsblk -no KNAME "${SRC}" 2>/dev/null | head -n1 || true)
+        fi
+        if [ -n "${SRC_DISK}" ] && [ "${SRC_DISK}" = "${TARGET_NAME}" ]; then
+            echo "ERROR: {{DEVICE}} is the disk backing the running system." >&2
+            echo "  ${mp} is on ${SRC}, which lives on /dev/${SRC_DISK}." >&2
+            echo "Refusing to overwrite it." >&2
+            exit 1
+        fi
+    done
+    # Refuse a device with anything mounted off it. dd writing under a live
+    # filesystem gives a torn image and leaves the kernel holding stale page
+    # cache for blocks that no longer exist.
+    MOUNTED=$(lsblk -n -o MOUNTPOINTS "{{DEVICE}}" | grep -v '^\s*$' || true)
+    if [ -n "${MOUNTED}" ]; then
+        echo "ERROR: {{DEVICE}} has mounted partitions:" >&2
+        lsblk -p -o NAME,SIZE,MOUNTPOINTS "{{DEVICE}}" >&2
+        echo >&2
+        echo "Unmount them first, e.g.:" >&2
+        # -l (list) not the default tree: tree mode prefixes names with box
+        # glyphs, which would make the suggested command uncopyable.
+        lsblk -p -n -l -o NAME,MOUNTPOINTS "{{DEVICE}}" \
+            | awk 'NF>1 {printf "  udisksctl unmount -b %s\n", $1}' >&2
+        exit 1
+    fi
+    # -maxdepth 1 keeps release images in dist/release/ out of the match, but a
+    # stale export beside a fresh one is still ambiguous — fail rather than let
+    # `head -n1` pick by directory order.
+    mapfile -t IMGS < <(find dist/ -maxdepth 1 -type f -name 'bluefin-server-installer-*.raw.zst' | sort)
+    if [ "${#IMGS[@]}" -eq 0 ]; then
         echo "ERROR: No exported installer found in dist/." >&2
         echo "Please run: just build-installer && just export-installer" >&2
+        exit 1
+    fi
+    if [ "${#IMGS[@]}" -gt 1 ]; then
+        echo "ERROR: ${#IMGS[@]} installer images in dist/; refusing to guess:" >&2
+        printf '  %s\n' "${IMGS[@]}" >&2
+        echo "Remove the stale one, then re-run." >&2
+        exit 1
+    fi
+    IMG="${IMGS[0]}"
+    # Verify the archive before the prompt, not after. A truncated or corrupt
+    # download is exactly what a freshly fetched CI artifact invites, and
+    # failing here costs nothing while failing mid-write leaves an unbootable
+    # disk that looks like it succeeded.
+    echo "Verifying ${IMG}..."
+    if ! zstd -t "${IMG}"; then
+        echo "ERROR: ${IMG} failed its integrity check; refusing to write it." >&2
         exit 1
     fi
     echo "WARNING: All data on {{DEVICE}} will be COMPLETELY DESTROYED!"
@@ -212,8 +305,257 @@ flash-installer DEVICE="":
         exit 1
     fi
     echo "Writing ${IMG} to {{DEVICE}}..."
-    sudo sh -c "zstd -dc ${IMG} | dd of={{DEVICE}} bs=4M iflag=fullblock oflag=direct status=progress conv=fsync"
+    # Digest and byte count of the payload. Both are needed after the write:
+    # the count to know how much of the device to read back, the digest to
+    # compare it against.
+    #
+    # Two plain passes rather than one with `tee >(wc -c > file)`. Bash does
+    # not wait for process-substitution children, so the count file may still
+    # be unwritten when $( ) returns — it happens to work only because wc
+    # finishes before sha256sum. An empty count yields a malformed `count=`
+    # and fails the flash with a misleading "medium did not retain the image".
+    # The extra decompression costs seconds against a write measured in
+    # minutes.
+    echo "Hashing ${IMG}..."
+    EXPECT_SHA=$(zstd -dc "${IMG}" | sha256sum | cut -d' ' -f1)
+    EXPECT_BYTES=$(zstd -dc "${IMG}" | wc -c | tr -d ' ')
+    # bash with pipefail, not sh. Under POSIX sh the pipeline's status is dd's
+    # alone, so zstd dying mid-stream leaves dd exiting 0 after writing a
+    # partial image and the success line below printing anyway. The outer
+    # `set -o pipefail` does not reach here — there is no pipeline in the outer
+    # shell, only this nested one.
+    sudo bash -c "set -o pipefail; zstd -dc '${IMG}' | dd of={{DEVICE}} bs=4M iflag=fullblock oflag=direct status=progress conv=fsync"
+    # Read the device back and compare. Without this, "flashed" rests on dd's
+    # exit status, which says the writes were accepted, not that the medium
+    # kept them — the failure mode of a dying USB stick. Do it before the
+    # relocation below, which deliberately rewrites the headers and would make
+    # the digests differ for a legitimate reason.
+    # Drop the kernel's cached view of the device first, so the comparison
+    # reads the medium and not the pages just written through it. O_DIRECT
+    # would do the same but requires aligned reads, and the trailing block is
+    # partial whenever the image is not a multiple of the block size.
+    sudo blockdev --flushbufs {{DEVICE}}
+    echo "Verifying ${EXPECT_BYTES} bytes read back from {{DEVICE}}..."
+    ACTUAL_SHA=$(sudo dd if={{DEVICE}} bs=4M iflag=fullblock,count_bytes \
+        count="${EXPECT_BYTES}" status=none | sha256sum | cut -d' ' -f1)
+    if [ "${ACTUAL_SHA}" != "${EXPECT_SHA}" ]; then
+        echo "ERROR: {{DEVICE}} does not contain what was written." >&2
+        echo "  expected ${EXPECT_SHA}" >&2
+        echo "  read     ${ACTUAL_SHA}" >&2
+        echo "The medium did not retain the image. Replace it." >&2
+        exit 1
+    fi
+    echo "Content verified: ${EXPECT_SHA}"
+    # Move the GPT backup header to the end of the DEVICE.
+    #
+    # dd writes the image verbatim, so the backup header lands at the end of the
+    # IMAGE. GPT requires it at the device's last LBA, so on any medium larger
+    # than the image the table is only half valid: the primary header points at
+    # a backup LBA that is not where the device ends. parted says so directly —
+    #
+    #   Warning: Not all of the space available to /dev/sdb appears to be used,
+    #   you can fix the GPT to use all of the space (an extra 115791863 blocks)
+    #
+    # — and tools disagree about partition sizes between reads.
+    #
+    # This does NOT stop the medium booting, and it is worth being precise about
+    # that, because assuming otherwise cost a day of chasing a phantom. UEFI
+    # reads the PRIMARY header at LBA 1, which dd writes correctly; the backup
+    # is a redundancy copy consulted when the primary is damaged. A medium in
+    # this state was written to a 58.6 GB sparse file, reproduced the sfdisk
+    # error exactly, and booted to systemd PID 1 under OVMF.
+    #
+    # What it breaks is tooling, and it is invisible to every test we have:
+    # `just test-installer-artifact` and the CI installer-test attach the image
+    # as a drive sized exactly to the image, so device size always equals image
+    # size and the condition cannot arise.
+    echo "Relocating the GPT backup header to the end of {{DEVICE}}..."
+    sudo sfdisk --relocate gpt-bak-std {{DEVICE}}
+    sudo partprobe {{DEVICE}} || true
+    sudo sfdisk --verify {{DEVICE}}
     echo "Successfully flashed the Bluefin Server installer to {{DEVICE}}!"
+
+# Boot the installer MEDIUM through firmware, as real hardware does.
+#
+# This is the only test that exercises the ESP. `test-installer-artifact` and
+# CI's installer-test both attach installer.raw as a data disk and inject the
+# kernel with -kernel/-initrd, so EFI/BOOT/BOOTX64.EFI is never executed. They
+# prove the installer installs; they cannot prove the medium boots.
+#
+# That gap shipped a medium that does not boot: a single 434 MiB UKI which OVMF
+# loads and never executes, with every gate green.
+#
+# The image is written into a sparse file LARGER than itself, because that is
+# what a real stick is, and it reproduces the GPT backup-header condition that
+# an image-sized virtual disk cannot.
+[group('test')]
+test-installer-boot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Same refusal as `flash-installer`: a stale export beside a fresh one is
+    # ambiguous, and `head -n1` would quietly gate on whichever sorts first.
+    # A boot result is only evidence about a named artifact, so the artifact
+    # must not be picked by accident.
+    mapfile -t IMGS < <(find dist/ -maxdepth 1 -type f -name 'bluefin-server-installer-*.raw.zst' | sort)
+    if [ "${#IMGS[@]}" -eq 0 ]; then
+        echo "ERROR: no exported installer in dist/. Run: just export-installer" >&2
+        exit 1
+    fi
+    if [ "${#IMGS[@]}" -gt 1 ]; then
+        echo "ERROR: ${#IMGS[@]} installer images in dist/; refusing to guess:" >&2
+        printf '  %s\n' "${IMGS[@]}" >&2
+        echo "Remove the stale one, then re-run." >&2
+        exit 1
+    fi
+    IMG="${IMGS[0]}"
+
+    # This boots an EXPORTED ARTIFACT. It does not build, and `just validate`
+    # only resolves the graph without building either. So a green result is
+    # evidence about the bytes in dist/, NOT about the current state of
+    # elements/oci/bluefin-server-installer.bst.
+    #
+    # Say so out loud, and refuse to imply more than that when the tree has
+    # moved since the export. Without this, "the medium boots" quietly becomes
+    # a claim about a tree that was never built — the same overclaim this
+    # recipe exists to prevent.
+    #
+    # The comparison is a content hash of the build inputs, recorded into a
+    # sidecar by `export-installer`. Not mtimes: a fresh clone stamps every
+    # file at checkout time and a rebase rewrites commit dates, so both would
+    # report a clean tree as stale and a stale tree as clean. Not an allow-list
+    # of "important" sources either — that drifts the moment someone edits a
+    # repart config or a unit file.
+    echo "==> Artifact under test:"
+    echo "    ${IMG}"
+    echo "    sha256 $(sha256sum "${IMG}" | cut -d' ' -f1)"
+    if [ -f "${IMG}.provenance" ]; then
+        BUILT_FROM=$(awk '/^tree /{print $2}' "${IMG}.provenance")
+        BUILT_AT=$(awk '/^commit /{print $2}' "${IMG}.provenance")
+        echo "    commit ${BUILT_AT}"
+        NOW=$(just _inputs-hash)
+        if [ "${BUILT_FROM}" != "${NOW}" ]; then
+            echo "WARNING: the tree has changed since this artifact was built." >&2
+            echo "           built from ${BUILT_FROM}" >&2
+            echo "           tree now   ${NOW}" >&2
+            echo "         A pass proves the exported medium boots. It proves" >&2
+            echo "         NOTHING about the current sources. Re-export before" >&2
+            echo "         treating this as a gate on your changes." >&2
+        else
+            echo "    tree   matches current sources"
+        fi
+    else
+        echo "WARNING: no provenance sidecar beside this artifact, so there is" >&2
+        echo "         no way to tell what it was built from. A pass proves" >&2
+        echo "         these bytes boot and nothing more. Re-export to record" >&2
+        echo "         provenance." >&2
+    fi
+
+    first_existing() { for f in "$@"; do [ -f "$f" ] && { echo "$f"; return 0; }; done; return 1; }
+    OVMF_CODE=$(first_existing \
+      /home/linuxbrew/.linuxbrew/Cellar/qemu/*/share/qemu/edk2-x86_64-code.fd \
+      /usr/share/edk2/ovmf/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE_4M.fd \
+      /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+      /usr/share/qemu/edk2-x86_64-code.fd \
+      /usr/share/qemu/OVMF_CODE.fd) \
+      || { echo "ERROR: OVMF_CODE not found" >&2; exit 1; }
+
+    WORK=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/bluefin-boot-test.XXXXXX")
+    trap 'rm -rf "$WORK"' EXIT INT TERM
+
+    # A stick is bigger than the image. Sparse, so this costs only real bytes.
+    truncate -s 62914560000 "$WORK/medium.img"
+    zstd -dc "${IMG}" | dd of="$WORK/medium.img" conv=notrunc bs=4M iflag=fullblock status=none
+    sfdisk --relocate gpt-bak-std "$WORK/medium.img" >/dev/null
+    sfdisk --verify "$WORK/medium.img"
+
+    # OVMF needs a writable vars pflash of the same size as the code image.
+    truncate -s "$(stat -c %s "$OVMF_CODE")" "$WORK/vars.fd"
+
+    DEADLINE="${INSTALLER_BOOT_DEADLINE:-240}"
+    # A healthy medium boots with `quiet loglevel=3` and prints almost nothing,
+    # which is indistinguishable from a hang until you look closely. Setting
+    # INSTALLER_BOOT_CMDLINE_EXTRA=loglevel=7 makes a healthy boot loud without
+    # rebuilding anything: systemd-stub reads this SMBIOS type-11 string and
+    # appends it to the UKI's embedded cmdline.
+    CMDLINE_EXTRA="${INSTALLER_BOOT_CMDLINE_EXTRA:-}"
+    # if-blocks, not `[ -n x ] && y`: under `set -e` a false test makes the
+    # whole recipe exit, so the default (no extra cmdline) would abort the run.
+    SMBIOS=()
+    if [ -n "${CMDLINE_EXTRA}" ]; then
+        SMBIOS=(-smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=${CMDLINE_EXTRA}")
+    fi
+    echo "==> Booting the installer medium through firmware (deadline ${DEADLINE}s)..."
+    if [ -n "${CMDLINE_EXTRA}" ]; then
+        echo "    cmdline-extra: ${CMDLINE_EXTRA}"
+    fi
+    timeout "${DEADLINE}" qemu-system-x86_64 \
+        -enable-kvm -m 4096 -smp 2 -cpu host \
+        -drive file="$WORK/medium.img",format=raw,if=virtio \
+        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+        -drive if=pflash,format=raw,file="$WORK/vars.fd" \
+        "${SMBIOS[@]}" \
+        -nographic -serial file:"$WORK/serial.log" -monitor none -no-reboot \
+        >/dev/null 2>&1 || true
+
+    # `strings`, not `cat`. The console is almost entirely ANSI and OSC escape
+    # sequences, which a terminal swallows — `cat` on a perfectly good boot log
+    # shows two firmware lines and apparent silence. That is what convinced me
+    # a working medium was hung.
+    echo "==> Serial output:"
+    strings -n 4 "$WORK/serial.log" | grep -av '^\[[0-9;]*[A-Za-z]$' || true
+
+    # Criterion 1: firmware must actually start an image, not merely find the
+    # medium. A corrupted bootloader makes firmware fall through to PXE, and
+    # this is the check that catches it — verified against a medium built by
+    # mcopy-ing junk over EFI/BOOT/BOOTX64.EFI, which produced
+    # "BdsDxe: failed to load ... Not Found" and no `starting` line.
+    #
+    # Criterion 2 below does not depend on this one: PXE fallback chatter
+    # cannot produce a machineid, and was checked against the corrupt medium's
+    # log — no match. Criterion 1 is kept because it names the failure
+    # precisely ("firmware never started an image" vs "userspace never came
+    # up"), which is the difference between a dead bootloader and a dead boot.
+    if ! grep -aq "BdsDxe: starting" "$WORK/serial.log"; then
+        echo "ERROR: firmware never started a boot image from the medium." >&2
+        exit 1
+    fi
+    # Firmware handing off is not proof that userspace ran. Assert on something
+    # only a running Linux userspace can emit.
+    #
+    # systemd PID 1 writes an OSC 3008 sequence to the console carrying the
+    # machine's identity:
+    #
+    #   ESC ]3008;start=<id>;user=root;hostname=<h>;machineid=<id>;bootid=<id>;
+    #        pid=1;comm=systemd;type=boot
+    #
+    # Firmware cannot produce a machineid or a bootid. This survives `quiet
+    # loglevel=3`, which is what the medium boots with, and it does not depend
+    # on guessing kernel log strings.
+    # Two earlier criteria were tried and rejected, both against captured logs:
+    #
+    #   "Linux version|initrd|systemd"  — `quiet` suppresses all of it, while a
+    #       FAILING boot prints dracut emergency text. It rewarded failure.
+    #   any non-whitespace after handoff — firmware and systemd-stub both emit
+    #       CSI cursor codes, so a corrupt bootloader falling through to PXE
+    #       scored as success.
+    #
+    # Honest limit: proven against a booting medium (fires on the real image
+    # under both `quiet` and loglevel=7) and against a medium whose bootloader
+    # is destroyed (its PXE-fallback log contains no machineid). NOT proven
+    # against a genuine start-then-hang, because no such image exists — the
+    # 434 MiB UKI was suspected of being one and was exonerated. If one ever
+    # turns up, keep it.
+    if ! grep -aqE 'machineid=[0-9a-f]{32}|comm=systemd' "$WORK/serial.log"; then
+        echo "ERROR: firmware started an image, but userspace never came up." >&2
+        echo "       No systemd identity record on the console. Control did not" >&2
+        echo "       reach PID 1." >&2
+        exit 1
+    fi
+    echo "==> The installer medium boots: systemd PID 1 reported in."
+    grep -ao 'machineid=[0-9a-f]\{32\}' "$WORK/serial.log" | head -1 | sed 's/^/    /'
 
 # Build the installer artifacts, then run the reusable artifact smoke path.
 [group('test')]
@@ -318,6 +660,11 @@ test-installer-artifact:
     }
     trap cleanup EXIT INT TERM
 
+    SSH_KEY="$WORKDIR/test_ssh_key"
+    rm -f "$SSH_KEY" "$SSH_KEY.pub"
+    ssh-keygen -t ed25519 -N "" -f "$SSH_KEY" >/dev/null 2>&1
+    SSH_PUB_B64=$(cat "$SSH_KEY.pub" | base64 -w0)
+
     echo "==> Booting the installed server in QEMU (background)..."
     qemu-system-x86_64 \
         -enable-kvm \
@@ -327,9 +674,10 @@ test-installer-artifact:
         -drive file="$WORKDIR/target.raw",format=raw,if=virtio \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
-        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080 \
+        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:8080-:8080,hostfwd=tcp:127.0.0.1:2222-:22 \
         -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
-        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service" \
+        -smbios "type=11,value=io.systemd.credential.binary:ssh.authorized_keys.root=${SSH_PUB_B64}" \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service systemd.mask=systemd-homed-firstboot.service systemd.wants=sshd.service" \
         -nographic \
         -serial file:"$SERIAL_LOG" \
         -monitor none &
@@ -337,7 +685,7 @@ test-installer-artifact:
 
     DEADLINE_SECS="${SHOW_ME_THE_FUTURE_DEADLINE:-${SHOW_ME_THE_FUTURE_TIMEOUT:-600}}"
     START_TIME=$(date +%s)
-    echo "==> Polling KubeStellar Console readiness at http://127.0.0.1:8080 (deadline: ${DEADLINE_SECS}s)..."
+    echo "==> Polling KubeStellar Console readiness (deadline: ${DEADLINE_SECS}s)..."
 
     while true; do
       if ! kill -0 "$TARGET_QEMU_PID" 2>/dev/null; then
@@ -349,15 +697,20 @@ test-installer-artifact:
         exit 1
       fi
 
-      HEALTHZ_JSON=$(curl --silent --fail --max-time 2 http://127.0.0.1:8080/healthz 2>/dev/null || true)
-      if [ -n "$HEALTHZ_JSON" ] && echo "$HEALTHZ_JSON" | jq -e '.status == "ok"' >/dev/null 2>&1; then
-        ROOT_CODE=$(curl --silent --fail --max-time 2 --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || true)
+      # Probe guest directly over SSH tunnel or in-guest curl to 127.0.0.1:8080.
+      # The kiosk serves TLS with an in-cluster CA, hence --insecure. Plain HTTP
+      # is not probed: nginx answers it with a 302 to https, so a fallback would
+      # report 302 rather than the real status.
+      HEALTHZ_RESP=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 root@127.0.0.1 "curl --silent --insecure --max-time 2 https://127.0.0.1:8080/healthz 2>/dev/null || true" 2>/dev/null || true)
+      if [ -n "$HEALTHZ_RESP" ]; then
+        ROOT_CODE=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 root@127.0.0.1 "curl --silent --insecure --max-time 2 --output /dev/null --write-out '%{http_code}' https://127.0.0.1:8080/ 2>/dev/null || true" 2>/dev/null || true)
         if [ "$ROOT_CODE" = "200" ]; then
-          echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
-          break
+          if echo "$HEALTHZ_RESP" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+            echo "==> KubeStellar Console is healthy: /healthz status ok, / returned HTTP 200"
+            break
+          fi
         fi
       fi
-
       NOW=$(date +%s)
       ELAPSED=$((NOW - START_TIME))
       if [ "$ELAPSED" -ge "$DEADLINE_SECS" ]; then
@@ -466,7 +819,7 @@ install-vm:
     }
     trap cleanup INT TERM
 
-    until curl --silent --show-error --max-time 2 --output /dev/null http://127.0.0.1:8080/; do
+    until curl --silent --show-error --insecure --max-time 2 --output /dev/null https://127.0.0.1:8080/; do
       if ! kill -0 "$QEMU_PID" 2>/dev/null; then
         wait "$QEMU_PID"
         exit 1
@@ -476,14 +829,14 @@ install-vm:
 
     HOST_IP="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1)"
     echo "==> KubeStellar Console is ready!"
-    echo "==> Access URL (LAN): http://${HOST_IP:-localhost}:8080/"
-    echo "==> Access URL (Local): http://localhost:8080/"
-    xdg-open "http://${HOST_IP:-localhost}:8080/" || xdg-open http://localhost:8080/ || true
+    echo "==> Access URL (LAN): https://${HOST_IP:-localhost}:8080/"
+    echo "==> Access URL (Local): https://localhost:8080/"
+    xdg-open "https://${HOST_IP:-localhost}:8080/" || xdg-open https://localhost:8080/ || true
     wait "$QEMU_PID"
 
 # Set up KubeStellar kc-agent for the user in ONE command.
 [group('test')]
-setup-kubestellar ORIGIN="http://localhost:8080,http://127.0.0.1:8080":
+setup-kubestellar ORIGIN="https://localhost:8080,https://127.0.0.1:8080":
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -x "files/bin/bluefin-kubestellar" ]; then
@@ -500,7 +853,7 @@ setup-kubestellar ORIGIN="http://localhost:8080,http://127.0.0.1:8080":
 
 # Run fully automated headless browser test against the KubeStellar console.
 [group('test')]
-test-e2e-browser CONSOLE_URL="http://127.0.0.1:8080":
+test-e2e-browser CONSOLE_URL="https://127.0.0.1:8080":
     python3 tests/e2e/test_kubestellar_browser_login.py --console-url "{{CONSOLE_URL}}"
 
 # Complete end-to-end Lima VM orchestration test.

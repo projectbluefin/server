@@ -1,0 +1,33 @@
+# KubeFlex control planes.
+#
+# `local-cluster` registers the appliance's own cluster with KubeFlex so the
+# console has something real to show the moment it comes up, rather than an
+# empty dashboard that looks broken. type: host means "this is the cluster
+# KubeFlex is running on" — no new API server is created for it.
+#
+# `cp1` is the default tenant control plane: a shared-backend Kubernetes control
+# plane whose data lands in the PostgreSQL instance from sync wave 1. It is the
+# thing an operator gets to experiment with without touching the host cluster.
+---
+apiVersion: tenancy.kflex.kubestellar.org/v1alpha1
+kind: ControlPlane
+metadata:
+  name: local-cluster
+  labels:
+    app.kubernetes.io/part-of: bluefin-server
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  type: host
+---
+apiVersion: tenancy.kflex.kubestellar.org/v1alpha1
+kind: ControlPlane
+metadata:
+  name: cp1
+  labels:
+    app.kubernetes.io/part-of: bluefin-server
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  type: k8s
+  backend: shared

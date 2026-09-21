@@ -13,7 +13,7 @@ A bootable GPT raw disk image executing systemd-repart to partition and install 
 _Avoid_: live ISO, installation media, setup script
 
 **Sysext**:
-A systemd-sysext extension raw image merged into `/usr` to deliver decoupled server runtimes such as k0s.
+A systemd-sysext extension raw image merged into `/usr` to deliver decoupled server runtimes such as Kubernetes and containerd.
 _Avoid_: addon, plugin, package, sidecar
 
 **Transfer**:

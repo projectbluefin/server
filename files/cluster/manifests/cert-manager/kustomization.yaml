@@ -1,0 +1,30 @@
+# cert-manager 1.21.2.
+#
+# cert-manager.yaml is the upstream release manifest, fetched and sha256-pinned
+# by elements/bluefin-server/os-cluster-manifests.bst:
+#
+#   https://github.com/cert-manager/cert-manager/releases/download/v1.21.2/cert-manager.yaml
+#   sha256: e03b668ec8675214af6b0a671699d088f2601fa3878e0dbe1b41d3feafd1879f
+#
+# It is not vendored here: it is ~6k lines of CRD schema that no human reviews
+# on a bump, and a stale hand-copy is worse than a pinned fetch.
+#
+# This is the earliest wave in the tree. Everything that asks for a certificate
+# needs the webhook Available first, and Argo will not start the next wave until
+# these Deployments report Healthy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - cert-manager.yaml
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "-10"
+
+images:
+  - name: quay.io/jetstack/cert-manager-controller
+    digest: sha256:70f532fd9cfde0b09d55687200942399d89838bc2d5d5b45152eb799a15912b8
+  - name: quay.io/jetstack/cert-manager-webhook
+    digest: sha256:a60e2dac46dbb8a7f3df95c54ce941012f54c2fe022f0ee55aaa1ab40ed957ae
+  - name: quay.io/jetstack/cert-manager-cainjector
+    digest: sha256:c85268c64f2e0e76684bf5fe8906caff34b82523561c6affe0fae3546bd87562

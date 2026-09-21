@@ -1,0 +1,33 @@
+# Seed phase 10 — Argo CD Core.
+#
+# core-install.yaml is the upstream manifest, fetched and sha256-pinned by
+# elements/bluefin-server/os-cluster-manifests.bst:
+#
+#   https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.3/manifests/core-install.yaml
+#   sha256: 1a87025d8eb2eae621653fd312fb9ca51df1b4b3b6992a030e3a9ef38e45c448
+#
+# It is deliberately not vendored into this repository. A hand-maintained subset
+# drifts from upstream and silently drops CRDs and RBAC; pinning the real file
+# keeps the next Argo bump a two-line change.
+#
+# core-install.yaml carries no namespace on any object and ships no Namespace,
+# so both are supplied here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  - namespace.yaml
+  - core-install.yaml
+
+patches:
+  # One root Application needs no template generator. The CRD stays in place;
+  # only the controller Deployment goes.
+  - path: remove-applicationset-controller.yaml
+
+images:
+  - name: quay.io/argoproj/argocd
+    digest: sha256:dd3f47d5a5e4da563a7a398506e892481b358a7cec50abdf320c71aa55904bfa
+  - name: public.ecr.aws/docker/library/redis
+    digest: sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba

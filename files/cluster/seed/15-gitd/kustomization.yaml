@@ -1,0 +1,12 @@
+# Seed phase 15 — manifest source bridge.
+#
+# Applied after Argo CD Core so the git URL exists before the root Application
+# in phase 20 is created. See deployment.yaml for why this cannot be an
+# Argo-managed manifest.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml

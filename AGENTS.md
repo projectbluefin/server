@@ -3,7 +3,7 @@
 Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 - an immutable XFS DDI OS payload (`oci/bluefin-server-ddi.bst`)
 - an offline, systemd-native installer raw disk (`oci/bluefin-server-installer.bst`)
-- an optional k0s `systemd-sysext` (`oci/k0s-sysext.bst`)
+- an optional Kubernetes `systemd-sysext` (`oci/kubernetes-sysext.bst`)
 
 ## What agents should know first
 
@@ -21,7 +21,7 @@ Bluefin Server is an FSDK-based, image-based Linux server OS. It produces:
 1. Compose from FSDK 26.08 `components/*`. Never use `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
 3. Installer must stay `systemd-sysinstall`-native and `systemd-repart`-based; no custom installer scripts or non-native installers.
-4. Deliver k0s as an optional `systemd-sysext`; never bundle Kubernetes or container runtimes into the base OS DDI.
+4. Deliver Kubernetes as an optional `systemd-sysext`; never bundle Kubernetes or container runtimes into the base OS DDI.
 5. Boot entries use GPT `PARTUUID`; never hardcode device paths.
 6. One canonical source per fact; do not duplicate content across docs.
 
@@ -46,7 +46,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | `just export-ddi` | Export DDI artifacts to `dist/ddi/`. |
 | `just build-installer` | Local full installer build. |
 | `just export-installer` | Export installer + UKI to `dist/`. |
-| `just build-sysext` | Build the k0s `systemd-sysext`. |
+| `just build-sysext` | Build the Kubernetes `systemd-sysext`. |
 | `just export-sysext` | Export sysext artifacts to `dist/sysext/`. |
 | `just show-me-the-future` | Local QEMU installer smoke test. |
 
@@ -55,9 +55,9 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | Task | Skill |
 |---|---|
 | Build or debug the installer / DDI | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md), [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md) |
-| Factory role, k0s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
+| Factory role, Kubernetes sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
 | Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
-| Build or ship the k0s sysext | [`docs/skills/k0s-sysext.md`](docs/skills/k0s-sysext.md), [`docs/skills/k0s-sysext-ops.md`](docs/skills/k0s-sysext-ops.md) |
+| Build or ship the Kubernetes sysext | [`docs/skills/kubernetes-sysext.md`](docs/skills/kubernetes-sysext.md), [`docs/skills/kubernetes-sysext-ops.md`](docs/skills/kubernetes-sysext-ops.md) |
 | Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
 | Flatcar version parity matrix / audit | [`docs/skills/flatcar-parity-matrix.md`](docs/skills/flatcar-parity-matrix.md) |
 | CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |

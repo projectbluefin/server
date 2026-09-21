@@ -52,7 +52,7 @@ must match the value baked into `elements/bluefin-server/os-release-flatcar.bst`
 
 ## Adding an extension from the Flatcar Bakery
 
-The k0s sysext is the built-in example, but any Flatcar-compatible extension can
+The Kubernetes sysext is the built-in example, but any Flatcar-compatible extension can
 be layered the same way.
 
 ```bash
@@ -108,6 +108,6 @@ systemd-sysext merge --force
 
 ## See also
 
-- [k0s-sysext.md](k0s-sysext.md) for the built-in Kubernetes extension
+- [kubernetes-sysext.md](kubernetes-sysext.md) for the built-in Kubernetes extension
 - [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (Sysext definition).
 - `systemd-sysext(8)`, `systemd-confext(8)`

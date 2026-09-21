@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubestellar-kiosk-proxy
+  namespace: kubestellar-console
+  labels:
+    app.kubernetes.io/name: kubestellar-kiosk-proxy
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubestellar-kiosk-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubestellar-kiosk-proxy
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kiosk-proxy
+          image: docker.io/library/nginx@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+          command:
+            - nginx
+          args:
+            - -g
+            - daemon off;
+            - -c
+            - /etc/kubestellar-kiosk/assets/nginx.conf
+          ports:
+            - containerPort: 8080
+              # Published on every interface. The previous hostIP: 127.0.0.1
+              # binding meant the console was unreachable from the LAN and from
+              # anything but the one QEMU hostfwd, which is not what a kiosk on
+              # a server appliance is for. The endpoint is HTTPS-only and the
+              # console behind it authenticates, so loopback was doing security
+              # theatre rather than security.
+              hostPort: 8080
+              name: https
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: assets
+              mountPath: /etc/kubestellar-kiosk/assets
+              readOnly: true
+            - name: tls
+              mountPath: /etc/kubestellar-kiosk/tls
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+      volumes:
+        # nginx.conf, kiosk-gate.js and kiosk-gate.css. These arrive from the
+        # cluster, not from a host directory seeded by tmpfiles.d: a workload
+        # that reads its configuration off the node cannot be reconciled, and
+        # drifts the moment someone edits the file in place.
+        - name: assets
+          configMap:
+            name: kubestellar-kiosk
+        - name: tls
+          secret:
+            secretName: kubestellar-kiosk-tls
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}

@@ -1,0 +1,116 @@
+# Serves /var/lib/bluefin/cluster.git over the cluster network.
+#
+# Argo's Application.source speaks git, Helm or OCI. There is no filesystem
+# source, so Argo cannot read /usr/share/bluefin/cluster/ directly. This
+# Deployment is the bridge: bluefin-cluster-repo.service initialises the bare
+# repository from the image's manifest tree on first boot, and git-daemon
+# publishes it to argocd-repo-server.
+#
+# It lives in the seed and cannot be an Argo manifest: the root Application
+# needs the repository served before Argo can read anything. Same class of
+# circular dependency as Cilium.
+#
+# The image is the Argo CD image that 10-argocd-core already pulls onto this
+# node. It carries git (Debian's git package owns /usr/lib/git-core/git-daemon),
+# so the bridge adds no second image to pull — which matters for a node that is
+# expected to come up without a registry reachable.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bluefin-git-daemon
+  namespace: bluefin-system
+  labels:
+    app.kubernetes.io/name: bluefin-git-daemon
+    app.kubernetes.io/part-of: bluefin-server
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bluefin-git-daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bluefin-git-daemon
+        app.kubernetes.io/part-of: bluefin-server
+    spec:
+      # The bare repository is a host path, so the pod is pinned to the node
+      # that owns it. Single-node appliance; this is a statement of fact, not a
+      # constraint being imposed.
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: git-daemon
+          image: quay.io/argoproj/argocd@sha256:dd3f47d5a5e4da563a7a398506e892481b358a7cec50abdf320c71aa55904bfa
+          command:
+            - git
+            - daemon
+            - --verbose
+            - --informative-errors
+            - --reuseaddr
+            - --export-all
+            - --listen=0.0.0.0
+            - --port=9418
+            - --base-path=/srv/git
+            - /srv/git
+          env:
+            # The bare repo is root-owned on the host and git-daemon runs as
+            # uid 999, which trips git's dubious-ownership guard. The mount is
+            # read-only, so there is nothing for an owner mismatch to protect.
+            - name: GIT_CONFIG_COUNT
+              value: "1"
+            - name: GIT_CONFIG_KEY_0
+              value: safe.directory
+            - name: GIT_CONFIG_VALUE_0
+              value: "*"
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: git
+              containerPort: 9418
+          readinessProbe:
+            tcpSocket:
+              port: git
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: git
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: cluster-repo
+              mountPath: /srv/git/cluster.git
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: cluster-repo
+          hostPath:
+            path: /var/lib/bluefin/cluster.git
+            type: Directory
+        - name: tmp
+          emptyDir: {}

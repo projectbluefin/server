@@ -24,9 +24,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^(renovate\.json|elements/(freedesktop-sdk|gnome-build-meta)\.bst|\.github/scripts/check-renovate-series\.py)$
-      - id: check-k0s-version
-        name: k0s version derived from include/k0s.yml, not restated
-        entry: python .github/scripts/check-k0s-version.py
+      - id: check-kubernetes-version
+        name: Kubernetes version derived from include/kubernetes.yml, not restated
+        entry: python .github/scripts/check-kubernetes-version.py
         language: system
         pass_filenames: false
-        files: ^(include/k0s\.yml|elements/k0s/k0s-bin\.bst|elements/oci/k0s-sysext\.bst|files/k0s/sysext/extension-release\.k0s|files/os/sysupdate\.k0s\.d/70-k0s\.transfer|\.github/scripts/check-k0s-version\.py)$
+        files: ^(include/kubernetes\.yml|elements/kubernetes/(kubernetes-bin|cni-plugins)\.bst|elements/oci/kubernetes-sysext\.bst|files/kubernetes/sysext/extension-release\.kubernetes|files/os/sysupdate\.kubernetes\.d/70-kubernetes\.transfer|\.github/scripts/check-kubernetes-version\.py)$

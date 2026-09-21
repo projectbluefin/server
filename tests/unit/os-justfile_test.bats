@@ -2,11 +2,11 @@
 #
 # Unit tests for the `k8s` recipe in files/os/justfile.
 #
-# The recipe interacts with /etc/k0s and /var/lib/extensions, so every
+# The recipe interacts with /var/lib/extensions and enables host units, so every
 # invocation runs inside an unprivileged user + mount namespace with tmpfs
 # masks over /etc and /var/lib. Nothing on the host is touched. systemctl,
-# systemd-sysext, systemd-sysupdate, and systemd-tmpfiles are replaced by
-# logging stubs on PATH, so no unit is ever enabled and no OTA is ever fetched.
+# systemd-sysext and systemd-sysupdate are replaced by logging stubs on PATH,
+# so no unit is ever enabled and no OTA is ever fetched.
 #
 # Results that must outlive the namespace (the call log) are copied back
 # into BATS_TEST_TMPDIR, which is outside both tmpfs masks.
@@ -36,11 +36,10 @@ setup() {
         JUSTFILE_PARSES=0
     fi
 
-    # Defaults: every helper succeeds, and the k0s sysext is not yet present.
+    # Defaults: every helper succeeds, and the sysext is not yet installed.
     make_stub systemctl 0
     make_stub systemd-sysext 0
     make_stub systemd-sysupdate 0
-    make_stub systemd-tmpfiles 0
     SYSEXT_PRESENT=0
 }
 
@@ -69,7 +68,7 @@ set -u
 mount -t tmpfs tmpfs /etc
 mount -t tmpfs tmpfs /var/lib
 mkdir -p /var/lib/extensions
-[ "$SYSEXT_PRESENT" = "1" ] && : > /var/lib/extensions/k0s.raw
+[ "$SYSEXT_PRESENT" = "1" ] && : > /var/lib/extensions/kubernetes.raw
 
 just --justfile "$JUSTFILE" --working-directory "$WORKDIR" k8s "$@"
 rc=$?
@@ -83,11 +82,6 @@ calls() {
 
 # --- the recipe file itself --------------------------------------------------
 
-# This is the parse gate. It fails on the current tree: the `cat <<EOF` body
-# inside the k8s recipe sits at column 0, which resets just's recipe
-# indentation and makes the closing `fi` an inconsistent-whitespace error.
-# Reproduced on just 1.14.0, 1.25.2, 1.36.0, 1.40.0 and 1.42.4, so `just k8s`
-# has never been runnable on a shipped image.
 @test "the justfile parses and exposes k8s" {
     run just --justfile "$JUSTFILE" --summary
     [ "$status" -eq 0 ]
@@ -101,19 +95,19 @@ calls() {
 
 # --- sysext acquisition ------------------------------------------------------
 
-@test "a missing k0s.raw triggers systemd-sysupdate" {
+@test "a missing kubernetes.raw triggers a component-scoped systemd-sysupdate" {
     run_k8s controller
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" == *"systemd-sysupdate update"* ]]
+    [[ "$output" == *"systemd-sysupdate --component=kubernetes update"* ]]
 }
 
-@test "an existing k0s.raw skips systemd-sysupdate" {
+@test "an existing kubernetes.raw skips systemd-sysupdate" {
     SYSEXT_PRESENT=1
     run_k8s controller
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" != *"systemd-sysupdate update"* ]]
+    [[ "$output" != *"systemd-sysupdate"* ]]
 }
 
 @test "a failing systemd-sysupdate does not abort the recipe" {
@@ -121,11 +115,11 @@ calls() {
     run_k8s controller
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" == *"systemd-sysupdate update"* ]]
-    [[ "$output" == *"systemctl enable --now k0scontroller.service"* ]]
+    [[ "$output" == *"systemd-sysupdate --component=kubernetes update"* ]]
+    [[ "$output" == *"systemctl enable --now bluefin-cluster-bootstrap.service"* ]]
 }
 
-# --- sysext merge & tmpfiles -------------------------------------------------
+# --- sysext merge & daemon-reload --------------------------------------------
 
 @test "the sysext service is enabled and the extensions are merged" {
     run_k8s controller
@@ -141,38 +135,57 @@ calls() {
     run_k8s controller
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" == *"systemctl enable --now k0scontroller.service"* ]]
+    [[ "$output" == *"systemctl enable --now bluefin-cluster-bootstrap.service"* ]]
 }
 
-@test "tmpfiles are seeded for k0s manifests" {
+# A merge makes unit files appear under /usr but does not make systemd notice
+# them. Without the reload, enabling bluefin-cluster-bootstrap.service fails on
+# a host that has never merged the sysext before.
+@test "systemd is reloaded after the merge and before the cluster units start" {
     run_k8s controller
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" == *"systemd-tmpfiles --create /usr/lib/tmpfiles.d/k0s-manifests.conf"* ]]
+    [[ "$output" == *"systemctl daemon-reload"* ]]
+    reload_line="$(grep -n 'systemctl daemon-reload' "$LOG" | head -1 | cut -d: -f1)"
+    bootstrap_line="$(grep -n 'bluefin-cluster-bootstrap.service' "$LOG" | head -1 | cut -d: -f1)"
+    [ "$reload_line" -lt "$bootstrap_line" ]
 }
 
-# --- role dispatch -----------------------------------------------------------
+# --- cluster bring-up --------------------------------------------------------
 
-@test "the default role enables k0scontroller.service" {
+# bluefin-cluster-bootstrap.service carries Requires=/After= on
+# kubeadm-init.service and bluefin-cluster-repo.service, so the recipe starts
+# exactly one unit and systemd orders the rest.
+@test "the default role enables bluefin-cluster-bootstrap.service" {
     run_k8s
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" == *"systemctl enable --now k0scontroller.service"* ]]
+    [[ "$output" == *"systemctl enable --now bluefin-cluster-bootstrap.service"* ]]
 }
 
-@test "the controller role enables k0scontroller.service" {
+@test "the controller role enables bluefin-cluster-bootstrap.service" {
     run_k8s controller
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" == *"systemctl enable --now k0scontroller.service"* ]]
+    [[ "$output" == *"systemctl enable --now bluefin-cluster-bootstrap.service"* ]]
 }
 
-@test "the server alias role enables k0scontroller.service" {
+@test "the server alias role enables bluefin-cluster-bootstrap.service" {
     run_k8s server
     [ "$status" -eq 0 ]
     run calls
-    [[ "$output" == *"systemctl enable --now k0scontroller.service"* ]]
+    [[ "$output" == *"systemctl enable --now bluefin-cluster-bootstrap.service"* ]]
 }
+
+@test "the recipe does not start kubeadm-init or the repo unit directly" {
+    run_k8s controller
+    [ "$status" -eq 0 ]
+    run calls
+    [[ "$output" != *"kubeadm-init.service"* ]]
+    [[ "$output" != *"bluefin-cluster-repo.service"* ]]
+}
+
+# --- role dispatch -----------------------------------------------------------
 
 @test "an unknown role exits 1 and names the supported roles" {
     run_k8s worker
@@ -181,11 +194,13 @@ calls() {
     [[ "$output" == *"Supported: controller"* ]]
 }
 
-@test "an unknown role enables no k0s unit" {
+@test "an unknown role touches nothing on the host" {
     run_k8s worker
     [ "$status" -eq 1 ]
     run calls
-    [[ "$output" != *"k0scontroller.service"* ]]
+    [[ "$output" != *"bluefin-cluster-bootstrap.service"* ]]
+    [[ "$output" != *"systemd-sysupdate"* ]]
+    [[ "$output" != *"systemd-sysext"* ]]
 }
 
 @test "the role comparison is case sensitive" {
@@ -196,7 +211,7 @@ calls() {
 
 # --- failure propagation -----------------------------------------------------
 
-@test "a failing systemctl enable of k0scontroller.service fails the recipe" {
+@test "a failing systemctl enable of the bootstrap unit fails the recipe" {
     make_stub systemctl 1
     run_k8s controller
     [ "$status" -ne 0 ]
@@ -206,5 +221,5 @@ calls() {
 @test "a successful run reports completion" {
     run_k8s controller
     [ "$status" -eq 0 ]
-    [[ "$output" == *"k0s Kubernetes has been successfully configured and started!"* ]]
+    [[ "$output" == *"Kubernetes has been successfully configured and started!"* ]]
 }

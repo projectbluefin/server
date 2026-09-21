@@ -1,0 +1,24 @@
+# systemd-sysupdate transfer for the Kubernetes sysext.
+#
+# The image lands directly in /var/lib/extensions, systemd-sysext's own scan
+# directory, so systemd-sysext.service merges it at boot with no copy step.
+#
+# Upgrade track: Kubernetes does not support unattended cross-minor in-place
+# upgrades, so this transfer must never carry the node across a minor. The
+# asset name is fixed by .github/scripts/check-kubernetes-version.py and
+# systemd-sysupdate has no version-range filter, so the minor track is held by
+# what the release feed publishes: bumping include/kubernetes.yml across a
+# minor is a deliberate release action, not something this file can drift into.
+[Transfer]
+
+[Source]
+Type=url-file
+Path=https://github.com/projectbluefin/server/releases/latest/download/
+MatchPattern=kubernetes-@v.raw.zst
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions
+MatchPattern=kubernetes-@v.raw
+CurrentSymlink=kubernetes.raw
+Mode=0644

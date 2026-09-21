@@ -1,0 +1,36 @@
+# The Argo-owned tree.
+#
+# Staged into the image at /usr/share/bluefin/cluster/, committed to
+# /var/lib/bluefin/cluster.git by bluefin-cluster-repo.service on first boot,
+# served by the git-daemon from seed phase 15, and reconciled by the single root
+# Application from seed phase 20.
+#
+# This is one Application, not a fan-out: ordering comes from
+# argocd.argoproj.io/sync-wave annotations on the resources themselves, which
+# Argo honours across the whole tree.
+#
+#   -10  cert-manager
+#    -5  CA bootstrap chain, kubelet-csr-approver
+#     0  KubeFlex CRD, PostgreSQL password generator
+#     1  PostgreSQL
+#     2  KubeFlex operator
+#     3  KubeStellar core, console JWT generator
+#     4  KubeStellar console
+#     5  kiosk proxy and its certificate
+#     6  ControlPlane custom resources
+#
+# Directory names carry no ordering. The sync waves are the only ordering
+# statement, so there is nothing to keep in agreement.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - cert-manager
+  - pki
+  - kubelet-csr-approver
+  - kubeflex
+  - postgres
+  - kubestellar
+  - console
+  - kiosk
+  - controlplanes

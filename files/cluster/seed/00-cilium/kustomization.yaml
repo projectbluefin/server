@@ -1,0 +1,12 @@
+# Seed phase 00 — CNI.
+#
+# Applied by bluefin-cluster-bootstrap.service before anything else:
+# `kubectl apply --server-side --force-conflicts -k /usr/share/bluefin/seed/00-cilium`.
+#
+# The seed is append-only and is never pruned; Argo owns pruning for everything
+# downstream. See the "Closed decision: pruning" section of the cutover design.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - cilium.yaml

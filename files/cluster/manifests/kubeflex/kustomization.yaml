@@ -1,0 +1,13 @@
+# KubeFlex: the ControlPlane CRD, the operator that reconciles it, and the
+# in-cluster generator for the PostgreSQL superuser password the operator's
+# database needs.
+#
+# Sync waves, not file ordering, decide what lands when: CRD and Secret at wave
+# 0, PostgreSQL at wave 1, operator at wave 2.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - crds.yaml
+  - postgres-secret.yaml
+  - operator.yaml

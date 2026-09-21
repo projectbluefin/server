@@ -1,0 +1,54 @@
+# The appliance's certificate authority.
+#
+# No certificate or private key ships in any Bluefin Server image. The CA is
+# minted in-cluster on first sync and rotated by cert-manager thereafter. This
+# permanently replaces the build-time self-signed key that used to be generated
+# into the sysext at image build, which meant every installed appliance shared
+# one private key.
+#
+# SelfSigned ClusterIssuer -> CA Certificate -> CA ClusterIssuer is the upstream
+# bootstrap chain: the SelfSigned issuer exists only to sign the CA once.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: bluefin-selfsigned
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  selfSigned: {}
+---
+# cert-manager reads ClusterIssuer CA secrets from its own namespace
+# (--cluster-resource-namespace, which defaults to the release namespace), so
+# this Certificate must land in cert-manager.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bluefin-ca
+  namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  isCA: true
+  commonName: Bluefin Server CA
+  secretName: bluefin-ca
+  duration: 87600h # 10 years
+  renewBefore: 8760h # 1 year
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: bluefin-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: bluefin-ca
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  ca:
+    secretName: bluefin-ca

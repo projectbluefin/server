@@ -31,8 +31,8 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |
 | [`flatcar-parity-matrix.md`](flatcar-parity-matrix.md) | Flatcar version audit, component parity, substitution order | Version parity matrix and gap audit against Flatcar 4593.2.5. |
 | [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |
-| [`k0s-sysext-ops.md`](k0s-sysext-ops.md) | Operating k0s on Bluefin Server | Runtime operation and reboot coordination for k0s. |
-| [`k0s-sysext.md`](k0s-sysext.md) | Building the k0s sysext | BuildStream element and publish steps for the k0s sysext. |
+| [`kubernetes-sysext-ops.md`](kubernetes-sysext-ops.md) | Operating Kubernetes on Bluefin Server | kubeadm bring-up, the seed phases, and Argo CD Core troubleshooting. |
+| [`kubernetes-sysext.md`](kubernetes-sysext.md) | Building the Kubernetes sysext | BuildStream element, version axis, and publish steps for the Kubernetes sysext. |
 | [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
 | [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
 | [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and Flatcar compatibility. |

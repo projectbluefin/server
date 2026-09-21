@@ -43,14 +43,21 @@ depends:
   # A/B System Update Configurations
   - bluefin-server/os-sysupdate.bst
 
-  # k0s component system update configuration
-  - bluefin-server/os-k0s-sysupdate.bst
+  # Kubernetes sysext component system update configuration
+  - bluefin-server/os-kubernetes-sysupdate.bst
 
   # Wired DHCP configuration for the installed OS
   - bluefin-server/os-networkd.bst
 
-  # Activate the optional k0s sysext after installation
-  - bluefin-server/os-k0s-first-boot.bst
+  # Control-plane bring-up and cluster seeding host units
+  - bluefin-server/os-cluster-bootstrap.bst
+
+  # Seed phases and the Argo-owned manifest tree under /usr/share/bluefin
+  - bluefin-server/os-cluster-manifests.bst
+
+  # git plumbing for bluefin-cluster-repo.service, which republishes
+  # /usr/share/bluefin/cluster as the bare repo Argo CD syncs from
+  - freedesktop-sdk.bst:components/git.bst
 
   # Public keyring for verifying SHA256SUMS manifests from GitHub Releases
   - bluefin-server/os-sysupdate-keys.bst

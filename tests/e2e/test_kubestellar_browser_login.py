@@ -2,7 +2,7 @@
 """Automated end-to-end browser test for KubeStellar Console.
 
 Tests:
-1. Console availability at http://127.0.0.1:8080/
+1. Console availability at https://127.0.0.1:8080/
 2. Automated login flow (Cluster Access / GitHub OAuth / Dev Mode / Token Login)
 3. Dashboard navigation and DOM rendering
 4. Kiosk gate overlay and kc-agent interaction on port 8585
@@ -27,8 +27,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="KubeStellar Console automated browser verification")
     parser.add_argument(
         "--console-url",
-        default="http://127.0.0.1:8080",
-        help="Base URL of KubeStellar console (default: http://127.0.0.1:8080)",
+        default="https://127.0.0.1:8080",
+        help="Base URL of KubeStellar console (default: https://127.0.0.1:8080)",
     )
     parser.add_argument(
         "--agent-url",

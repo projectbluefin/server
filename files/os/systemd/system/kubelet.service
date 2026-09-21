@@ -1,0 +1,40 @@
+[Unit]
+Description=kubelet: the Kubernetes node agent
+Documentation=https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/
+# /usr/bin/kubelet ships in the Kubernetes sysext, not in the base DDI, so the
+# merge must complete before this unit can start.
+Requires=systemd-sysext.service
+After=systemd-sysext.service
+Wants=network-online.target
+After=network-online.target
+After=containerd.service
+# kubeadm writes the kubelet configuration, so the kubelet restarts until
+# `kubeadm init` has run. Never give up on it.
+StartLimitIntervalSec=0
+
+[Service]
+# The Kubernetes sysext ships the upstream CNI plugins at /usr/local/bin/cni,
+# matching the flatcar/sysext-bakery layout. containerd and Cilium both look in
+# /opt/cni/bin. Without this bridge the `loopback` plugin is missing, every pod
+# sandbox fails to get a network, and the node never leaves NotReady — silently.
+#
+# /opt/cni/bin is on /var and survives reboots, so a plain no-clobber copy would
+# pin the node to whatever plugins the sysext shipped on the day it was first
+# installed: a sysext OTA update would advertise a new version in
+# /usr/local/share/kubernetes-cni-version while the node kept executing the old
+# binaries forever. The copy is therefore keyed on that stamp.
+#
+# Refreshing cannot clobber Cilium either way: /usr/local/bin/cni contains only
+# the upstream containernetworking plugins, and the cilium agent installs
+# cilium-cni, a name that is not in that set, so it is never a copy target. The
+# no-clobber copy is kept for the unchanged case — it costs nothing and restores
+# any plugin removed from /opt/cni/bin out of band.
+ExecStartPre=/usr/bin/install -d -m 0755 /opt/cni
+ExecStartPre=/usr/bin/install -d -m 0755 /opt/cni/bin
+ExecStartPre=/bin/sh -c 'want=$(cat /usr/local/share/kubernetes-cni-version 2>/dev/null || echo unknown); have=$(cat /opt/cni/.bluefin-cni-version 2>/dev/null || echo none); if [ "$want" = "$have" ]; then cp -an /usr/local/bin/cni/. /opt/cni/bin/; else cp -a /usr/local/bin/cni/. /opt/cni/bin/ && printf "%s\\n" "$want" > /opt/cni/.bluefin-cni-version; fi'
+ExecStart=/usr/bin/kubelet
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

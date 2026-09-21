@@ -1,0 +1,42 @@
+# TLS for the kiosk proxy, issued by the in-cluster CA.
+#
+# This is what replaced the openssl invocation in the old sysext element, which
+# baked a 10-year self-signed key into every published image — the same private
+# key on every appliance. cert-manager mints this one on the machine and renews
+# it automatically.
+#
+# Short-lived on purpose: 90 days, renewed at 30 days remaining. A kiosk
+# certificate that outlives the appliance's install is a certificate nobody
+# notices has leaked.
+#
+# The SANs below deliberately do not cover the LAN address the issue banner
+# advertises (https://<dhcp-address>:8080). That address is unknown at manifest
+# time, so a LAN browser gets a hostname mismatch on top of the untrusted
+# in-cluster CA — one warning rather than two, and the same click-through
+# either way. A site that wants a clean chain issues its own certificate for a
+# name it controls and replaces this Secret.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kubestellar-kiosk-tls
+  namespace: kubestellar-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  secretName: kubestellar-kiosk-tls
+  commonName: KubeStellar Console
+  duration: 2160h # 90 days
+  renewBefore: 720h # 30 days
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  dnsNames:
+    - localhost
+    - kubestellar-kiosk-proxy.kubestellar-console.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: bluefin-ca
+    kind: ClusterIssuer
+    group: cert-manager.io

@@ -26,7 +26,7 @@ just export-installer      # export installer + UKI + SHA256SUMS to dist/
 just export-pxe            # export standalone PXE vmlinuz/initrd to dist/
 just build-ddi             # build the OS DDI payload
 just export-ddi            # export DDI + SHA256SUMS to dist/ddi/
-just build-sysext          # build the k0s sysext
+just build-sysext          # build the Kubernetes sysext
 just export-sysext         # export sysext artifacts to dist/sysext/
 just flash-installer       # write the installer image to a USB device
 just show-me-the-future    # end-to-end QEMU installer smoke test
@@ -88,7 +88,7 @@ Use direct I/O and full-block reads to avoid dirtying the page cache.
 The release process is driven by `.github/workflows/build.yml`:
 
 - Renovate point-release updates or direct pushes to `main` trigger a full build.
-- CI builds the DDI payload, installer, target UKI, k0s sysext, and standalone
+- CI builds the DDI payload, installer, target UKI, Kubernetes sysext, and standalone
   PXE boot inputs (`bluefin-server-pxe-vmlinuz-*`, `bluefin-server-pxe-initrd-*.cpio.gz`).
 - CI uploads the versioned release assets to the corresponding
   `installer-v<release-version>` GitHub Release.

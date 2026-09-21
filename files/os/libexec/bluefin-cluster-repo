@@ -1,0 +1,75 @@
+#!/bin/bash
+# Publish /usr/share/bluefin/cluster as a bare git repository that the
+# in-cluster git-daemon serves to Argo CD.
+#
+# Argo CD's Application.source accepts git, Helm or OCI and has no filesystem
+# type, so the image-delivered manifest tree cannot be read from /usr directly.
+# This script bridges the two: it mirrors the read-only tree into a bare
+# repository on /var, which the git-daemon Deployment exports over the cluster
+# network. No external git host is ever contacted.
+#
+# It runs on every boot and is idempotent. Re-running after a system update
+# publishes the manifests that update shipped; re-running with no change
+# publishes nothing and creates no empty commit.
+set -euo pipefail
+
+# git-daemon serves the repository from a non-root uid through a read-only
+# hostPath mount, so every directory and object it walks must stay readable.
+umask 022
+
+SEED=/usr/share/bluefin/cluster
+REPO=/var/lib/bluefin/cluster.git
+BRANCH=main
+
+if [ ! -d "${SEED}" ]; then
+  echo "ERROR: cluster manifest tree is missing at ${SEED}" >&2
+  exit 1
+fi
+
+# Keep the result independent of any stray host or user git configuration.
+export GIT_CONFIG_SYSTEM=/dev/null
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_AUTHOR_NAME="Bluefin Server"
+export GIT_AUTHOR_EMAIL="root@localhost"
+export GIT_COMMITTER_NAME="${GIT_AUTHOR_NAME}"
+export GIT_COMMITTER_EMAIL="${GIT_AUTHOR_EMAIL}"
+
+mkdir -p "${REPO}"
+if [ ! -e "${REPO}/HEAD" ]; then
+  git init --bare --initial-branch="${BRANCH}" "${REPO}"
+fi
+
+# git-daemon refuses to serve a repository that is not explicitly exported.
+touch "${REPO}/git-daemon-export-ok"
+
+# Build the tree through a scratch index so a failure leaves no partial state
+# in the repository the daemon is serving. core.bare is overridden per
+# invocation because `git add` refuses to run against a bare repository.
+INDEX="${REPO}/bluefin-seed.index"
+rm -f "${INDEX}"
+GIT_INDEX_FILE="${INDEX}" git --git-dir="${REPO}" -c core.bare=false \
+  --work-tree="${SEED}" add --all
+TREE="$(GIT_INDEX_FILE="${INDEX}" git --git-dir="${REPO}" write-tree)"
+rm -f "${INDEX}"
+
+PUBLISHED=""
+if git --git-dir="${REPO}" rev-parse --verify --quiet "refs/heads/${BRANCH}^{tree}" >/dev/null; then
+  PUBLISHED="$(git --git-dir="${REPO}" rev-parse --verify "refs/heads/${BRANCH}^{tree}")"
+fi
+
+if [ "${TREE}" = "${PUBLISHED}" ]; then
+  echo "cluster repository already matches ${SEED}"
+else
+  if [ -n "${PUBLISHED}" ]; then
+    COMMIT="$(git --git-dir="${REPO}" commit-tree "${TREE}" \
+      -p "refs/heads/${BRANCH}" -m "Bluefin cluster manifests")"
+  else
+    COMMIT="$(git --git-dir="${REPO}" commit-tree "${TREE}" \
+      -m "Bluefin cluster manifests")"
+  fi
+  git --git-dir="${REPO}" update-ref "refs/heads/${BRANCH}" "${COMMIT}"
+  echo "published ${SEED} as ${BRANCH} ${COMMIT}"
+fi
+
+git --git-dir="${REPO}" symbolic-ref HEAD "refs/heads/${BRANCH}"
+git --git-dir="${REPO}" update-server-info

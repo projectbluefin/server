@@ -3,37 +3,44 @@
 default:
     @just --list
 
-# Enable k0s Kubernetes controller on this host
-k8s ROLE="controller" TOKEN="":
+# Bring up the single-node Kubernetes control plane on this host (ROLE: controller, or its alias server)
+k8s ROLE="controller":
     #!/usr/bin/env bash
     set -euo pipefail
-    
-    # 1. Trigger systemd-sysupdate to pull the k0s systemd-sysext if missing
-    if [ ! -f /var/lib/extensions/k0s.raw ]; then
-        echo "==> k0s system extension raw image not found in /var/lib/extensions/"
-        echo "==> Running systemd-sysupdate to fetch and install the k0s sysext OTA..."
-        # Ignore errors if systemd-sysupdate can't connect (e.g. offline dev test)
-        systemd-sysupdate update || true
-    fi
 
-    # 2. Setup k0s configuration directory
-    install -d -m 0755 /etc/k0s
-
-    # 3. Trigger systemd-sysext to merge extensions into /usr immediately
-    echo "==> Merging k0s system extension..."
-    systemctl enable --now systemd-sysext.service || true
-    systemd-sysext merge || true
-
-    # 4. Trigger systemd-tmpfiles to seed declarative manifests
-    systemd-tmpfiles --create /usr/lib/tmpfiles.d/k0s-manifests.conf || true
-
-    # 5. Enable and start the selected systemd service
-    if [ "{{ROLE}}" = "controller" ] || [ "{{ROLE}}" = "server" ]; then
-        echo "==> Enabling and starting k0s controller service..."
-        systemctl enable --now k0scontroller.service
-    else
-        echo "ERROR: Invalid role '{{ROLE}}'. Supported: controller" >&2
+    # 0. Reject unsupported roles before touching anything on the host. This is
+    #    a single-node control plane, so "controller" is the only real role;
+    #    "server" is accepted as a backwards-compatible alias for it, and
+    #    tests/unit/os-justfile_test.bats pins both spellings.
+    if [ "{{ROLE}}" != "controller" ] && [ "{{ROLE}}" != "server" ]; then
+        echo "ERROR: Invalid role '{{ROLE}}'. Supported: controller (alias: server)" >&2
         exit 1
     fi
 
-    echo "==> k0s Kubernetes has been successfully configured and started!"
+    # 1. Fetch the Kubernetes systemd-sysext if it is not installed yet.
+    #    70-kubernetes.transfer lands it in /var/lib/extensions/ behind the
+    #    stable kubernetes.raw symlink.
+    if [ ! -e /var/lib/extensions/kubernetes.raw ]; then
+        echo "==> Kubernetes system extension not found in /var/lib/extensions/"
+        echo "==> Running systemd-sysupdate to fetch and install the Kubernetes sysext OTA..."
+        # Ignore errors if systemd-sysupdate can't connect (e.g. offline dev test)
+        systemd-sysupdate --component=kubernetes update || true
+    fi
+
+    # 2. Merge the extension into /usr now rather than waiting for a reboot.
+    echo "==> Merging the Kubernetes system extension..."
+    systemctl enable --now systemd-sysext.service || true
+    systemd-sysext merge || true
+
+    # 3. A merge makes unit files appear under /usr; systemd does not notice
+    #    them on its own.
+    systemctl daemon-reload
+
+    # 4. Bring the cluster up. bluefin-cluster-bootstrap.service carries
+    #    Requires=/After= on kubeadm-init.service and bluefin-cluster-repo.service,
+    #    so starting it runs kubeadm init and then the seed phases in order.
+    echo "==> Starting cluster bootstrap..."
+    systemctl enable --now bluefin-cluster-bootstrap.service
+
+    echo "==> Kubernetes has been successfully configured and started!"
+    echo "==> Inspect with: kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes"

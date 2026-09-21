@@ -1,0 +1,45 @@
+# The one Application. Everything downstream of here is Argo's.
+#
+# repoURL points at the in-cluster git-daemon from seed phase 15, which serves
+# the bare repository that bluefin-cluster-repo.service initialises from
+# /usr/share/bluefin/cluster/. No external git host is contacted, so the
+# manifest tree stays available with the network unplugged.
+#
+# `.` is a kustomization that pulls in every component directory in order, so
+# the whole appliance is one sync unit with sync waves for ordering rather than
+# a fan-out of Applications that would each need their own health gate.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bluefin-cluster
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: bluefin-server
+spec:
+  project: bluefin
+  source:
+    repoURL: git://bluefin-git-daemon.bluefin-system.svc.cluster.local/cluster.git
+    targetRevision: main
+    path: .
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      # Upstream Kubernetes ships no addon manager, so nothing else removes a
+      # resource that leaves this tree. Argo is the only pruner in the system:
+      # the seed itself is append-only and never pruned.
+      prune: true
+      # ...and the only thing correcting drift.
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      # cert-manager's CRDs exceed the annotation size limit that
+      # client-side apply's last-applied-configuration would need.
+      - Replace=false
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m

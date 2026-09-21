@@ -1,0 +1,18 @@
+# Delete the ApplicationSet controller from upstream core-install.yaml.
+#
+# ApplicationSet generates Applications from templates. This appliance declares
+# exactly one root Application by hand, so the controller has nothing to do and
+# is a third idle workload plus a cluster-wide write surface.
+#
+# applicationsets.argoproj.io stays installed: an orphaned CRD costs nothing and
+# removing it from the upstream manifest would fight every Argo bump.
+#
+# No namespace is named here on purpose: kustomize matches patches against the
+# resource as written, and upstream core-install.yaml carries no namespace on
+# any object. The `namespace: argocd` transformer in kustomization.yaml runs
+# afterwards.
+$patch: delete
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-applicationset-controller

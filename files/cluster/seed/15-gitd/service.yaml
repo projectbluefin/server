@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bluefin-git-daemon
+  namespace: bluefin-system
+  labels:
+    app.kubernetes.io/name: bluefin-git-daemon
+    app.kubernetes.io/part-of: bluefin-server
+spec:
+  type: ClusterIP
+  ports:
+    - name: git
+      port: 9418
+      targetPort: git
+  selector:
+    app.kubernetes.io/name: bluefin-git-daemon

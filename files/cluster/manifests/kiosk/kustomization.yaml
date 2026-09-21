@@ -1,0 +1,25 @@
+# The kiosk proxy: TLS termination and the kc-agent gate in front of the
+# console.
+#
+# The three asset files are a ConfigMap rather than a host directory. Its
+# generated name carries a content hash, so editing nginx.conf or the gate
+# rolls the Deployment instead of leaving a stale config mounted until someone
+# notices.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - certificate.yaml
+  - deployment.yaml
+  - service.yaml
+
+configMapGenerator:
+  - name: kubestellar-kiosk
+    namespace: kubestellar-console
+    options:
+      annotations:
+        argocd.argoproj.io/sync-wave: "5"
+    files:
+      - assets/nginx.conf
+      - assets/kiosk-gate.js
+      - assets/kiosk-gate.css

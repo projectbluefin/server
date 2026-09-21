@@ -1,0 +1,32 @@
+[Unit]
+Description=Publish the Bluefin cluster manifests as a local git repository
+Documentation=file:///usr/share/bluefin/cluster
+# Argo CD has no filesystem source type, so the image-delivered manifest tree
+# has to be reachable over git before the root Application can sync.
+RequiresMountsFor=/var/lib/bluefin
+Before=bluefin-cluster-bootstrap.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Restart=on-failure is load-bearing, not boilerplate.
+#
+# bluefin-cluster-bootstrap.service declares Requires= on this unit, and a job
+# that dies with result 'dependency' never runs at all, so the dependent's own
+# Restart=on-failure never engages and systemd never re-queues it. Without a
+# restart here, one transient failure of the publish — a git invocation that
+# loses a race with /var/lib/bluefin being set up, a full filesystem that
+# clears — would strand the entire seed permanently behind a node that
+# otherwise looks healthy. That is the same failure mode kubeadm-init.service
+# forced onto the seed and which the Wants= edge there exists to prevent.
+#
+# Restart=on-failure is valid for Type=oneshot (only always/on-success are
+# refused), and the publish is idempotent: it initialises the bare repository
+# when absent and pushes the current manifest tree otherwise.
+Restart=on-failure
+RestartSec=30s
+StateDirectory=bluefin
+ExecStart=/usr/libexec/bluefin-cluster-repo
+
+[Install]
+WantedBy=multi-user.target
