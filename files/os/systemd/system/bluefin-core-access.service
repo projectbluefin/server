@@ -1,0 +1,9 @@
+[Unit]
+Description=Verify core SSH authorization
+Requires=var.mount
+After=var.mount systemd-tmpfiles-setup.service
+Before=sshd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/test -s /var/home/core/.ssh/authorized_keys

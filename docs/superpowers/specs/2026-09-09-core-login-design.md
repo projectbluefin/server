@@ -127,7 +127,9 @@ it reads for these settings.
 
 `sshd` is explicitly enabled at boot. It is not enabled merely by changing a
 preset, because a preset alone does not establish the runtime enablement
-symlink in this image.
+symlink in this image. `sshd.socket` stays disabled by preset so socket
+activation cannot bypass the `sshd.service` host-key and `core` authorization
+gates.
 
 The DDI contains no SSH host private keys. A native systemd one-shot service:
 

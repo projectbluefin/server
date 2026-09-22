@@ -1,5 +1,5 @@
 kind: import
-description: Install first-boot systemd credentials provisioning helpers into target OS.
+description: Install the static root and core account definitions into target OS.
 
 sources:
   - kind: local

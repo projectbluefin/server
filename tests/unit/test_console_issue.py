@@ -17,6 +17,10 @@ def test_issue_file_exists_and_contains_kubestellar_url() -> None:
     assert "Bluefin Server" in content
     assert "KubeStellar Console: https://127.0.0.1:8080/" in content
     assert "ssh -L 8080:127.0.0.1:8080" in content
+    assert "root / bluefin" not in content, (
+        "the banner must not advertise a root password login: root has no "
+        "password and sshd refuses root entirely; the operator account is core"
+    )
 
 
 def test_os_issue_element_target_usr_lib_issue_d() -> None:

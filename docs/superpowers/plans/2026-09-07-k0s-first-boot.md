@@ -199,7 +199,7 @@ config:
 ```
 
 Add this element to `elements/bluefin-server/os-stack.bst`. The existing
-`os-sshd-preset.bst` already imports the full
+`os-systemd-presets.bst` already imports the full
 `files/os/systemd/system-preset` directory, so adding the new preset there
 requires no second preset import.
 

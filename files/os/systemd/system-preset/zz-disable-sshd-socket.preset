@@ -1,0 +1,2 @@
+# SSH is enabled explicitly through sshd.service so readiness gates apply.
+disable sshd.socket

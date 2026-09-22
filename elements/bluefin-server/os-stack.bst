@@ -22,8 +22,10 @@ depends:
   - freedesktop-sdk.bst:components/openssh-systemd.bst
 
   # SSH enablement drop-ins
-  - bluefin-server/os-sshd-preset.bst
   - bluefin-server/os-sshd-config.bst
+
+  # systemd unit presets (networkd, k0s first boot, persistent /var mount)
+  - bluefin-server/os-systemd-presets.bst
 
   # Image identity and weekly first-party countme reporting
   - bluefin-server/os-image-info.bst
@@ -60,6 +62,9 @@ depends:
 
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
+  - freedesktop-sdk.bst:components/sudo.bst
+  - bluefin-server/os-tmpfiles.bst
+  - bluefin-server/os-sudo.bst
 
   # Reboot Coordination for Kured
   - bluefin-server/os-kured-hook.bst

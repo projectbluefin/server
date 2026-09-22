@@ -581,7 +581,7 @@ install-vm:
     echo "==> TLS with a self-signed certificate, so it is not directly reachable from"
     echo "==> the host. To view it in a host browser, start sshd inside the VM"
     echo "==> (systemctl start sshd) and open a tunnel over the forwarded SSH port:"
-    echo "==>   ssh -p 2222 -L 8080:127.0.0.1:8080 <your-user>@127.0.0.1"
+    echo "==>   ssh -p 2222 -L 8080:127.0.0.1:8080 core@127.0.0.1"
     echo "==> then browse https://localhost:8080/ and accept the self-signed certificate."
     wait "$QEMU_PID"
 

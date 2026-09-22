@@ -27,7 +27,7 @@ Bluefin Server is currently in **Alpha**:
 - **systemd-native installer** — `systemd-sysinstall` provides the interactive terminal UI and `systemd-repart` handles partitioning and block-copy DDI placement.
 - **Optional k0s as a `systemd-sysext`** so the base image stays minimal.
 
-> **Remote diagnostics:** OpenSSH is installed for on-demand diagnostics, but is disabled by default via systemd presets. It can be started manually with `systemctl start sshd` when remote access is needed. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
+> **Remote diagnostics:** SSH is key-only for the provisioned `core` operator account and is enabled after successful key provisioning. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 
 ## Quick start
 
