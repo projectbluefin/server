@@ -21,7 +21,7 @@ variables:
 sources:
   - kind: remote
     url: flatcar:stable/%{flatcar-board}/%{flatcar-version}/flatcar-container.tar.gz
-    ref: c533ff576e128d11ce240e01f818c358d75b9ff118b2dd9199fbf4684547a32c
+    ref: "%{flatcar-kernel-container-sha256}"
 
 config:
   install-commands:

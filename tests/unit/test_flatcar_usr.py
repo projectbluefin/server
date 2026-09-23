@@ -104,14 +104,16 @@ def test_flatcar_usr_element_structure() -> None:
         "variables.strip-binaries must be empty string to prevent stripping"
     )
 
-    # Exactly one remote source for flatcar-container.tar.gz pinned by sha256
+    # Exactly one remote source for flatcar-container.tar.gz pinned via include/flatcar.yml
     sources = data.get("sources", [])
     assert len(sources) == 1, "Must declare exactly one source"
     src = sources[0]
     assert src.get("kind") == "remote"
     assert src.get("url") == "flatcar:stable/%{flatcar-board}/%{flatcar-version}/flatcar-container.tar.gz"
-    assert len(src.get("ref", "")) == 64, "Source ref must be a valid sha256 hash"
-
+    ref = src.get("ref", "")
+    assert ref == "%{flatcar-kernel-container-sha256}" or len(ref) == 64, (
+        "Source ref must reference %{flatcar-kernel-container-sha256} or be a valid sha256 hash"
+    )
 
 def test_flatcar_usr_explicit_removals_and_replacements() -> None:
     """Verify explicit rm lines and Bluefin replacement documentation."""
