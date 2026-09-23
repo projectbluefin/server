@@ -55,7 +55,7 @@ metadata:
   - `version.txt` (`6e86c457...`): release identifier and build ID.
   - `flatcar_production_image_packages.txt` (`58a43787...`): installed Portage atoms and versions.
   - `flatcar-podman_packages.txt` (`befde0ac...`): container runtime sysext packages.
-- FSDK 26.08 source elements: pinned junction ref `freedesktop-sdk-26.08.0` in `elements/freedesktop-sdk.bst`.
+- FSDK 26.08 source elements: pinned junction ref `freedesktop-sdk-26.08.1` in `elements/freedesktop-sdk.bst`.
 
 ## Downstream Substitution Tickets
 
