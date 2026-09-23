@@ -22,7 +22,7 @@ jobs:
   build:
     # Read-only token (workflow default): on pull_request this job checks out
     # and executes PR-controlled code, so it must never hold a write token.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 180
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -145,7 +145,7 @@ jobs:
   release:
     if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}
     needs: [build, installer-test]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: write # creates the GitHub Release and uploads its assets
