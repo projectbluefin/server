@@ -311,7 +311,7 @@ config:
         echo "==> Found installer partition at ${INSTALLER_PART_PATH} -> ${INSTALLER_PART}"
       fi
       # Auto-detect target disk for unattended install (any raw disk of type "disk" that is not the installer, is not read-only, and has size > 0)
-      TARGET_DISK=""
+      TARGET_DISKS=()
       while read -r name type ro size; do
         [ "${type}" = "disk" ] || continue
         [ "${ro}" = "0" ] || continue
@@ -322,9 +322,9 @@ config:
           continue
         fi
 
-        TARGET_DISK="${name}"
-        break
+        TARGET_DISKS+=("${name}")
       done < <(lsblk -p -d -n -o NAME,TYPE,RO,SIZE -b)
+      TARGET_DISK="${TARGET_DISKS[0]:-}"
 
       # inst.target_disk= overrides auto-detection (explicit target under PXE).
       if [ -n "${TARGET_DISK_OVERRIDE}" ]; then
@@ -397,6 +397,17 @@ config:
         fi
       else
         echo "==> Running in INTERACTIVE mode..."
+        # If exactly one non-installer target disk exists, pass it directly to systemd-sysinstall
+        # so the user isn't prompted with device serial/path queries.
+        # If multiple disks exist, systemd-sysinstall prompts with its native numbered list;
+        # print a hint reminding users they can simply type the item number (1, 2, ...).
+        EXTRA_ARGS=()
+        if [ "${#TARGET_DISKS[@]}" -eq 1 ]; then
+          echo "==> Automatically selected only available installation disk: ${TARGET_DISKS[0]}"
+          EXTRA_ARGS+=("${TARGET_DISKS[0]}")
+        elif [ "${#TARGET_DISKS[@]}" -gt 1 ]; then
+          echo "==> Multiple disks detected. You can type the menu item number (1, 2, ...) to choose."
+        fi
         /usr/bin/systemd-sysinstall \
           --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
           --variables=yes \
@@ -404,7 +415,8 @@ config:
           --mute-console=yes \
           --copy-locale=yes \
           --copy-keymap=yes \
-          --copy-timezone=yes
+          --copy-timezone=yes \
+          "${EXTRA_ARGS[@]}"
         stage_fallback_bootloader
         echo "==> Installation complete! Rebooting..."
         systemctl reboot
