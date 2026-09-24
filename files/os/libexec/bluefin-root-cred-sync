@@ -1,0 +1,137 @@
+#!/bin/bash
+# bluefin-root-cred-sync — keep the root credential outside the replaceable DDI.
+#
+# /etc/shadow ships inside the OS DDI, and systemd-sysupdate replaces that whole
+# filesystem image in both root slots on every update. A root password rotated
+# on the running host therefore rolls back to the credential baked into the
+# image as soon as the other slot boots. This helper keeps the authoritative
+# root entry in the persistent /var partition instead, and reconciles the image
+# with it:
+#
+#   boot     restore the persisted root entry into /etc/shadow, seeding the
+#            persisted copy from the image on the first boot after install
+#   persist  copy the current /etc/shadow root entry into the persisted copy
+#
+# bluefin-root-cred.service runs `boot` before every login path;
+# bluefin-root-cred-persist.path runs `persist` whenever /etc/shadow changes.
+#
+# Only the root entry is kept, never the whole file: every other shadow entry is
+# an image-managed system account that must track the image, not the host.
+#
+# Recovery: remove the persisted copy and reboot to fall back to the credential
+# baked into the image (the documented console bring-up credential).
+#
+# Deliberately pure bash builtins plus coreutils. The DDI runtime is
+# runtime-minimal: /bin/sh, sed, awk and grep are not guaranteed to exist, and
+# this code runs before the login services it protects.
+#
+# Usage: bluefin-root-cred-sync {boot|persist} [shadow-file] [state-file]
+# The two paths are overridable for tests only; the shipped units pass neither.
+
+set -euo pipefail
+umask 077
+
+PROG="${0##*/}"
+MODE="${1:-}"
+SHADOW="${2:-/etc/shadow}"
+STATE="${3:-/var/lib/bluefin-server/root-shadow}"
+
+log() { printf '%s: %s\n' "$PROG" "$*" >&2; }
+die() { log "$*"; exit 1; }
+
+# Print the entry for a user out of a colon-separated shadow database.
+user_entry() { # $1 = file, $2 = user
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ "${line%%:*}" = "$2" ]; then
+      printf '%s\n' "$line"
+      return 0
+    fi
+  done < "$1"
+  return 1
+}
+
+# A shadow entry is name:password:lastchange:min:max:warn:inactive:expire:reserved.
+# Refuse anything else: a truncated or half-written entry must never replace
+# either copy of the credential.
+shadow_entry_is_sane() { # $1 = entry
+  local entry="$1" rest="$1" fields=1 hash
+  while [ "${rest#*:}" != "$rest" ]; do
+    fields=$((fields + 1))
+    rest="${rest#*:}"
+  done
+  [ "$fields" -eq 9 ] || return 1
+  hash="${entry#*:}"
+  hash="${hash%%:*}"
+  [ -n "$hash" ] || return 1
+  return 0
+}
+
+# Replace the entry for a user in a shadow database, or append it when absent.
+# Writes next to the target and renames, so the database is never truncated,
+# and re-asserts 0600 on the result.
+set_user_entry() { # $1 = file, $2 = user, $3 = entry
+  local file="$1" user="$2" entry="$3" tmp line replaced=0
+  tmp="$(mktemp "${file}.XXXXXX")" ||
+    die "cannot create a temporary file next to ${file}"
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ "${line%%:*}" = "$user" ]; then
+      printf '%s\n' "$entry" >>"$tmp"
+      replaced=1
+    else
+      printf '%s\n' "$line" >>"$tmp"
+    fi
+  done <"$file"
+  [ "$replaced" -eq 1 ] || printf '%s\n' "$entry" >>"$tmp"
+  chmod 0600 "$tmp"
+  mv -f "$tmp" "$file"
+}
+
+# Copy the live root entry into the persistent store.
+persist() {
+  local entry tmp dir
+  entry="$(user_entry "$SHADOW" root)" ||
+    die "no root entry in ${SHADOW}; refusing to persist"
+  shadow_entry_is_sane "$entry" ||
+    die "root entry in ${SHADOW} is malformed; refusing to persist"
+  case "$STATE" in
+  */*) dir="${STATE%/*}" ;;
+  *) dir="." ;;
+  esac
+  [ -d "$dir" ] || mkdir -p "$dir" || die "cannot create ${dir}"
+  tmp="$(mktemp "${STATE}.XXXXXX")" ||
+    die "cannot create a temporary file next to ${STATE}"
+  printf '%s\n' "$entry" >"$tmp"
+  chmod 0600 "$tmp"
+  mv -f "$tmp" "$STATE"
+  log "persisted the root entry from ${SHADOW} in ${STATE}"
+}
+
+# Make the persisted root entry authoritative for this boot.
+boot() {
+  local entry current=""
+  if [ ! -e "$STATE" ]; then
+    log "no persisted root credential in ${STATE}; seeding it from ${SHADOW}"
+    persist
+    return 0
+  fi
+  entry="$(user_entry "$STATE" root)" ||
+    die "${STATE} holds no root entry; leaving ${SHADOW} untouched"
+  shadow_entry_is_sane "$entry" ||
+    die "${STATE} holds a malformed root entry; leaving ${SHADOW} untouched"
+  current="$(user_entry "$SHADOW" root)" || current=""
+  if [ "$current" = "$entry" ]; then
+    log "root entry in ${SHADOW} already matches ${STATE}"
+    return 0
+  fi
+  set_user_entry "$SHADOW" root "$entry"
+  log "restored the persisted root entry into ${SHADOW}"
+}
+
+case "$MODE" in
+boot) boot ;;
+persist) persist ;;
+*)
+  die "usage: ${PROG} {boot|persist} [shadow-file] [state-file]"
+  ;;
+esac

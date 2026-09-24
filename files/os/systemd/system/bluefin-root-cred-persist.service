@@ -1,0 +1,16 @@
+# Copy the live root credential out of /etc/shadow into the persistent store.
+#
+# Triggered by bluefin-root-cred-persist.path whenever /etc/shadow changes.
+# Deliberately not enabled at boot: bluefin-root-cred.service owns the boot-time
+# direction, and running both concurrently could persist the image's baked-in
+# credential over the operator's.
+[Unit]
+Description=Persist the /etc/shadow root credential into /var
+RequiresMountsFor=/var/lib/bluefin-server
+ConditionPathExists=/etc/shadow
+
+[Service]
+Type=oneshot
+StateDirectory=bluefin-server
+StateDirectoryMode=0700
+ExecStart=/usr/libexec/bluefin-root-cred-sync persist

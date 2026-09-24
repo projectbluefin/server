@@ -38,6 +38,9 @@ depends:
   # A/B System Update Configurations
   - bluefin-server/os-sysupdate.bst
 
+  # Root credential persistence across A/B DDI replacements
+  - bluefin-server/os-root-cred.bst
+
   # k0s component system update configuration
   - bluefin-server/os-k0s-sysupdate.bst
 

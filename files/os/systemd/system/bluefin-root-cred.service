@@ -1,0 +1,31 @@
+# Restore the authoritative root credential into /etc/shadow.
+#
+# /etc/shadow ships inside the OS DDI, and systemd-sysupdate replaces that
+# filesystem image in both root slots on every update. Without this unit a root
+# password rotated on the running host would roll back to the credential baked
+# into the image as soon as the other slot boots. bluefin-root-cred-sync keeps
+# the authoritative root entry in the persistent /var partition and reconciles
+# the image with it here, before any process can authenticate.
+#
+# Enablement is the explicit multi-user.target.wants symlink created by
+# elements/bluefin-server/os-root-cred.bst: systemd presets are not applied in
+# this image, so a preset would enable nothing.
+[Unit]
+Description=Restore the persisted root credential into /etc/shadow
+Documentation=man:shadow(5)
+# /var must be mounted, and every login path (getty, sshd, k0s console) hangs
+# off multi-user.target.
+RequiresMountsFor=/var/lib/bluefin-server
+After=local-fs.target
+Before=multi-user.target
+ConditionPathExists=/etc/shadow
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StateDirectory=bluefin-server
+StateDirectoryMode=0700
+ExecStart=/usr/libexec/bluefin-root-cred-sync boot
+
+[Install]
+WantedBy=multi-user.target

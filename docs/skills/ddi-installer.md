@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server DDI live installe
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-09"
+  last_updated: "2026-09-24"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -107,6 +107,28 @@ container runtime pod sandboxes.
 | ESP | vfat | 500 MiB – 1 GiB | `systemd-boot` + target OS UKI (`bluefin-server.efi`) |
 | `bluefin-server-root-a` | XFS | 4 GiB – 8 GiB | OS root filesystem (copied from installer data partition) |
 | `var` | XFS | ≥ 4 GiB | Writable persistent `/var`; grows to fill remaining disk |
+
+## State Across Updates
+
+`systemd-sysupdate` replaces the root partition block-for-block in each A/B slot,
+so everything under `/etc` is re-created from the new DDI on every update. Only
+the `var` partition, the ESP, and the bootloader state survive.
+
+The root credential is the one piece of `/etc` an operator changes at runtime,
+so the image keeps the authoritative root entry of `/etc/shadow` in
+`/var/lib/bluefin-server/root-shadow`:
+
+- `bluefin-root-cred.service` restores the persisted entry into `/etc/shadow`
+  before `multi-user.target` — and therefore before `getty`, `sshd`, and the k0s
+  console — seeding the persisted copy from the image on the first boot after
+  install.
+- `bluefin-root-cred-persist.path` copies `/etc/shadow` back out whenever it
+  changes, so a password rotated with `passwd` or `chage` is what the next slot
+  boots with.
+
+Removing the persisted copy and rebooting falls back to the credential baked
+into the image. Removing that baked credential entirely is the operator-login
+redesign in [`#80`](https://github.com/projectbluefin/server/issues/80).
 
 ## Installer Boot Flow
 
