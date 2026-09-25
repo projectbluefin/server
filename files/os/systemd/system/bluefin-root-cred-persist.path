@@ -1,0 +1,22 @@
+# Persist root credential changes made on the running host.
+#
+# Changing the root password (passwd, chage) rewrites /etc/shadow in the root
+# slot the host is currently booted from, and systemd-sysupdate replaces that
+# slot wholesale on the next update. Watching /etc/shadow keeps the persisted
+# copy in the persistent /var partition in step with the host, so the slot that
+# boots next gets the operator's credential instead of the image's.
+#
+# Enablement is the explicit multi-user.target.wants symlink created by
+# elements/bluefin-server/os-root-cred.bst; systemd presets are not applied in
+# this image.
+[Unit]
+Description=Persist root credential changes to the /var root credential store
+# Arm the watch only once the boot-time restore has settled /etc/shadow.
+After=bluefin-root-cred.service
+
+[Path]
+PathChanged=/etc/shadow
+Unit=bluefin-root-cred-persist.service
+
+[Install]
+WantedBy=multi-user.target
