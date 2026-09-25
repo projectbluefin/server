@@ -361,12 +361,12 @@ config:
         fi
 
         esp_dev=""
-        while read -r dev fstype; do
-          if [ "${fstype}" = "vfat" ]; then
+        while read -r dev parttype fstype; do
+          if [ "${parttype,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ] && [ "${fstype}" = "vfat" ]; then
             esp_dev="${dev}"
             break
           fi
-        done < <(lsblk -p -n -l -o NAME,FSTYPE "${target}")
+        done < <(lsblk -p -n -l -o NAME,PARTTYPE,FSTYPE "${target}")
         if [ ! -b "${esp_dev}" ]; then
           echo "ERROR: no EFI system partition found on ${target}." >&2
           return 1
