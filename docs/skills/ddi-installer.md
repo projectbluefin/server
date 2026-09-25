@@ -80,15 +80,19 @@ container runtime pod sandboxes.
    which calls `systemd-sysinstall` with the target OS UKI at
    `/usr/lib/bluefin-server/bluefin-server.efi` so `bootctl link` installs the
    target UKI instead of the installer UKI.
-5. `systemd-sysinstall` reads partition recipes from
-   `/usr/lib/repart.sysinstall.d/` if it is populated; otherwise it falls back
-   to `/usr/lib/repart.d/`. The target recipes are staged at
-   `/usr/lib/repart.d/` (`10-esp.conf`, `20-root-a.conf`, `30-var.conf`).
+5. The wrapper stages `10-esp.conf`, `20-root-a.conf`, and `30-var.conf` in
+   `/usr/lib/repart.sysinstall.d/` for `systemd-sysinstall` to pass to
+   `systemd-repart`. On a PXE install it repoints only the root recipe to the
+   verified downloaded DDI.
 6. `20-root-a.conf` copies the DDI block-for-block from
    `/dev/disk/by-partlabel/bluefin-installer-data` (the embedded DDI data
    partition on the installer media).
 7. The immutable root DDI is copied without filesystem growth; `/var` uses
    `GrowFileSystem=yes` to fill the remaining target disk.
+8. The wrapper assigns the new `/var` partition a per-install GPT UUID and
+   passes an `fstab.extra` system credential containing its `PARTUUID` to
+   `systemd-sysinstall`. The installed OS mounts that partition rather than
+   another disk's identically labelled `var` partition.
 
 ## Partition Layout
 

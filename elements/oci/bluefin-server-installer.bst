@@ -233,6 +233,14 @@ config:
         esac
       done
 
+      # Use one partition UUID for repart and the installed system's mount.
+      # A global 'var' partition label can resolve to another attached disk.
+      VAR_UUID="$(systemd-id128 new -u)"
+      mkdir -p /usr/lib/repart.sysinstall.d
+      cp -a /usr/lib/repart.d/10-esp.conf /usr/lib/repart.d/20-root-a.conf \
+        /usr/lib/repart.d/30-var.conf /usr/lib/repart.sysinstall.d/
+      printf 'UUID=%s\n' "${VAR_UUID}" >> /usr/lib/repart.sysinstall.d/30-var.conf
+
       # Opt-in network DDI pull (PXE/netboot). Absence of inst.ddi_url leaves
       # the embedded installer-media path byte-for-byte unchanged (offline-first
       # preserved). Any fetch/verification failure aborts here, before the target
@@ -268,13 +276,7 @@ config:
             exit 1
           }
         ls -lh /run/installer/bluefin-server-ddi.raw
-        # Feed the downloaded image into the native systemd-sysinstall flow by
-        # overriding only the root recipe's CopyBlocks=. systemd-sysinstall
-        # reads /usr/lib/repart.sysinstall.d/ when populated, else /usr/lib/
-        # repart.d/, so stage all three recipes with 20-root-a.conf repointed.
-        mkdir -p /usr/lib/repart.sysinstall.d
-        cp -a /usr/lib/repart.d/10-esp.conf /usr/lib/repart.sysinstall.d/
-        cp -a /usr/lib/repart.d/30-var.conf /usr/lib/repart.sysinstall.d/
+        # Repoint only the root recipe when booting without embedded media.
         sed 's#^CopyBlocks=.*#CopyBlocks=/run/installer/bluefin-server-ddi.raw#' \
           /usr/lib/repart.d/20-root-a.conf \
           > /usr/lib/repart.sysinstall.d/20-root-a.conf
@@ -383,6 +385,7 @@ config:
           echo "==> Auto-detected target disk: ${TARGET_DISK}"
           /usr/bin/systemd-sysinstall \
             --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
+            --set-credential="fstab.extra:PARTUUID=${VAR_UUID} /var xfs defaults 0 0" \
             --erase=yes \
             --confirm=no \
             --summary=no \
@@ -410,6 +413,7 @@ config:
         fi
         /usr/bin/systemd-sysinstall \
           --kernel=/usr/lib/bluefin-server/bluefin-server.efi \
+          --set-credential="fstab.extra:PARTUUID=${VAR_UUID} /var xfs defaults 0 0" \
           --variables=yes \
           --reboot=no \
           --mute-console=yes \
