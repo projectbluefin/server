@@ -87,9 +87,8 @@ container runtime pod sandboxes.
 6. `20-root-a.conf` copies the DDI block-for-block from
    `/dev/disk/by-partlabel/bluefin-installer-data` (the embedded DDI data
    partition on the installer media).
-7. Target OS volume expansion is handled by `systemd-growfs`; the target OS
-   stack includes `xfsprogs` so the root and `/var` filesystems can grow to fill
-   their partitions on first boot.
+7. The immutable root DDI is copied without filesystem growth; `/var` uses
+   `GrowFileSystem=yes` to fill the remaining target disk.
 
 ## Partition Layout
 
@@ -231,7 +230,7 @@ in tmpfs, so plan roughly `live-env + DDI` of free RAM (~8 GiB guidance).
 - [ ] The interactive installer service sets `TTYPath=/dev/tty0` so the TUI
       appears on the attached display even when serial is the primary console.
 - [ ] `bluefin-server-installer.bst` decompresses the DDI after the cpio step.
-- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
+- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=no`.
 
 ## See also
 

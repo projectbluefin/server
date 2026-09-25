@@ -168,7 +168,7 @@ The release process is driven by `.github/workflows/build.yml`:
 - Boot cmdline uses a hardcoded device path like `root=/dev/vda2`.
 - DDI decompression is placed before the cpio step.
 - The installer data partition uses FAT32/vfat instead of XFS.
-- The repart recipe is missing `GrowFileSystem=yes` for the copied rootfs.
+- The repart recipe is missing `GrowFileSystem=no` for the copied rootfs.
 - Unattended target-disk discovery is not filtered and can select empty devices.
 
 ## Verification
@@ -183,7 +183,7 @@ The release process is driven by `.github/workflows/build.yml`:
 - [ ] The live installer does not bake hardcoded SSH keys or pre-hashed root
       passwords.
 - [ ] The DDI is decompressed after the cpio step.
-- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=yes`.
+- [ ] `files/installer/repart.d/20-root-a.conf` has `GrowFileSystem=no`.
 
 ## See also
 

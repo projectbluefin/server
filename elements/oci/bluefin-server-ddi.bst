@@ -41,6 +41,9 @@ config:
       depmod -b /layer/usr "${KVER}"
 
       # Stage extracted CA certificate bundle into target DDI rootfs
+      # Remote execution may hard-link the staged CA files to the build root;
+      # replace the target tree before copying rather than copying onto itself.
+      rm -rf /layer/etc/pki/ca-trust/extracted
       mkdir -p /layer/etc/pki/ca-trust/extracted /layer/etc/ssl/certs /layer/etc/pki/tls/certs
       cp -a /etc/pki/ca-trust/extracted/* /layer/etc/pki/ca-trust/extracted/
       ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /layer/etc/ssl/certs/ca-certificates.crt
