@@ -194,6 +194,42 @@ def test_flatcar_zfs_removes_udevd_sysext_ordering_dropin() -> None:
     )
 
 
+def test_var_partition_contracts_use_consistent_partlabel() -> None:
+    import base64
+
+    repart_var = (
+        REPO_ROOT / "files" / "installer" / "repart.d" / "30-var.conf"
+    ).read_text(encoding="utf-8")
+    ddi_element = DDI_ELEMENT.read_text(encoding="utf-8")
+    var_mount = (
+        REPO_ROOT / "files" / "os" / "systemd" / "system" / "var.mount"
+    ).read_text(encoding="utf-8")
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+
+    assert "Label=var" in repart_var
+    assert "/dev/disk/by-partlabel/var /var xfs defaults 0 0" in ddi_element
+    assert "What=/dev/disk/by-partlabel/var" in var_mount
+    expected_b64 = base64.b64encode(
+        b"/dev/disk/by-partlabel/var /var xfs defaults 0 0\n"
+    ).decode("ascii")
+    assert expected_b64 in justfile
+
+
+def test_installer_smoke_probes_the_kiosk_over_tls_from_inside_the_guest() -> None:
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+    assert "systemd.mask=systemd-homed-firstboot.service" in justfile
+    assert "https://127.0.0.1:8080/healthz" in justfile
+    assert "--insecure" in justfile
+    assert "systemd.extra-unit.bluefin-kiosk-ready.service" in justfile
+    assert "systemd.wants=bluefin-kiosk-ready.service" in justfile
+    # The host cannot reach the guest's loopback-bound kiosk proxy, so no
+    # host-side probe may remain in the smoke test — a stray host process on
+    # port 8080 would otherwise let it pass without the guest being ready.
+    smoke = justfile.split("install-vm:")[0]
+    assert "http://127.0.0.1:8080/healthz" not in smoke
+    assert "KIOSK_CONSOLE_READY" in smoke
+
+
 def test_test_installer_boot_usb_contract() -> None:
     justfile = JUSTFILE.read_text(encoding="utf-8")
     start = justfile.index("test-installer-boot-usb:")

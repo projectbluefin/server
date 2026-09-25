@@ -15,8 +15,8 @@ depends:
   - flatcar/flatcar-usr.bst
 
   # FSDK junction is still pulled in for OS-level integration helpers only
-  # (minimal filesystem layout and linker cache); the base runtime it used to
-  # provide is now Flatcar's.
+  # (fstab entries, ldconfig cache); the base runtime it used to provide is
+  # now Flatcar's.
   - freedesktop-sdk.bst:integration/extra-fs.bst
   - freedesktop-sdk.bst:integration/ldconfig.bst
 

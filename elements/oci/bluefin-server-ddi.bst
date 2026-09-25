@@ -73,6 +73,9 @@ config:
       # Ensure standard /etc/hosts exists for container runtimes (containerd/podman)
       printf '127.0.0.1   localhost\n::1         localhost ip6-localhost ip6-loopback\n' > /layer/etc/hosts
 
+      # Ensure persistent /var is mounted from its partition label
+      printf '/dev/disk/by-partlabel/var /var xfs defaults 0 0\n' > /layer/etc/fstab
+
       # Ensure all standard virtual, serial, and hypervisor consoles allow root login
       printf 'tty0\ntty1\ntty2\ntty3\ntty4\ntty5\ntty6\nttyS0\nttyS1\nconsole\nhvc0\n' > /layer/etc/securetty
 

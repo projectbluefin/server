@@ -1,7 +1,7 @@
 kind: import
 description: |
   Install the systemd units from files/os/systemd/system: the first-boot k0s
-  sysext activation units and first-start SSH host key generation
+  sysext activation units, var.mount, and first-start SSH host key generation
   (ssh-host-keygen.service plus its sshd.service drop-in).
 
 sources:
