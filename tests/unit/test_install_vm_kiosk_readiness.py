@@ -69,19 +69,6 @@ def test_install_vm_probes_readiness_inside_the_guest_over_tls() -> None:
     assert 'if ! kill -0 "$QEMU_PID" 2>/dev/null; then' in recipe
 
 
-def test_install_vm_mounts_var_from_the_partlabel_credential() -> None:
-    recipe = _install_vm_recipe()
-
-    # The installed image has no fstab entry for /var and gpt-auto cannot
-    # mount it, so the boot needs the same SMBIOS fstab.extra credential
-    # test-installer-artifact passes. Without /var, k0s (and the kiosk proxy
-    # it runs) never starts and the readiness marker never appears.
-    assert (
-        "io.systemd.credential.binary:fstab.extra="
-        "L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg=="
-    ) in recipe
-
-
 def test_install_vm_readiness_wait_has_a_deadline_and_diagnostics() -> None:
     recipe = _install_vm_recipe()
 

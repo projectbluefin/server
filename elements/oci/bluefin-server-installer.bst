@@ -69,7 +69,7 @@ config:
       set -eux
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall; do
+      for tool in udevadm lsblk systemd-repart systemd-id128 bootctl systemd-sysinstall dd grep; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
@@ -144,6 +144,13 @@ config:
         --cmdline="rw console=ttyS0,115200 console=tty0 quiet loglevel=3 audit=0" \
         --output=/target-root/boot/EFI/Linux/bluefin-server.efi
       cp /target-root/boot/EFI/Linux/bluefin-server.efi /layer/usr/lib/bluefin-server/bluefin-server.efi
+
+      # Staged in the live initrd; the selected disk's UUID is patched in
+      # after sysinstall creates its partitions. No Python in the live image.
+      ukify build \
+        --stub=/usr/lib/systemd/boot/efi/addonx64.efi.stub \
+        --cmdline="systemd.mount-extra=PARTUUID=00000000-0000-0000-0000-000000000000:/var:xfs:defaults" \
+        --output=/layer/usr/lib/bluefin-server/var-mount.addon.efi
 
     # ── Step 1c: Configure installer services and users ─────────────────
     - |
@@ -233,6 +240,16 @@ config:
         esac
       done
 
+      # Use one partition UUID for repart and the installed system's mount.
+      # A global 'var' partition label can resolve to another attached disk.
+      VAR_UUID="$(systemd-id128 new -u)"
+      VAR_UUID="${VAR_UUID,,}"
+      [ "${#VAR_UUID}" -eq 36 ] || { echo "ERROR: invalid generated /var partition UUID" >&2; exit 1; }
+      mkdir -p /usr/lib/repart.sysinstall.d
+      cp -a /usr/lib/repart.d/10-esp.conf /usr/lib/repart.d/20-root-a.conf \
+        /usr/lib/repart.d/30-var.conf /usr/lib/repart.sysinstall.d/
+      printf 'UUID=%s\n' "${VAR_UUID}" >> /usr/lib/repart.sysinstall.d/30-var.conf
+
       # Opt-in network DDI pull (PXE/netboot). Absence of inst.ddi_url leaves
       # the embedded installer-media path byte-for-byte unchanged (offline-first
       # preserved). Any fetch/verification failure aborts here, before the target
@@ -268,13 +285,7 @@ config:
             exit 1
           }
         ls -lh /run/installer/bluefin-server-ddi.raw
-        # Feed the downloaded image into the native systemd-sysinstall flow by
-        # overriding only the root recipe's CopyBlocks=. systemd-sysinstall
-        # reads /usr/lib/repart.sysinstall.d/ when populated, else /usr/lib/
-        # repart.d/, so stage all three recipes with 20-root-a.conf repointed.
-        mkdir -p /usr/lib/repart.sysinstall.d
-        cp -a /usr/lib/repart.d/10-esp.conf /usr/lib/repart.sysinstall.d/
-        cp -a /usr/lib/repart.d/30-var.conf /usr/lib/repart.sysinstall.d/
+        # Repoint only the root recipe when booting without embedded media.
         sed 's#^CopyBlocks=.*#CopyBlocks=/run/installer/bluefin-server-ddi.raw#' \
           /usr/lib/repart.d/20-root-a.conf \
           > /usr/lib/repart.sysinstall.d/20-root-a.conf
@@ -335,45 +346,59 @@ config:
         TARGET_DISK="${TARGET_DISK_OVERRIDE}"
       fi
 
-      stage_fallback_bootloader() {
+      stage_target_boot_files() {
         udevadm settle --timeout=10 || true
-        local target="${TARGET_DISK:-}"
-        if [ -z "${target}" ]; then
-          local root_part="$(readlink -f /dev/disk/by-partlabel/bluefin-server-root-a 2>/dev/null || true)"
-          if [ -n "${root_part}" ]; then
-            target="$(lsblk -p -n -d -o PKNAME "${root_part}" 2>/dev/null || true)"
-          fi
+        local var_part target esp_dev candidate
+        var_part="$(readlink -f "/dev/disk/by-partuuid/${VAR_UUID}" 2>/dev/null || true)"
+        if [ ! -b "${var_part}" ]; then
+          echo "ERROR: installed /var partition ${VAR_UUID} is missing; cannot configure boot." >&2
+          return 1
+        fi
+        target="$(lsblk -p -n -d -o PKNAME "${var_part}" 2>/dev/null || true)"
+        if [ ! -b "${target}" ]; then
+          echo "ERROR: cannot find the disk containing /var partition ${var_part}." >&2
+          return 1
         fi
 
-        if [ -n "${target}" ]; then
-          local esp_dev=""
-          while read -r dev fstype; do
-            if [ "${fstype}" = "vfat" ]; then
-              esp_dev="${dev}"
-              break
-            fi
-          done < <(lsblk -p -n -l -o NAME,FSTYPE "${target}")
-
-          if [ -n "${esp_dev}" ] && [ -b "${esp_dev}" ]; then
-            echo "==> Staging UEFI removable media fallback /EFI/BOOT/BOOTX64.EFI on ${esp_dev}..."
-            mkdir -p /mnt/esp
-            if mount -t vfat "${esp_dev}" /mnt/esp; then
-              mkdir -p /mnt/esp/EFI/BOOT
-              for candidate in \
-                /mnt/esp/EFI/systemd/systemd-bootx64.efi \
-                /mnt/esp/flatcar/bluefin-server.efi \
-                /mnt/esp/EFI/Linux/bluefin-server.efi \
-                /usr/lib/bluefin-server/bluefin-server.efi; do
-                if [ -f "${candidate}" ]; then
-                  cp -a "${candidate}" /mnt/esp/EFI/BOOT/BOOTX64.EFI
-                  echo "==> Successfully staged ${candidate} -> ${esp_dev}:/EFI/BOOT/BOOTX64.EFI"
-                  break
-                fi
-              done
-              umount /mnt/esp || true
-            fi
+        esp_dev=""
+        while read -r dev fstype; do
+          if [ "${fstype}" = "vfat" ]; then
+            esp_dev="${dev}"
+            break
           fi
+        done < <(lsblk -p -n -l -o NAME,FSTYPE "${target}")
+        if [ ! -b "${esp_dev}" ]; then
+          echo "ERROR: no EFI system partition found on ${target}." >&2
+          return 1
         fi
+
+        mkdir -p /mnt/esp
+        mount -t vfat "${esp_dev}" /mnt/esp || return 1
+        mkdir -p /mnt/esp/EFI/BOOT /mnt/esp/loader/addons
+        local addon=/mnt/esp/loader/addons/bluefin-var.addon.efi
+        cp /usr/lib/bluefin-server/var-mount.addon.efi "${addon}"
+        local -a matches=()
+        mapfile -t matches < <(LC_ALL=C grep -aob '00000000-0000-0000-0000-000000000000' "${addon}" || true)
+        if [ "${#matches[@]}" -ne 1 ]; then
+          echo "ERROR: /var addon must have exactly one UUID placeholder." >&2
+          umount /mnt/esp
+          return 1
+        fi
+        printf '%s' "${VAR_UUID}" | dd of="${addon}" bs=1 seek="${matches[0]%%:*}" conv=notrunc status=none
+
+        echo "==> Staging UEFI removable media fallback /EFI/BOOT/BOOTX64.EFI on ${esp_dev}..."
+        for candidate in \
+          /mnt/esp/EFI/systemd/systemd-bootx64.efi \
+          /mnt/esp/flatcar/bluefin-server.efi \
+          /mnt/esp/EFI/Linux/bluefin-server.efi \
+          /usr/lib/bluefin-server/bluefin-server.efi; do
+          if [ -f "${candidate}" ]; then
+            cp -a "${candidate}" /mnt/esp/EFI/BOOT/BOOTX64.EFI
+            echo "==> Successfully staged ${candidate} -> ${esp_dev}:/EFI/BOOT/BOOTX64.EFI"
+            break
+          fi
+        done
+        umount /mnt/esp
       }
 
       # Check for unattended in kernel command line
@@ -390,7 +415,7 @@ config:
             --reboot=no \
             --mute-console=yes \
             "${TARGET_DISK}" < /dev/null
-          stage_fallback_bootloader
+          stage_target_boot_files
         else
           echo "ERROR: No suitable target disk found for unattended installation!" >&2
           exit 1
@@ -417,7 +442,7 @@ config:
           --copy-keymap=yes \
           --copy-timezone=yes \
           "${EXTRA_ARGS[@]}"
-        stage_fallback_bootloader
+        stage_target_boot_files
         echo "==> Installation complete! Rebooting..."
         systemctl reboot
       fi

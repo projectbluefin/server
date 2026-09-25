@@ -566,9 +566,8 @@ test-installer-artifact:
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORKDIR/ovmf-vars.fd" \
         -nic user,model=virtio-net-pci \
-        -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
         -smbios "type=11,value=io.systemd.credential.binary:systemd.extra-unit.bluefin-kiosk-ready.service=${READY_UNIT}" \
-        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.mask=systemd-firstboot.service systemd.mask=systemd-homed-firstboot.service systemd.wants=bluefin-kiosk-ready.service" \
+        -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.wants=bluefin-kiosk-ready.service" \
         -nographic \
         -serial file:"$SERIAL_LOG" \
         -monitor none &
@@ -738,11 +737,6 @@ install-vm:
     # is exactly "healthz ok and / returns 200", and it avoids embedding
     # quotes inside a systemd ExecStart= line, where escaping rules differ
     # from a plain shell.
-    # The installed image carries no fstab entry for /var and gpt-auto cannot
-    # mount it, so /var (which holds k0s state and therefore the kiosk proxy)
-    # stays empty unless the same SMBIOS fstab.extra credential
-    # test-installer-artifact passes is supplied here too. Without it k0s never
-    # starts and the readiness marker never appears.
     READY_MARKER="KIOSK_CONSOLE_READY"
     READY_UNIT=$(base64 -w0 <<'UNIT'
     [Unit]
@@ -767,7 +761,6 @@ install-vm:
       -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
       -drive if=pflash,format=raw,file="$OVMF_VARS" \
       -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22,hostfwd=tcp::6443-:6443 \
-      -smbios "type=11,value=io.systemd.credential.binary:fstab.extra=L2Rldi9kaXNrL2J5LXBhcnRsYWJlbC92YXIgL3ZhciB4ZnMgZGVmYXVsdHMgMCAwCg==" \
       -smbios "type=11,value=io.systemd.credential.binary:systemd.extra-unit.bluefin-kiosk-ready.service=${READY_UNIT}" \
       -smbios "type=11,value=io.systemd.stub.kernel-cmdline-extra=console=tty0 console=ttyS0,,115200 systemd.wants=bluefin-kiosk-ready.service" \
       -serial file:"$SERIAL_LOG" &
