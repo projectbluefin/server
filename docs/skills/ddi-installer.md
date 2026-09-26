@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server DDI live installe
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-09"
+  last_updated: "2026-09-26"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -185,7 +185,13 @@ wrapper (`bluefin-sysinstall`) brings up DHCP via `systemd-networkd-wait-online`
 streams the DDI down with `curl`, stream-decompresses it with `zstd`, and feeds
 it into the **native** `systemd-sysinstall` flow by staging a temporary
 `/usr/lib/repart.sysinstall.d/` override whose `20-root-a.conf` `CopyBlocks=`
-points at the downloaded image — no custom installer logic.
+points at the downloaded image — no custom installer logic. The override is
+written with plain Bash line handling: the live initrd contains only what
+`installer-stack.bst` and its transitive runtime deps install (Bash, uutils
+coreutils, util-linux, kmod, systemd, `grep`, `curl`, `zstd`, cryptsetup,
+xfsprogs, dosfstools). `sed`, `awk` and `tar` are **not** present. Every
+external command the wrapper calls is pinned by the Step 1a tool check in
+`bluefin-server-installer.bst`, which fails the build when one is missing.
 
 Example iPXE stanza (the PXE server mirrors the three assets, verified against
 the signed `SHA256SUMS`):
@@ -212,6 +218,7 @@ in tmpfs, so plan roughly `live-env + DDI` of free RAM (~8 GiB guidance).
 | "Use knuckle instead." | knuckle is deprecated in favor of native `systemd-sysinstall` (systemd 261+). |
 | "Hardcode `root=/dev/vda2` for QEMU." | Bare metal has different device names. Always use PARTUUID. |
 | "Pull the DDI from the network at install time." | Network pull is opt-in via `inst.ddi_url`; verification is mandatory and failures abort before any disk change, while the embedded installer media stays the default. |
+| "The live initrd has sed/awk/tar like any Linux box." | It does not. The initrd holds only `installer-stack.bst` plus transitive runtime deps (Bash, uutils coreutils, util-linux, kmod, systemd, `grep`, `curl`, `zstd`); `sed`, `awk` and `tar` are absent and fail with `command not found` (exit 127) after the download. Use Bash builtins, or declare the tool in `installer-stack.bst` and add it to the Step 1a build-time tool check. |
 | "Put the DDI in the initrd cpio." | The DDI is 2 GiB+. The initrd cpio step must run before the DDI is placed in `/layer`. |
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |
