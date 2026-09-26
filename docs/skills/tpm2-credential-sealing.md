@@ -4,7 +4,7 @@ description: Securing provisioning credentials (such as hashed root passwords or
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-07"
+  last_updated: "2026-09-26"
   context7-sources:
     - /systemd/systemd
 ---
@@ -21,7 +21,7 @@ decrypts and routes at boot:
 
 | Credential | Consumer | Purpose |
 |---|---|---|
-| `passwd.hashed-password.root` | `systemd-sysusers` / `systemd-firstboot` | Optional root password hash for break-glass provisioning. |
+| `passwd.hashed-password.root` | `systemd-sysusers` | Optional root password hash for break-glass provisioning. |
 | `tmpfiles.extra` | `systemd-tmpfiles` | Extra tmpfiles rules, such as writing an operator's SSH `authorized_keys`. |
 | `network.network.*`, `network.netdev.*`, `network.link.*`, `network.conf.*` | `systemd-network-generator` | Static network, routes, virtual devices, and networkd config. |
 | `network.dns`, `network.search_domains` | `systemd-resolved` | DNS resolver defaults. |
