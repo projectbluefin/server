@@ -177,12 +177,14 @@ over the LAN with `inst.*` kernel parameters:
   embedded installer partition.
 - `inst.ddi_sha256=<hex>` — **mandatory** when `inst.ddi_url` is set; verify the
   downloaded DDI before touching the target disk (fail closed if absent).
-- `inst.creds_url=<https-url>` — download a tar archive of first-boot systemd
-  credentials and place them in the installed system's ESP at
+- `inst.creds_url=<url>` — download a tar archive of first-boot systemd
+  credentials (any `curl` scheme; the iPXE example uses plain `http://`) and
+  place them in the installed system's ESP at
   `/loader/credentials/`, where `systemd-stub` hands them to the target OS on
   first boot (consumers: [tpm2-credential-sealing.md](tpm2-credential-sealing.md)).
-- `inst.creds_sha256=<hex>` — **mandatory** when `inst.creds_url` is set; verify
-  the downloaded archive before touching the target disk (fail closed if absent).
+- `inst.creds_sha256=<hex>` — **mandatory** when `inst.creds_url` is set;
+  verify the downloaded archive before touching the target disk (fail closed
+  if absent).
 - `inst.target_disk=/dev/...` — explicit target disk, overriding
   first-writable-disk auto-detection.
 
@@ -202,27 +204,50 @@ for the credentials archive), cryptsetup, xfsprogs, dosfstools). `sed` and
 by the Step 1a tool check in `bluefin-server-installer.bst`, which fails the
 build when one is missing.
 
-The credentials archive is flat: top-level regular files named `<name>.cred`
-only, plain or `systemd-creds encrypt`ed, no directories or links. Any other
-member rejects the whole archive. Build it with explicit member names so no
-`./` entry is recorded:
+The credentials archive is an **uncompressed** ustar/pax/gnu tar (the wrapper
+checks the `ustar` magic and feeds tar on stdin, so a `.tar.zst`/`.tar.xz` is
+rejected rather than transparently decompressed) and flat: at most 64
+top-level regular files named `<name>.cred`, where `<name>` matches
+`[A-Za-z0-9][A-Za-z0-9._@~-]*` (`~` is systemd's own drop-in namespace,
+`systemd.unit-dropin.<unit>~<name>`), each filename at most 250 bytes, each
+file at most 1 MiB, the whole archive at most 16 MiB. Names must be unique
+even ignoring case — the ESP is vfat, where `a.cred` and `A.cred` are the same
+file. The wrapper validates the `tar -tv` listing column by column before
+extracting anything (no directories, symlinks, hardlinks, devices or FIFOs; no
+path separators, spaces, control characters or leading dashes/dots in names),
+cross-checks it against `tar -t`, extracts only the validated names with
+`--no-same-owner --no-same-permissions`, pins its copies to `0644` and
+re-checks each is a regular file; any violation rejects the whole archive with
+the target disk untouched. Trust model: `inst.creds_sha256` arrives on the same
+unauthenticated PXE command line as the URL, so the checksum protects against a
+compromised or misconfigured file server, not against whoever controls
+DHCP/TFTP — they control both. The archive hardening is defence against
+operator error and a bad mirror, not a boundary against a hostile netboot
+server; secrets belong in TPM2/host-key-sealed credentials.
+Each file must be `systemd-creds encrypt`ed with `--name=<name>` matching the
+filename — `systemd-stub` stages ESP credentials under
+`/run/credentials/@encrypted`, so plaintext files fail with
+`status=243/CREDENTIALS`. The null key suffices for non-secret data
+(`firstboot.hostname`, `tmpfiles.extra`); use host/TPM2 keys for secrets:
 
 ```bash
-tar -cf <mac>.tar -C /path/to/creds firstboot.hostname.cred tmpfiles.extra.cred
+systemd-creds --with-key=null encrypt --name=firstboot.hostname hostname.txt firstboot.hostname.cred
+systemd-creds --with-key=null encrypt --name=tmpfiles.extra tmpfiles.conf tmpfiles.extra.cred
+tar -cf <mac>.tar firstboot.hostname.cred tmpfiles.extra.cred
 sha256sum <mac>.tar
 ```
 
 Ordering and guarantees: both downloads are fetched and verified together,
 before any disk change, so a bad DDI or credentials download aborts the install
 with the target untouched. The credentials are unpacked into
-`/dev/shm/installer/credentials/` at that point and copied onto the ESP only after `systemd-sysinstall` has created it;
-the wrapper locates the ESP by GPT partition type
-(`c12a7328-f81f-11d2-ba4b-00a0c93ec93b`) on the target disk, mounts it once
-(the same mount stages the UEFI fallback loader), writes
-`/loader/credentials/*.cred`, syncs, and unmounts. If the ESP cannot be found
-or mounted while `inst.creds_url` is set, the install fails rather than leaving
-the host to boot unconfigured. Without `inst.creds_url`, no credentials are
-written.
+`/dev/shm/installer/credentials/` at that point and copied onto the ESP only
+after `systemd-sysinstall` has created it; the wrapper locates the ESP by GPT
+partition type (`c12a7328-f81f-11d2-ba4b-00a0c93ec93b`) on the target disk,
+mounts it once, writes `/loader/credentials/*.cred` first, syncs, then stages
+the best-effort UEFI fallback loader on the same mount and unmounts. If the ESP
+cannot be found or mounted while `inst.creds_url` is set, the install fails
+rather than leaving the host to boot unconfigured. Without `inst.creds_url`, no
+credentials are written.
 
 Example iPXE stanza (the PXE server mirrors the three release assets, verified
 against the signed `SHA256SUMS`, plus one per-host credentials archive):
