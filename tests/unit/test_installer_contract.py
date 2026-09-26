@@ -145,14 +145,15 @@ def test_installer_hard_preflight_aborts_on_missing_installer_data_part() -> Non
     assert "lsblk -p -o NAME,TYPE,PARTLABEL,PKNAME,SIZE,FSTYPE" in installer_element
 
 
-def test_installer_wrapper_does_not_call_sed_awk_or_tar(installer_wrapper: str) -> None:
+def test_installer_wrapper_does_not_call_sed_or_awk(installer_wrapper: str) -> None:
     # The released 26.08.0 PXE initrd failed with "sed: command not found"
     # (exit 127) right after a successful download: the live initrd ships
-    # uutils coreutils, grep, curl, zstd and systemd, but no sed, awk or tar,
-    # so no command position may name any of them. Only a '#' at the start of
-    # a line or after whitespace opens a comment; '#' inside a string does not.
+    # uutils coreutils, grep, curl, zstd, tar (declared for the credentials
+    # archive) and systemd, but no sed or awk, so no command position may
+    # name either. Only a '#' at the start of a line or after whitespace
+    # opens a comment; '#' inside a string does not.
     code_lines = [re.sub(r"(^|\s)#.*$", "", line) for line in installer_wrapper.splitlines()]
-    invoked = re.compile(r"(?:^|[\s|;&(`$])(sed|awk|tar)(?=[\s;|&)>]|$)")
+    invoked = re.compile(r"(?:^|[\s|;&(`$])(sed|awk)(?=[\s;|&)>]|$)")
     offenders = [line for line in code_lines if invoked.search(line)]
     assert offenders == [], offenders
 
@@ -168,7 +169,7 @@ def test_installer_build_pins_every_external_command_the_wrapper_calls() -> None
     for tool in (
         "grep", "curl", "zstd", "modprobe", "mount", "umount", "sha256sum",
         "readlink", "lsblk", "udevadm", "systemd-sysinstall", "systemctl",
-        "mountpoint", "stat", "df", "tail",
+        "mountpoint", "stat", "df", "tail", "tar", "dd", "rm", "chmod", "sync",
     ):
         assert tool in pinned, f"{tool} is called by bluefin-sysinstall but not pinned at build time"
 
@@ -414,15 +415,98 @@ def test_installer_network_ddi_waits_for_networkd_by_absolute_path(installer_wra
     assert "--ipv4" in args
     assert any(arg.startswith("--timeout=") for arg in args)
 
-    # The wait must sit inside the inst.ddi_url block (an unconditional wait
-    # would stall every offline USB install) and before the download.
-    ddi_block = wrapper.index('if [ -n "${DDI_URL}" ]; then')
+    # The wait must sit inside the network-pull block (an unconditional wait
+    # would stall every offline USB install) and before the downloads.
+    net_block = wrapper.index('if [ -n "${DDI_URL}" ] || [ -n "${CREDS_URL}" ]; then')
     fetch = wrapper.index('--output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"')
-    assert ddi_block < call.start() < fetch
+    assert net_block < call.start() < fetch
     assert "ERROR: systemd-networkd-wait-online failed" in wrapper
 
     # The build fails if the FSDK ever moves the binary out from under the path.
     assert "if ! [ -x /layer/usr/lib/systemd/systemd-networkd-wait-online ]; then" in installer_element
+
+
+def test_installer_network_credentials_pull_contract() -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    installer_stack = INSTALLER_STACK.read_text(encoding="utf-8")
+
+    # Both parameters are parsed next to the inst.ddi_* pair and the checksum is
+    # mandatory, mirroring the DDI pull's fail-closed wording.
+    assert 'inst.creds_url=*) CREDS_URL="${arg#inst.creds_url=}" ;;' in installer_element
+    assert 'inst.creds_sha256=*) CREDS_SHA256="${arg#inst.creds_sha256=}" ;;' in installer_element
+    assert (
+        "ERROR: inst.creds_url is set but inst.creds_sha256 is missing; "
+        "verification is mandatory for network installs."
+    ) in installer_element
+    assert "ERROR: downloaded credentials SHA256 verification failed." in installer_element
+
+    # Fetch + verify + unpack into tmpfs happen before systemd-sysinstall runs, so
+    # a bad archive aborts with the target disk untouched.
+    fetch = installer_element.index('--output /dev/shm/installer/credentials.tar "${CREDS_URL}"')
+    verify = installer_element.index("ERROR: downloaded credentials SHA256 verification failed.")
+    size_cap = installer_element.index('CREDS_TAR_BYTES="$(stat -c %s /dev/shm/installer/credentials.tar)"')
+    magic = installer_element.index(
+        'if [ "$(dd if=/dev/shm/installer/credentials.tar bs=1 skip=257 count=5 2>/dev/null)" != "ustar" ]; then'
+    )
+    listing = installer_element.index("tar --quoting-style=escape -tvf - < /dev/shm/installer/credentials.tar")
+    unpack = installer_element.index(
+        'tar --no-same-owner --no-same-permissions -C "${CREDS_DIR}" \\\n'
+        '          -xf - -- "${CREDS_NAMES[@]}" < /dev/shm/installer/credentials.tar'
+    )
+    sysinstall = installer_element.index("/usr/bin/systemd-sysinstall \\")
+    assert fetch < verify < size_cap < magic < listing < unpack < sysinstall
+    # tar never sees the archive as a named file, so it cannot transparently
+    # decompress a compressed download into an unbounded listing.
+    assert "-tvf /dev/shm/installer/credentials.tar" not in installer_element
+    assert "-tf /dev/shm/installer/credentials.tar" not in installer_element
+    assert "-xf /dev/shm/installer/credentials.tar" not in installer_element
+
+    # Nothing unverified is used: the download is capped at 16 MiB (curl and a
+    # stat re-check after the checksum), the verbose listing is validated column
+    # by column (regular file, numeric size <= 1 MiB, date/time columns, strict
+    # name pattern, <= 64 members) and cross-checked against the plain listing,
+    # then only the validated names are extracted, pinned to 0644 and re-checked
+    # as regular files.
+    assert "--max-filesize 16777216" in installer_element
+    assert 'if [ "${CREDS_TAR_BYTES}" -gt 16777216 ]; then' in installer_element
+    assert "CREDS_MODE_RE='^-[-rwxsStT]{9}$'" in installer_element
+    assert "CREDS_NAME_RE='^[A-Za-z0-9][A-Za-z0-9._@~-]*\\.cred$'" in installer_element
+    assert 'if [ "${CREDS_COUNT}" -gt 64 ]; then' in installer_element
+    assert 'if [ "${#name}" -gt 250 ]; then' in installer_element
+    assert 'if [ "${size}" -gt 1048576 ]; then' in installer_element
+    assert 'if [ -n "${CREDS_SEEN[${name,,}]+set}" ]; then' in installer_element
+    assert (
+        'if [ "$(printf \'%s\\n\' "${CREDS_NAMES[@]}")" != "${CREDS_PLAIN_LIST}" ]; then'
+        in installer_element
+    )
+    assert 'if [ -L "${CREDS_DIR}/${name}" ] || ! [ -f "${CREDS_DIR}/${name}" ]; then' in installer_element
+    assert 'chmod 0644 -- "${CREDS_DIR}/${name}"' in installer_element
+
+    # The ESP is located by GPT partition type on the target disk, mounted once
+    # (shared with the fallback-loader staging), only the validated names are
+    # copied (never a glob over the extraction dir), and the pull fails closed
+    # when the ESP cannot be mounted.
+    assert 'lsblk -p -n -l -o NAME,PARTTYPE "${target}"' in installer_element
+    assert '"${parttype,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"' in installer_element
+    assert 'cp -- "${CREDS_DIR}/${name}" /mnt/esp/loader/credentials/' in installer_element
+    assert "${CREDS_DIR}\"/*.cred" not in installer_element
+    assert installer_element.count("mount -t vfat") == 1
+    assert (
+        "ERROR: inst.creds_url was given but the target ESP could not be found or mounted; "
+        "credentials were not installed."
+    ) in installer_element
+
+    # The credentials are written before the best-effort fallback-loader copy,
+    # so a loader hiccup cannot abort the function with the mandatory step undone.
+    creds_copy = installer_element.index('cp -- "${CREDS_DIR}/${name}" /mnt/esp/loader/credentials/')
+    loader_copy = installer_element.index('cp -a "${candidate}" /mnt/esp/EFI/BOOT/BOOTX64.EFI')
+    assert creds_copy < loader_copy
+
+    # tar is the only new tool; it is declared in the stack and checked at build
+    # time next to the wrapper's other external commands.
+    assert "freedesktop-sdk.bst:components/tar.bst" in installer_stack
+    tools = re.search(r"for tool in ((?:[^;\n]|\\\n)+); do", installer_element)
+    assert tools and "tar" in tools.group(1).split()
 
 
 def test_interactive_installer_uses_local_virtual_console() -> None:
