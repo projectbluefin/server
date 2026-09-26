@@ -44,6 +44,7 @@ NETWORK_GENERATOR_DROPIN = (
     / "systemd-network-generator.service.d"
     / "10-bluefin-credentials.conf"
 )
+FIRSTBOOT_HELPER = REPO_ROOT / "files" / "os" / "libexec" / "bluefin-firstboot-credentials"
 NETWORK = REPO_ROOT / "files" / "os" / "systemd" / "network" / "20-wired.network"
 TPM2_SKILL = REPO_ROOT / "docs" / "skills" / "tpm2-credential-sealing.md"
 
@@ -59,11 +60,16 @@ def test_creds_provisioning_element_stages_all_credential_consumers() -> None:
     assert sources == {
         "sysusers-src": "files/os/sysusers.d",
         "systemd-src": "files/os/creds/systemd/system",
+        "libexec-src": "files/os/libexec",
     }
 
     commands = "\n".join(data["config"]["install-commands"])
     assert "/usr/lib/sysusers.d/" in commands
     assert "cp -a systemd-src/." in commands
+    assert "install -Dm0755 libexec-src/bluefin-firstboot-credentials" in commands
+    assert '"%{install-root}/usr/libexec/bluefin-firstboot-credentials"' in commands
+    assert FIRSTBOOT_HELPER.is_file()
+    assert FIRSTBOOT_HELPER.stat().st_mode & 0o111
 
 
 def test_firstboot_credentials_are_noninteractive_and_presence_gated() -> None:
@@ -79,17 +85,13 @@ def test_firstboot_credentials_are_noninteractive_and_presence_gated() -> None:
         assert f"ConditionCredential=|{credential}" in unit
         assert f"ImportCredential={credential}" in unit
 
-    assert "ExecStart=systemd-firstboot --force --welcome=no" in unit
-    assert '/usr/bin/hostname "$$hostname"' in unit
-    assert unit.index("/usr/bin/hostname") < unit.index("/usr/bin/touch /etc/.bluefin-firstboot-credentials")
-    # Verify that shell variables in ExecStartPost are escaped with $$ so systemd does not expand them
-    exec_post_lines = [
-        line for line in unit.splitlines() if line.startswith("ExecStartPost=")
-    ]
-    hostname_post = [line for line in exec_post_lines if "/usr/bin/hostname" in line][0]
-    assert "$$hostname" in hostname_post
-    assert "$$CREDENTIALS_DIRECTORY" in hostname_post
-    assert "$hostname" not in hostname_post.replace("$$hostname", "")
+    # Flatcar's /usr ships no systemd-firstboot: the unit must not call it, or
+    # it fails at step EXEC and every firstboot.* credential is a silent no-op.
+    assert "systemd-firstboot" not in unit
+    assert "ExecStart=/usr/libexec/bluefin-firstboot-credentials" in unit
+    assert unit.index("ExecStart=/usr/libexec/bluefin-firstboot-credentials") < unit.index(
+        "ExecStartPost=/usr/bin/touch /etc/.bluefin-firstboot-credentials"
+    )
     assert "--prompt" not in unit
     assert "ConditionPathIsReadWrite=/etc" in unit
     assert "ConditionPathExists=!/etc/.bluefin-firstboot-credentials" in unit
