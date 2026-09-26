@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shlex
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -138,6 +143,370 @@ def test_installer_hard_preflight_aborts_on_missing_installer_data_part() -> Non
     assert '[ ! -b "${INSTALLER_PART_PATH}" ]' in installer_element
     assert "/dev/disk/by-partlabel/bluefin-installer-data" in installer_element
     assert "lsblk -p -o NAME,TYPE,PARTLABEL,PKNAME,SIZE,FSTYPE" in installer_element
+
+
+def test_installer_wrapper_does_not_call_sed_or_awk(installer_wrapper: str) -> None:
+    # The released 26.08.0 PXE initrd failed with "sed: command not found"
+    # (exit 127) right after a successful download: the live initrd ships
+    # uutils coreutils, grep, curl, zstd, tar (declared for the credentials
+    # archive) and systemd, but no sed or awk, so no command position may
+    # name either. Only a '#' at the start of a line or after whitespace
+    # opens a comment; '#' inside a string does not.
+    code_lines = [re.sub(r"(^|\s)#.*$", "", line) for line in installer_wrapper.splitlines()]
+    invoked = re.compile(r"(?:^|[\s|;&(`$])(sed|awk)(?=[\s;|&)>]|$)")
+    offenders = [line for line in code_lines if invoked.search(line)]
+    assert offenders == [], offenders
+
+
+def test_installer_build_pins_every_external_command_the_wrapper_calls() -> None:
+    # Step 1a of the element refuses to pack an initrd that lacks any of the
+    # wrapper's external commands, so a missing tool fails the build rather
+    # than the install (exit 127 after the DDI download, as sed did).
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    match = re.search(r"for tool in ((?:[^;\n]|\\\n)+); do", installer_element)
+    assert match, "the build-time tool check loop must be present"
+    pinned = set(match.group(1).replace("\\\n", " ").split())
+    for tool in (
+        "grep", "curl", "zstd", "modprobe", "mount", "umount", "sha256sum",
+        "readlink", "lsblk", "udevadm", "systemd-sysinstall", "systemctl",
+        "mountpoint", "stat", "df", "tail", "tar", "dd", "rm", "chmod", "sync",
+    ):
+        assert tool in pinned, f"{tool} is called by bluefin-sysinstall but not pinned at build time"
+
+
+def _copyblocks_repoint_block(installer_wrapper: str) -> tuple[str, str]:
+    """The CopyBlocks= rewrite carved out of the wrapper, plus the repointed line.
+
+    Coupled to the element text: the slice starts at the ROOT_COPYBLOCKS_LINE
+    assignment (column 0 after the fixture de-indents the heredoc) and ends at
+    the ``fi`` closing the ROOT_COPYBLOCKS_SEEN check.
+    """
+    start = installer_wrapper.index('ROOT_COPYBLOCKS_LINE="CopyBlocks=')
+    seen_if = installer_wrapper.index('if [ "${ROOT_COPYBLOCKS_SEEN}" -eq 0 ]', start)
+    end = re.compile(r"^[ \t]*fi\n", re.MULTILINE).search(installer_wrapper, seen_if).end()
+    block = installer_wrapper[start:end]
+
+    copyblocks = re.search(r'^ROOT_COPYBLOCKS_LINE="(CopyBlocks=/\S+)"$', block, flags=re.MULTILINE)
+    assert copyblocks, "the wrapper must pin the repointed CopyBlocks= line in ROOT_COPYBLOCKS_LINE"
+    return block, copyblocks.group(1)
+
+
+def _run_copyblocks_repoint(
+    tmp_path: Path, installer_wrapper: str, recipe_text: str
+) -> tuple[subprocess.CompletedProcess[str], Path, str]:
+    block, copyblocks_line = _copyblocks_repoint_block(installer_wrapper)
+    src_dir = tmp_path / "repart.d"
+    dst_dir = tmp_path / "repart.sysinstall.d"
+    src_dir.mkdir(parents=True)
+    dst_dir.mkdir(parents=True)
+    (src_dir / "20-root-a.conf").write_text(recipe_text, encoding="utf-8")
+    block = block.replace("/usr/lib/repart.d", shlex.quote(str(src_dir))).replace(
+        "/usr/lib/repart.sysinstall.d", shlex.quote(str(dst_dir))
+    )
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", block], capture_output=True, text=True
+    )
+    return result, dst_dir / "20-root-a.conf", copyblocks_line
+
+
+def test_installer_wrapper_copyblocks_repoint_matches_the_sed_it_replaced(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    """Run the Bash rewrite against the shipped recipe: only the CopyBlocks= line changes."""
+    recipe = (REPO_ROOT / "files" / "installer" / "repart.d" / "20-root-a.conf").read_text(
+        encoding="utf-8"
+    )
+    result, output, copyblocks_line = _run_copyblocks_repoint(tmp_path, installer_wrapper, recipe)
+    assert result.returncode == 0, result.stderr
+
+    expected = re.sub(r"^CopyBlocks=.*$", copyblocks_line, recipe, flags=re.MULTILINE)
+    assert output.read_text(encoding="utf-8") == expected
+    assert f"{copyblocks_line}\n" in expected
+
+
+def test_installer_wrapper_copyblocks_repoint_fails_closed_without_a_copyblocks_line(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    # Recipe and wrapper ship from the same repo; a recipe with no column-0
+    # CopyBlocks= line is a repo bug, so the wrapper must error out before the
+    # disk is touched rather than guess where to put the key. An indented key
+    # (valid for systemd's parser) is deliberately not matched and hits the
+    # same error, instead of silently producing a second CopyBlocks= line.
+    for recipe in (
+        "[Partition]\nType=root\nLabel=bluefin-server-root-a\n",
+        "[Partition]\nType=root\n  CopyBlocks=/dev/disk/by-partlabel/x\n",
+    ):
+        result, output, copyblocks_line = _run_copyblocks_repoint(
+            tmp_path / str(len(recipe)), installer_wrapper, recipe
+        )
+        assert result.returncode == 1, (result.returncode, result.stderr)
+        assert "20-root-a.conf has no CopyBlocks= line" in result.stderr
+        assert copyblocks_line not in output.read_text(encoding="utf-8")
+
+
+def test_installer_network_ddi_stages_in_dev_shm_with_space_preflight(installer_wrapper: str) -> None:
+    wrapper = installer_wrapper
+
+    # /run is a tmpfs capped at 20% of RAM and cannot hold the decompressed DDI
+    # on an 8 GiB machine; /dev/shm is at the kernel tmpfs default of 50%.
+    assert "mountpoint -q /dev/shm ||" in wrapper
+    assert "mkdir -p /dev/shm/installer" in wrapper
+    assert "/run/installer" not in wrapper
+    assert '--output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"' in wrapper
+    assert "-o /dev/shm/installer/bluefin-server-ddi.raw ||" in wrapper
+    assert "CopyBlocks=/dev/shm/installer/bluefin-server-ddi.raw" in wrapper
+
+    # Free space is checked against the raw size (frame header, else 5x the
+    # compressed size) after verification and before zstd runs, so a machine
+    # with too little RAM gets a clear error instead of ENOSPC mid-write or an
+    # OOM kill. Both the tmpfs cap (df) and MemAvailable bound the check. The
+    # comparison is in KiB, rounded up, so a raw image a few KiB over the free
+    # space is not waved through by MiB truncation.
+    verify = wrapper.index("sha256sum --check --status")
+    preflight = wrapper.index("ERROR: not enough RAM-backed temporary space in /dev/shm/installer")
+    decompress = wrapper.index("zstd -d -q --rm")
+    assert verify < preflight < decompress
+    assert 'DDI_ZST_BYTES="$(stat -c %s /dev/shm/installer/bluefin-server-ddi.raw.zst)"' in wrapper
+    assert "DDI_RAW_BYTES=$(( DDI_ZST_BYTES * 5 ))" in wrapper
+    assert 'DDI_STAGE_AVAIL_KIB="$(df -k --output=avail /dev/shm/installer | tail -n1)"' in wrapper
+    assert "DDI_MEMINFO=/proc/meminfo" in wrapper
+    assert 'if [ "${key}" = "MemAvailable:" ]; then' in wrapper
+    assert "DDI_NEED_KIB=$(( (DDI_RAW_BYTES + 1023) / 1024 ))" in wrapper
+    assert 'if [ "${DDI_HAVE_KIB}" -lt "${DDI_NEED_KIB}" ]; then' in wrapper
+
+
+def _space_preflight_block(wrapper: str) -> str:
+    """The preflight carved out of the wrapper: from the stat of the download to the fi of the size check."""
+    start = wrapper.index('DDI_ZST_BYTES="$(stat -c %s')
+    size_if = wrapper.index('if [ "${DDI_HAVE_KIB}" -lt "${DDI_NEED_KIB}" ]', start)
+    end = re.compile(r"^[ \t]*fi\n", re.MULTILINE).search(wrapper, size_if).end()
+    return wrapper[start:end]
+
+
+def _run_space_preflight(
+    tmp_path: Path,
+    block: str,
+    payload: bytes,
+    avail_kib: int,
+    mem_available_kib: int = 64 * 1024 * 1024,
+    meminfo_text: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run the preflight with a stand-in df (right-aligned like the real one) and a fake /proc/meminfo."""
+    stage = tmp_path / "stage"
+    stage.mkdir(parents=True)
+    (stage / "bluefin-server-ddi.raw.zst").write_bytes(payload)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "df").write_text(
+        f"#!/bin/bash\nprintf '   Avail\\n %d\\n' {avail_kib}\n", encoding="utf-8"
+    )
+    (fake_bin / "df").chmod(0o755)
+    meminfo = tmp_path / "meminfo"
+    if meminfo_text is None:
+        meminfo_text = (
+            "MemTotal:       16000000 kB\n"
+            "MemFree:         1000000 kB\n"
+            f"MemAvailable:   {mem_available_kib} kB\n"
+            "Buffers:              10 kB\n"
+        )
+    meminfo.write_text(meminfo_text, encoding="utf-8")
+    script = block.replace("/dev/shm/installer", shlex.quote(str(stage))).replace(
+        "DDI_MEMINFO=/proc/meminfo", f"DDI_MEMINFO={shlex.quote(str(meminfo))}"
+    )
+    env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}")
+    return subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+@pytest.mark.skipif(shutil.which("zstd") is None, reason="zstd not installed")
+def test_installer_space_preflight_uses_the_zstd_frame_header(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    block = _space_preflight_block(installer_wrapper)
+
+    raw = tmp_path / "ddi.raw"
+    raw.write_bytes(b"\0" * (3 * 1048576 + 1))
+    subprocess.run(["zstd", "-q", "-f", str(raw), "-o", str(tmp_path / "ddi.raw.zst")], check=True)
+    payload = (tmp_path / "ddi.raw.zst").read_bytes()
+
+    # A frame that records a raw size of 3 MiB + 1 byte needs 3073 KiB: it passes
+    # with that much free and fails with 3072 KiB (exactly 3 MiB), regardless of
+    # the compressed size. The message rounds up to whole MiB and names both
+    # bounds.
+    ok = _run_space_preflight(tmp_path / "ok", block, payload, avail_kib=3 * 1024 + 1)
+    assert ok.returncode == 0, ok.stderr
+    assert "WARN" not in ok.stderr
+    short = _run_space_preflight(tmp_path / "short", block, payload, avail_kib=3 * 1024)
+    assert short.returncode == 1
+    assert "need ~4 MiB; tmpfs has 3 MiB free, MemAvailable is 65536 MiB" in short.stderr
+
+
+@pytest.mark.skipif(shutil.which("zstd") is None, reason="zstd not installed")
+def test_installer_space_preflight_is_bounded_by_mem_available(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    block = _space_preflight_block(installer_wrapper)
+
+    raw = tmp_path / "ddi.raw"
+    raw.write_bytes(b"\0" * (3 * 1048576 + 1))
+    subprocess.run(["zstd", "-q", "-f", str(raw), "-o", str(tmp_path / "ddi.raw.zst")], check=True)
+    payload = (tmp_path / "ddi.raw.zst").read_bytes()
+
+    # The tmpfs cap is generous but real memory is not: the rootfs is its own
+    # tmpfs, so df on /dev/shm can report far more than the kernel can back.
+    # MemAvailable minus 256 MiB headroom must also cover the raw image.
+    headroom = 256 * 1024
+    ok = _run_space_preflight(
+        tmp_path / "ok", block, payload, avail_kib=1 << 30, mem_available_kib=headroom + 3 * 1024 + 1
+    )
+    assert ok.returncode == 0, ok.stderr
+    short = _run_space_preflight(
+        tmp_path / "short", block, payload, avail_kib=1 << 30, mem_available_kib=headroom + 3 * 1024
+    )
+    assert short.returncode == 1
+    assert "need ~4 MiB; tmpfs has 1048576 MiB free, MemAvailable is 259 MiB" in short.stderr
+
+    # A meminfo without a MemAvailable line fails closed too.
+    broken = _run_space_preflight(
+        tmp_path / "broken", block, payload, avail_kib=1 << 30, meminfo_text="MemTotal: 1 kB\n"
+    )
+    assert broken.returncode == 1
+    assert "could not read MemAvailable" in broken.stderr
+
+
+def test_installer_space_preflight_falls_back_to_five_times_compressed(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    block = _space_preflight_block(installer_wrapper)
+
+    # Not a zstd frame: no header size, so 5x the 1 MiB file must fit, and the
+    # wrapper says so.
+    payload = b"x" * 1048576
+    ok = _run_space_preflight(tmp_path / "ok", block, payload, avail_kib=5 * 1024)
+    assert ok.returncode == 0, ok.stderr
+    assert "WARN: zstd frame header carries no content size" in ok.stderr
+    short = _run_space_preflight(tmp_path / "short", block, payload, avail_kib=5 * 1024 - 1)
+    assert short.returncode == 1
+    assert "need ~5 MiB; tmpfs has 4 MiB free" in short.stderr
+
+
+def test_installer_network_ddi_waits_for_networkd_by_absolute_path(installer_wrapper: str) -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    wrapper = installer_wrapper
+
+    # systemd-networkd-wait-online lives in /usr/lib/systemd, not on PATH, so a
+    # `command -v` guard never fired and curl raced the DHCP lease. --any keeps
+    # an unplugged second NIC (matched by 80-dhcp.network, stuck in
+    # "configuring") from holding the wait until the timeout; --ipv4 keeps a
+    # SLAAC/DHCPv6-configured link from satisfying the wait before the DHCPv4
+    # lease the download needs.
+    assert "command -v systemd-networkd-wait-online" not in wrapper
+    assert wrapper.count("/usr/lib/systemd/systemd-networkd-wait-online") == 1
+    call = re.search(
+        r"^\s*/usr/lib/systemd/systemd-networkd-wait-online\b(?P<args>[^|\n]*)\|\|", wrapper, re.MULTILINE
+    )
+    assert call, "the wrapper must call systemd-networkd-wait-online by absolute path with a failure handler"
+    args = call.group("args").split()
+    assert "--any" in args
+    assert "--ipv4" in args
+    assert any(arg.startswith("--timeout=") for arg in args)
+
+    # The wait must sit inside the network-pull block (an unconditional wait
+    # would stall every offline USB install) and before the downloads.
+    net_block = wrapper.index('if [ -n "${DDI_URL}" ] || [ -n "${CREDS_URL}" ]; then')
+    fetch = wrapper.index('--output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"')
+    assert net_block < call.start() < fetch
+    assert "ERROR: systemd-networkd-wait-online failed" in wrapper
+
+    # The build fails if the FSDK ever moves the binary out from under the path.
+    assert "if ! [ -x /layer/usr/lib/systemd/systemd-networkd-wait-online ]; then" in installer_element
+
+
+def test_installer_network_credentials_pull_contract() -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    installer_stack = INSTALLER_STACK.read_text(encoding="utf-8")
+
+    # Both parameters are parsed next to the inst.ddi_* pair and the checksum is
+    # mandatory, mirroring the DDI pull's fail-closed wording.
+    assert 'inst.creds_url=*) CREDS_URL="${arg#inst.creds_url=}" ;;' in installer_element
+    assert 'inst.creds_sha256=*) CREDS_SHA256="${arg#inst.creds_sha256=}" ;;' in installer_element
+    assert (
+        "ERROR: inst.creds_url is set but inst.creds_sha256 is missing; "
+        "verification is mandatory for network installs."
+    ) in installer_element
+    assert "ERROR: downloaded credentials SHA256 verification failed." in installer_element
+
+    # Fetch + verify + unpack into tmpfs happen before systemd-sysinstall runs, so
+    # a bad archive aborts with the target disk untouched.
+    fetch = installer_element.index('--output /dev/shm/installer/credentials.tar "${CREDS_URL}"')
+    verify = installer_element.index("ERROR: downloaded credentials SHA256 verification failed.")
+    size_cap = installer_element.index('CREDS_TAR_BYTES="$(stat -c %s /dev/shm/installer/credentials.tar)"')
+    magic = installer_element.index(
+        'if [ "$(dd if=/dev/shm/installer/credentials.tar bs=1 skip=257 count=5 2>/dev/null)" != "ustar" ]; then'
+    )
+    listing = installer_element.index("tar --quoting-style=escape -tvf - < /dev/shm/installer/credentials.tar")
+    unpack = installer_element.index(
+        'tar --no-same-owner --no-same-permissions -C "${CREDS_DIR}" \\\n'
+        '          -xf - -- "${CREDS_NAMES[@]}" < /dev/shm/installer/credentials.tar'
+    )
+    sysinstall = installer_element.index("/usr/bin/systemd-sysinstall \\")
+    assert fetch < verify < size_cap < magic < listing < unpack < sysinstall
+    # tar never sees the archive as a named file, so it cannot transparently
+    # decompress a compressed download into an unbounded listing.
+    assert "-tvf /dev/shm/installer/credentials.tar" not in installer_element
+    assert "-tf /dev/shm/installer/credentials.tar" not in installer_element
+    assert "-xf /dev/shm/installer/credentials.tar" not in installer_element
+
+    # Nothing unverified is used: the download is capped at 16 MiB (curl and a
+    # stat re-check after the checksum), the verbose listing is validated column
+    # by column (regular file, numeric size <= 1 MiB, date/time columns, strict
+    # name pattern, <= 64 members) and cross-checked against the plain listing,
+    # then only the validated names are extracted, pinned to 0644 and re-checked
+    # as regular files.
+    assert "--max-filesize 16777216" in installer_element
+    assert 'if [ "${CREDS_TAR_BYTES}" -gt 16777216 ]; then' in installer_element
+    assert "CREDS_MODE_RE='^-[-rwxsStT]{9}$'" in installer_element
+    assert "CREDS_NAME_RE='^[A-Za-z0-9][A-Za-z0-9._@~-]*\\.cred$'" in installer_element
+    assert 'if [ "${CREDS_COUNT}" -gt 64 ]; then' in installer_element
+    assert 'if [ "${#name}" -gt 250 ]; then' in installer_element
+    assert 'if [ "${size}" -gt 1048576 ]; then' in installer_element
+    assert 'if [ -n "${CREDS_SEEN[${name,,}]+set}" ]; then' in installer_element
+    assert (
+        'if [ "$(printf \'%s\\n\' "${CREDS_NAMES[@]}")" != "${CREDS_PLAIN_LIST}" ]; then'
+        in installer_element
+    )
+    assert 'if [ -L "${CREDS_DIR}/${name}" ] || ! [ -f "${CREDS_DIR}/${name}" ]; then' in installer_element
+    assert 'chmod 0644 -- "${CREDS_DIR}/${name}"' in installer_element
+
+    # The ESP is located by GPT partition type on the target disk, mounted once
+    # (shared with the fallback-loader staging), only the validated names are
+    # copied (never a glob over the extraction dir), and the pull fails closed
+    # when the ESP cannot be mounted.
+    assert 'lsblk -p -n -l -o NAME,PARTTYPE "${target}"' in installer_element
+    assert '"${parttype,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"' in installer_element
+    assert 'cp -- "${CREDS_DIR}/${name}" /mnt/esp/loader/credentials/' in installer_element
+    assert "${CREDS_DIR}\"/*.cred" not in installer_element
+    assert installer_element.count("mount -t vfat") == 1
+    assert (
+        "ERROR: inst.creds_url was given but the target ESP could not be found or mounted; "
+        "credentials were not installed."
+    ) in installer_element
+
+    # The credentials are written before the best-effort fallback-loader copy,
+    # so a loader hiccup cannot abort the function with the mandatory step undone.
+    creds_copy = installer_element.index('cp -- "${CREDS_DIR}/${name}" /mnt/esp/loader/credentials/')
+    loader_copy = installer_element.index('cp -a "${candidate}" /mnt/esp/EFI/BOOT/BOOTX64.EFI')
+    assert creds_copy < loader_copy
+
+    # tar is the only new tool; it is declared in the stack and checked at build
+    # time next to the wrapper's other external commands.
+    assert "freedesktop-sdk.bst:components/tar.bst" in installer_stack
+    tools = re.search(r"for tool in ((?:[^;\n]|\\\n)+); do", installer_element)
+    assert tools and "tar" in tools.group(1).split()
 
 
 def test_interactive_installer_uses_local_virtual_console() -> None:

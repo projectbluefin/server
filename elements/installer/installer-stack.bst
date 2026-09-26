@@ -38,6 +38,9 @@ depends:
   # zstd-compressed DDI over the LAN, per inst.ddi_url in the wrapper).
   - freedesktop-sdk.bst:components/curl.bst
   - freedesktop-sdk.bst:components/zstd.bst
+  # tar unpacks the inst.creds_url first-boot credentials archive; nothing else
+  # in this stack (uutils, util-linux, systemd) ships a tar.
+  - freedesktop-sdk.bst:components/tar.bst
 
   # Kernel (installer boots from this; vmlinuz used as the UKI --linux= arg)
   - flatcar/flatcar-kernel.bst
