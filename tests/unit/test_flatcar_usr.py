@@ -101,6 +101,9 @@ def test_flatcar_usr_element_structure() -> None:
     assert "base/base-stack.bst" in build_deps, "Must depend on base/base-stack.bst"
     assert "freedesktop-sdk.bst:components/tar.bst" in build_deps
     assert "freedesktop-sdk.bst:components/gzip.bst" in build_deps
+    assert "freedesktop-sdk.bst:components/findutils.bst" in build_deps, (
+        "find -perm/-printf records the setuid/setgid modes"
+    )
 
     # Prebuilt binaries must not be stripped
     variables = data.get("variables", {})
@@ -180,20 +183,10 @@ def test_flatcar_usr_removes_modules() -> None:
     )
 
 
-def test_flatcar_usr_contract_execution(tmp_path: Path) -> None:
-    """Simulate execution of flatcar-usr.bst install-commands against a staged /usr.
-
-    Verifies:
-    1. Removed binaries are absent.
-    2. Removed units are absent.
-    3. bootengine.img is preserved.
-    4. Module directory /usr/lib/modules is removed to avoid collision with flatcar-kernel.bst.
-    5. Retained files (bash, sshd, systemd, crictl) remain untouched.
-    """
+def _populate_mock_usr(install_root: Path, *, sudo_mode: int = 0o4755) -> tuple[str, Path, Path]:
+    """Lay out the files flatcar-container.tar.gz delivers (as far as the script touches them)."""
     flatcar_yml_data = yaml.safe_load(FLATCAR_YML.read_text(encoding="utf-8"))
     kver = flatcar_yml_data["variables"]["flatcar-kver"]
-
-    install_root = tmp_path / "install-root"
     usr = install_root / "usr"
 
     # Populate mock files that flatcar-container.tar.gz delivers
@@ -202,9 +195,18 @@ def test_flatcar_usr_contract_execution(tmp_path: Path) -> None:
     for b in [
         "bash", "crictl", "sshd", "update_engine", "update_engine_client",
         "update_engine_stub", "locksmithctl", "ignition", "coreos-cloudinit",
-        "flatcar-update", "download_sysext"
+        "flatcar-update", "download_sysext", "sudo", "su", "umount", "unix_chkpwd"
     ]:
         (bin_dir / b).write_text(f"mock-{b}", encoding="utf-8")
+    # Flatcar ships these with special bits; the archive extraction keeps them.
+    # umount sorts after sudo so the manifest's last line is not sudo (the
+    # real list ends with polkit-agent-helper-1), exercising the loop's
+    # last-iteration path under set -e.
+    (bin_dir / "sudo").chmod(sudo_mode)
+    (bin_dir / "su").chmod(0o4755)
+    (bin_dir / "umount").chmod(0o4755)
+    (bin_dir / "unix_chkpwd").chmod(0o2755)
+    (bin_dir / "bash").chmod(0o755)
 
     locksmith_dir = usr / "lib" / "locksmith"
     locksmith_dir.mkdir(parents=True)
@@ -260,6 +262,23 @@ def test_flatcar_usr_contract_execution(tmp_path: Path) -> None:
     (mod_dir / "kernel" / "drivers" / "driver.ko").write_bytes(b"mock-driver")
     (mod_dir / "modules.dep").write_text("mock modules.dep", encoding="utf-8")
 
+    return kver, bin_dir, bootengine
+
+
+def test_flatcar_usr_contract_execution(tmp_path: Path) -> None:
+    """Simulate execution of flatcar-usr.bst install-commands against a staged /usr.
+
+    Verifies:
+    1. Removed binaries are absent.
+    2. Removed units are absent.
+    3. bootengine.img is preserved.
+    4. Module directory /usr/lib/modules is removed to avoid collision with flatcar-kernel.bst.
+    5. Retained files (bash, sshd, systemd, crictl) remain untouched.
+    """
+    install_root = tmp_path / "install-root"
+    usr = install_root / "usr"
+    kver, bin_dir, bootengine = _populate_mock_usr(install_root)
+
     # Extract script from flatcar-usr.bst and adapt variables
     install_commands = _load_element_data().get("config", {}).get("install-commands", [])
     script = "\n".join(install_commands)
@@ -300,3 +319,42 @@ def test_flatcar_usr_contract_execution(tmp_path: Path) -> None:
     # 5. Assert kept binaries remain
     for kept in ["bash", "crictl", "sshd"]:
         assert (bin_dir / kept).is_file(), f"Kept binary {kept} must remain in output"
+
+    # 6. Every setuid/setgid file is recorded (octal mode, install-root-relative
+    #    path) so bluefin-server-ddi.bst can restore the bits the artifact loses.
+    #    The manifest is recorded after the rm block, so it never names a file
+    #    this element removes, and its last line is not sudo.
+    manifest = usr / "lib" / "bluefin-server" / "setuid-modes"
+    assert manifest.read_text(encoding="utf-8") == (
+        "2755 usr/bin/unix_chkpwd\n"
+        "4755 usr/bin/su\n"
+        "4755 usr/bin/sudo\n"
+        "4755 usr/bin/umount\n"
+    )
+    for rel_path in REMOVED_BINARIES:
+        assert rel_path not in manifest.read_text(encoding="utf-8")
+
+
+def test_flatcar_usr_refuses_an_extraction_that_lost_the_setuid_bits(tmp_path: Path) -> None:
+    """If sudo comes out of the archive without setuid the build must fail, not ship 0755."""
+    install_root = tmp_path / "install-root"
+    kver, _, _ = _populate_mock_usr(install_root, sudo_mode=0o755)
+
+    install_commands = _load_element_data().get("config", {}).get("install-commands", [])
+    script = "\n".join(install_commands)
+    script = script.replace("%{install-root}", str(install_root))
+    script = script.replace("%{flatcar-kver}", kver)
+    script = re.sub(r"tar\s+.*flatcar-container\.tar\.gz\s+-C\s+.*", "# tar extract bypassed", script)
+
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "usr/bin/sudo is not setuid" in result.stderr
+
+
+def test_flatcar_usr_records_the_manifest_after_its_removals() -> None:
+    """A removed file must never end up in setuid-modes (the DDI restore would fail on it)."""
+    install_commands = _load_element_data().get("config", {}).get("install-commands", [])
+    script = "\n".join(install_commands)
+    last_rm = max(m.end() for m in re.finditer(r"^\s*rm .*$", script, re.MULTILINE))
+    record = script.index("-printf '%m usr/%P\\n'")
+    assert last_rm < record
