@@ -4,7 +4,7 @@ description: Build, export, flash, and release the Bluefin Server installer medi
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-08"
+  last_updated: "2026-09-26"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -161,6 +161,7 @@ The release process is driven by `.github/workflows/build.yml`:
 | "Put the DDI in the initrd cpio." | The DDI is 2 GiB+. The initrd cpio step must run before the DDI is placed in `/layer`. |
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |
+| "`chmod 4755` in an element's install-commands makes the file setuid in the image." | No. BuildStream artifacts keep one executable bit per file, so every staged file is 0644/0755 (FSDK works around this with `initial-script` chmods at image assembly). `flatcar-usr.bst` records Flatcar's setuid/setgid files in `usr/lib/bluefin-server/setuid-modes` (after its own removals) and `bluefin-server-ddi.bst` re-applies them right before `mkfs.xfs`, then asserts the written image with `xfs_db -c 'path /usr/bin/sudo' -c 'print core.mode'`; special modes must be set in the `script` element that writes the image. (A tmpfiles `z` line at boot would technically work, since the UKI cmdline is `rw`, but it would mutate a signed A/B slot after the fact and the first `sudo` before tmpfiles ran would fail — the bits belong in the shipped image.) |
 
 ## Red flags
 
