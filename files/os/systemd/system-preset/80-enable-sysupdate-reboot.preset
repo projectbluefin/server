@@ -1,0 +1,2 @@
+# Enable automatic reboot timer for system updates on non-Kubernetes and single-node hosts
+enable systemd-sysupdate-reboot.timer

@@ -4,7 +4,7 @@ description: Operator runbook for the k0s systemd-sysext extension — provision
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-08"
+  last_updated: "2026-09-18"
   context7-sources:
     - /systemd/systemd
 ---
@@ -45,6 +45,13 @@ k0s automatically applies all `.yaml` files under `/var/lib/k0s/manifests/argocd
 # Verify pods in argocd and kubestellar namespaces
 k0s kubectl get pods -A
 ```
+
+## Reboot Coordination
+
+On Bluefin Server hosts running k0s:
+
+- **Kubernetes clusters**: `systemd-sysupdate.service` touches `/run/reboot-required` after staging updates. When k0s (`k0scontroller.service`) is active, `systemd-sysupdate-reboot.service` detects the active service via `ExecCondition` and skips uncoordinated local reboots, allowing Kured to cordon, drain, and reboot nodes safely. Note that k0s hosts must deploy Kured (or an equivalent cluster reboot coordinator); if Kured is not deployed on a single-node k0s host, uncoordinated local reboots remain inhibited while k0s services run, requiring manual reboot or manual coordination. Because the `ExecCondition` is evaluated at the instant the maintenance timer fires, nodes undergoing planned cluster maintenance or service restarts should set `/run/reboot-lock` to guarantee inhibition across transient unit state transitions.
+- **Single-node / non-Kubernetes hosts**: When k0s is not running, `systemd-sysupdate-reboot.timer` schedules automatic reboots during the maintenance window (04:10 with randomized delay). Reboots can be temporarily inhibited by creating `/run/reboot-lock` or persistently inhibited with `/etc/reboot-lock`.
 
 ## Troubleshooting
 

@@ -26,7 +26,7 @@ Priorities are derived from [gap-analysis-distros.md](gap-analysis-distros.md).
 | 2 | Mount `/usr` read-only and enforce the state model | DDI is currently booted `rw`; sysext-first design assumes immutable `/usr`. |
 | 3 | Boot-time selection / automatic rollback of a failed update | No previous OS version is kept once a root update overwrites the slot. |
 | 4 | Credential provisioning smoke tests on real hardware | SSH keys, static network, and firstboot settings are wired through systemd credentials; TPM2-sealed credential decryption still needs hardware proof. |
-| 5 | Native reboot coordination for non-Kubernetes and single-node hosts | Kured only covers Kubernetes nodes; no FleetLock/locksmith equivalent. |
+| 5 | Distributed reboot lock coordination for multi-node non-Kubernetes clusters | Single-node / maintenance window / lock-file reboot coordination is present via `systemd-sysupdate-reboot`; cluster-wide FleetLock/locksmith HTTP protocol is not implemented. |
 | 6 | Staged rollout behavior for larger fleets | Future after items 1-3 are implemented. |
 
 ## Status notes
