@@ -80,6 +80,12 @@ config:
           exit 1
         fi
       done
+      # bluefin-sysinstall calls this by absolute path (it is not on PATH), so
+      # pin the location here rather than discover a move at install time.
+      if ! [ -x /layer/usr/lib/systemd/systemd-networkd-wait-online ]; then
+        echo "ERROR: /usr/lib/systemd/systemd-networkd-wait-online is missing from the staged rootfs at /layer!" >&2
+        exit 1
+      fi
 
       # systemd-native initrd: /init -> PID 1
       ln -sf usr/lib/systemd/systemd /layer/init
@@ -260,12 +266,22 @@ config:
         }
         mkdir -p /dev/shm/installer
         echo "==> Fetching DDI from ${DDI_URL}..."
-        if command -v systemd-networkd-wait-online >/dev/null 2>&1; then
-          systemd-networkd-wait-online --timeout=90 || {
-            echo "ERROR: network did not come up before the DDI download timeout." >&2
-            exit 1
-          }
-        fi
+        # The binary lives in /usr/lib/systemd, not on PATH: a `command -v`
+        # guard silently skipped the wait and curl raced the DHCP lease. It is
+        # called from here, not via systemd-networkd-wait-online.service, so
+        # the wait stays conditional on inst.ddi_url (offline USB installs
+        # must not wait) and a failure aborts the install.
+        # --any: the installer's 80-dhcp.network matches every en*/eth*
+        # interface, and without --any an unplugged NIC (no-carrier, setup
+        # state "configuring") would hold the wait until the timeout.
+        # --ipv4: a link counts as configured once any one dynamic protocol
+        # finished, so on a LAN with router advertisements (SLAAC/DHCPv6) the
+        # wait would return before the DHCPv4 lease; the download needs an
+        # IPv4 address on the link that satisfies the wait.
+        /usr/lib/systemd/systemd-networkd-wait-online --any --ipv4 --timeout=90 || {
+          echo "ERROR: systemd-networkd-wait-online failed: no interface got an IPv4 address within 90 s (or wait-online itself failed, see above)." >&2
+          exit 1
+        }
         curl --fail --silent --show-error --location --retry 3 \
           --output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"
         printf '%s  %s\n' "${DDI_SHA256}" /dev/shm/installer/bluefin-server-ddi.raw.zst \

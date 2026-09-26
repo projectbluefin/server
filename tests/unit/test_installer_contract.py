@@ -393,6 +393,38 @@ def test_installer_space_preflight_falls_back_to_five_times_compressed(
     assert "need ~5 MiB; tmpfs has 4 MiB free" in short.stderr
 
 
+def test_installer_network_ddi_waits_for_networkd_by_absolute_path(installer_wrapper: str) -> None:
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    wrapper = installer_wrapper
+
+    # systemd-networkd-wait-online lives in /usr/lib/systemd, not on PATH, so a
+    # `command -v` guard never fired and curl raced the DHCP lease. --any keeps
+    # an unplugged second NIC (matched by 80-dhcp.network, stuck in
+    # "configuring") from holding the wait until the timeout; --ipv4 keeps a
+    # SLAAC/DHCPv6-configured link from satisfying the wait before the DHCPv4
+    # lease the download needs.
+    assert "command -v systemd-networkd-wait-online" not in wrapper
+    assert wrapper.count("/usr/lib/systemd/systemd-networkd-wait-online") == 1
+    call = re.search(
+        r"^\s*/usr/lib/systemd/systemd-networkd-wait-online\b(?P<args>[^|\n]*)\|\|", wrapper, re.MULTILINE
+    )
+    assert call, "the wrapper must call systemd-networkd-wait-online by absolute path with a failure handler"
+    args = call.group("args").split()
+    assert "--any" in args
+    assert "--ipv4" in args
+    assert any(arg.startswith("--timeout=") for arg in args)
+
+    # The wait must sit inside the inst.ddi_url block (an unconditional wait
+    # would stall every offline USB install) and before the download.
+    ddi_block = wrapper.index('if [ -n "${DDI_URL}" ]; then')
+    fetch = wrapper.index('--output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"')
+    assert ddi_block < call.start() < fetch
+    assert "ERROR: systemd-networkd-wait-online failed" in wrapper
+
+    # The build fails if the FSDK ever moves the binary out from under the path.
+    assert "if ! [ -x /layer/usr/lib/systemd/systemd-networkd-wait-online ]; then" in installer_element
+
+
 def test_interactive_installer_uses_local_virtual_console() -> None:
     installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
 
