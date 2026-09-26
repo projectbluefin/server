@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shlex
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -138,6 +140,103 @@ def test_installer_hard_preflight_aborts_on_missing_installer_data_part() -> Non
     assert '[ ! -b "${INSTALLER_PART_PATH}" ]' in installer_element
     assert "/dev/disk/by-partlabel/bluefin-installer-data" in installer_element
     assert "lsblk -p -o NAME,TYPE,PARTLABEL,PKNAME,SIZE,FSTYPE" in installer_element
+
+
+def test_installer_wrapper_does_not_call_sed_awk_or_tar(installer_wrapper: str) -> None:
+    # The released 26.08.0 PXE initrd failed with "sed: command not found"
+    # (exit 127) right after a successful download: the live initrd ships
+    # uutils coreutils, grep, curl, zstd and systemd, but no sed, awk or tar,
+    # so no command position may name any of them. Only a '#' at the start of
+    # a line or after whitespace opens a comment; '#' inside a string does not.
+    code_lines = [re.sub(r"(^|\s)#.*$", "", line) for line in installer_wrapper.splitlines()]
+    invoked = re.compile(r"(?:^|[\s|;&(`$])(sed|awk|tar)(?=[\s;|&)>]|$)")
+    offenders = [line for line in code_lines if invoked.search(line)]
+    assert offenders == [], offenders
+
+
+def test_installer_build_pins_every_external_command_the_wrapper_calls() -> None:
+    # Step 1a of the element refuses to pack an initrd that lacks any of the
+    # wrapper's external commands, so a missing tool fails the build rather
+    # than the install (exit 127 after the DDI download, as sed did).
+    installer_element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    match = re.search(r"for tool in ((?:[^;\n]|\\\n)+); do", installer_element)
+    assert match, "the build-time tool check loop must be present"
+    pinned = set(match.group(1).replace("\\\n", " ").split())
+    for tool in (
+        "grep", "curl", "zstd", "modprobe", "mount", "umount", "sha256sum",
+        "readlink", "lsblk", "udevadm", "systemd-sysinstall", "systemctl",
+    ):
+        assert tool in pinned, f"{tool} is called by bluefin-sysinstall but not pinned at build time"
+
+
+def _copyblocks_repoint_block(installer_wrapper: str) -> tuple[str, str]:
+    """The CopyBlocks= rewrite carved out of the wrapper, plus the repointed line.
+
+    Coupled to the element text: the slice starts at the ROOT_COPYBLOCKS_LINE
+    assignment (column 0 after the fixture de-indents the heredoc) and ends at
+    the ``fi`` closing the ROOT_COPYBLOCKS_SEEN check.
+    """
+    start = installer_wrapper.index('ROOT_COPYBLOCKS_LINE="CopyBlocks=')
+    seen_if = installer_wrapper.index('if [ "${ROOT_COPYBLOCKS_SEEN}" -eq 0 ]', start)
+    end = re.compile(r"^[ \t]*fi\n", re.MULTILINE).search(installer_wrapper, seen_if).end()
+    block = installer_wrapper[start:end]
+
+    copyblocks = re.search(r'^ROOT_COPYBLOCKS_LINE="(CopyBlocks=/\S+)"$', block, flags=re.MULTILINE)
+    assert copyblocks, "the wrapper must pin the repointed CopyBlocks= line in ROOT_COPYBLOCKS_LINE"
+    return block, copyblocks.group(1)
+
+
+def _run_copyblocks_repoint(
+    tmp_path: Path, installer_wrapper: str, recipe_text: str
+) -> tuple[subprocess.CompletedProcess[str], Path, str]:
+    block, copyblocks_line = _copyblocks_repoint_block(installer_wrapper)
+    src_dir = tmp_path / "repart.d"
+    dst_dir = tmp_path / "repart.sysinstall.d"
+    src_dir.mkdir(parents=True)
+    dst_dir.mkdir(parents=True)
+    (src_dir / "20-root-a.conf").write_text(recipe_text, encoding="utf-8")
+    block = block.replace("/usr/lib/repart.d", shlex.quote(str(src_dir))).replace(
+        "/usr/lib/repart.sysinstall.d", shlex.quote(str(dst_dir))
+    )
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", block], capture_output=True, text=True
+    )
+    return result, dst_dir / "20-root-a.conf", copyblocks_line
+
+
+def test_installer_wrapper_copyblocks_repoint_matches_the_sed_it_replaced(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    """Run the Bash rewrite against the shipped recipe: only the CopyBlocks= line changes."""
+    recipe = (REPO_ROOT / "files" / "installer" / "repart.d" / "20-root-a.conf").read_text(
+        encoding="utf-8"
+    )
+    result, output, copyblocks_line = _run_copyblocks_repoint(tmp_path, installer_wrapper, recipe)
+    assert result.returncode == 0, result.stderr
+
+    expected = re.sub(r"^CopyBlocks=.*$", copyblocks_line, recipe, flags=re.MULTILINE)
+    assert output.read_text(encoding="utf-8") == expected
+    assert f"{copyblocks_line}\n" in expected
+
+
+def test_installer_wrapper_copyblocks_repoint_fails_closed_without_a_copyblocks_line(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    # Recipe and wrapper ship from the same repo; a recipe with no column-0
+    # CopyBlocks= line is a repo bug, so the wrapper must error out before the
+    # disk is touched rather than guess where to put the key. An indented key
+    # (valid for systemd's parser) is deliberately not matched and hits the
+    # same error, instead of silently producing a second CopyBlocks= line.
+    for recipe in (
+        "[Partition]\nType=root\nLabel=bluefin-server-root-a\n",
+        "[Partition]\nType=root\n  CopyBlocks=/dev/disk/by-partlabel/x\n",
+    ):
+        result, output, copyblocks_line = _run_copyblocks_repoint(
+            tmp_path / str(len(recipe)), installer_wrapper, recipe
+        )
+        assert result.returncode == 1, (result.returncode, result.stderr)
+        assert "20-root-a.conf has no CopyBlocks= line" in result.stderr
+        assert copyblocks_line not in output.read_text(encoding="utf-8")
 
 
 def test_interactive_installer_uses_local_virtual_console() -> None:
