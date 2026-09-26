@@ -69,7 +69,11 @@ config:
       set -eux
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall; do
+      # The second row is every external command bluefin-sysinstall calls: the
+      # live initrd has no sed, awk or tar, so the wrapper's tool set is pinned
+      # here rather than discovered at install time (exit 127 after download).
+      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall systemctl \
+                  grep curl zstd modprobe mount umount sha256sum readlink ls cp mkdir sleep; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
@@ -272,12 +276,27 @@ config:
         # overriding only the root recipe's CopyBlocks=. systemd-sysinstall
         # reads /usr/lib/repart.sysinstall.d/ when populated, else /usr/lib/
         # repart.d/, so stage all three recipes with 20-root-a.conf repointed.
+        # The rewrite is plain Bash: the live initrd ships no sed or awk.
         mkdir -p /usr/lib/repart.sysinstall.d
         cp -a /usr/lib/repart.d/10-esp.conf /usr/lib/repart.sysinstall.d/
         cp -a /usr/lib/repart.d/30-var.conf /usr/lib/repart.sysinstall.d/
-        sed 's#^CopyBlocks=.*#CopyBlocks=/run/installer/bluefin-server-ddi.raw#' \
-          /usr/lib/repart.d/20-root-a.conf \
-          > /usr/lib/repart.sysinstall.d/20-root-a.conf
+        # The key is matched at column 0, as files/installer/repart.d writes it.
+        # Recipe and wrapper ship from the same repo, so a recipe without a
+        # column-0 CopyBlocks= line is a repo bug: fail loudly before the disk
+        # is touched instead of guessing where the key belongs.
+        ROOT_COPYBLOCKS_LINE="CopyBlocks=/run/installer/bluefin-server-ddi.raw"
+        ROOT_COPYBLOCKS_SEEN=0
+        while IFS= read -r line || [ -n "${line}" ]; do
+          if [[ "${line}" == CopyBlocks=* ]]; then
+            line="${ROOT_COPYBLOCKS_LINE}"
+            ROOT_COPYBLOCKS_SEEN=1
+          fi
+          printf '%s\n' "${line}"
+        done < /usr/lib/repart.d/20-root-a.conf > /usr/lib/repart.sysinstall.d/20-root-a.conf
+        if [ "${ROOT_COPYBLOCKS_SEEN}" -eq 0 ]; then
+          echo "ERROR: /usr/lib/repart.d/20-root-a.conf has no CopyBlocks= line to repoint." >&2
+          exit 1
+        fi
       fi
 
       INSTALLER_PART=""
@@ -339,7 +358,8 @@ config:
         udevadm settle --timeout=10 || true
         local target="${TARGET_DISK:-}"
         if [ -z "${target}" ]; then
-          local root_part="$(readlink -f /dev/disk/by-partlabel/bluefin-server-root-a 2>/dev/null || true)"
+          local root_part
+          root_part="$(readlink -f /dev/disk/by-partlabel/bluefin-server-root-a 2>/dev/null || true)"
           if [ -n "${root_part}" ]; then
             target="$(lsblk -p -n -d -o PKNAME "${root_part}" 2>/dev/null || true)"
           fi

@@ -1,6 +1,7 @@
-"""Shared fixtures for the docs-checks unit tests."""
+"""Shared fixtures for the unit tests."""
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -8,6 +9,28 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / ".github" / "scripts" / "docs-checks.py"
+INSTALLER_ELEMENT = REPO_ROOT / "elements" / "oci" / "bluefin-server-installer.bst"
+
+
+@pytest.fixture(scope="session")
+def installer_wrapper() -> str:
+    """The ``bluefin-sysinstall`` script carved out of the installer element.
+
+    The wrapper lives in a quoted heredoc inside ``bluefin-server-installer.bst``
+    with six spaces of YAML indentation; this returns it as it lands in the
+    initrd so tests can run or inspect it as a plain bash script.
+    """
+    element = INSTALLER_ELEMENT.read_text(encoding="utf-8")
+    match = re.search(
+        r"cat > /layer/usr/bin/bluefin-sysinstall << 'EOF'\n(.*?)\n      EOF\n",
+        element,
+        flags=re.DOTALL,
+    )
+    assert match, "bluefin-sysinstall heredoc must be present"
+    return "\n".join(
+        line[6:] if line.startswith("      ") else line
+        for line in match.group(1).splitlines()
+    ) + "\n"
 
 
 def _load_module():
