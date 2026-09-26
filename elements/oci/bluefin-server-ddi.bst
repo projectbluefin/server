@@ -40,6 +40,41 @@ config:
       rm -f "/layer/usr/lib/modules/${KVER}/vmlinux" "/layer/usr/lib/modules/${KVER}/System.map"
       depmod -b /layer/usr "${KVER}"
 
+      # Restore the setuid/setgid bits recorded by flatcar/flatcar-usr.bst.
+      # BuildStream artifacts keep only an executable bit per file, so the
+      # staged /layer has sudo, su, passwd, mount, ... at 0755; mkfs.xfs -p
+      # copies whatever mode it finds, so fix them here, before the image is
+      # written. A missing or empty list is a build error, not a silent 0755.
+      SETUID_MODES=/layer/usr/lib/bluefin-server/setuid-modes
+      if [ ! -s "${SETUID_MODES}" ]; then
+        echo "ERROR: ${SETUID_MODES} is missing or empty; flatcar-usr.bst must record the setuid/setgid files" >&2
+        exit 1
+      fi
+      # mkfs.xfs -p has to open every file it copies, and the build sandbox
+      # (buildbox-fuse) enforces the mode bits itself, so a mode without an
+      # owner-read bit -- Flatcar ships dbus-daemon-launch-helper as 4110,
+      # ---s--x--- -- fails the image build with "Permission denied". Keep
+      # u+r on such files: root reads them regardless on a real system.
+      while read -r mode path; do
+        if [ ! -f "/layer/${path}" ]; then
+          echo "ERROR: setuid-modes lists ${path} but it is not in /layer (stale manifest? flatcar-usr.bst records after its removals)" >&2
+          exit 1
+        fi
+        if (( (8#${mode} & 8#400) == 0 )); then
+          mode="$(printf '%04o' $(( 8#${mode} | 8#400 )))"
+          echo "NOTE: ${path} recorded without owner read; applying ${mode} so mkfs.xfs can copy it"
+        fi
+        chmod "${mode}" "/layer/${path}"
+      done < "${SETUID_MODES}"
+      SUDO_MODE="$(stat -c %a /layer/usr/bin/sudo)"
+      if [ "${SUDO_MODE}" != 4755 ]; then
+        echo "ERROR: /usr/bin/sudo is mode ${SUDO_MODE} after restoring setuid-modes, expected 4755" >&2
+        exit 1
+      fi
+      echo "Restored $(wc -l < "${SETUID_MODES}") setuid/setgid modes from ${SETUID_MODES}:"
+      cat "${SETUID_MODES}"
+      ls -l /layer/usr/bin/sudo
+
       # Stage extracted CA certificate bundle into target DDI rootfs
       # Remote execution may hard-link the staged CA files to the build root;
       # replace the target tree before copying rather than copying onto itself.
@@ -116,6 +151,18 @@ config:
 
       echo "Allocating XFS image of ${TARGET_BYTES} bytes"
       mkfs.xfs -f -L bluefin-root -m reflink=0,rmapbt=0 -n parent=0 -i exchange=0 -p /layer "${OUT}/${FNAME}"
+
+      # Prove the image, not just /layer, carries the setuid bit: BuildStream
+      # only shows element output on failure, so this check is what makes a
+      # green build evidence that mkfs.xfs -p copied the mode into the DDI.
+      SUDO_IMAGE_MODE="$(xfs_db -r -c 'path /usr/bin/sudo' -c 'print core.mode' "${OUT}/${FNAME}")"
+      case "${SUDO_IMAGE_MODE}" in
+        "core.mode = 0104755") echo "Verified in image: /usr/bin/sudo ${SUDO_IMAGE_MODE}" ;;
+        *)
+          echo "ERROR: /usr/bin/sudo in ${FNAME} is '${SUDO_IMAGE_MODE}', expected 'core.mode = 0104755'" >&2
+          exit 1
+          ;;
+      esac
 
       zstd --rm -T0 -19 -q "${OUT}/${FNAME}" -o "${OUT}/${FNAME}.zst"
       (
