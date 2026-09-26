@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -165,6 +168,7 @@ def test_installer_build_pins_every_external_command_the_wrapper_calls() -> None
     for tool in (
         "grep", "curl", "zstd", "modprobe", "mount", "umount", "sha256sum",
         "readlink", "lsblk", "udevadm", "systemd-sysinstall", "systemctl",
+        "mountpoint", "stat", "df", "tail",
     ):
         assert tool in pinned, f"{tool} is called by bluefin-sysinstall but not pinned at build time"
 
@@ -237,6 +241,156 @@ def test_installer_wrapper_copyblocks_repoint_fails_closed_without_a_copyblocks_
         assert result.returncode == 1, (result.returncode, result.stderr)
         assert "20-root-a.conf has no CopyBlocks= line" in result.stderr
         assert copyblocks_line not in output.read_text(encoding="utf-8")
+
+
+def test_installer_network_ddi_stages_in_dev_shm_with_space_preflight(installer_wrapper: str) -> None:
+    wrapper = installer_wrapper
+
+    # /run is a tmpfs capped at 20% of RAM and cannot hold the decompressed DDI
+    # on an 8 GiB machine; /dev/shm is at the kernel tmpfs default of 50%.
+    assert "mountpoint -q /dev/shm ||" in wrapper
+    assert "mkdir -p /dev/shm/installer" in wrapper
+    assert "/run/installer" not in wrapper
+    assert '--output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"' in wrapper
+    assert "-o /dev/shm/installer/bluefin-server-ddi.raw ||" in wrapper
+    assert "CopyBlocks=/dev/shm/installer/bluefin-server-ddi.raw" in wrapper
+
+    # Free space is checked against the raw size (frame header, else 5x the
+    # compressed size) after verification and before zstd runs, so a machine
+    # with too little RAM gets a clear error instead of ENOSPC mid-write or an
+    # OOM kill. Both the tmpfs cap (df) and MemAvailable bound the check. The
+    # comparison is in KiB, rounded up, so a raw image a few KiB over the free
+    # space is not waved through by MiB truncation.
+    verify = wrapper.index("sha256sum --check --status")
+    preflight = wrapper.index("ERROR: not enough RAM-backed temporary space in /dev/shm/installer")
+    decompress = wrapper.index("zstd -d -q --rm")
+    assert verify < preflight < decompress
+    assert 'DDI_ZST_BYTES="$(stat -c %s /dev/shm/installer/bluefin-server-ddi.raw.zst)"' in wrapper
+    assert "DDI_RAW_BYTES=$(( DDI_ZST_BYTES * 5 ))" in wrapper
+    assert 'DDI_STAGE_AVAIL_KIB="$(df -k --output=avail /dev/shm/installer | tail -n1)"' in wrapper
+    assert "DDI_MEMINFO=/proc/meminfo" in wrapper
+    assert 'if [ "${key}" = "MemAvailable:" ]; then' in wrapper
+    assert "DDI_NEED_KIB=$(( (DDI_RAW_BYTES + 1023) / 1024 ))" in wrapper
+    assert 'if [ "${DDI_HAVE_KIB}" -lt "${DDI_NEED_KIB}" ]; then' in wrapper
+
+
+def _space_preflight_block(wrapper: str) -> str:
+    """The preflight carved out of the wrapper: from the stat of the download to the fi of the size check."""
+    start = wrapper.index('DDI_ZST_BYTES="$(stat -c %s')
+    size_if = wrapper.index('if [ "${DDI_HAVE_KIB}" -lt "${DDI_NEED_KIB}" ]', start)
+    end = re.compile(r"^[ \t]*fi\n", re.MULTILINE).search(wrapper, size_if).end()
+    return wrapper[start:end]
+
+
+def _run_space_preflight(
+    tmp_path: Path,
+    block: str,
+    payload: bytes,
+    avail_kib: int,
+    mem_available_kib: int = 64 * 1024 * 1024,
+    meminfo_text: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run the preflight with a stand-in df (right-aligned like the real one) and a fake /proc/meminfo."""
+    stage = tmp_path / "stage"
+    stage.mkdir(parents=True)
+    (stage / "bluefin-server-ddi.raw.zst").write_bytes(payload)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "df").write_text(
+        f"#!/bin/bash\nprintf '   Avail\\n %d\\n' {avail_kib}\n", encoding="utf-8"
+    )
+    (fake_bin / "df").chmod(0o755)
+    meminfo = tmp_path / "meminfo"
+    if meminfo_text is None:
+        meminfo_text = (
+            "MemTotal:       16000000 kB\n"
+            "MemFree:         1000000 kB\n"
+            f"MemAvailable:   {mem_available_kib} kB\n"
+            "Buffers:              10 kB\n"
+        )
+    meminfo.write_text(meminfo_text, encoding="utf-8")
+    script = block.replace("/dev/shm/installer", shlex.quote(str(stage))).replace(
+        "DDI_MEMINFO=/proc/meminfo", f"DDI_MEMINFO={shlex.quote(str(meminfo))}"
+    )
+    env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}")
+    return subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+@pytest.mark.skipif(shutil.which("zstd") is None, reason="zstd not installed")
+def test_installer_space_preflight_uses_the_zstd_frame_header(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    block = _space_preflight_block(installer_wrapper)
+
+    raw = tmp_path / "ddi.raw"
+    raw.write_bytes(b"\0" * (3 * 1048576 + 1))
+    subprocess.run(["zstd", "-q", "-f", str(raw), "-o", str(tmp_path / "ddi.raw.zst")], check=True)
+    payload = (tmp_path / "ddi.raw.zst").read_bytes()
+
+    # A frame that records a raw size of 3 MiB + 1 byte needs 3073 KiB: it passes
+    # with that much free and fails with 3072 KiB (exactly 3 MiB), regardless of
+    # the compressed size. The message rounds up to whole MiB and names both
+    # bounds.
+    ok = _run_space_preflight(tmp_path / "ok", block, payload, avail_kib=3 * 1024 + 1)
+    assert ok.returncode == 0, ok.stderr
+    assert "WARN" not in ok.stderr
+    short = _run_space_preflight(tmp_path / "short", block, payload, avail_kib=3 * 1024)
+    assert short.returncode == 1
+    assert "need ~4 MiB; tmpfs has 3 MiB free, MemAvailable is 65536 MiB" in short.stderr
+
+
+@pytest.mark.skipif(shutil.which("zstd") is None, reason="zstd not installed")
+def test_installer_space_preflight_is_bounded_by_mem_available(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    block = _space_preflight_block(installer_wrapper)
+
+    raw = tmp_path / "ddi.raw"
+    raw.write_bytes(b"\0" * (3 * 1048576 + 1))
+    subprocess.run(["zstd", "-q", "-f", str(raw), "-o", str(tmp_path / "ddi.raw.zst")], check=True)
+    payload = (tmp_path / "ddi.raw.zst").read_bytes()
+
+    # The tmpfs cap is generous but real memory is not: the rootfs is its own
+    # tmpfs, so df on /dev/shm can report far more than the kernel can back.
+    # MemAvailable minus 256 MiB headroom must also cover the raw image.
+    headroom = 256 * 1024
+    ok = _run_space_preflight(
+        tmp_path / "ok", block, payload, avail_kib=1 << 30, mem_available_kib=headroom + 3 * 1024 + 1
+    )
+    assert ok.returncode == 0, ok.stderr
+    short = _run_space_preflight(
+        tmp_path / "short", block, payload, avail_kib=1 << 30, mem_available_kib=headroom + 3 * 1024
+    )
+    assert short.returncode == 1
+    assert "need ~4 MiB; tmpfs has 1048576 MiB free, MemAvailable is 259 MiB" in short.stderr
+
+    # A meminfo without a MemAvailable line fails closed too.
+    broken = _run_space_preflight(
+        tmp_path / "broken", block, payload, avail_kib=1 << 30, meminfo_text="MemTotal: 1 kB\n"
+    )
+    assert broken.returncode == 1
+    assert "could not read MemAvailable" in broken.stderr
+
+
+def test_installer_space_preflight_falls_back_to_five_times_compressed(
+    tmp_path: Path, installer_wrapper: str
+) -> None:
+    block = _space_preflight_block(installer_wrapper)
+
+    # Not a zstd frame: no header size, so 5x the 1 MiB file must fit, and the
+    # wrapper says so.
+    payload = b"x" * 1048576
+    ok = _run_space_preflight(tmp_path / "ok", block, payload, avail_kib=5 * 1024)
+    assert ok.returncode == 0, ok.stderr
+    assert "WARN: zstd frame header carries no content size" in ok.stderr
+    short = _run_space_preflight(tmp_path / "short", block, payload, avail_kib=5 * 1024 - 1)
+    assert short.returncode == 1
+    assert "need ~5 MiB; tmpfs has 4 MiB free" in short.stderr
 
 
 def test_interactive_installer_uses_local_virtual_console() -> None:
