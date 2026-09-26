@@ -74,7 +74,7 @@ config:
       # here rather than discovered at install time (exit 127 after download).
       for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall systemctl \
                   grep curl zstd modprobe mount umount sha256sum readlink ls cp mkdir sleep \
-                  mountpoint stat df tail; do
+                  mountpoint stat df tail tar dd rm chmod sync; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
@@ -231,46 +231,56 @@ config:
 
       # Parse the kernel command line for PXE/netboot parameters. The inst.*
       # namespace follows the Anaconda convention PXE operators already guess.
-      # Without inst.ddi_url the embedded installer-media path is unchanged.
+      # Without inst.ddi_url / inst.creds_url the embedded installer-media path
+      # is unchanged.
       CMDLINE="$(< /proc/cmdline)"
       DDI_URL=""
       DDI_SHA256=""
+      CREDS_URL=""
+      CREDS_SHA256=""
       TARGET_DISK_OVERRIDE=""
       for arg in ${CMDLINE}; do
         case "${arg}" in
           inst.ddi_url=*) DDI_URL="${arg#inst.ddi_url=}" ;;
           inst.ddi_sha256=*) DDI_SHA256="${arg#inst.ddi_sha256=}" ;;
+          inst.creds_url=*) CREDS_URL="${arg#inst.creds_url=}" ;;
+          inst.creds_sha256=*) CREDS_SHA256="${arg#inst.creds_sha256=}" ;;
           inst.target_disk=*) TARGET_DISK_OVERRIDE="${arg#inst.target_disk=}" ;;
         esac
       done
 
-      # Opt-in network DDI pull (PXE/netboot). Absence of inst.ddi_url leaves
-      # the embedded installer-media path byte-for-byte unchanged (offline-first
-      # preserved). Any fetch/verification failure aborts here, before the target
-      # disk is touched.
-      if [ -n "${DDI_URL}" ]; then
-        # Verification is mandatory for network installs: fail closed when no
-        # checksum is supplied, so no unsigned/unchecked install can proceed.
-        if [ -z "${DDI_SHA256}" ]; then
-          echo "ERROR: inst.ddi_url is set but inst.ddi_sha256 is missing; verification is mandatory for network installs." >&2
-          exit 1
-        fi
+      # Opt-in network pulls (PXE/netboot): the OS DDI (inst.ddi_url) and a tar
+      # archive of first-boot systemd credentials (inst.creds_url). Absence of
+      # both leaves the embedded installer-media path behaviourally unchanged
+      # (offline-first preserved; the one shared change is that the ESP is
+      # located by GPT partition type in finalize_target_esp). Verification is mandatory for network
+      # installs: fail closed when a checksum is not supplied, so no
+      # unsigned/unchecked install can proceed, and any fetch/verification
+      # failure aborts here, before the target disk is touched.
+      if [ -n "${DDI_URL}" ] && [ -z "${DDI_SHA256}" ]; then
+        echo "ERROR: inst.ddi_url is set but inst.ddi_sha256 is missing; verification is mandatory for network installs." >&2
+        exit 1
+      fi
+      if [ -n "${CREDS_URL}" ] && [ -z "${CREDS_SHA256}" ]; then
+        echo "ERROR: inst.creds_url is set but inst.creds_sha256 is missing; verification is mandatory for network installs." >&2
+        exit 1
+      fi
+      if [ -n "${DDI_URL}" ] || [ -n "${CREDS_URL}" ]; then
         # Stage under /dev/shm, not /run: systemd PID 1 mounts /run as tmpfs
         # capped at 20% of RAM, which cannot hold the decompressed DDI on an
         # 8 GiB machine, while /dev/shm is a tmpfs at the kernel default of
         # 50% of RAM. PID 1 mounts it as an API filesystem before any unit
         # runs; refuse to stage on devtmpfs should that ever not be the case.
         mountpoint -q /dev/shm || {
-          echo "ERROR: /dev/shm is not a mounted tmpfs; cannot stage the network DDI." >&2
+          echo "ERROR: /dev/shm is not a mounted tmpfs; cannot stage network downloads." >&2
           exit 1
         }
         mkdir -p /dev/shm/installer
-        echo "==> Fetching DDI from ${DDI_URL}..."
         # The binary lives in /usr/lib/systemd, not on PATH: a `command -v`
         # guard silently skipped the wait and curl raced the DHCP lease. It is
         # called from here, not via systemd-networkd-wait-online.service, so
-        # the wait stays conditional on inst.ddi_url (offline USB installs
-        # must not wait) and a failure aborts the install.
+        # the wait stays conditional on inst.ddi_url / inst.creds_url (offline
+        # USB installs must not wait) and a failure aborts the install.
         # --any: the installer's 80-dhcp.network matches every en*/eth*
         # interface, and without --any an unplugged NIC (no-carrier, setup
         # state "configuring") would hold the wait until the timeout.
@@ -282,6 +292,10 @@ config:
           echo "ERROR: systemd-networkd-wait-online failed: no interface got an IPv4 address within 90 s (or wait-online itself failed, see above)." >&2
           exit 1
         }
+      fi
+
+      if [ -n "${DDI_URL}" ]; then
+        echo "==> Fetching DDI from ${DDI_URL}..."
         curl --fail --silent --show-error --location --retry 3 \
           --output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"
         printf '%s  %s\n' "${DDI_SHA256}" /dev/shm/installer/bluefin-server-ddi.raw.zst \
@@ -374,6 +388,131 @@ config:
         fi
       fi
 
+      # Opt-in first-boot credentials pull. The archive is fetched, verified and
+      # unpacked into tmpfs now, before any disk change; the files reach the
+      # target ESP only after systemd-sysinstall has created it (see
+      # finalize_target_esp below), where systemd-stub hands /loader/credentials/
+      # to the installed OS on first boot.
+      CREDS_DIR=""
+      CREDS_NAMES=()
+      if [ -n "${CREDS_URL}" ]; then
+        echo "==> Fetching first-boot credentials from ${CREDS_URL}..."
+        # A handful of encrypted credentials is a few KiB; 16 MiB bounds what
+        # the URL can make the installer pull into tmpfs. curl >= 8.4 aborts
+        # a transfer of unknown length once it crosses --max-filesize (exit
+        # 63); the stat re-check below keeps the bound independent of the
+        # curl version.
+        curl --fail --silent --show-error --location --retry 3 \
+          --max-filesize 16777216 \
+          --output /dev/shm/installer/credentials.tar "${CREDS_URL}"
+        printf '%s  %s\n' "${CREDS_SHA256}" /dev/shm/installer/credentials.tar \
+          | sha256sum --check --status || {
+            echo "ERROR: downloaded credentials SHA256 verification failed." >&2
+            exit 1
+          }
+        CREDS_TAR_BYTES="$(stat -c %s /dev/shm/installer/credentials.tar)"
+        if [ "${CREDS_TAR_BYTES}" -gt 16777216 ]; then
+          echo "ERROR: credentials archive is ${CREDS_TAR_BYTES} bytes, above the 16 MiB limit; refusing the archive." >&2
+          exit 1
+        fi
+        # Only an uncompressed, flat archive of at most 64 top-level regular
+        # files named <name>.cred, each at most 1 MiB, is accepted
+        # (systemd-creds encrypted; on this image systemd-stub stages ESP
+        # credentials under /run/credentials/@encrypted, so plaintext files
+        # are rejected by the consuming services). GNU tar transparently
+        # decompresses a compressed file named on -f, which would let a
+        # 16 MiB download expand into gigabytes of listing; require the
+        # ustar magic at offset 257 (ustar, pax and gnu formats all carry
+        # it) and hand the archive to tar on stdin, where it refuses
+        # compressed input instead of decompressing it. The verbose listing
+        # is then validated column by column before anything is extracted:
+        # the type must be a regular file (no directories, symlinks,
+        # hardlinks, devices or FIFOs), the size must be numeric and within
+        # the cap, the date and time columns must be where tar puts them,
+        # and the name must match [A-Za-z0-9][A-Za-z0-9._@~-]*.cred (~ is
+        # systemd's own drop-in namespace, systemd.unit-dropin.<unit>~<n>)
+        # -- no path separators, spaces, leading dashes or dots -- and be at
+        # most 250 bytes so it fits vfat and systemd's filename limits. tar's
+        # escape quoting turns a newline or any other control character
+        # inside a member name into a backslash sequence, which that pattern
+        # rejects. Names that repeat, or differ only by case (the ESP is
+        # vfat, where a.cred and A.cred are the same file), reject the
+        # archive too. Anything else rejects the whole archive, so nothing
+        # unexpected can reach the ESP.
+        if [ "$(dd if=/dev/shm/installer/credentials.tar bs=1 skip=257 count=5 2>/dev/null)" != "ustar" ]; then
+          echo "ERROR: downloaded credentials file is not an uncompressed ustar/pax tar archive; refusing the archive." >&2
+          exit 1
+        fi
+        CREDS_LIST="$(LC_ALL=C tar --quoting-style=escape -tvf - < /dev/shm/installer/credentials.tar)" || {
+          echo "ERROR: downloaded credentials file is not a readable tar archive." >&2
+          exit 1
+        }
+        CREDS_PLAIN_LIST="$(LC_ALL=C tar --quoting-style=escape -tf - < /dev/shm/installer/credentials.tar)" || {
+          echo "ERROR: downloaded credentials file is not a readable tar archive." >&2
+          exit 1
+        }
+        [ -n "${CREDS_LIST}" ] || {
+          echo "ERROR: downloaded credentials archive contains no files." >&2
+          exit 1
+        }
+        CREDS_MODE_RE='^-[-rwxsStT]{9}$'
+        CREDS_NAME_RE='^[A-Za-z0-9][A-Za-z0-9._@~-]*\.cred$'
+        CREDS_DATE_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        CREDS_TIME_RE='^[0-9]{2}:[0-9]{2}$'
+        CREDS_COUNT=0
+        declare -A CREDS_SEEN=()
+        while read -r mode _ size date time name; do
+          CREDS_COUNT=$(( CREDS_COUNT + 1 ))
+          if [ "${CREDS_COUNT}" -gt 64 ]; then
+            echo "ERROR: credentials archive has more than 64 members; refusing the archive." >&2
+            exit 1
+          fi
+          if ! [[ "${mode}" =~ ${CREDS_MODE_RE} ]] || ! [[ "${size}" =~ ^[0-9]+$ ]] \
+             || ! [[ "${date}" =~ ${CREDS_DATE_RE} ]] || ! [[ "${time}" =~ ${CREDS_TIME_RE} ]] \
+             || ! [[ "${name}" =~ ${CREDS_NAME_RE} ]]; then
+            echo "ERROR: credentials archive member '${name}' is not a top-level regular *.cred file; refusing the archive." >&2
+            exit 1
+          fi
+          if [ "${#name}" -gt 250 ]; then
+            echo "ERROR: credentials archive member '${name}' has a ${#name}-byte name, above the 250-byte limit; refusing the archive." >&2
+            exit 1
+          fi
+          if [ "${size}" -gt 1048576 ]; then
+            echo "ERROR: credentials archive member '${name}' is ${size} bytes, above the 1 MiB limit; refusing the archive." >&2
+            exit 1
+          fi
+          if [ -n "${CREDS_SEEN[${name,,}]+set}" ]; then
+            echo "ERROR: credentials archive member '${name}' repeats '${CREDS_SEEN[${name,,}]}' (names are case-insensitive on the ESP); refusing the archive." >&2
+            exit 1
+          fi
+          CREDS_SEEN[${name,,}]="${name}"
+          CREDS_NAMES+=("${name}")
+        done <<< "${CREDS_LIST}"
+        # The plain listing must name exactly the members the verbose one was
+        # parsed into; a disagreement means the columns were not where the
+        # parser assumed and nothing is trusted.
+        if [ "$(printf '%s\n' "${CREDS_NAMES[@]}")" != "${CREDS_PLAIN_LIST}" ]; then
+          echo "ERROR: credentials archive listing is inconsistent; refusing the archive." >&2
+          exit 1
+        fi
+        CREDS_DIR=/dev/shm/installer/credentials
+        mkdir -p "${CREDS_DIR}"
+        # Extract only the validated names, as this user with the umask, then
+        # pin our own copies to 0644 and re-check that each is a regular file.
+        tar --no-same-owner --no-same-permissions -C "${CREDS_DIR}" \
+          -xf - -- "${CREDS_NAMES[@]}" < /dev/shm/installer/credentials.tar
+        rm -f /dev/shm/installer/credentials.tar
+        for name in "${CREDS_NAMES[@]}"; do
+          if [ -L "${CREDS_DIR}/${name}" ] || ! [ -f "${CREDS_DIR}/${name}" ]; then
+            echo "ERROR: credentials archive member '${name}' did not extract as a regular file; refusing the archive." >&2
+            exit 1
+          fi
+          chmod 0644 -- "${CREDS_DIR}/${name}"
+        done
+        echo "==> Verified first-boot credentials:"
+        ls -l "${CREDS_DIR}"
+      fi
+
       INSTALLER_PART=""
       # Hard preflight: the embedded installer-media path needs the
       # bluefin-installer-data partition. Under PXE (inst.ddi_url=) there is no
@@ -429,7 +568,12 @@ config:
         TARGET_DISK="${TARGET_DISK_OVERRIDE}"
       fi
 
-      stage_fallback_bootloader() {
+      # Post-install pass over the target ESP, mounted once: stage the UEFI
+      # removable-media fallback loader (best-effort) and, when inst.creds_url
+      # was given, place the verified credentials under /loader/credentials/
+      # (mandatory: a host that cannot receive its credentials must not be left
+      # to boot unconfigured, so a missing or unmountable ESP fails the install).
+      finalize_target_esp() {
         udevadm settle --timeout=10 || true
         local target="${TARGET_DISK:-}"
         if [ -z "${target}" ]; then
@@ -440,34 +584,56 @@ config:
           fi
         fi
 
+        local esp_dev=""
         if [ -n "${target}" ]; then
-          local esp_dev=""
-          while read -r dev fstype; do
-            if [ "${fstype}" = "vfat" ]; then
+          # Identify the ESP by its GPT partition type (never by device path or
+          # filesystem alone, which any vfat data partition would also match).
+          while read -r dev parttype; do
+            if [ "${parttype,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then
               esp_dev="${dev}"
               break
             fi
-          done < <(lsblk -p -n -l -o NAME,FSTYPE "${target}")
+          done < <(lsblk -p -n -l -o NAME,PARTTYPE "${target}")
+        fi
 
-          if [ -n "${esp_dev}" ] && [ -b "${esp_dev}" ]; then
-            echo "==> Staging UEFI removable media fallback /EFI/BOOT/BOOTX64.EFI on ${esp_dev}..."
-            mkdir -p /mnt/esp
-            if mount -t vfat "${esp_dev}" /mnt/esp; then
-              mkdir -p /mnt/esp/EFI/BOOT
-              for candidate in \
-                /mnt/esp/EFI/systemd/systemd-bootx64.efi \
-                /mnt/esp/flatcar/bluefin-server.efi \
-                /mnt/esp/EFI/Linux/bluefin-server.efi \
-                /usr/lib/bluefin-server/bluefin-server.efi; do
-                if [ -f "${candidate}" ]; then
-                  cp -a "${candidate}" /mnt/esp/EFI/BOOT/BOOTX64.EFI
-                  echo "==> Successfully staged ${candidate} -> ${esp_dev}:/EFI/BOOT/BOOTX64.EFI"
-                  break
-                fi
+        local esp_mounted=0
+        if [ -n "${esp_dev}" ] && [ -b "${esp_dev}" ]; then
+          echo "==> Staging UEFI removable media fallback /EFI/BOOT/BOOTX64.EFI on ${esp_dev}..."
+          mkdir -p /mnt/esp
+          if mount -t vfat "${esp_dev}" /mnt/esp; then
+            esp_mounted=1
+            if [ -n "${CREDS_DIR}" ]; then
+              # The mandatory step first, so the best-effort loader copy below
+              # cannot abort this function before the credentials are on disk.
+              # Plain cp (no mode/owner preservation) — vfat has neither — of
+              # each validated name; never a glob over the extraction dir.
+              echo "==> Placing first-boot credentials in ${esp_dev}:/loader/credentials/..."
+              mkdir -p /mnt/esp/loader/credentials
+              for name in "${CREDS_NAMES[@]}"; do
+                cp -- "${CREDS_DIR}/${name}" /mnt/esp/loader/credentials/
               done
-              umount /mnt/esp || true
+              ls -l /mnt/esp/loader/credentials
+              sync
             fi
+            mkdir -p /mnt/esp/EFI/BOOT
+            for candidate in \
+              /mnt/esp/EFI/systemd/systemd-bootx64.efi \
+              /mnt/esp/flatcar/bluefin-server.efi \
+              /mnt/esp/EFI/Linux/bluefin-server.efi \
+              /usr/lib/bluefin-server/bluefin-server.efi; do
+              if [ -f "${candidate}" ]; then
+                cp -a "${candidate}" /mnt/esp/EFI/BOOT/BOOTX64.EFI
+                echo "==> Successfully staged ${candidate} -> ${esp_dev}:/EFI/BOOT/BOOTX64.EFI"
+                break
+              fi
+            done
+            umount /mnt/esp || true
           fi
+        fi
+
+        if [ -n "${CREDS_DIR}" ] && [ "${esp_mounted}" -ne 1 ]; then
+          echo "ERROR: inst.creds_url was given but the target ESP could not be found or mounted; credentials were not installed." >&2
+          exit 1
         fi
       }
 
@@ -485,7 +651,7 @@ config:
             --reboot=no \
             --mute-console=yes \
             "${TARGET_DISK}" < /dev/null
-          stage_fallback_bootloader
+          finalize_target_esp
         else
           echo "ERROR: No suitable target disk found for unattended installation!" >&2
           exit 1
@@ -512,7 +678,7 @@ config:
           --copy-keymap=yes \
           --copy-timezone=yes \
           "${EXTRA_ARGS[@]}"
-        stage_fallback_bootloader
+        finalize_target_esp
         echo "==> Installation complete! Rebooting..."
         systemctl reboot
       fi
