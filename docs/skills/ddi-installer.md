@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server DDI live installe
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-09"
+  last_updated: "2026-09-26"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -52,13 +52,18 @@ system credentials so the base image remains stateless. `systemd-sysusers`
 consumes root account records, `systemd-tmpfiles` consumes `tmpfiles.extra`
 for arbitrary first-boot files, and `systemd-network-generator` consumes
 `network.conf.*` / `network.link.*` / `network.netdev.*` /
-`network.network.*` credentials before networkd starts. The stock interactive
-`systemd-firstboot.service` stays masked, but
-`bluefin-firstboot-credentials.service` runs `systemd-firstboot`
-non-interactively when `firstboot.locale`, `firstboot.timezone`,
-`firstboot.hostname`, or related credentials are present. When
-`firstboot.hostname` is supplied, the service also applies the live kernel
-hostname before `systemd-networkd` starts so first-boot DHCP uses it. With no
+`network.network.*` credentials before networkd starts. Flatcar's `/usr` is
+built without `systemd-firstboot`, so `bluefin-firstboot-credentials.service`
+runs `/usr/libexec/bluefin-firstboot-credentials` (bash + coreutils) when
+`firstboot.locale`, `firstboot.locale-messages`, `firstboot.keymap`,
+`firstboot.timezone` or `firstboot.hostname` are present; it validates every
+value (ASCII-only, at least as strict as systemd's own validators) and writes
+the same files `systemd-firstboot` would (`/etc/locale.conf`,
+`/etc/vconsole.conf`, `/etc/localtime`) and additionally `/etc/hostname` plus
+the live kernel hostname — systemd ≤ v259 (Flatcar's) has no
+`firstboot.hostname`; v260 added it as a static hostname applied only when
+none is set, whereas Bluefin applies it unconditionally — before
+`systemd-networkd` starts so first-boot DHCP uses it. With no
 credentials, the target keeps the default DHCP network and does not prompt. The
 target DDI
 also pre-stages the extracted CA certificate bundle
