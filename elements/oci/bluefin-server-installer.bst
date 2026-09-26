@@ -69,17 +69,28 @@ config:
       set -eux
       # Ensure critical tools are present in the staged rootfs before packing
       # ponytail: fail fast if critical dependencies are missing, preventing broken images
-      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall; do
+      # The second row is every external command bluefin-sysinstall calls: the
+      # live initrd has no sed, awk or tar, so the wrapper's tool set is pinned
+      # here rather than discovered at install time (exit 127 after download).
+      for tool in udevadm lsblk systemd-repart bootctl systemd-sysinstall systemctl \
+                  grep curl zstd modprobe mount umount sha256sum readlink ls cp mkdir sleep \
+                  mountpoint stat df tail; do
         if ! [ -x "/layer/usr/bin/${tool}" ] && ! [ -x "/layer/usr/sbin/${tool}" ]; then
           echo "ERROR: Critical tool '${tool}' is missing from the staged rootfs at /layer!" >&2
           exit 1
         fi
       done
+      # bluefin-sysinstall calls this by absolute path (it is not on PATH), so
+      # pin the location here rather than discover a move at install time.
+      if ! [ -x /layer/usr/lib/systemd/systemd-networkd-wait-online ]; then
+        echo "ERROR: /usr/lib/systemd/systemd-networkd-wait-online is missing from the staged rootfs at /layer!" >&2
+        exit 1
+      fi
 
       # systemd-native initrd: /init -> PID 1
       ln -sf usr/lib/systemd/systemd /layer/init
       # Mount points needed by the installer service
-      mkdir -p /layer/efi /layer/mnt/esp /layer/mnt/root /layer/run/installer
+      mkdir -p /layer/efi /layer/mnt/esp /layer/mnt/root
       mkdir -p /layer/usr/lib/bluefin-server
       mkdir -p /layer/boot
       mkdir -p /target-root/boot/EFI/Linux /tmp /var/tmp
@@ -244,40 +255,123 @@ config:
           echo "ERROR: inst.ddi_url is set but inst.ddi_sha256 is missing; verification is mandatory for network installs." >&2
           exit 1
         fi
-        mkdir -p /run/installer
+        # Stage under /dev/shm, not /run: systemd PID 1 mounts /run as tmpfs
+        # capped at 20% of RAM, which cannot hold the decompressed DDI on an
+        # 8 GiB machine, while /dev/shm is a tmpfs at the kernel default of
+        # 50% of RAM. PID 1 mounts it as an API filesystem before any unit
+        # runs; refuse to stage on devtmpfs should that ever not be the case.
+        mountpoint -q /dev/shm || {
+          echo "ERROR: /dev/shm is not a mounted tmpfs; cannot stage the network DDI." >&2
+          exit 1
+        }
+        mkdir -p /dev/shm/installer
         echo "==> Fetching DDI from ${DDI_URL}..."
-        if command -v systemd-networkd-wait-online >/dev/null 2>&1; then
-          systemd-networkd-wait-online --timeout=90 || {
-            echo "ERROR: network did not come up before the DDI download timeout." >&2
-            exit 1
-          }
-        fi
-        # Stream-decompress: decompress straight to the final image and remove
-        # the compressed copy, so only one DDI-sized blob lives in tmpfs at a time.
+        # The binary lives in /usr/lib/systemd, not on PATH: a `command -v`
+        # guard silently skipped the wait and curl raced the DHCP lease. It is
+        # called from here, not via systemd-networkd-wait-online.service, so
+        # the wait stays conditional on inst.ddi_url (offline USB installs
+        # must not wait) and a failure aborts the install.
+        # --any: the installer's 80-dhcp.network matches every en*/eth*
+        # interface, and without --any an unplugged NIC (no-carrier, setup
+        # state "configuring") would hold the wait until the timeout.
+        # --ipv4: a link counts as configured once any one dynamic protocol
+        # finished, so on a LAN with router advertisements (SLAAC/DHCPv6) the
+        # wait would return before the DHCPv4 lease; the download needs an
+        # IPv4 address on the link that satisfies the wait.
+        /usr/lib/systemd/systemd-networkd-wait-online --any --ipv4 --timeout=90 || {
+          echo "ERROR: systemd-networkd-wait-online failed: no interface got an IPv4 address within 90 s (or wait-online itself failed, see above)." >&2
+          exit 1
+        }
         curl --fail --silent --show-error --location --retry 3 \
-          --output /run/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"
-        printf '%s  %s\n' "${DDI_SHA256}" /run/installer/bluefin-server-ddi.raw.zst \
+          --output /dev/shm/installer/bluefin-server-ddi.raw.zst "${DDI_URL}"
+        printf '%s  %s\n' "${DDI_SHA256}" /dev/shm/installer/bluefin-server-ddi.raw.zst \
           | sha256sum --check --status || {
             echo "ERROR: downloaded DDI SHA256 verification failed." >&2
             exit 1
           }
+        # zstd --rm only drops the compressed copy after a successful decompress,
+        # so the staging tmpfs must hold both at once. Refuse up front with the
+        # numbers rather than dying mid-write with ENOSPC or an OOM kill. The
+        # compressed DDI already occupies its share, so what must still fit is
+        # the raw image: exact when the zstd frame header records it, else 5x
+        # the compressed size (the shipped DDIs compress 2-4.5x). Two bounds
+        # apply: the tmpfs cap df reports, and MemAvailable from /proc/meminfo
+        # (tmpfs pages are not reclaimable without swap, and the initrd has
+        # none), minus headroom for the live environment's own working set.
+        DDI_ZST_BYTES="$(stat -c %s /dev/shm/installer/bluefin-server-ddi.raw.zst)"
+        DDI_RAW_BYTES=$(( DDI_ZST_BYTES * 5 ))
+        DDI_RAW_SIZE_RE='Decompressed Size: [^(]*\(([0-9]+) B\)'
+        if [[ "$(zstd -lv /dev/shm/installer/bluefin-server-ddi.raw.zst 2>/dev/null || true)" =~ ${DDI_RAW_SIZE_RE} ]]; then
+          DDI_RAW_BYTES="${BASH_REMATCH[1]}"
+        else
+          echo "WARN: zstd frame header carries no content size; assuming 5x the compressed size (${DDI_RAW_BYTES} B)." >&2
+        fi
+        DDI_STAGE_AVAIL_KIB="$(df -k --output=avail /dev/shm/installer | tail -n1)" || {
+          echo "ERROR: df failed for /dev/shm/installer." >&2
+          exit 1
+        }
+        DDI_STAGE_AVAIL_KIB="${DDI_STAGE_AVAIL_KIB// /}"
+        [[ "${DDI_STAGE_AVAIL_KIB}" =~ ^[0-9]+$ ]] || {
+          echo "ERROR: unexpected df output for /dev/shm/installer: '${DDI_STAGE_AVAIL_KIB}'." >&2
+          exit 1
+        }
+        DDI_MEMINFO=/proc/meminfo
+        DDI_MEM_AVAIL_KIB=""
+        while read -r key value _; do
+          if [ "${key}" = "MemAvailable:" ]; then
+            DDI_MEM_AVAIL_KIB="${value}"
+          fi
+        done < "${DDI_MEMINFO}"
+        [[ "${DDI_MEM_AVAIL_KIB}" =~ ^[0-9]+$ ]] || {
+          echo "ERROR: could not read MemAvailable from ${DDI_MEMINFO}." >&2
+          exit 1
+        }
+        DDI_MEM_HEADROOM_KIB=$(( 256 * 1024 ))
+        DDI_RAM_AVAIL_KIB=$(( DDI_MEM_AVAIL_KIB - DDI_MEM_HEADROOM_KIB ))
+        DDI_HAVE_KIB="${DDI_STAGE_AVAIL_KIB}"
+        if [ "${DDI_RAM_AVAIL_KIB}" -lt "${DDI_HAVE_KIB}" ]; then
+          DDI_HAVE_KIB="${DDI_RAM_AVAIL_KIB}"
+        fi
+        DDI_NEED_KIB=$(( (DDI_RAW_BYTES + 1023) / 1024 ))
+        if [ "${DDI_HAVE_KIB}" -lt "${DDI_NEED_KIB}" ]; then
+          DDI_NEED_MIB=$(( (DDI_NEED_KIB + 1023) / 1024 ))
+          DDI_STAGE_MIB=$(( DDI_STAGE_AVAIL_KIB / 1024 ))
+          DDI_MEM_MIB=$(( DDI_MEM_AVAIL_KIB / 1024 ))
+          echo "ERROR: not enough RAM-backed temporary space in /dev/shm/installer to decompress the DDI (need ~${DDI_NEED_MIB} MiB; tmpfs has ${DDI_STAGE_MIB} MiB free, MemAvailable is ${DDI_MEM_MIB} MiB with 256 MiB headroom); add RAM to this machine." >&2
+          exit 1
+        fi
         zstd -d -q --rm \
-          /run/installer/bluefin-server-ddi.raw.zst \
-          -o /run/installer/bluefin-server-ddi.raw || {
+          /dev/shm/installer/bluefin-server-ddi.raw.zst \
+          -o /dev/shm/installer/bluefin-server-ddi.raw || {
             echo "ERROR: failed to decompress downloaded DDI." >&2
             exit 1
           }
-        ls -lh /run/installer/bluefin-server-ddi.raw
+        ls -lh /dev/shm/installer/bluefin-server-ddi.raw
         # Feed the downloaded image into the native systemd-sysinstall flow by
         # overriding only the root recipe's CopyBlocks=. systemd-sysinstall
         # reads /usr/lib/repart.sysinstall.d/ when populated, else /usr/lib/
         # repart.d/, so stage all three recipes with 20-root-a.conf repointed.
+        # The rewrite is plain Bash: the live initrd ships no sed or awk.
         mkdir -p /usr/lib/repart.sysinstall.d
         cp -a /usr/lib/repart.d/10-esp.conf /usr/lib/repart.sysinstall.d/
         cp -a /usr/lib/repart.d/30-var.conf /usr/lib/repart.sysinstall.d/
-        sed 's#^CopyBlocks=.*#CopyBlocks=/run/installer/bluefin-server-ddi.raw#' \
-          /usr/lib/repart.d/20-root-a.conf \
-          > /usr/lib/repart.sysinstall.d/20-root-a.conf
+        # The key is matched at column 0, as files/installer/repart.d writes it.
+        # Recipe and wrapper ship from the same repo, so a recipe without a
+        # column-0 CopyBlocks= line is a repo bug: fail loudly before the disk
+        # is touched instead of guessing where the key belongs.
+        ROOT_COPYBLOCKS_LINE="CopyBlocks=/dev/shm/installer/bluefin-server-ddi.raw"
+        ROOT_COPYBLOCKS_SEEN=0
+        while IFS= read -r line || [ -n "${line}" ]; do
+          if [[ "${line}" == CopyBlocks=* ]]; then
+            line="${ROOT_COPYBLOCKS_LINE}"
+            ROOT_COPYBLOCKS_SEEN=1
+          fi
+          printf '%s\n' "${line}"
+        done < /usr/lib/repart.d/20-root-a.conf > /usr/lib/repart.sysinstall.d/20-root-a.conf
+        if [ "${ROOT_COPYBLOCKS_SEEN}" -eq 0 ]; then
+          echo "ERROR: /usr/lib/repart.d/20-root-a.conf has no CopyBlocks= line to repoint." >&2
+          exit 1
+        fi
       fi
 
       INSTALLER_PART=""
@@ -339,7 +433,8 @@ config:
         udevadm settle --timeout=10 || true
         local target="${TARGET_DISK:-}"
         if [ -z "${target}" ]; then
-          local root_part="$(readlink -f /dev/disk/by-partlabel/bluefin-server-root-a 2>/dev/null || true)"
+          local root_part
+          root_part="$(readlink -f /dev/disk/by-partlabel/bluefin-server-root-a 2>/dev/null || true)"
           if [ -n "${root_part}" ]; then
             target="$(lsblk -p -n -d -o PKNAME "${root_part}" 2>/dev/null || true)"
           fi
