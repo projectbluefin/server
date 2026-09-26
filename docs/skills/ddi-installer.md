@@ -177,6 +177,12 @@ over the LAN with `inst.*` kernel parameters:
   embedded installer partition.
 - `inst.ddi_sha256=<hex>` — **mandatory** when `inst.ddi_url` is set; verify the
   downloaded DDI before touching the target disk (fail closed if absent).
+- `inst.creds_url=<https-url>` — download a tar archive of first-boot systemd
+  credentials and place them in the installed system's ESP at
+  `/loader/credentials/`, where `systemd-stub` hands them to the target OS on
+  first boot (consumers: [tpm2-credential-sealing.md](tpm2-credential-sealing.md)).
+- `inst.creds_sha256=<hex>` — **mandatory** when `inst.creds_url` is set; verify
+  the downloaded archive before touching the target disk (fail closed if absent).
 - `inst.target_disk=/dev/...` — explicit target disk, overriding
   first-writable-disk auto-detection.
 
@@ -190,18 +196,41 @@ decompresses it with `zstd`, and feeds it into the **native**
 points at the downloaded image — no custom installer logic. The override is
 written with plain Bash line handling: the live initrd contains only what
 `installer-stack.bst` and its transitive runtime deps install (Bash, uutils
-coreutils, util-linux, kmod, systemd, `grep`, `curl`, `zstd`, cryptsetup,
-xfsprogs, dosfstools). `sed`, `awk` and `tar` are **not** present. Every
-external command the wrapper calls is pinned by the Step 1a tool check in
-`bluefin-server-installer.bst`, which fails the build when one is missing.
+coreutils, util-linux, kmod, systemd, `grep`, `curl`, `zstd`, `tar` (declared
+for the credentials archive), cryptsetup, xfsprogs, dosfstools). `sed` and
+`awk` are **not** present. Every external command the wrapper calls is pinned
+by the Step 1a tool check in `bluefin-server-installer.bst`, which fails the
+build when one is missing.
 
-Example iPXE stanza (the PXE server mirrors the three assets, verified against
-the signed `SHA256SUMS`):
+The credentials archive is flat: top-level regular files named `<name>.cred`
+only, plain or `systemd-creds encrypt`ed, no directories or links. Any other
+member rejects the whole archive. Build it with explicit member names so no
+`./` entry is recorded:
+
+```bash
+tar -cf <mac>.tar -C /path/to/creds firstboot.hostname.cred tmpfiles.extra.cred
+sha256sum <mac>.tar
+```
+
+Ordering and guarantees: both downloads are fetched and verified together,
+before any disk change, so a bad DDI or credentials download aborts the install
+with the target untouched. The credentials are unpacked into
+`/dev/shm/installer/credentials/` at that point and copied onto the ESP only after `systemd-sysinstall` has created it;
+the wrapper locates the ESP by GPT partition type
+(`c12a7328-f81f-11d2-ba4b-00a0c93ec93b`) on the target disk, mounts it once
+(the same mount stages the UEFI fallback loader), writes
+`/loader/credentials/*.cred`, syncs, and unmounts. If the ESP cannot be found
+or mounted while `inst.creds_url` is set, the install fails rather than leaving
+the host to boot unconfigured. Without `inst.creds_url`, no credentials are
+written.
+
+Example iPXE stanza (the PXE server mirrors the three release assets, verified
+against the signed `SHA256SUMS`, plus one per-host credentials archive):
 
 ```ipxe
 #!ipxe
 set base http://pxe-server:8080/data
-kernel ${base}/bluefin-server-pxe-vmlinuz-<ver> systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended inst.ddi_url=${base}/bluefin-server-ddi-<ver>.raw.zst inst.ddi_sha256=<sha256>
+kernel ${base}/bluefin-server-pxe-vmlinuz-<ver> systemd.unit=system-install.target console=tty0 console=ttyS0,115200 rw unattended inst.ddi_url=${base}/bluefin-server-ddi-<ver>.raw.zst inst.ddi_sha256=<sha256> inst.creds_url=${base}/creds/${mac}.tar inst.creds_sha256=<sha256>
 initrd ${base}/bluefin-server-pxe-initrd-<ver>.cpio.gz
 boot
 ```
@@ -243,8 +272,9 @@ unaffected.
 | "Use knuckle instead." | knuckle is deprecated in favor of native `systemd-sysinstall` (systemd 261+). |
 | "Hardcode `root=/dev/vda2` for QEMU." | Bare metal has different device names. Always use PARTUUID. |
 | "Pull the DDI from the network at install time." | Network pull is opt-in via `inst.ddi_url`; verification is mandatory and failures abort before any disk change, while the embedded installer media stays the default. |
-| "The live initrd has sed/awk/tar like any Linux box." | It does not. The initrd holds only `installer-stack.bst` plus transitive runtime deps (Bash, uutils coreutils, util-linux, kmod, systemd, `grep`, `curl`, `zstd`); `sed`, `awk` and `tar` are absent and fail with `command not found` (exit 127) after the download. Use Bash builtins, or declare the tool in `installer-stack.bst` and add it to the Step 1a build-time tool check. |
+| "The live initrd has sed/awk like any Linux box." | It does not. The initrd holds only `installer-stack.bst` plus transitive runtime deps (Bash, uutils coreutils, util-linux, kmod, systemd, `grep`, `curl`, `zstd`, `tar`); `sed` and `awk` are absent and fail with `command not found` (exit 127) after the download. Use Bash builtins, or declare the tool in `installer-stack.bst` and add it to the Step 1a build-time tool check. |
 | "`/run` can hold the downloaded DDI." | No. systemd mounts `/run` with `size=20%`; the network DDI stages in `/dev/shm/installer/` (kernel tmpfs default, 50% of RAM) and the wrapper checks tmpfs free space and `MemAvailable` before decompressing. See "Memory requirements". |
+| "Per-host configuration needs a custom installer step." | `inst.creds_url` is opt-in and only delivers verified `*.cred` files to the ESP `/loader/credentials/`; the installed OS consumes them through stock systemd credential consumers, so no installer logic is added. |
 | "Put the DDI in the initrd cpio." | The DDI is ≈1.6 GiB raw (2 GiB+ once sparse space is written out). The initrd cpio step must run before the DDI is placed in `/layer`. |
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |
