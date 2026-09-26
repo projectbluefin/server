@@ -182,8 +182,10 @@ over the LAN with `inst.*` kernel parameters:
 
 Without `inst.ddi_url`, behavior is unchanged and uses the embedded DDI. The
 wrapper (`bluefin-sysinstall`) brings up DHCP via `systemd-networkd-wait-online`,
-streams the DDI down with `curl`, stream-decompresses it with `zstd`, and feeds
-it into the **native** `systemd-sysinstall` flow by staging a temporary
+downloads the DDI with `curl` into `/dev/shm/installer/`, verifies it, checks
+that the staging tmpfs and `MemAvailable` can hold the decompressed image,
+decompresses it with `zstd`, and feeds it into the **native**
+`systemd-sysinstall` flow by staging a temporary
 `/usr/lib/repart.sysinstall.d/` override whose `20-root-a.conf` `CopyBlocks=`
 points at the downloaded image — no custom installer logic. The override is
 written with plain Bash line handling: the live initrd contains only what
@@ -204,8 +206,31 @@ initrd ${base}/bluefin-server-pxe-initrd-<ver>.cpio.gz
 boot
 ```
 
-RAM floor: the whole live env is a RAM-resident cpio rootfs and the DDI stages
-in tmpfs, so plan roughly `live-env + DDI` of free RAM (~8 GiB guidance).
+### Memory requirements
+
+Everything on a PXE client lives in RAM: the live env is a RAM-resident cpio
+rootfs, and the DDI is staged in tmpfs under `/dev/shm/installer/`. systemd
+PID 1 mounts `/run` as tmpfs with `size=20%` (≈1.6 GiB on an 8 GiB machine),
+which is why `/run` cannot hold the DDI; `/dev/shm` is mounted without a size
+option and so uses the kernel tmpfs default of 50% of RAM. `zstd --rm` deletes
+the compressed download only after a successful decompress, so the staging
+tmpfs must hold the compressed **and** the decompressed DDI at once. Before
+decompressing, the wrapper compares the raw size recorded in the zstd frame
+header (or 5× the compressed size if the header does not carry it, with a
+`WARN`) against both the free space `df` reports for `/dev/shm/installer` and
+`MemAvailable` from `/proc/meminfo` minus 256 MiB of headroom, and aborts with
+`ERROR: not enough RAM-backed temporary space ... (need ~N MiB; tmpfs has M MiB
+free, MemAvailable is K MiB ...)` instead of failing mid-write with `ENOSPC` or
+being OOM-killed. The `MemAvailable` bound matters because the tmpfs cap alone
+is not proof of memory: the rootfs is its own tmpfs, so `df` on `/dev/shm` can
+report space the kernel cannot back.
+
+Plan for the check to pass: `MemAvailable` after the download must exceed the
+raw DDI size plus 256 MiB, and the 50% `/dev/shm` cap must hold both copies.
+For the 26.08.0 Flatcar-based DDI (365 MiB compressed, ≈1.6 GiB raw) 8 GiB is
+the tested and recommended size; smaller machines have not been boot-tested.
+The embedded (USB) install path does not stage the DDI in RAM and is
+unaffected.
 
 ## Common Rationalizations
 
@@ -219,7 +244,8 @@ in tmpfs, so plan roughly `live-env + DDI` of free RAM (~8 GiB guidance).
 | "Hardcode `root=/dev/vda2` for QEMU." | Bare metal has different device names. Always use PARTUUID. |
 | "Pull the DDI from the network at install time." | Network pull is opt-in via `inst.ddi_url`; verification is mandatory and failures abort before any disk change, while the embedded installer media stays the default. |
 | "The live initrd has sed/awk/tar like any Linux box." | It does not. The initrd holds only `installer-stack.bst` plus transitive runtime deps (Bash, uutils coreutils, util-linux, kmod, systemd, `grep`, `curl`, `zstd`); `sed`, `awk` and `tar` are absent and fail with `command not found` (exit 127) after the download. Use Bash builtins, or declare the tool in `installer-stack.bst` and add it to the Step 1a build-time tool check. |
-| "Put the DDI in the initrd cpio." | The DDI is 2 GiB+. The initrd cpio step must run before the DDI is placed in `/layer`. |
+| "`/run` can hold the downloaded DDI." | No. systemd mounts `/run` with `size=20%`; the network DDI stages in `/dev/shm/installer/` (kernel tmpfs default, 50% of RAM) and the wrapper checks tmpfs free space and `MemAvailable` before decompressing. See "Memory requirements". |
+| "Put the DDI in the initrd cpio." | The DDI is ≈1.6 GiB raw (2 GiB+ once sparse space is written out). The initrd cpio step must run before the DDI is placed in `/layer`. |
 | "Store the DDI in the ESP (FAT32)." | FAT32 has a 4 GiB per-file limit. Use a separate XFS partition. |
 | "Add an 8 GiB minimum size floor to the DDI." | The rootfs is immutable. It never grows in-place. Content + overhead is enough. |
 
