@@ -47,6 +47,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist, Conventi
 ## Security and release trust
 
 - **Signed manifests**: GitHub Actions builds all release artifacts, generates a combined `SHA256SUMS` manifest, and signs it with GPG before publishing to GitHub Releases.
+- **Secure Boot**: release UKIs, `systemd-boot`, the installer and the PXE kernel are signed with a project key on `main`; enrol the published `bluefin-server-secureboot.der` in the firmware `db`, or disable Secure Boot. Without one of those the installed system will not boot. See [`docs/skills/secure-boot-signing.md`](docs/skills/secure-boot-signing.md).
 - **Sysupdate verification**: Target nodes verify updates using signed manifest transfers; see [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) for details.
 - **Vulnerability disclosure**: See [`SECURITY.md`](SECURITY.md) for policy details and how to report security issues.
 

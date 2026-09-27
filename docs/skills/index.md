@@ -36,6 +36,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
 | [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
 | [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and Flatcar compatibility. |
+| [`secure-boot-signing.md`](secure-boot-signing.md) | Secure Boot refusals, UKI / `systemd-boot` / PXE kernel Authenticode signing, db certificate enrolment | Post-build signing pass, key handling, and certificate publication. |
 | [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md) | Image-based A/B updates and signed manifests | Release signing, `systemd-sysupdate`, and trust model. |
 | [`tpm2-credential-sealing.md`](tpm2-credential-sealing.md) | TPM2-bound first-boot credentials | Credential sealing with `systemd-creds` and TPM2. |
 

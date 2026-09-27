@@ -62,6 +62,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | Flatcar version parity matrix / audit | [`docs/skills/flatcar-parity-matrix.md`](docs/skills/flatcar-parity-matrix.md) |
 | CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
 | Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |
+| Secure Boot signing / db certificate enrolment | [`docs/skills/secure-boot-signing.md`](docs/skills/secure-boot-signing.md) |
 | Credential sealing with TPM2 | [`docs/skills/tpm2-credential-sealing.md`](docs/skills/tpm2-credential-sealing.md) |
 | System containers (`machinectl`) | [`docs/skills/system-containers.md`](docs/skills/system-containers.md) |
 | Cut bloat / avoid over-engineering | [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md) |

@@ -769,9 +769,10 @@ config:
       ls -lh /installer.cpio.gz
 
     # ── Step 4: Build the UKI ────────────────────────────────────────────
-    # Unsigned UKI — acceptable for USB installer media. Secure Boot
-    # signing can be layered on by passing --secureboot-private-key /
-    # --secureboot-certificate if keys are injected at CI time.
+    # Unsigned here: the sandbox holds no key. CI signs this UKI, the target
+    # UKI and systemd-boot after export with scripts/sign-secureboot-artifacts.sh
+    # (docs/skills/secure-boot-signing.md), which rebuilds this UKI from its own
+    # .linux/.cmdline/.osrel sections — keep the cmdline in one place here.
     - |
       set -eux
       mkdir -p /layer/boot/efi/EFI/BOOT

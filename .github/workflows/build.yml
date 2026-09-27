@@ -78,6 +78,26 @@ jobs:
           just build-zfs
           just export-kernel
 
+      # Secure Boot: sign the target UKI, systemd-boot, installer UKI and PXE
+      # kernel with the project db key (docs/skills/secure-boot-signing.md).
+      # Runs before the installer test so the boot-tested artifacts are the
+      # signed ones, but only on main: this job executes PR-controlled code,
+      # so the key must never be exposed to a pull_request run. Skipped when
+      # the secrets are not configured; the release then stays unsigned.
+      - name: Sign Secure Boot artifacts
+        if: github.ref == 'refs/heads/main'
+        env:
+          SECUREBOOT_SIGNING_KEY: ${{ secrets.SECUREBOOT_SIGNING_KEY }}
+          SECUREBOOT_SIGNING_CERT: ${{ secrets.SECUREBOOT_SIGNING_CERT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SECUREBOOT_SIGNING_KEY}" ] || [ -z "${SECUREBOOT_SIGNING_CERT}" ]; then
+            echo "::warning::SECUREBOOT_SIGNING_KEY/SECUREBOOT_SIGNING_CERT not configured; release artifacts stay unsigned and will not boot with Secure Boot enabled."
+            exit 0
+          fi
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends sbsigntool systemd-ukify mtools cpio
+          scripts/sign-secureboot-artifacts.sh
       - name: Upload installer test artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -101,6 +121,8 @@ jobs:
           mkdir -p dist/release
           cp dist/bluefin-server-installer-*.raw.zst dist/bluefin-server-*.efi dist/release/
           cp dist/bluefin-server-pxe-vmlinuz-* dist/bluefin-server-pxe-initrd-*.cpio.gz dist/release/
+          # Secure Boot db certificate, present only when the signing step ran.
+          cp dist/bluefin-server-secureboot.der dist/bluefin-server-secureboot.pem dist/release/ 2>/dev/null || true
           cp dist/ddi/bluefin-server-ddi-*.raw.zst dist/release/
           cp dist/sysext/k0s-*.raw.zst dist/release/
           if [ -d dist/kernel ]; then

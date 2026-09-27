@@ -115,7 +115,7 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
 | `track-junctions` | `track-junctions.yml` | `schedule` (08:00 UTC), `workflow_dispatch` | Resolves the `freedesktop-sdk.bst` + `gnome-build-meta.bst` junction refs, syncs `project.conf`'s `release-version`, and opens/updates its own PR on `auto/track-junctions`. `contents: write` + `pull-requests: write`, never on `pull_request`. |
-| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile (including Flatcar LTS Kernel & ZFS), and signs the release manifest on pushes to `main`. Read-only token. |
+| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, runs the full BuildStream compile (including Flatcar LTS Kernel & ZFS), and on pushes to `main` Secure-Boot-signs the installer/UKI artifacts before the boot test and signs the release manifest. Read-only token. |
 | `installer-test` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Downloads the build job's exported installer/PXE artifact and calls the shared `projectbluefin/actions` QEMU workflow. No Lima or second BuildStream build. |
 | `release` | `build.yml` | `push/main`, `workflow_dispatch` | Downloads the signed assets handed off by `build` and publishes them to the GitHub Release (`if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}`). `contents: write`. |
 | `build-kernel` | `kernel.yml` | `pull_request` (paths: `elements/flatcar/**`, `include/flatcar.yml`, `patches/flatcar-kernel/**`), `push/main`, `workflow_dispatch` | Standalone kernel & OpenZFS sysext BuildStream build and export. Emits `dist/kernel/` artifacts. Read-only token. |
@@ -137,10 +137,11 @@ uploaded to a GitHub Release tagged `installer-v<FSDK-RELEASE>`.
    result as its own pull request against `main`.
 3. **Full Compilation:** Builds the standalone DDI OS image, live installer, and
    k0s systemd-sysext on every pull request and push to `main`.
-4. **Installer boot test:** Uploads the already-built installer and PXE artifacts and calls `projectbluefin/actions/.github/workflows/server-installer-test.yml`. The shared workflow prepares QEMU/KVM and runs this repository's `just test-installer-artifact`, which defaults to the USB/firmware boot path and consumes only the raw installer image; the uploaded PXE pair is exercised by `just test-installer-boot-pxe` (`INSTALLER_BOOT_MODE=pxe`). Lima remains local-only.
-5. **Version Derivation:** The release tag is derived with `just version`, which
+4. **Secure Boot signing:** On `main` only, `scripts/sign-secureboot-artifacts.sh` signs the target UKI, `systemd-boot`, the installer UKI and the PXE kernel with the `SECUREBOOT_SIGNING_KEY` / `SECUREBOOT_SIGNING_CERT` secrets before the artifacts are uploaded for the boot test; unset secrets skip the step with a warning.
+5. **Installer boot test:** Uploads the already-built installer and PXE artifacts and calls `projectbluefin/actions/.github/workflows/server-installer-test.yml`. The shared workflow prepares QEMU/KVM and runs this repository's `just test-installer-artifact`, which defaults to the USB/firmware boot path and consumes only the raw installer image; the uploaded PXE pair is exercised by `just test-installer-boot-pxe` (`INSTALLER_BOOT_MODE=pxe`). Lima remains local-only.
+6. **Version Derivation:** The release tag is derived with `just version`, which
    parses the pinned FSDK point release from `elements/freedesktop-sdk.bst`.
-6. **Automated Publishing:** For pushes to `main` (including Renovate PR merges),
+7. **Automated Publishing:** For pushes to `main` (including Renovate PR merges),
    GitHub Actions creates a GitHub Release, uploads all compiled assets, and
    produces a combined `dist/release/SHA256SUMS` plus detached
    `SHA256SUMS.gpg` for `systemd-sysupdate` verification.
@@ -176,4 +177,5 @@ uploaded to a GitHub Release tagged `installer-v<FSDK-RELEASE>`.
 ## See also
 
 - [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md) — release signing and sysupdate verification.
+- [secure-boot-signing.md](secure-boot-signing.md) — Secure Boot signing step and its `SECUREBOOT_SIGNING_KEY` / `SECUREBOOT_SIGNING_CERT` secrets.
 - [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.
