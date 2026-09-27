@@ -135,7 +135,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-    uses: projectbluefin/actions/.github/workflows/server-installer-test.yml@601eb67dcb8fb07eaf3cc683274c91ee31268479 # v1
+    uses: projectbluefin/actions/.github/workflows/server-installer-test.yml@52c87987ba73e7359b25e2e8010fb1de7b619bd9 # v1
     with:
       artifact-name: server-installer-test
 
