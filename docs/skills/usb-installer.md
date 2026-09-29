@@ -58,11 +58,14 @@ installer UI of its own.
 2. **Target disk.** sysinstall lists every disk it can install to as a
    numbered menu, labelled with its `/dev/disk/by-id/` name (model and serial,
    which is how you tell disks apart). The USB stick itself is never listed.
-   Type the **number** in front of the disk and press Enter; you never type the
-   device path. A number is always required, even with a single disk: upstream
-   v261 offers no preselected entry, and an empty answer cancels the install.
-   Tab completes a partially typed name. Upstream v261 has no arrow-key menu;
-   the number is the selector.
+   The input line comes pre-filled (upstream v261 `prompt_loop` preselect):
+   - **One disk:** its name is already filled in. Press **Enter**.
+   - **Several disks:** the line holds the names' common prefix (for example
+     `/dev/disk/by-id/nvme-`). Press **Ctrl-U** to clear it, type the
+     **number** in front of the disk, and press Enter. Typing the number
+     without clearing appends it to the prefix and is rejected as
+     `Invalid input …`.
+   Upstream v261 has no arrow-key menu; the number is the selector.
 3. **Summary.** The chosen disk is always erased (`--erase=yes`), and the
    install is registered in the firmware boot menu (`--variables=yes`). Type
    `yes` to begin. This is the only confirmation.
@@ -86,8 +89,9 @@ The installed disk is identical to one a diskless node installs: stock
 
 `systemd-sysinstall` is interactive on `/dev/console`. To make an install
 unattended, pass a `systemd.unit-dropin.systemd-sysinstall.service` system
-credential (SMBIOS type 11, QEMU fw_cfg, or a `.cred` file in
-`/loader/credentials/` on the stick's ESP). It lands as `50-credential.conf`,
+credential (SMBIOS type 11 or QEMU fw_cfg). Plaintext `.cred` files in the
+stick's `/loader/credentials/` are not applied: a KubeVirt run with one there
+still stopped at the disk prompt. It lands as `50-credential.conf`,
 after the image's `10-bluefin-installer.conf`, and re-runs that drop-in's
 `ExecStart=` with the target disk and `--confirm=no` appended (the drop-in
 already passes `--erase=yes --variables=yes`), plus `StandardInput=null` so any
