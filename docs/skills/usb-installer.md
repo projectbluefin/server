@@ -69,10 +69,14 @@ installer UI of its own.
 4. sysinstall installs, and the machine **reboots by itself** when it
    succeeds. Remove the stick when the screen goes blank.
 
-An empty answer or anything else at a prompt cancels the installation
-(`Installation cancelled.`), and upstream's `FailureAction=halt` then halts the
-machine — it stops at `System halted` with the error still on screen, but does
-not power off. Power-cycle and boot the stick again to retry.
+Only two answers cancel: an empty answer at either prompt, and `no` at the
+confirmation (`Installation not confirmed, cancelling.`). Anything else
+upstream does not accept — a typo, an out-of-range number — is rejected with
+`Invalid input …` and the same prompt is asked again, so a mistyped answer
+never halts the machine. After a cancel or a real install failure, upstream's
+`FailureAction=halt` halts the machine — it stops at `System halted` with the
+message still on screen, but does not power off. Power-cycle and boot the stick
+again to retry.
 
 The installed disk is identical to one a diskless node installs: stock
 `systemd-sysinstall` with the layout from `files/os/repart.d/` (see
