@@ -16,9 +16,9 @@
 # credential (installed as 50-credential.conf, after the image's
 # 10-bluefin-installer.conf) that re-runs the image drop-in's ExecStart= with
 # the target disk and --erase=yes --confirm=no --variables=yes appended, and
-# with StandardInput=null: the only prompt left is "Press any key" before the
-# reboot, which EOF answers, and any prompt a regression adds fails at once
-# instead of hanging.
+# with StandardInput=null: no prompt is left (the image drop-in already skips
+# the erase question and reboots via SuccessAction=), so any prompt a
+# regression adds fails at once instead of hanging.
 #
 # Usage: dogfood-installer.sh <dir with bluefin-server-installer_<ver>.raw>
 # Environment:

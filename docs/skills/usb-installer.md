@@ -43,10 +43,34 @@ not warn about executable definition files). The
 `systemd-sysinstall.service.d/10-bluefin-installer.conf` drop-in passes
 `--definitions=/run/bluefin/installer/bluefin/repart.d` and
 `--kernel=${BLUEFIN_INSTALL_KERNEL}` (the disk UKI, named by the installer
-UKI's `systemd.setenv=`). The disk UKI sits outside `EFI/Linux` on the stick
-so systemd-boot never offers it there. sysinstall prompts for the target
-disk, erasing it, and confirmation, then reboots; remove the stick when it
-does.
+UKI's `systemd.setenv=`), `--erase=yes`, and `--reboot=no` with
+`SuccessAction=reboot`. The disk UKI sits outside `EFI/Linux` on the stick
+so systemd-boot never offers it there.
+
+## Using the installer
+
+This is stock `systemd-sysinstall` (systemd-sysinstall(8)); Bluefin adds no
+installer UI of its own.
+
+1. Boot the stick. The installer UKI sets the `firstboot.keymap` credential
+   (`us`), so `systemd-firstboot` asks nothing, and the screen goes straight to
+   **Operating System Installer**.
+2. **Target disk.** sysinstall lists every disk it can install to as a
+   numbered menu, labelled with its `/dev/disk/by-id/` name (model and serial,
+   which is how you tell disks apart). The USB stick itself is never listed.
+   Type the **number** in front of the disk and press Enter; you never type the
+   device path. With a single disk, the entry is suggested already and Enter
+   alone accepts it. Tab completes a partially typed name. Upstream v261 has no
+   arrow-key menu; the number is the selector.
+3. **Summary.** The chosen disk is always erased (`--erase=yes`), and the
+   install is registered in the firmware boot menu (`--variables=yes`). Type
+   `yes` to begin. This is the only confirmation.
+4. sysinstall installs, and the machine **reboots by itself** when it
+   succeeds. Remove the stick when the screen goes blank.
+
+An empty answer or anything else at a prompt cancels the installation, and
+upstream's `FailureAction=halt` powers the machine off with the error still
+on screen; boot the stick again to retry.
 
 The installed disk is identical to one a diskless node installs: stock
 `systemd-sysinstall` with the layout from `files/os/repart.d/` (see
