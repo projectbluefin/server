@@ -15,10 +15,11 @@
 # unattended with a systemd.unit-dropin.systemd-sysinstall.service SMBIOS
 # credential (installed as 50-credential.conf, after the image's
 # 10-bluefin-installer.conf) that re-runs the image drop-in's ExecStart= with
-# the target disk and --erase=yes --confirm=no --variables=yes appended, and
-# with StandardInput=null: no prompt is left (the image drop-in already skips
-# the erase question and reboots via SuccessAction=), so any prompt a
-# regression adds fails at once instead of hanging.
+# the target disk and --confirm=no appended (the image drop-in already passes
+# --erase=yes --variables=yes), and with StandardInput=null: no prompt is left
+# (the image drop-in also skips the erase question and reboots via
+# SuccessAction=), so any prompt a regression adds fails at once instead of
+# hanging.
 #
 # Usage: dogfood-installer.sh <dir with bluefin-server-installer_<ver>.raw>
 # Environment:
@@ -27,7 +28,7 @@
 #   DOGFOOD_TARGET_DEV=<path>  target device the installer is told to use
 #                              (default /dev/disk/by-id/virtio-bluefin-target)
 #   DOGFOOD_SYSINSTALL_ARGS=.. extra systemd-sysinstall arguments
-#                              (default --erase=yes --confirm=no --variables=yes)
+#                              (default --confirm=no)
 #   DOGFOOD_SYSINSTALL_CRED=0  do not pass the unattended drop-in credential
 #   DOGFOOD_MEM=<MiB>          guest memory (default 4096)
 #   DOGFOOD_TIMEOUT=<s>        per-boot timeout (default 600)
@@ -40,7 +41,7 @@ mem="${DOGFOOD_MEM:-4096}"
 timeout_s="${DOGFOOD_TIMEOUT:-600}"
 target_serial=bluefin-target
 target_dev="${DOGFOOD_TARGET_DEV:-/dev/disk/by-id/virtio-${target_serial}}"
-install_args="${DOGFOOD_SYSINSTALL_ARGS:---erase=yes --confirm=no --variables=yes}"
+install_args="${DOGFOOD_SYSINSTALL_ARGS:---confirm=no}"
 dropin_src="${here}/../files/os/systemd/system/systemd-sysinstall.service.d/10-bluefin-installer.conf"
 
 installer="$(ls "${dir}"/bluefin-server-installer_*.raw 2>/dev/null | tail -n1)" \

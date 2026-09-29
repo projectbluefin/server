@@ -59,18 +59,20 @@ installer UI of its own.
    numbered menu, labelled with its `/dev/disk/by-id/` name (model and serial,
    which is how you tell disks apart). The USB stick itself is never listed.
    Type the **number** in front of the disk and press Enter; you never type the
-   device path. With a single disk, the entry is suggested already and Enter
-   alone accepts it. Tab completes a partially typed name. Upstream v261 has no
-   arrow-key menu; the number is the selector.
+   device path. A number is always required, even with a single disk: upstream
+   v261 offers no preselected entry, and an empty answer cancels the install.
+   Tab completes a partially typed name. Upstream v261 has no arrow-key menu;
+   the number is the selector.
 3. **Summary.** The chosen disk is always erased (`--erase=yes`), and the
    install is registered in the firmware boot menu (`--variables=yes`). Type
    `yes` to begin. This is the only confirmation.
 4. sysinstall installs, and the machine **reboots by itself** when it
    succeeds. Remove the stick when the screen goes blank.
 
-An empty answer or anything else at a prompt cancels the installation, and
-upstream's `FailureAction=halt` powers the machine off with the error still
-on screen; boot the stick again to retry.
+An empty answer or anything else at a prompt cancels the installation
+(`Installation cancelled.`), and upstream's `FailureAction=halt` then halts the
+machine — it stops at `System halted` with the error still on screen, but does
+not power off. Power-cycle and boot the stick again to retry.
 
 The installed disk is identical to one a diskless node installs: stock
 `systemd-sysinstall` with the layout from `files/os/repart.d/` (see
@@ -83,10 +85,10 @@ unattended, pass a `systemd.unit-dropin.systemd-sysinstall.service` system
 credential (SMBIOS type 11, QEMU fw_cfg, or a `.cred` file in
 `/loader/credentials/` on the stick's ESP). It lands as `50-credential.conf`,
 after the image's `10-bluefin-installer.conf`, and re-runs that drop-in's
-`ExecStart=` with the target disk and `--erase=yes --confirm=no
---variables=yes` appended, plus `StandardInput=null` so any leftover prompt
-fails instead of hanging. `scripts/dogfood-installer.sh` drives exactly this
-path in QEMU and is the reference for the drop-in contents.
+`ExecStart=` with the target disk and `--confirm=no` appended (the drop-in
+already passes `--erase=yes --variables=yes`), plus `StandardInput=null` so any
+leftover prompt fails instead of hanging. `scripts/dogfood-installer.sh` drives
+exactly this path in QEMU and is the reference for the drop-in contents.
 
 ## First-boot prompt
 
