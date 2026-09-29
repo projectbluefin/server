@@ -202,10 +202,12 @@ of build time over 4 cores). The critical path is FSDK's
 `components/linux.bst`: 6 min to fetch its source (not in any source cache)
 and 1 h 43 min to build. FSDK's caches never hold it for us, because the
 `components/linux-module-cert.bst` junction override (our module certificate)
-and `patches/freedesktop-sdk/0006-linux-*.patch` change its cache key. Next are
-about 40 FSDK elements our FSDK patches or their reverse dependencies change
-(glib-stage1, gobject-introspection, harfbuzz, go, vala, ...; about 70 min of
-build time in parallel with the kernel). Changing only `image-version`
+and `patches/freedesktop-sdk/0006-linux-*.patch` change its cache key. The
+other ~70 min of parallel build time on that run came from about 40 FSDK
+elements (glib-stage1, gobject-introspection, harfbuzz, vala, ...) pulled in
+only by FSDK's `components/os-release.bst` in `base/base-stack.bst`, and
+patched by `0002`–`0005`; both are gone, which removes 57 elements from the
+graph. Go (for ignition) still builds from source. Changing only `image-version`
 rebuilds 13 version-stamped elements (os-release to `oci/bluefin-server-image.bst`
 and the sysexts), 2 min locally on a warm cache; CI's
 per-set cost is estimated at under 10 min.
