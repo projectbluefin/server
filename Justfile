@@ -133,11 +133,16 @@ dogfood-install NEXT="":
 
 # REF=ghcr.io/<owner>/bluefin-server or <registry-host>:30500/bluefin-server
 # (PLAIN_HTTP=1); log in with podman login first. One layer per file.
+# Local rehearsal only: releases are published by scripts/publish-release.sh
+# from .github/workflows/build.yml, which also verifies the pushed manifest
+# against the local files. This recipe pushes the same artifact type,
+# annotations and layout, and nothing else.
 # Publish an image set as an ORAS OCI artifact tagged <version> and latest.
 [group('diskless')]
 publish-oci REF DIR="dist/diskless" PLAIN_HTTP="0":
     #!/usr/bin/env bash
     set -euo pipefail
+    revision="$(git rev-parse HEAD)"
     cd "{{DIR}}"
     uki="$(ls bluefin-server-netboot_*.efi)"
     ver="${uki#bluefin-server-netboot_}"; ver="${ver%.efi}"
@@ -150,6 +155,8 @@ publish-oci REF DIR="dist/diskless" PLAIN_HTTP="0":
         {{oras_image}} push "${extra[@]}" \
         --artifact-type application/vnd.projectbluefin.server.release.v1 \
         --annotation "org.opencontainers.image.version=${ver}" \
+        --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-projectbluefin/server}" \
+        --annotation "org.opencontainers.image.revision=${revision}" \
         "{{REF}}:${ver},latest" "${files[@]}"
 
 # Boot dist/diskless/ in QEMU with Secure Boot, pulling /usr over HTTP.

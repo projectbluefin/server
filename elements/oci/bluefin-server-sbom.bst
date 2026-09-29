@@ -19,7 +19,9 @@ description: |
   oci/*-sysext.bst element for its own local sources (units,
   extension-release, config), and the element it stages them from.
 
-  oci/bluefin-server-image.bst stamps creationInfo.created and ships the
+  oci/bluefin-server-image.bst stamps creationInfo.created from the
+  sandbox's fixed SOURCE_DATE_EPOCH (always 2011-11-11T11:11:11Z, a
+  reproducibility placeholder rather than a build time) and ships the
   result as bluefin-server_<ver>.spdx.json inside the signed SHA256SUMS.
 
 (@):

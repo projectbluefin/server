@@ -113,10 +113,18 @@ tell a human or a policy engine which commit and workflow run produced it.
   OpenZFS sysext payloads. It lists one SPDX package per source (name,
   version, download URL, source kind). Build-only elements such as the
   signing keys are not runtime dependencies of that payload and never
-  appear. The image element stamps `creationInfo.created` and ships it as
-  `bluefin-server_<ver>.spdx.json`, listed in `SHA256SUMS`, so the GPG
-  signature covers it too. No transfer matches it, so nodes never download it.
-- **Publishing.** `scripts/publish-release.sh` is the only publish path.
+  appear. SPDX requires a `creationInfo.created`, which the plugin leaves to
+  the build, so the image element stamps it from `SOURCE_DATE_EPOCH`. The
+  build runs in a BuildStream sandbox that fixes `SOURCE_DATE_EPOCH` to
+  BuildStream's own default (1321009871), so the field always reads
+  `2011-11-11T11:11:11Z`: it is a reproducibility placeholder, not a build
+  time. Use the SLSA provenance attestation (or the release tag) for when a
+  set was built. The SBOM ships as `bluefin-server_<ver>.spdx.json`, listed
+  in `SHA256SUMS`, so the GPG signature covers it too. No transfer matches
+  it, so nodes never download it.
+- **Publishing.** In CI, `scripts/publish-release.sh` is the only publish
+  path (`just publish-oci` pushes to a local or personal registry for
+  rehearsal and runs none of the script's checks).
   `verify` checks what nodes will check (`gpgv` against the keyring, every
   `SHA256SUMS` entry present and matching), plus: every published file is
   listed, every file name carries the release version, and the SBOM is valid
