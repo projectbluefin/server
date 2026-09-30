@@ -22,7 +22,11 @@ This skill covers what each key signs, where it lives, and how CI gets it.
 | sysupdate-signing | `SHA256SUMS` | `files/boot-keys/sysupdate-signing.asc` | `files/boot-keys/import-pubring.pgp` |
 
 The module certificate is baked into the kernel's trusted keyring via
-`SYSTEM_TRUSTED_KEYS`; changing it forces a kernel rebuild.
+`SYSTEM_TRUSTED_KEYS`; changing it forces a kernel rebuild. The release
+certificate is also committed as `files/release-keys/linux-module-cert.crt`:
+the key-free kernel cache (`scripts/kernel-cache.sh`, see `ci-tooling.md`) is
+built against it, and release builds stop if it differs from the one in
+`BOOT_KEYS_TARBALL`.
 
 ## Local development
 
@@ -50,7 +54,9 @@ real secrets.
 
 1. Generate new keys (`just gen-dev-keys --force` locally, or the equivalent
    in a secure environment for production).
-2. Update the CI secrets (`BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY`).
+2. Update the CI secrets (`BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY`), and
+   commit the new public module certificate as
+   `files/release-keys/linux-module-cert.crt` in the same change.
 3. Bump `image-version` in `include/image.yml` (a new build is required; the
    old image still trusts the old keys).
 4. Nodes re-enroll Secure Boot keys on next boot if the firmware is in Setup

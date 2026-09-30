@@ -227,17 +227,34 @@ per-set cost is estimated at under 10 min.
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip. No
   status check is required on `main` today; a skipped job reports as passing,
   so they can be made required without `paths-ignore` leaving them pending.
-- **No cache push.** CI only pulls from the caches `project.conf` lists.
-  `bluefin-server/keys/boot-keys.bst` imports `files/boot-keys/`, which on
-  `main` holds the Secure Boot, module-signing and sysupdate private keys, and
-  the image, UKIs, `kernel-modules.bst`, `efi-keys.bst`,
-  `os-sd-boot-signed.bst` and `openzfs-signed.bst` build-depend on it, so
-  `bst artifact push --deps all` of the image would upload the keys to a cache
-  every build pulls from. Pushing needs an explicit element allow-list, with a
-  unit test proving no listed element is, or build-depends on,
-  `boot-keys.bst`. FSDK's `components/linux.bst` only stages the public
-  certificate (`bluefin-server/keys/linux-module-cert.bst`), so the kernel is
-  the candidate worth listing.
+- **Kernel cache in ghcr.io, key-free by construction.** The `kernel-cache`
+  job (releases only) runs `scripts/kernel-cache.sh seed`: with no signing
+  secrets and the committed release module certificate
+  (`files/release-keys/linux-module-cert.crt`) staged as
+  `files/boot-keys/modules/linux-module-cert.crt`, it builds FSDK's
+  `components/linux.bst` and `components/go.bst` into an empty BuildStream
+  cache and pushes that cache as a zstd tarball (split into 1.9 GB layers) to
+  `ghcr.io/<owner>/bluefin-server-bst-cache:kernel-<hash of both cache keys>`,
+  unless the tag exists. `build` then runs `kernel-cache.sh restore` into its
+  empty cache before building, and gets the kernel as `cached`. Release builds
+  normalize `BOOT_KEYS_TARBALL`'s module certificate to the committed bytes
+  after checking it is the same certificate (and stop if not), so the keys
+  match. The tarball is public: `seed` refuses if
+  `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds, and
+  the job holds no secret but `GITHUB_TOKEN`. A content grep is no guard
+  here: FSDK sources (Go's TLS test data and others) carry 307 PEM private
+  keys. Both cache steps are `continue-on-error`, so a failed seed or restore
+  only costs time. Measured in the lab: the seed build takes 44 min on 16+
+  CPUs, fills 15 GB, and packs to 5.0 GB in under a minute; a restored cache
+  reports the element `cached` where an empty one reports `fetch needed`.
+  Only a kernel or Go change (FSDK bump, patch `0006`, module certificate)
+  reseeds.
+- **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
+  `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
+  and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
+  `efi-keys.bst`, `os-sd-boot-signed.bst` and `openzfs-signed.bst`
+  build-depend on it, so a release build's own cache must never be saved or
+  pushed anywhere a pull request can read.
 - **Most pull requests do not build the image.** The full build costs about
   1.5 h, most of it FSDK's kernel, so a pull request builds only with the
   `full-build` label or when it changes `elements/freedesktop-sdk.bst` or
@@ -247,13 +264,9 @@ per-set cost is estimated at under 10 min.
   release that contains it. When a pull request does build, it still builds
   the kernel: `just gen-dev-keys` makes a new module certificate on every
   run, so the PR kernel's cache key never matches anything cached.
-- **No `actions/cache` for sources or artifacts.** The kernel source fetch
-  (6 min, 1 of the 85 fetches) is the only one on the critical path, and it
-  only matters when the kernel is rebuilt anyway. The runner's BuildStream
-  cache after a build holds every pulled and built artifact of the graph,
-  several times the 2.1 GB image set, and would churn the 10 GB repository
-  cache quota; BuildStream 2 cannot import a single artifact from a tarball,
-  so the kernel alone cannot be cached that way.
+- **No `actions/cache`.** A full build's cache holds `boot-keys.bst`, and
+  pull requests can restore caches saved on `main`; the key-free kernel cache
+  is 5 GB, half the 10 GB repository quota, so it lives in ghcr.io instead.
 
 ## Common Rationalizations
 

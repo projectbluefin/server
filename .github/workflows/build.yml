@@ -128,11 +128,79 @@ jobs:
       - name: Validate Element Graph
         run: just validate
 
-  build:
+  # FSDK's kernel is ~70 of the ~85 build minutes, and no upstream cache holds
+  # it (our module certificate and patch 0006 change its key). This job builds
+  # it (and Go) with the committed release module certificate and no secrets,
+  # and pushes the key-free BuildStream cache to ghcr.io once per kernel cache
+  # key; release builds restore it (scripts/kernel-cache.sh).
+  kernel-cache:
     needs: changes
-    if: needs.changes.outputs.image == 'true'
+    if: needs.changes.outputs.release == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: write # pushes ghcr.io/<owner>/bluefin-server-bst-cache
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        with:
+          tool: just@1.58.0
+
+      # BuildStream's cache on the runner's /mnt disk; the kernel build alone
+      # fills 15 GB.
+      - name: Set up runner disk space
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /mnt/podman /mnt/buildstream
+          sudo chown -R "$USER:$USER" /mnt/podman /mnt/buildstream
+          mkdir -p ~/.config/containers
+          cat > ~/.config/containers/storage.conf <<EOF
+          [storage]
+          driver = "overlay"
+          runroot = "/run/user/1001"
+          graphroot = "/mnt/podman"
+          EOF
+          mkdir -p ~/.cache
+          ln -sfn /mnt/buildstream ~/.cache/buildstream
+
+      - name: Stage the release module certificate
+        run: |
+          mkdir -p files/boot-keys/modules
+          cp files/release-keys/linux-module-cert.crt files/boot-keys/modules/
+
+      - name: Set up oras
+        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
+        with:
+          url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
+          checksum: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
+
+      # The cache only saves time: a failure here must not hold back the
+      # release, which also counts this job through `build`.
+      - name: Build and push the kernel cache unless it exists
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${GITHUB_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          bash scripts/kernel-cache.sh seed "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bluefin-server-bst-cache"
+
+  build:
+    needs: [changes, kernel-cache]
+    # Runs when kernel-cache is skipped (non-release builds) or failed: the
+    # cache only saves time.
+    if: ${{ !cancelled() && needs.changes.outputs.image == 'true' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 300
+    permissions:
+      contents: read
+      packages: read # pulls the kernel cache
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -180,6 +248,14 @@ jobs:
               echo "Security violation: private linux-module-cert.key must not reside in modules/" >&2
               exit 1
             fi
+            # The kernel cache is keyed on the committed copy of the module
+            # certificate; same certificate, so use its exact bytes.
+            if ! cmp -s <(openssl x509 -in files/boot-keys/modules/linux-module-cert.crt -outform der) \
+                        <(openssl x509 -in files/release-keys/linux-module-cert.crt -outform der); then
+              echo "files/release-keys/linux-module-cert.crt is not the module certificate in BOOT_KEYS_TARBALL; update it" >&2
+              exit 1
+            fi
+            cp files/release-keys/linux-module-cert.crt files/boot-keys/modules/linux-module-cert.crt
             printf '%s\n' "${SYSUPDATE_SIGNING_KEY}" > files/boot-keys/sysupdate-signing.asc
             cp files/os/sysupdate-keys/import-pubring.gpg files/boot-keys/import-pubring.pgp
           else
@@ -202,9 +278,6 @@ jobs:
           just set-version "${V}"
           echo "version=${V}" >> "$GITHUB_OUTPUT"
 
-      - name: Validate Element Graph
-        run: just validate
-
       - name: Set up runner disk space
         run: |
           set -euo pipefail
@@ -219,6 +292,26 @@ jobs:
           EOF
           mkdir -p ~/.cache
           ln -sf /mnt/buildstream ~/.cache/buildstream
+
+      - name: Validate Element Graph
+        run: just validate
+
+      - name: Set up oras
+        if: needs.changes.outputs.release == 'true'
+        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
+        with:
+          url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
+          checksum: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
+
+      - name: Restore the kernel cache
+        if: needs.changes.outputs.release == 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${GITHUB_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          bash scripts/kernel-cache.sh restore "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bluefin-server-bst-cache"
 
       - name: Build and export the image set
         run: just export-image
