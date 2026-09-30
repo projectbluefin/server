@@ -100,6 +100,24 @@ config:
 
   - |
     set -eu
+    # BuildStream records no directory modes and the sandbox umask is 0, so
+    # staged directories and the files written above come out group- and
+    # world-writable. /etc is copied from the factory tree with its modes,
+    # which would let any local user rewrite /etc/sudoers.d or unit files.
+    # Clear group/other write on everything but sticky directories.
+    factory=/sysroot/usr/share/factory/etc
+    conf=/sysroot/usr/lib/tmpfiles.d/00-bluefin-factory-etc.conf
+    find "${factory}" -mindepth 1 \( -type d ! -perm -1000 -o -type f \) -perm /022 -printf '%P\n' | sort > /tmp/etc-writable
+    find /sysroot \( -type d ! -perm -1000 -o -type f \) -perm /022 -exec chmod go-w {} +
+    # C only copies what is missing and /etc persists across updates, so
+    # repair the copies earlier images installed in place.
+    while IFS= read -r rel; do
+      printf 'z /etc/%s %s - - -\n' "${rel}" "$(stat -c %04a "${factory}/${rel}")" >> "${conf}"
+    done < /tmp/etc-writable
+    echo "Cleared group/other write; /etc paths repaired in place: $(wc -l < /tmp/etc-writable)"
+
+  - |
+    set -eu
     mkdir -p /tmp/repart.d
     cat > /tmp/repart.d/10-usr.conf <<EOF
     [Partition]

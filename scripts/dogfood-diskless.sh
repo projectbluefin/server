@@ -192,6 +192,12 @@ echo "PROBE verity=$(veritysetup status usr | sed -n 's/^ *status: *//p')"
 echo "PROBE os=$(. /usr/lib/os-release; echo "${IMAGE_ID} ${IMAGE_VERSION}")"
 echo "PROBE var=$(findmnt -no SOURCE,FSTYPE /var)"
 echo "PROBE root-passwd=$(passwd -S root 2>&1 | cut -d' ' -f2)"
+etc_writable=$(shopt -s globstar dotglob nullglob; for p in /etc /etc/**; do
+    [ -L "${p}" ] && continue
+    case "$(stat -c %A "${p}")" in [d-]????w????|[d-]???????w?) ;; *) continue ;; esac
+    [ -k "${p}" ] || echo "${p}"
+done)
+echo "PROBE etc-writable=$(printf '%s' "${etc_writable}" | grep -c .) $(printf '%s' "${etc_writable}" | head -n 5 | tr '\n' ' ')"
 boots=$(( $(cat /var/lib/dogfood-boots 2>/dev/null || echo 0) + 1 ))
 echo "${boots}" > /var/lib/dogfood-boots
 echo "PROBE boots=${boots}"
@@ -281,6 +287,9 @@ fi
 failed="$(grep -a '\[FAILED\]' "${dir}/dogfood-serial.log" || true)"
 if [ "${status}" = 0 ] && [ -n "${DOGFOOD_EXPECT:-}" ] && ! grep -aqE -- "${DOGFOOD_EXPECT}" "${dir}/dogfood-serial.log"; then
     echo "FAIL: booted, but the probe output does not match DOGFOOD_EXPECT=${DOGFOOD_EXPECT}" >&2
+    status=1
+elif [ "${status}" = 0 ] && ! grep -aq 'PROBE etc-writable=0' "${dir}/dogfood-serial.log"; then
+    echo "FAIL: group- or world-writable paths under /etc: $(grep -aoE 'PROBE etc-writable=.*' "${dir}/dogfood-serial.log" | head -n1)" >&2
     status=1
 elif [ "${status}" = 0 ] && ! grep -aq 'PROBE secureboot=enabled' "${dir}/dogfood-serial.log"; then
     # Firmware that refuses the enrollment payloads boots on in setup mode,
