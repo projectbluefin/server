@@ -72,7 +72,9 @@ installer UI of its own.
 4. sysinstall installs, and the machine **reboots by itself** when it
    succeeds. Remove the stick when the screen goes blank.
 5. **First boot of the installed disk** asks, on the monitor (tty1), for a new
-   **root password** (typed twice). Then log in as `root` with it.
+   **root password**, then asks again to confirm. It shows what you type unless
+   you press **Tab** first. Do not leave it empty: an empty answer skips the
+   prompt and root stays locked. Then log in as `root` with it.
 
 Only two answers cancel: an empty answer at either prompt, and `no` at the
 confirmation (`Installation not confirmed, cancelling.`). Anything else
@@ -123,9 +125,12 @@ does for the unattended test. See
 
 ## Credentials and the ESP
 
-The installer needs no login: `systemd-sysinstall` runs on the console. It
-does not carry the installer's credentials over to the installed disk, so
-provision the installed node by placing encrypted `.cred` files in
+The installer needs no login: `systemd-sysinstall` runs on the console.
+sysinstall stores a few system credentials next to the installed UKI (`extra`
+lines in the boot entry): `firstboot.locale`, `firstboot.keymap`,
+`firstboot.timezone`, and `bluefin.prompt-root-password`. It does not copy
+other credentials from the installer, so provision anything else (SSH keys,
+hostname, network) by placing encrypted `.cred` files in
 `/loader/credentials/` on the installed disk's ESP before its first boot
 (details in [tpm2-credential-sealing.md](tpm2-credential-sealing.md)).
 
