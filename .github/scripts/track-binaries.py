@@ -9,11 +9,18 @@ BuildStream source ref.
   kubernetes   include/kubeadm.yml kubernetes-version  kubelet, kubeadm, kubectl  ref: in
   cri-tools    include/kubeadm.yml crictl-version      crictl tarball             elements/kubeadm/
   containerd   include/kubeadm.yml containerd-version  containerd static tarball  kubeadm-bin.bst
-  runc         include/kubeadm.yml runc-version        runc.amd64
+  runc         include/kubeadm.yml runc-version        runc.<arch>
   cni-plugins  include/kubeadm.yml cni-plugins-version CNI plugins tarball
   k0s          include/k0s.yml k0s-k8s-version and     k0s binary                 ref: in
                k0s-patch                                                          elements/k0s/k0s-bin.bst
   oras         Justfile oras_image tag                 setup-oras url + checksum in .github/workflows/*.yml
+
+The .bst pins cover every architecture the element fetches: the top-level
+amd64 sources and the arm64 ones under `(?): arch == "aarch64"`. Every
+`url:` line carrying the component's marker is a pin, wherever it sits, so a
+bump refreshes all architectures at once, and a release counts as a candidate
+only when every architecture's asset and checksum file is attached. ORAS is
+CI tooling and pinned for amd64 runners only.
 
 check   Newest release of each component inside its pinned MAJOR.MINOR series:
         Kubernetes from dl.k8s.io/release/stable-X.Y.txt, the rest from the

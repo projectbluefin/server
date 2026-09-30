@@ -6,9 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Pull requests cancel superseded runs. Pushes to main queue instead: a run
+# on main ends in a release, and cancelling it would skip that version.
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least privilege by default: this workflow executes PR-controlled build code
 # (the Justfile and build scripts come from the PR head), so the workflow-wide
@@ -275,6 +277,9 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: bash scripts/dogfood-install.sh dist/diskless dist/diskless-next dist/diskless-broken
 
+      - name: Install from the offline USB installer and boot it
+        run: bash scripts/dogfood-installer.sh dist/diskless
+
       - name: Upload boot logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -283,6 +288,7 @@ jobs:
           path: |
             dist/*/dogfood-*.log
             dist/dogfood-install/*.log
+            dist/dogfood-installer/*.log
           if-no-files-found: ignore
           retention-days: 7
 

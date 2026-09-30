@@ -29,7 +29,6 @@ The factory pattern is broader than a single host: a downstream CI lab or OS fac
 │ Core server OS: DDI-first, image-updated                    │
 │ • systemd-sysupdate for atomic A/B updates                  │
 │ • systemd-sysext for optional layers (k0s, extensions)      │
-│ • container runtimes as systemd-sysexts                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -47,8 +46,10 @@ See [k0s-sysext.md](k0s-sysext.md) for details.
 ## Workloads are containers
 
 The workloads the factory tests and ships live in other repositories or image
-pipelines. Container runtimes ship as optional `systemd-sysext`s rather than in
-the base /usr image (hard rule 4 forbids container runtimes in the base image).
+pipelines. No container runtime ships in the base /usr image (hard rule 4);
+the only runtime we ship is containerd, inside the opt-in kubeadm sysext (see
+[kubeadm-sysext.md](kubeadm-sysext.md)). Everything else runs in system
+containers or in the workload images themselves.
 
 > Bluefin Server is the factory floor; optional workloads and variant images run on that floor.
 
@@ -60,7 +61,7 @@ the base /usr image (hard rule 4 forbids container runtimes in the base image).
 | Atomic, rollback-capable updates | Image-based A/B updates via `systemd-sysupdate`; diskless nodes update by rebooting |
 | Minimal attack surface / lean base OS | Verity-sealed read-only /usr with bash; optional tools as sysexts |
 | Kubernetes control plane on every node | k0s delivered as `systemd-sysext` |
-| Container workloads | `podman` (and other runtimes) as optional `systemd-sysext`s |
+| Container workloads | containerd via the opt-in kubeadm sysext; anything else runs in system containers |
 | Signed, verifiable release artifacts | Signed UKIs + `SHA256SUMS` signed in-element, verified against `/etc/systemd/import-pubring.pgp` |
 
 ## SSH and Remote Diagnostics

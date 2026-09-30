@@ -8,7 +8,8 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-JOBS = yaml.safe_load((ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8"))["jobs"]
+WORKFLOW = yaml.safe_load((ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8"))
+JOBS = WORKFLOW["jobs"]
 RELEASE = JOBS["release"]
 DRY_RUN = JOBS["release-dry-run"]
 
@@ -70,3 +71,15 @@ def test_release_attests_files_and_oci_artifact() -> None:
     assert RELEASE["permissions"]["id-token"] == "write"
     assert RELEASE["permissions"]["attestations"] == "write"
     assert not any("id-token" in (job.get("permissions") or {}) for name, job in JOBS.items() if name != "release")
+
+
+def test_pushes_to_main_never_cancel_a_release_run() -> None:
+    concurrency = WORKFLOW["concurrency"]
+    assert concurrency["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
+
+
+def test_boot_test_uploads_every_harness_log_directory() -> None:
+    upload = next(s for s in WORKFLOW["jobs"]["boot-test"]["steps"] if s.get("name") == "Upload boot logs")
+    paths = upload["with"]["path"].split()
+    for d in ("dist/dogfood-install/", "dist/dogfood-installer/"):
+        assert any(p.startswith(d) for p in paths), d

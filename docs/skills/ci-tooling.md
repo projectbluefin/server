@@ -29,8 +29,8 @@ metadata:
 Every `uses:` line must reference a full commit SHA. Never use `@v2` or `@main`.
 
 ```yaml
-# correct
-- uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2
+# correct (see build.yml for the current pinned SHA)
+- uses: taiki-e/install-action@<full-commit-sha> # v2
 
 # wrong — mutable tag, supply-chain risk
 - uses: taiki-e/install-action@v2
@@ -48,7 +48,7 @@ Pin the tool version too, not only the action SHA. Without `@<version>`,
 a binary chosen by an upstream release rather than by a commit in this repo.
 
 ```yaml
-- uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2
+- uses: taiki-e/install-action@<full-commit-sha> # v2 — see build.yml for the current pin
   with:
     tool: just@1.58.0
 ```
@@ -130,7 +130,7 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | `docs` | `docs-checks.yml` | `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. Read-only token. |
 | `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the final-assembly artifacts, rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). Throwaway keys, nothing published. Read-only token. |
 | `unit` | `unit-tests.yml` | `pull_request`, `push/main` | Runs pytest and BATS unit test suites. Read-only token. |
-| `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream binaries pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, ORAS) with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins, verified against upstream's checksum files and the downloaded assets, and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
+| `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream binaries pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, ORAS) with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets, and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
 GitHub Actions runs the **complete BuildStream compilation pipeline** using `/mnt`
 SSD storage on the runner for podman and BuildStream caches. Release assets are
@@ -152,7 +152,7 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
     shipped keyring).
  4. **Boot test:** Downloads the exported image sets and runs, in QEMU with
     Secure Boot OVMF, each as one `scripts/dogfood-diskless.sh --check` or
-    `scripts/dogfood-install.sh` call. The firmware is Fedora's
+    `scripts/dogfood-install.sh` or `scripts/dogfood-installer.sh` call. The firmware is Fedora's
     `edk2-ovmf` (Koji URL + SHA-256 in `build.yml`), not Ubuntu's `ovmf`:
     Ubuntu 26.04's OVMF 2025.11 rejects systemd-boot's PK enrollment
     (`Failed to write PK secure boot variable: Security violation`), and
@@ -178,6 +178,9 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
       `0.<run>.N`). Main skips this
       because its extra sets would be release-signed versions nobody
       publishes; every change reaches main through a pull request that ran it.
+    - `scripts/dogfood-installer.sh`: the offline USB installer installs
+      unattended onto a blank disk, which then boots with and without the
+      installer attached.
  5. **Version Derivation:** The release version is set per build with
     `just set-version`: `YY.MM.<run>` on main, `0.<run>` on pull requests so
     a PR build can never sort above a release.
@@ -199,10 +202,12 @@ of build time over 4 cores). The critical path is FSDK's
 `components/linux.bst`: 6 min to fetch its source (not in any source cache)
 and 1 h 43 min to build. FSDK's caches never hold it for us, because the
 `components/linux-module-cert.bst` junction override (our module certificate)
-and `patches/freedesktop-sdk/0006-linux-*.patch` change its cache key. Next are
-about 40 FSDK elements our FSDK patches or their reverse dependencies change
-(glib-stage1, gobject-introspection, harfbuzz, go, vala, ...; about 70 min of
-build time in parallel with the kernel). Changing only `image-version`
+and `patches/freedesktop-sdk/0006-linux-*.patch` change its cache key. The
+other ~70 min of parallel build time on that run came from about 40 FSDK
+elements (glib-stage1, gobject-introspection, harfbuzz, vala, ...) pulled in
+only by FSDK's `components/os-release.bst` in `base/base-stack.bst`, and
+patched by `0002`–`0005`; both are gone, which removes 57 elements from the
+graph. Go (for ignition) still builds from source. Changing only `image-version`
 rebuilds 13 version-stamped elements (os-release to `oci/bluefin-server-image.bst`
 and the sysexts), 2 min locally on a warm cache; CI's
 per-set cost is estimated at under 10 min.

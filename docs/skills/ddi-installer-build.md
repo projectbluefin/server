@@ -54,17 +54,13 @@ just publish-oci <registry-host>:30500/bluefin-server dist/diskless 1  # plain H
 
 Every image build signs: the UKIs and systemd-boot with DB, kernel modules
 with the module signing certificate, and the release `SHA256SUMS` with the
-image signing key. `build-image` (and `validate`) depends on `gen-dev-keys`,
-which generates throwaway keys in `files/boot-keys/` (gitignored) on first
-run: PK/KEK/DB, the module certificate, and the `sysupdate-signing.asc` /
-`import-pubring.pgp` pair. Keys are kept unless `--force` is given, and a
-partial set (a file of a pair or of the boot set missing or empty) is an error
-rather than something to fill in. CI builds
-on `main` unpack the `BOOT_KEYS_TARBALL` secret, write `SYSUPDATE_SIGNING_KEY`
-to `files/boot-keys/sysupdate-signing.asc`, and copy the committed release
-keyring `files/os/sysupdate-keys/import-pubring.gpg` to
-`files/boot-keys/import-pubring.pgp`; pull requests get throwaway keys and
-their images are never published.
+image signing key. What each key is, where it lives, what `just gen-dev-keys`
+generates (throwaway keys in the gitignored `files/boot-keys/`, kept unless
+`--force`, a partial set is an error), and how CI supplies the real keys:
+[secure-boot-keys.md](secure-boot-keys.md). The release-signing half
+(`sysupdate-signing.asc` / `import-pubring.pgp`, the committed
+`files/os/sysupdate-keys/import-pubring.gpg`, and rotation):
+[systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
 
 **Rotating any key needs a new `image-version`.** Every key ends up in the
 image bits: DB signs the UKIs and systemd-boot, the module certificate is
@@ -72,12 +68,8 @@ built into the kernel, and `import-pubring.pgp` ships in `/usr`. An image
 version names one immutable set of bits, and `systemd-sysupdate` only
 installs a version newer than the one it runs, so rebuilding the same version
 with new keys publishes different bits under a released name and never
-reaches nodes already on it. Rotate keys (`just gen-dev-keys --force`, or new
-CI secrets), then `just set-version` to a version that sorts higher before
-building. Nodes also need the new Secure Boot keys enrolled and, for the
-image signing key, the new keyring; see
-"Rotating the Signing Key" in
-[systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
+reaches nodes already on it. Rotate keys, then `just set-version` to a
+version that sorts higher before building.
 
 ## Reproducible builds
 
@@ -113,6 +105,7 @@ just dogfood-check               # headless: pass when the in-guest probe
 just dogfood-install             # diskless boot, systemd-sysinstall to a blank
                                  # disk, then boot the installed disk
 just dogfood-install NEXT=<dir>  # ...then sysupdate A->B to NEXT and boot it
+just dogfood-installer           # offline USB installer: unattended install to a blank disk, boot it with and without the stick
 ```
 
 `scripts/dogfood-diskless.sh <dir> [--check]` boots the way a PXE/HTTP-booted
@@ -203,9 +196,8 @@ projects:
 
 `.github/workflows/build.yml` runs `just validate`, exports the image set
 (already carrying its signed `SHA256SUMS(.gpg)`), runs the QEMU boot test, and
-on `main` publishes `dist/diskless/` as-is: an immutable GitHub Release tagged
-`v<image-version>` plus an ORAS OCI artifact at
-`ghcr.io/<owner>/bluefin-server:<ver>,latest`. One version is published
+on `main` publishes `dist/diskless/` as-is (see the `release` job in
+[ci-tooling.md](ci-tooling.md)). One version is published
 exactly once; creating an existing tag fails rather than overwriting assets
 nodes may already trust.
 

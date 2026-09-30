@@ -51,8 +51,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y bats
+          sudo apt-get update && sudo apt-get install -y bats nodejs shellcheck
           pip install pytest pyyaml
+
+      # Ubuntu's AppArmor policy blocks unprivileged user namespaces; the
+      # os-justfile bats tests run the k8s recipe inside one.
+      - name: Allow unprivileged user namespaces
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
 
       - name: Set up just
         uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2

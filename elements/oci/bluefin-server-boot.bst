@@ -88,7 +88,9 @@ variables:
   # installer's /usr. The installer is offline: the initrd must not wait for
   # network-online (no limit; netboot needs it, the installer never does).
   # tty0 comes last so /dev/console, where systemd-sysinstall.service draws
-  # its interface, is the monitor.
+  # its interface, is the monitor. firstboot.keymap is a well-known
+  # systemd-firstboot credential: with it set, firstboot does not ask for a
+  # keymap (a list of 100+ layouts), and sysinstall copies it to the target.
   installer-cmdline: >-
     root=tmpfs
     systemd.verity_usr_data=/dev/disk/by-partlabel/bluefin-installer-usr
@@ -98,6 +100,7 @@ variables:
     systemd.mask=boot.automount systemd.mask=boot.mount
     systemd.unit=system-install.target
     systemd.setenv=BLUEFIN_INSTALL_KERNEL=/run/bluefin/installer/bluefin/bluefin-server-%{image-version}.efi
+    systemd.set_credential=firstboot.keymap:us
     console=ttyS0,115200 console=tty0
 
 config:

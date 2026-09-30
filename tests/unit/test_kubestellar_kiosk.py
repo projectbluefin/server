@@ -1,8 +1,13 @@
 """Contracts for the KubeStellar kiosk proxy and authenticated agent gate."""
 
+import posixpath
+import re
+import subprocess
 from pathlib import Path
 
 import yaml
+
+from _systemd import SystemdFile, tmpfiles
 
 ROOT = Path(__file__).resolve().parents[2]
 KIOSK = ROOT / "files" / "k0s" / "kiosk"
@@ -31,29 +36,68 @@ PROXY_MANIFEST = (
 )
 
 
+def local_sources(element: Path) -> list[dict]:
+    data = yaml.safe_load(element.read_text(encoding="utf-8"))
+    return [s for s in data["sources"] if s["kind"] == "local"]
+
+
+def deployment_pod(manifest: Path, name: str) -> dict:
+    docs = [d for d in yaml.safe_load_all(manifest.read_text(encoding="utf-8")) if d]
+    (deployment,) = [d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == name]
+    return deployment["spec"]["template"]["spec"]
+
+
 def test_kiosk_assets_are_packaged_and_seeded() -> None:
     sysext = SYSEXT.read_text(encoding="utf-8")
-    tmpfiles = TMPFILES.read_text(encoding="utf-8")
 
     assert KIOSK_CONF.is_file()
     assert KIOSK_JS.is_file()
     assert KIOSK_CSS.is_file()
-    assert "path: files/k0s/kiosk" in sysext
-    assert "directory: kiosk-src" in sysext
+    assert {"kind": "local", "path": "files/k0s/kiosk", "directory": "kiosk-src"} in local_sources(SYSEXT)
     assert 'cp -a kiosk-src/. "${root}/share/k0s/kiosk/"' in sysext
-    assert "C+ /var/lib/k0s/kiosk - - - - /usr/share/k0s/kiosk" in tmpfiles
-    assert "kiosk-src" not in K0S_SYSEXT.read_text(encoding="utf-8"), (
+    seeded = [rule for rule in tmpfiles(TMPFILES) if rule.path == "/var/lib/k0s/kiosk"]
+    assert [(rule.type, rule.argument) for rule in seeded] == [("C+", "/usr/share/k0s/kiosk")]
+    k0s_sources = [s["path"] for s in local_sources(K0S_SYSEXT)]
+    assert "files/k0s/sysext" in k0s_sources
+    assert "files/k0s/kiosk" not in k0s_sources, (
         "the kiosk ships in the opt-in KubeStellar sysext, not with k0s"
     )
 
 
-def test_kiosk_tls_key_is_generated_per_node_not_shipped() -> None:
+def test_kiosk_tls_key_is_generated_per_node_not_shipped(tmp_path: Path) -> None:
     sysext = SYSEXT.read_text(encoding="utf-8")
-    seed = SEED.read_text(encoding="utf-8")
     assert "openssl req" not in sysext, "a public sysext must not carry a private key"
     assert "key material in a public sysext" in sysext
-    assert "test -s /var/lib/k0s/kiosk/key.pem ||" in seed
-    assert "-keyout /var/lib/k0s/kiosk/key.pem" in seed
+
+    scripts = [
+        argv[2]
+        for argv in SystemdFile(SEED).commands()
+        if posixpath.basename(argv[0]) == "sh" and argv[1:2] == ["-c"] and "openssl" in argv[2]
+    ]
+    assert len(scripts) == 1, "expected one sh -c command generating the kiosk key"
+    assert "/var/lib/k0s/kiosk" in scripts[0] and "/usr/bin/openssl" in scripts[0]
+    kiosk = tmp_path / "kiosk"
+    kiosk.mkdir()
+    openssl = tmp_path / "openssl"
+    openssl.write_text(
+        '#!/bin/sh\necho "$@" >> "$CALLS"\n'
+        'while [ $# -gt 0 ]; do case "$1" in -keyout|-out) : > "$2";; esac; shift; done\n',
+        encoding="utf-8",
+    )
+    openssl.chmod(0o755)
+    calls = tmp_path / "calls"
+    script = scripts[0].replace("/var/lib/k0s/kiosk", str(kiosk)).replace("/usr/bin/openssl", str(openssl))
+
+    def seed() -> list[str]:
+        subprocess.run(["sh", "-c", script], env={"CALLS": str(calls), "PATH": "/usr/bin:/bin"}, check=True)
+        return calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+
+    first = seed()
+    assert len(first) == 1 and f"-keyout {kiosk}/key.pem" in first[0]
+    assert ((kiosk / "key.pem").stat().st_mode & 0o077) == 0, "the private key must not be group/world readable"
+    assert ((kiosk / "cert.pem").stat().st_mode & 0o777) == 0o644
+    (kiosk / "key.pem").write_text("existing node key", encoding="utf-8")
+    assert seed() == first, "an existing key must never be regenerated"
 
 
 def test_proxy_injects_only_csp_safe_same_origin_assets() -> None:
@@ -95,40 +139,43 @@ def test_gate_waits_for_session_and_blocks_until_agent_health() -> None:
 
 
 def test_console_provides_local_and_oauth_login_options() -> None:
-    console = CONSOLE_MANIFEST.read_text(encoding="utf-8")
+    pod = deployment_pod(CONSOLE_MANIFEST, "kubestellar-console")
+    (console,) = [c for c in pod["containers"] if c["name"] == "console"]
+    env = {e["name"]: e for e in console["env"]}
 
-    assert "name: DEV_MODE" in console
-    assert 'value: "true"' in console
-    assert "name: ALLOW_DEV_MODE_IN_CLUSTER" in console
-    assert "hostPort:" not in console
     # #193: on first boot the console must read the local k0s cluster directly
     # (no connected kc-agent yet) and skip the onboarding questionnaire.
     # SKIP_ONBOARDING skips the questionnaire, not sign-in; sign-in is bypassed
     # by DEV_MODE/DEV_USER_LOGIN.
-    assert "name: SKIP_ONBOARDING" in console
-    assert "name: NO_LOCAL_AGENT" in console
-    assert "name: POD_NAMESPACE" in console
-    assert "serviceAccountName: kubestellar-console" in console
-    assert "name: GITHUB_CLIENT_ID" in console
-    assert "name: GITHUB_CLIENT_SECRET" in console
-    assert "name: kubestellar-console-github-oauth" in console
-    assert "key: client-id" in console
-    assert "key: client-secret" in console
-    assert "optional: true" in console
+    for flag in ("DEV_MODE", "ALLOW_DEV_MODE_IN_CLUSTER", "SKIP_ONBOARDING", "NO_LOCAL_AGENT"):
+        assert env[flag].get("value") == "true", flag
+    assert env["POD_NAMESPACE"].get("value") == "kubestellar-console"
+    assert pod["serviceAccountName"] == "kubestellar-console"
+    for name, key in (("GITHUB_CLIENT_ID", "client-id"), ("GITHUB_CLIENT_SECRET", "client-secret")):
+        assert env[name]["valueFrom"]["secretKeyRef"] == {
+            "name": "kubestellar-console-github-oauth",
+            "key": key,
+            "optional": True,
+        }, name
+
+    # Only the kiosk proxy may be reachable from the node.
+    assert not pod.get("hostNetwork")
+    assert not [p for c in pod["containers"] for p in c.get("ports", []) if "hostPort" in p]
+    docs = [d for d in yaml.safe_load_all(CONSOLE_MANIFEST.read_text(encoding="utf-8")) if d]
+    assert all(d["spec"].get("type", "ClusterIP") == "ClusterIP" for d in docs if d["kind"] == "Service")
 
 
 def test_proxy_is_the_only_public_console_endpoint() -> None:
-    proxy = PROXY_MANIFEST.read_text(encoding="utf-8")
+    pod = deployment_pod(PROXY_MANIFEST, "kubestellar-kiosk-proxy")
+    (proxy,) = pod["containers"]
 
-    assert "name: kubestellar-kiosk-proxy" in proxy
-    assert "hostPort: 8080" in proxy
-    assert "mountPath: /etc/kubestellar-kiosk" in proxy
-    assert "hostPath:\n          path: /var/lib/k0s/kiosk" in proxy
-    assert "readOnly: true" in proxy
-    assert (
-        "nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8"
-        in proxy
-    )
+    published = [(p.get("hostIP"), p["hostPort"]) for p in proxy["ports"] if "hostPort" in p]
+    assert published == [("127.0.0.1", 8080)], "publish the kiosk on loopback only"
+    assert re.fullmatch(r"docker\.io/library/nginx@sha256:[0-9a-f]{64}", proxy["image"]), proxy["image"]
+    (mount,) = [m for m in proxy["volumeMounts"] if m["mountPath"] == "/etc/kubestellar-kiosk"]
+    assert mount.get("readOnly") is True
+    (volume,) = [v for v in pod["volumes"] if v["name"] == mount["name"]]
+    assert volume["hostPath"]["path"] == "/var/lib/k0s/kiosk"
 
 
 def test_console_rbac_reads_only_the_local_cluster() -> None:

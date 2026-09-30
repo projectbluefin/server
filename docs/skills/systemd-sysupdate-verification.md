@@ -171,9 +171,8 @@ Use `--type spdxjson` to get the SBOM attestation instead.
   committed. On release builds CI copies it to
   `files/boot-keys/import-pubring.pgp`.
 - `files/boot-keys/sysupdate-signing.asc` / `import-pubring.pgp` — the signing
-  key and public keyring for a build (gitignored). Locally `just gen-dev-keys`
-  generates a dev key; on main CI writes them from the `SYSUPDATE_SIGNING_KEY`
-  secret plus the committed release keyring.
+  key and public keyring for a build (gitignored). Where they come from
+  locally and in CI: [secure-boot-keys.md](secure-boot-keys.md).
 - `elements/bluefin-server/os-sysupdate-keys.bst` — installs
   `files/boot-keys/import-pubring.pgp` as `/etc/systemd/import-pubring.pgp`.
 - `files/os/sysupdate.d/*.transfer` and the k0s component directory
@@ -212,9 +211,8 @@ Use `--type spdxjson` to get the SBOM attestation instead.
    trust updates signed by the key in their keyring, so plan the rotation
    around a release boundary.
 
-For a throwaway local signing key, `just gen-dev-keys` writes
-`files/boot-keys/sysupdate-signing.asc` and `files/boot-keys/import-pubring.pgp`
-on its own; no manual gpg step is needed.
+For a throwaway local signing key, `just gen-dev-keys` writes the pair on its
+own; see [secure-boot-keys.md](secure-boot-keys.md).
 
 ## Common Gotchas
 

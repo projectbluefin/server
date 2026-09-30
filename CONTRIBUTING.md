@@ -8,6 +8,7 @@ Thanks for contributing. This repository is optimized for AI coding agents first
 2. AI agents must query the `projectbluefin` MCP server (`search_knowledge(query, limit)`, `get_factory_status()`, `get_work_queue()`) before investigating or implementing.
 3. Make the smallest change that solves the problem.
 4. Run `just validate` on every change that touches the element graph.
+   `just test-unit` runs pytest (needs `python3` with `pytest` and `pyyaml`) and bats; without a local `bats` it runs bats from a digest-pinned container through `podman`.
 5. Validate documentation changes with `python3 .github/scripts/docs-checks.py`.
 6. Use Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`, `chore:`).
 7. Attribution trailers are required on all AI-assisted commits:

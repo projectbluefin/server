@@ -39,9 +39,7 @@ There is no application version for these images. Two version axes exist:
 
 3. Re-check the local patches in `patches/freedesktop-sdk/`
    ([`patches/README.md`](../../patches/README.md) says why each exists and
-   when to drop it). `just validate` surfaces a patch that no longer applies;
-   it does not catch 0003-0005 pointing at a library version the new ref no
-   longer builds, so compare those by hand (see the README).
+   when to drop it). `just validate` surfaces a patch that no longer applies.
 
 4. Rebuild and verify:
 
@@ -76,8 +74,8 @@ Before merging a bump:
   it; there is no gnome-build-meta junction to keep in step.
 - A point-release tag is immutable: once a GitHub Release for a given
   `image-version` is published, never republish different bits under it.
-- **Six patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
-  CAS servers to `project.conf`; `0002`–`0005` are FSDK build fixes; **`0006`
+- **Two patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
+  CAS servers to `project.conf`; **`0006`
   carries the Cilium/Kubernetes kernel options** (VXLAN, GENEVE, tc BPF,
   conntrack/ss diagnostics). A bumper must not drop `0006` or the kubeadm and
   k0s sysexts lose their datapath. If a release changed a patched file,

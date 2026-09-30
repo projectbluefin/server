@@ -6,6 +6,8 @@ default:
 # Same bst2 container image FSDK/dakota CI uses -- pinned by SHA.
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4")
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:64eb0b4930d57a92710822898fb73af6cc1ae35d")
+# bats for `just test-unit` when none is installed -- pinned by digest.
+export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
 
 # Prefix for podman calls: empty when rootless podman works, "sudo" otherwise.
 sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } else { "sudo" }
@@ -68,11 +70,18 @@ validate: gen-dev-keys
     python3 .github/scripts/check-renovate-series.py
     just bst show --deps all oci/bluefin-server-image.bst oci/k0s-sysext.bst oci/kubestellar-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst
 
-# Run the unit test suite (pytest + bats).
+# Run the unit test suite (pytest + bats; bats from a container if not installed).
 [group('dev')]
 test-unit:
+    #!/usr/bin/env bash
+    set -euo pipefail
     python3 -m pytest tests/unit -q
-    bats tests/unit
+    if command -v bats >/dev/null 2>&1; then
+        exec bats tests/unit
+    fi
+    echo "==> bats is not installed; running it from ${bats_image}" >&2
+    exec {{sudo_cmd}} podman run --rm --security-opt label=disable -e CI \
+        -v "{{justfile_directory()}}:/code:ro" -w /code "${bats_image}" tests/unit
 
 # ── Build ─────────────────────────────────────────────────────────────
 # Build the k0s and KubeStellar systemd-sysext images.
@@ -130,6 +139,11 @@ set-version VERSION:
 [group('diskless')]
 dogfood-install NEXT="":
     bash scripts/dogfood-install.sh dist/diskless {{NEXT}}
+
+# Boot the offline USB installer, install unattended to a blank disk, boot it (QEMU).
+[group('diskless')]
+dogfood-installer:
+    bash scripts/dogfood-installer.sh dist/diskless
 
 # REF=ghcr.io/<owner>/bluefin-server or <registry-host>:30500/bluefin-server
 # (PLAIN_HTTP=1); log in with podman login first. One layer per file.

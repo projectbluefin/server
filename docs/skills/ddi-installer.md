@@ -37,15 +37,14 @@ GPT partition label with room to spare):
 | `bluefin-server-<ver>.efi` | Disk UKI (installed nodes); also the sysupdate source for `$BOOT`. |
 | `bluefin-server-netboot_<ver>.efi` | Netboot UKI (diskless nodes); the UEFI HTTP boot / PXE target. |
 | `bluefin-server-netboot_<ver>.esp.raw` | Netboot ESP image: signed systemd-boot, the netboot UKI, and Secure Boot key enrollment payloads. Write it to a USB stick to boot diskless without HTTP boot. |
-| `bluefin-server-installer_<ver>.raw` | Offline USB installer: the same usr + verity images (labelled `bluefin-installer-usr` / `bluefin-installer-usr-verity`) plus an ESP with signed systemd-boot, the installer UKI, key enrollment payloads, and the disk UKI + install-time `repart.d` under `bluefin/`. Write it to a USB stick to install without a network. |
+| `bluefin-server-installer_<ver>.raw` | Offline USB installer; write to a stick to install without a network. See [usb-installer.md](usb-installer.md). |
 | `zfs_<ver>.raw.zst` / `kubestellar_<ver>.raw.zst` / `kubeadm_<ver>.raw.zst` | Opt-in sysext assets locked to this image version; installed nodes fetch them through the `zfs` / `kubestellar` / `kubeadm` sysupdate features. |
 | `k0s-<k0s-ver>.raw.zst` | Opt-in k0s sysext asset, on its own version axis. |
 | `efi-keys/` | PK/KEK/db enrollment payloads. |
 | `SHA256SUMS` / `SHA256SUMS.gpg` | One manifest over every file above, signed in-element with `files/boot-keys/sysupdate-signing.asc`; the image trusts the matching `import-pubring.pgp` (see `systemd-sysupdate-verification.md`). |
 
-A release is this directory published as-is: a GitHub Release `v<ver>` plus an
-ORAS OCI artifact `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per
-file, artifact type `application/vnd.projectbluefin.server.release.v1`).
+A release publishes this directory as-is (GitHub Release `v<ver>` plus an ORAS
+OCI artifact); see the `release` job in [ci-tooling.md](ci-tooling.md).
 `just publish-oci REF [DIR] [PLAIN_HTTP]` pushes the same artifact locally, as
 a rehearsal; CI publishes through `scripts/publish-release.sh`, which also
 verifies the pushed manifest against the local files.
@@ -66,10 +65,9 @@ signed with DB, so Secure Boot locks those command lines. `lockdown=integrity`
 is always on. `os-sd-boot-signed.bst` signs systemd-boot with the same DB key
 so installed disks and the netboot ESP get a loader firmware accepts.
 
-Dev keys come from `just gen-dev-keys` (throwaway keys in the gitignored
-`files/boot-keys/`, including the `sysupdate-signing.asc` /
-`import-pubring.pgp` pair that signs and verifies `SHA256SUMS`); CI builds on
-main use the `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets.
+The signing keys (dev vs CI, and the pair that signs and verifies
+`SHA256SUMS`): [secure-boot-keys.md](secure-boot-keys.md) and
+[systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
 
 ### Diskless (netboot UKI)
 
@@ -134,34 +132,8 @@ installed disk is identical whichever path installed it. No shell installer.
 
 ### From the USB installer (offline)
 
-```bash
-sudo dd if=bluefin-server-installer_<ver>.raw of=/dev/<usb> bs=4M conv=fsync status=progress
-```
-
-```text
-firmware -> systemd-boot -> bluefin-server-installer_<ver>.efi
-  -> /usr from the stick's bluefin-installer-usr partition (dm-verity, usrhash=)
-  -> tmpfs root, systemd.unit=system-install.target
-  -> systemd-sysinstall.service on the monitor (/dev/console = tty0)
-```
-
-The installer UKI finds its /usr by partition label, not by the
-usrhash-derived UUIDs. Those UUIDs belong to installed usr slots, so an
-existing Bluefin install (including the disk being overwritten) is never opened
-as the installer's /usr, and an installed node booted with the stick still
-plugged in never opens the stick's usr. `run-bluefin-installer.mount` mounts
-the stick's ESP (`bluefin-installer`) at `/run/bluefin/installer`; the
-`systemd-sysinstall.service` drop-in passes
-`--definitions=/run/bluefin/installer/bluefin/repart.d` and
-`--kernel=${BLUEFIN_INSTALL_KERNEL}` (the disk UKI, named by the installer
-UKI's `systemd.setenv=`). The disk UKI sits outside `EFI/Linux` on the stick so
-systemd-boot never offers it there. sysinstall prompts for the target disk,
-erasing it, and confirmation, then reboots; remove the stick when it does.
-
-Secure Boot: the stick's systemd-boot and UKIs are signed with the project DB
-key. On bare metal put the firmware into Setup Mode and pick the enrollment
-entry in the systemd-boot menu (`secure-boot-enroll if-safe` only
-auto-enrolls in VMs), or turn Secure Boot off.
+See [usb-installer.md](usb-installer.md) — the offline installer image, its
+boot flow, unattended installs, and install-time provisioning.
 
 ### From a diskless node
 

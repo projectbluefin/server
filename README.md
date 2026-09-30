@@ -33,6 +33,18 @@ Bluefin Server is currently in **Alpha**:
 
 > **Remote diagnostics:** OpenSSH is installed for on-demand diagnostics, but is disabled by default via systemd presets. It can be started manually with `systemctl start sshd` when remote access is needed. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 
+## Download a release
+
+Each push to `main` publishes an immutable [GitHub Release](https://github.com/projectbluefin/server/releases) tagged `v<YY.MM.run>` and the same file set as an OCI artifact at `ghcr.io/projectbluefin/bluefin-server` (tags `<ver>` and `latest`). Which file you want:
+
+| File | Use it for |
+|---|---|
+| `bluefin-server-netboot_<ver>.esp.raw` | Written to a USB stick, boots a node diskless (pulls the OS into RAM over HTTP). |
+| `bluefin-server-installer_<ver>.raw` | Written to a USB stick, boots into `systemd-sysinstall` for an offline install to disk. |
+| everything else | [Booty](https://github.com/jeefy/booty) syncs the whole release and serves it for network boot at scale. |
+
+Verify the download against the GPG-signed `SHA256SUMS` before use; the release public keyring is [`files/os/sysupdate-keys/import-pubring.gpg`](files/os/sysupdate-keys/import-pubring.gpg), and the verification and attestation steps are in [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md).
+
 ## Quick start
 
 You need only `podman` and [`just`](https://github.com/casey/just). BuildStream runs inside the FSDK `bst2` container, so BuildStream is not installed locally.

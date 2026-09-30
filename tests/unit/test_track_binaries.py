@@ -423,6 +423,134 @@ def test_github_token_is_sent_to_the_api_and_never_to_downloads(repo, upstream, 
     }
 
 
+ARM64_OLD = {name: sha(f"{name} arm64".encode()) for name in ("runc", "k0s")}
+
+
+def add_arm64(repo: Path) -> None:
+    """Give the fixture the real layout's `(?): arch == "aarch64"` sources."""
+    bst = repo / "elements/kubeadm/kubeadm-bin.bst"
+    bst.write_text(bst.read_text().replace("\nconfig:", f"""
+(?):
+- arch == "aarch64":
+    sources:
+    - kind: remote
+      url: github:opencontainers/runc/releases/download/v%{{runc-version}}/runc.arm64
+      ref: {ARM64_OLD['runc']}
+      directory: runc
+
+config:""", 1))
+    k0s = repo / "elements/k0s/k0s-bin.bst"
+    k0s.write_text(k0s.read_text().replace("\nconfig:", f"""
+(?):
+  - arch == "aarch64":
+      sources:
+        - kind: remote
+          url: github:k0sproject/k0s/releases/download/%{{k0s-upstream-tag}}/k0s-%{{k0s-upstream-tag}}-arm64
+          ref: {ARM64_OLD['k0s']}
+
+config:""", 1))
+
+
+RUNC = "https://github.com/opencontainers/runc/releases/download/v1.3.6/"
+
+
+def runc_release(upstream: Upstream, *arches: str) -> dict[str, str]:
+    new = {}
+    for arch in arches:
+        upstream.files[RUNC + f"runc.{arch}"] = f"runc {arch} 1.3.6".encode()
+        new[arch] = sha(f"runc {arch} 1.3.6".encode())
+    upstream.files[RUNC + "runc.sha256sum"] = "".join(f"{d}  runc.{a}\n" for a, d in new.items()).encode()
+    upstream.releases("opencontainers/runc", [
+        release("v1.3.6", *(f"runc.{a}" for a in arches), "runc.sha256sum"),
+        release("v1.3.3", "runc.amd64", "runc.arm64", "runc.sha256sum"),
+    ])
+    return new
+
+
+def test_bump_refreshes_every_architecture_together(repo, upstream):
+    add_arm64(repo)
+    new = runc_release(upstream, "amd64", "arm64")
+    before = snapshot(repo)
+
+    assert track.main(["apply", "runc"], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        "include/kubeadm.yml": [('  runc-version: "1.3.3"', '  runc-version: "1.3.6"')],
+        "elements/kubeadm/kubeadm-bin.bst": [
+            (f"  ref: {OLD['runc']}", f"  ref: {new['amd64']}"),
+            (f"      ref: {ARM64_OLD['runc']}", f"      ref: {new['arm64']}"),
+        ],
+    }
+    fetched = [r.full_url for r in upstream.requests]
+    assert RUNC + "runc.amd64" in fetched and RUNC + "runc.arm64" in fetched
+
+
+def test_k0s_bump_refreshes_the_arm64_binary_too(repo, upstream):
+    add_arm64(repo)
+    base = "https://github.com/k0sproject/k0s/releases/download/v1.36.4%2Bk0s.1/"
+    new = {a: upstream.asset(base + f"k0s-v1.36.4%2Bk0s.1-{a}") for a in ("amd64", "arm64")}
+    upstream.files[base + "sha256sums.txt"] = "".join(
+        f"{d} *k0s-v1.36.4+k0s.1-{a}\n" for a, d in new.items()).encode()
+    before = snapshot(repo)
+
+    assert track.main(["apply", "k0s", "--version", "1.36.4+k0s.1"], root=repo) == 0
+
+    assert changed_lines(before, repo)["elements/k0s/k0s-bin.bst"] == [
+        (f"    ref: {OLD['k0s']}", f"    ref: {new['amd64']}"),
+        (f"          ref: {ARM64_OLD['k0s']}", f"          ref: {new['arm64']}"),
+    ]
+
+
+def test_release_without_its_arm64_asset_is_not_proposed(repo, upstream):
+    add_arm64(repo)
+    runc_release(upstream, "amd64")
+    assert newest("runc", repo) == "1.3.3"
+
+
+def test_missing_arm64_checksum_fails_the_component_and_writes_nothing(repo, upstream, capsys):
+    add_arm64(repo)
+    runc_release(upstream, "amd64")
+    upstream.asset(RUNC + "runc.arm64")  # asset exists, but the sums file omits it
+    before = snapshot(repo)
+
+    assert track.main(["apply", "runc", "--version", "1.3.6"], root=repo) == 1
+
+    assert snapshot(repo) == before
+    assert "lists 0 sha256 for runc.arm64" in capsys.readouterr().err
+
+
+def test_missing_arm64_asset_fails_the_component_and_writes_nothing(repo, upstream, capsys):
+    add_arm64(repo)
+    new = runc_release(upstream, "amd64", "arm64")
+    del upstream.files[RUNC + "runc.arm64"]
+    before = snapshot(repo)
+
+    assert track.main(["apply", "runc", "--version", "1.3.6"], root=repo) == 1
+
+    assert snapshot(repo) == before
+    assert new["arm64"] not in (repo / "elements/kubeadm/kubeadm-bin.bst").read_text()
+    assert f"GET {RUNC}runc.arm64: HTTP 404" in capsys.readouterr().err
+
+
+def test_no_op_run_leaves_multi_arch_files_byte_identical(repo, upstream, capsys):
+    add_arm64(repo)
+    upstream.releases("opencontainers/runc", [release("v1.3.3", "runc.amd64", "runc.arm64", "runc.sha256sum")])
+    before = {p: (repo / p).read_bytes() for p in FILES}
+
+    assert track.main(["apply", "runc"], root=repo) == 0
+
+    assert {p: (repo / p).read_bytes() for p in FILES} == before
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("name", [n for n, c in track.COMPONENTS.items() if isinstance(c, track.BstComponent)])
+def test_real_elements_pin_amd64_and_arm64_alike(name):
+    pins = track.COMPONENTS[name].pins(track.Tree(ROOT))
+    by_arch = {arch: sorted(p.url.replace(arch, "ARCH") for p in pins if arch in p.url) for arch in ("amd64", "arm64")}
+    assert by_arch["amd64"] and by_arch["amd64"] == by_arch["arm64"]
+    assert len(pins) == len(by_arch["amd64"]) * 2
+
+
 @pytest.mark.parametrize("name", list(track.COMPONENTS))
 def test_real_pins_are_readable(name):
     tree = track.Tree(ROOT)

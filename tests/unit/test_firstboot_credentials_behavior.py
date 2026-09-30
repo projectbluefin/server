@@ -1,15 +1,15 @@
 """Executed coverage for files/os/libexec/bluefin-firstboot-credentials.
 
-The helper replaces `systemd-firstboot --force --welcome=no` in
-bluefin-firstboot-credentials.service because Flatcar's /usr is built without
-systemd-firstboot. These tests drive it under bash against a scratch --root
-with credentials laid out the way ImportCredential= presents them.
+bluefin-firstboot-credentials.service runs this helper instead of
+systemd-firstboot: it writes the same files and also applies firstboot.hostname
+to the live kernel hostname before systemd-networkd starts. These tests drive
+it under bash against a scratch --root with credentials laid out the way
+ImportCredential= presents them.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -41,15 +41,14 @@ def _run(tmp_path: Path, creds: dict[str, str], zoneinfo: tuple[str, ...] = ("Eu
 
 
 def test_helper_is_bash_that_passes_syntax() -> None:
-    # /usr/bin/bash, not /bin/bash: /bin is a tmpfiles-created symlink on
-    # Flatcar and the unit runs before sysinit.target.
+    # /usr/bin/bash, not /bin/bash: the image ships only /usr, and /bin is a
+    # symlink on the root file system that the image does not contain.
     assert HELPER.read_text(encoding="utf-8").startswith("#!/usr/bin/bash\n")
     subprocess.run(["bash", "-n", str(HELPER)], check=True)
 
 
-@pytest.mark.skipif(shutil.which("shellcheck") is None, reason="shellcheck not installed")
-def test_helper_is_shellcheck_clean_at_warning_level() -> None:
-    subprocess.run(["shellcheck", "-S", "warning", str(HELPER)], check=True)
+def test_helper_is_shellcheck_clean_at_warning_level(shellcheck: str) -> None:
+    subprocess.run([shellcheck, "-S", "warning", str(HELPER)], check=True)
 
 
 def test_all_five_credentials_write_what_systemd_firstboot_would(tmp_path: Path) -> None:

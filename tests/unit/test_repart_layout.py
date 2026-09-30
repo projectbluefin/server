@@ -13,10 +13,11 @@ Pure static checks: no BuildStream, no block devices.
 
 from __future__ import annotations
 
-import configparser
 from pathlib import Path
 
 import pytest
+
+from _systemd import SystemdFile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPART_DIR = REPO_ROOT / "files" / "os" / "repart.d"
@@ -34,17 +35,11 @@ EXPECTED = {
 
 
 def load(path: Path) -> dict[str, str]:
-    parser = configparser.ConfigParser(strict=False, interpolation=None)
-    parser.optionxform = str
-    parser.read_string(path.read_text(encoding="utf-8"))
-    return dict(parser["Partition"])
+    return {key: values[-1] for key, values in SystemdFile(path).sections["Partition"].items()}
 
 
 def transfer_target(name: str) -> dict[str, str]:
-    parser = configparser.ConfigParser(strict=False, interpolation=None)
-    parser.optionxform = str
-    parser.read_string((SYSUPDATE_DIR / name).read_text(encoding="utf-8"))
-    return dict(parser["Target"])
+    return {key: values[-1] for key, values in SystemdFile(SYSUPDATE_DIR / name).sections["Target"].items()}
 
 
 def test_layout_files_and_types():
@@ -90,8 +85,9 @@ def test_root_is_persistent_xfs_with_mount_points():
     root = load(REPART_DIR / "50-root.conf")
     assert root["Format"] == "xfs"
     assert root["FactoryReset"] == "yes"
+    directories = SystemdFile(REPART_DIR / "50-root.conf").words("Partition", "MakeDirectories")
     for directory in ("/usr", "/etc", "/efi", "/var"):
-        assert directory in root["MakeDirectories"].split()
+        assert directory in directories
 
 
 def test_boot_element_pins_slot_a_uuids_for_sysinstall():

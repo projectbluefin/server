@@ -147,31 +147,18 @@ These gaps drive the priorities in [architecture-roadmap.md](architecture-roadma
 
 ### Upstream distribution documentation
 
+Specific claims carry inline links in section 2. Documentation roots:
+
 - Ubuntu Server / autoinstall / cloud-init
   - <https://documentation.ubuntu.com/server/>
-  - <https://raw.githubusercontent.com/canonical/ubuntu-server-documentation/main/docs/how-to/software/automatic-updates.md>
-  - <https://raw.githubusercontent.com/canonical/ubuntu-server-documentation/main/docs/how-to/software/upgrade-your-release.md>
-  - <https://raw.githubusercontent.com/canonical/ubuntu-server-documentation/main/docs/how-to/software/package-management.md>
   - <https://canonical-subiquity.readthedocs-hosted.com/en/latest/intro-to-autoinstall.html>
   - <https://cloudinit.readthedocs.io/>
-- Talos Linux
-  - <https://docs.siderolabs.com/talos/v1.13/overview/what-is-talos.md>
-  - <https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/lifecycle-management/upgrading-talos.md>
-  - <https://docs.siderolabs.com/talos/v1.13/build-and-extend-talos/custom-images-and-development/system-extensions.md>
-  - <https://docs.siderolabs.com/talos/v1.13/reference/configuration/overview.md>
-- Flatcar Container Linux
-  - <https://raw.githubusercontent.com/flatcar/flatcar-docs/main/docs/setup/releases/update-strategies.md>
-  - <https://raw.githubusercontent.com/flatcar/flatcar-docs/main/docs/provisioning/ignition/_index.md>
-  - <https://raw.githubusercontent.com/flatcar/flatcar-docs/main/docs/provisioning/sysext/_index.md>
+- Talos Linux — <https://docs.siderolabs.com/talos/v1.13/>
+- Flatcar Container Linux — <https://www.flatcar.org/docs/latest/>
 - Fedora CoreOS / rpm-ostree / Zincati
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/index.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/auto-updates.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/producing-ign.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/running-containers.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/faq.adoc>
-  - <https://raw.githubusercontent.com/coreos/rpm-ostree/main/README.md>
+  - <https://docs.fedoraproject.org/en-US/fedora-coreos/>
+  - <https://coreos.github.io/rpm-ostree/>
   - <https://coreos.github.io/zincati/>
-  - <https://coreos.github.io/zincati/development/fleetlock/>
 
 ### systemd reference
 
