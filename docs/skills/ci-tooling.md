@@ -236,7 +236,10 @@ per-set cost is estimated at under 10 min.
   cache and pushes that cache as a zstd tarball (split into 1.9 GB layers) to
   `ghcr.io/<owner>/bluefin-server-bst-cache:kernel-<hash of both cache keys>`,
   unless the tag exists. `build` then runs `kernel-cache.sh restore` into its
-  empty cache before building, and gets the kernel as `cached`. Release builds
+  cache before building, and gets the kernel as `cached`; restore reads the
+  whole stream (zstd checksums, every tar header) before extracting, so a
+  corrupt download leaves the cache untouched instead of half-populated.
+  Release builds
   normalize `BOOT_KEYS_TARBALL`'s module certificate to the committed bytes
   after checking it is the same certificate (and stop if not), so the keys
   match. The tarball is public: `seed` refuses if

@@ -82,6 +82,21 @@ def test_restore_miss_is_not_an_error(env: dict[str, str]) -> None:
     assert not any((Path(env["HOME"]) / ".cache" / "buildstream").iterdir())
 
 
+def test_restore_leaves_the_cache_untouched_on_a_corrupt_download(env: dict[str, str]) -> None:
+    assert run(env, "seed", "ghcr.io/x/cache").returncode == 0
+    cache = Path(env["HOME"]) / ".cache" / "buildstream"
+    for entry in cache.iterdir():
+        subprocess.run(["rm", "-rf", str(entry)], check=True)
+    part = next(Path(env["STORE"]).iterdir())
+    data = bytearray(part.read_bytes())
+    data[len(data) // 2] ^= 0xFF
+    part.write_bytes(bytes(data))
+    result = run(env, "restore", "ghcr.io/x/cache")
+    assert result.returncode == 0
+    assert "did not verify" in result.stdout
+    assert not any(cache.iterdir())
+
+
 def test_seeded_cache_restores_into_an_empty_cache(env: dict[str, str], tmp_path: Path) -> None:
     assert run(env, "seed", "ghcr.io/x/cache").returncode == 0
     fresh = tmp_path / "fresh-home"
