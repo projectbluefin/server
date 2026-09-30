@@ -2,14 +2,21 @@ name: Build image artifacts
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
+  # Nightly dev-key build of main with the full boot test (A/B update and
+  # rollback included), which pull requests no longer run by default.
+  schedule:
+    - cron: "30 5 * * *"
   workflow_dispatch:
 
 # Pull requests cancel superseded runs. Pushes to main queue instead: a run
-# on main ends in a release, and cancelling it would skip that version.
+# on main ends in a release, and cancelling it would skip that version. The
+# nightly build and labels other than full-build get groups of their own, so
+# they neither delay a release nor cancel a pull request's full build.
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.event_name == 'schedule' && 'nightly' || (github.event.action == 'labeled' && github.event.label.name != 'full-build') && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least privilege by default: this workflow executes PR-controlled build code
@@ -20,13 +27,18 @@ permissions:
   contents: read
 
 jobs:
-  # Pull requests that cannot change the image set or the boot test (docs,
-  # unit tests, other workflows; see .github/scripts/image-build-needed.py)
-  # skip the ~2 h build. A skipped job reports as passing, so `build` and
-  # `boot-test` can be required checks without blocking those PRs.
-  # The classifier runs from the base revision, never the PR head, so a PR
-  # cannot edit it to skip its own build; changes to it or to this workflow
-  # always build.
+  # Decides what this run builds:
+  #  - release: a push or dispatch on main. Release-signed, published.
+  #  - image: the full image build and boot test. Always for releases, the
+  #    nightly schedule and dispatches; on a pull request only with the
+  #    full-build label or when it changes the FSDK junction or its patches,
+  #    and never when it cannot change the image set (docs, unit tests; see
+  #    .github/scripts/image-build-needed.py). Other pull requests run
+  #    `validate` in minutes instead of the ~1.5 h build.
+  # A skipped job reports as passing, so `build` and `boot-test` can be
+  # required checks without blocking those PRs. The classifier runs from the
+  # base revision, never the PR head, so a PR cannot edit it to skip its own
+  # build; changes to it or to this workflow always count as image changes.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -35,6 +47,8 @@ jobs:
       pull-requests: read # lists the pull request's changed files
     outputs:
       image: ${{ steps.decide.outputs.image }}
+      release: ${{ steps.decide.outputs.release }}
+      validate: ${{ steps.decide.outputs.validate }}
     steps:
       - name: Checkout the base revision's scripts
         if: github.event_name == 'pull_request'
@@ -44,23 +58,75 @@ jobs:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
-      - name: Decide whether to build the image set
+      - name: Decide what to build
         id: decide
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
         run: |
           set -euo pipefail
-          # Before the classifier exists on the base branch, build.
-          if [ "${GITHUB_EVENT_NAME}" != pull_request ] || [ ! -f .github/scripts/image-build-needed.py ]; then
-            echo "image=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[] | .filename, (.previous_filename // empty)' > "${RUNNER_TEMP}/changed.txt"
-          image="$(python3 .github/scripts/image-build-needed.py < "${RUNNER_TEMP}/changed.txt")"
-          echo "image=${image}" >> "$GITHUB_OUTPUT"
-          echo "Image build needed: ${image}"
+          image=false release=false validate=false
+          case "${GITHUB_EVENT_NAME}" in
+            push|workflow_dispatch)
+              image=true
+              if [ "${GITHUB_REF}" = refs/heads/main ]; then release=true; fi ;;
+            schedule)
+              image=true ;;
+            pull_request)
+              # Adding an unrelated label changes nothing about the PR.
+              if [ "${ACTION}" != labeled ] || [ "${LABEL}" = full-build ]; then
+                validate=true
+                gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+                  --jq '.[] | .filename, (.previous_filename // empty)' > "${RUNNER_TEMP}/changed.txt"
+                # Before the classifier exists on the base branch, build.
+                needed=true
+                if [ -f .github/scripts/image-build-needed.py ]; then
+                  needed="$(python3 .github/scripts/image-build-needed.py < "${RUNNER_TEMP}/changed.txt")"
+                fi
+                if [ "${needed}" = true ]; then
+                  if jq -e 'index("full-build")' <<< "${PR_LABELS}" > /dev/null \
+                    || grep -qE '^(elements/freedesktop-sdk\.bst|patches/)' "${RUNNER_TEMP}/changed.txt"; then
+                    image=true
+                  fi
+                fi
+              fi ;;
+          esac
+          {
+            echo "image=${image}"
+            echo "release=${release}"
+            echo "validate=${validate}"
+          } >> "$GITHUB_OUTPUT"
+          echo "image=${image} release=${release} validate=${validate}"
+
+  # The cheap check every pull request gets: resolves every shipped element
+  # graph and runs the version-invariant checks (`just validate`), with
+  # throwaway keys.
+  validate:
+    needs: changes
+    if: needs.changes.outputs.validate == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          persist-credentials: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        with:
+          tool: just@1.58.0
+
+      - name: Generate throwaway keys
+        run: just gen-dev-keys
+
+      - name: Validate Element Graph
+        run: just validate
 
   build:
     needs: changes
@@ -87,14 +153,16 @@ jobs:
       # module keys come from BOOT_KEYS_TARBALL (a base64 tarball of
       # files/boot-keys/), the SHA256SUMS signing key from
       # SYSUPDATE_SIGNING_KEY, and the image trusts the committed release
-      # keyring. Pull requests get throwaway keys and are never published.
+      # keyring. Every other build (pull requests, the nightly build, branch
+      # dispatches) gets throwaway keys and is never published.
       - name: Install signing keys
         env:
-          BOOT_KEYS_TARBALL: ${{ github.ref == 'refs/heads/main' && secrets.BOOT_KEYS_TARBALL || '' }}
-          SYSUPDATE_SIGNING_KEY: ${{ github.ref == 'refs/heads/main' && secrets.SYSUPDATE_SIGNING_KEY || '' }}
+          RELEASE: ${{ needs.changes.outputs.release }}
+          BOOT_KEYS_TARBALL: ${{ needs.changes.outputs.release == 'true' && secrets.BOOT_KEYS_TARBALL || '' }}
+          SYSUPDATE_SIGNING_KEY: ${{ needs.changes.outputs.release == 'true' && secrets.SYSUPDATE_SIGNING_KEY || '' }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_REF}" = refs/heads/main ]; then
+          if [ "${RELEASE}" = true ]; then
             if [ -z "${BOOT_KEYS_TARBALL}" ] || [ -z "${SYSUPDATE_SIGNING_KEY}" ]; then
               echo "BOOT_KEYS_TARBALL and SYSUPDATE_SIGNING_KEY are required to build releases on main" >&2
               exit 1
@@ -118,13 +186,15 @@ jobs:
             just gen-dev-keys
           fi
 
-      # One version per build, increasing under strverscmp(). Pull requests
-      # use a 0.* version so they can never sort above a release.
+      # One version per build, increasing under strverscmp(). Non-release
+      # builds use a 0.* version so they can never sort above a release.
       - name: Set image version
         id: version
+        env:
+          RELEASE: ${{ needs.changes.outputs.release }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_REF}" = refs/heads/main ]; then
+          if [ "${RELEASE}" = true ]; then
             V="$(date -u +%y.%m).${GITHUB_RUN_NUMBER}"
           else
             V="0.${GITHUB_RUN_NUMBER}"
@@ -165,14 +235,14 @@ jobs:
 
       # The A/B update and boot-counted rollback test needs two more image
       # sets that sort above this one. Only the version differs, so each is a
-      # warm rebuild of the version-stamped elements. Not on main: these would
-      # be release-signed versions nobody publishes.
+      # warm rebuild of the version-stamped elements. Not in releases: these
+      # would be release-signed versions nobody publishes.
       # 1.<run>.N, not 0.<run>.N: systemd-sysinstall's boot entry for the
       # installed 0.<run> carries `version 1.0.<run>`, and systemd-boot would
       # keep defaulting to it over a 0.<run>.N update. 1.<run>.N sorts above
       # both and still below every release (YY.MM.<run>).
       - name: Build the next and broken image sets
-        if: github.ref != 'refs/heads/main'
+        if: needs.changes.outputs.release != 'true'
         run: |
           set -euo pipefail
           just set-version "1.${GITHUB_RUN_NUMBER}.1"
@@ -181,7 +251,7 @@ jobs:
           just export-image dist/diskless-broken
 
       - name: Upload update test image sets
-        if: github.ref != 'refs/heads/main'
+        if: needs.changes.outputs.release != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: image-update
@@ -195,9 +265,9 @@ jobs:
   # Secure Boot QEMU boots of the built images: diskless (network pull,
   # dm-verity /usr, tmpfs root), refusal of a tampered image or manifest,
   # UEFI HTTP boot, Ignition applying a config, and diskless ->
-  # systemd-sysinstall -> disk; off main also A/B update and rollback.
+  # systemd-sysinstall -> disk; outside releases also A/B update and rollback.
   boot-test:
-    needs: build
+    needs: [changes, build]
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     steps:
@@ -214,7 +284,7 @@ jobs:
           path: dist/diskless
 
       - name: Download update test image sets
-        if: github.ref != 'refs/heads/main'
+        if: needs.changes.outputs.release != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: image-update
@@ -270,11 +340,11 @@ jobs:
         run: bash scripts/dogfood-diskless.sh dist/diskless --check
 
       - name: Install to disk and boot it
-        if: github.ref == 'refs/heads/main'
+        if: needs.changes.outputs.release == 'true'
         run: bash scripts/dogfood-install.sh dist/diskless
 
       - name: Install, A/B update and boot-counted rollback
-        if: github.ref != 'refs/heads/main'
+        if: needs.changes.outputs.release != 'true'
         run: bash scripts/dogfood-install.sh dist/diskless dist/diskless-next dist/diskless-broken
 
       - name: Install from the offline USB installer and boot it
@@ -294,14 +364,14 @@ jobs:
 
   # Publishes the signed image set as a new, immutable GitHub Release and as
   # an ORAS OCI artifact (one layer per file, tags <version> and latest), each
-  # with SLSA build provenance and SBOM attestations. Only runs on
-  # pushes/dispatches to main, where the code is already reviewed, and is the
-  # only job in this workflow that holds write tokens. Every publish command
-  # is scripts/publish-release.sh, which release-dry-run rehearses on each
-  # pull request.
+  # with SLSA build provenance and SBOM attestations. Only runs for releases
+  # (pushes/dispatches to main, where the code is already reviewed), and is
+  # the only job in this workflow that holds write tokens. Every publish
+  # command is scripts/publish-release.sh, which release-dry-run rehearses on
+  # each pull request that builds.
   release:
-    if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}
-    needs: [build, boot-test]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.release == 'true' }}
+    needs: [changes, build, boot-test]
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:

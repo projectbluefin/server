@@ -64,7 +64,6 @@ def test_changes_job_runs_the_base_revision_classifier():
     assert "repository" not in checkouts[0]["with"]
     run = "\n".join(s.get("run", "") for s in steps)
     assert "python3 .github/scripts/image-build-needed.py" in run
-    assert "[ ! -f .github/scripts/image-build-needed.py ]" in run
 
 
 @pytest.mark.parametrize(

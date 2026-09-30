@@ -122,11 +122,12 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
 | `track-junctions` | `track-junctions.yml` | `schedule` (08:00 UTC), `workflow_dispatch` | Resolves the `freedesktop-sdk.bst` junction ref, syncs `project.conf`'s `installer-version`, and opens/updates its own PR on `auto/track-junctions`. `contents: write` + `pull-requests: write`, never on `pull_request`. |
-| `changes` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Decides whether `build` and `boot-test` run: always outside pull requests; on a pull request only if `.github/scripts/image-build-needed.py`, checked out from the PR's base revision, finds a changed path that can reach the image set or the boot test (see [Build time and caches](#build-time-and-caches)). `contents: read` + `pull-requests: read`. |
-| `build` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Resolves the element graph, sets `image-version`, and runs the full BuildStream compile of the image set (OS DDI, signed UKIs, netboot ESP, k0s/KubeStellar/OpenZFS sysext assets), which also writes and signs the combined `SHA256SUMS` inside `oci/bluefin-server-image.bst`. On `main` it installs the `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets; both are required there. Off `main` it also exports two higher-versioned sets (`1.<run>.1`, `1.<run>.2`) for the update test. Read-only token. |
-| `boot-test` | `build.yml` | `pull_request`, `push/main`, `workflow_dispatch` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4). Read-only token. |
-| `release` | `build.yml` | `push/main`, `workflow_dispatch` | Publishes `dist/diskless/` as-is through `scripts/publish-release.sh`: an immutable GitHub Release tagged `v<image-version>` plus an ORAS OCI artifact at `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per file, artifact type `application/vnd.projectbluefin.server.release.v1`), with provenance and SBOM attestations for both (`if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' }}`). Write permissions listed above. |
-| `release-dry-run` | `build.yml` | `pull_request` | Runs the same `scripts/publish-release.sh` commands against the PR's image set: verify, render `gh release create`, and a real `oras push` to a `registry` service container (pinned by digest) that it pulls back. Read-only token, no secrets. |
+| `changes` | `build.yml` | `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`), `push/main`, `schedule` (05:30 UTC), `workflow_dispatch` | Decides what the run builds. `release=true` only for a push or dispatch on `main`; it is the one switch that hands out the signing secrets, picks the release version and publishes. `image=true` (full `build` + `boot-test`) for releases, the nightly schedule and dispatches; on a pull request only with the `full-build` label or when it changes `elements/freedesktop-sdk.bst` or `patches/`, and never when `.github/scripts/image-build-needed.py`, checked out from the PR's base revision, finds no changed path that can reach the image set or the boot test (see [Build time and caches](#build-time-and-caches)). `validate=true` for every pull request event except adding an unrelated label. `contents: read` + `pull-requests: read`. |
+| `validate` | `build.yml` | `pull_request` | `just validate` with throwaway keys: resolves every shipped element graph and runs the version-invariant checks, in minutes. Read-only token. |
+| `build` | `build.yml` | when `changes` says `image=true` | Resolves the element graph, sets `image-version`, and runs the full BuildStream compile of the image set (OS DDI, signed UKIs, netboot ESP, k0s/KubeStellar/OpenZFS sysext assets), which also writes and signs the combined `SHA256SUMS` inside `oci/bluefin-server-image.bst`. For releases it installs the `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets; both are required there. Every other build uses throwaway keys and also exports two higher-versioned sets (`1.<run>.1`, `1.<run>.2`) for the update test. Read-only token. |
+| `boot-test` | `build.yml` | after `build` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4). Read-only token. |
+| `release` | `build.yml` | `release=true` | Publishes `dist/diskless/` as-is through `scripts/publish-release.sh`: an immutable GitHub Release tagged `v<image-version>` plus an ORAS OCI artifact at `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per file, artifact type `application/vnd.projectbluefin.server.release.v1`), with provenance and SBOM attestations for both (`if: ${{ !failure() && !cancelled() && needs.changes.outputs.release == 'true' }}`). Write permissions listed above. |
+| `release-dry-run` | `build.yml` | `pull_request` that builds | Runs the same `scripts/publish-release.sh` commands against the PR's image set: verify, render `gh release create`, and a real `oras push` to a `registry` service container (pinned by digest) that it pulls back. Read-only token, no secrets. |
 | `docs` | `docs-checks.yml` | `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. Read-only token. |
 | `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the final-assembly artifacts, rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). Throwaway keys, nothing published. Read-only token. |
 | `unit` | `unit-tests.yml` | `pull_request`, `push/main` | Runs pytest and BATS unit test suites. Read-only token. |
@@ -146,10 +147,11 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
     syncs `installer-version` to the tracked FSDK point release, and proposes the
     result as its own pull request against `main`.
  3. **Full Compilation:** Builds the OS DDI, signed UKIs, netboot ESP, and the
-    k0s, KubeStellar, and OpenZFS systemd-sysext assets on every pull request
-    and push to `main`, and signs the combined `SHA256SUMS` inside
-    `oci/bluefin-server-image.bst` (gpg sign plus a `gpgv` proof against the
-    shipped keyring).
+    k0s, KubeStellar, and OpenZFS systemd-sysext assets for every push to
+    `main`, every night, and on pull requests that carry `full-build` or change
+    the FSDK junction or its patches, and signs the combined `SHA256SUMS`
+    inside `oci/bluefin-server-image.bst` (gpg sign plus a `gpgv` proof
+    against the shipped keyring). Other pull requests run `validate`.
  4. **Boot test:** Downloads the exported image sets and runs, in QEMU with
     Secure Boot OVMF, each as one `scripts/dogfood-diskless.sh --check` or
     `scripts/dogfood-install.sh` or `scripts/dogfood-installer.sh` call. The firmware is Fedora's
@@ -171,26 +173,27 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
       `bluefin-node.ign` served next to the UKI, both with
       `tests/fixtures/ignition/apply-marker.ign`: the probe must see the
       written file and the Ignition-enabled unit active (`DOGFOOD_EXPECT`);
-    - on `main`: diskless boot, `systemd-sysinstall` to disk, boot the disk;
-    - off `main`: the same, then `systemd-sysupdate` A->B to `1.<run>.1` and
-      a boot-counted rollback from a corrupted `1.<run>.2` (see
-      [ddi-installer-build.md](ddi-installer-build.md) for why not
-      `0.<run>.N`). Main skips this
-      because its extra sets would be release-signed versions nobody
-      publishes; every change reaches main through a pull request that ran it.
+    - releases: diskless boot, `systemd-sysinstall` to disk, boot the disk;
+    - every other build (the nightly build of `main`, `full-build` and FSDK
+      pull requests, dispatches): the same, then `systemd-sysupdate` A->B to
+      `1.<run>.1` and a boot-counted rollback from a corrupted `1.<run>.2`
+      (see [ddi-installer-build.md](ddi-installer-build.md) for why not
+      `0.<run>.N`). Releases skip this because their extra sets would be
+      release-signed versions nobody publishes; the nightly dev-key build of
+      `main` runs it instead.
     - `scripts/dogfood-installer.sh`: the offline USB installer installs
       unattended onto a blank disk, which then boots with and without the
       installer attached.
  5. **Version Derivation:** The release version is set per build with
-    `just set-version`: `YY.MM.<run>` on main, `0.<run>` on pull requests so
-    a PR build can never sort above a release.
+    `just set-version`: `YY.MM.<run>` for releases, `0.<run>` for every other
+    build so it can never sort above a release.
  6. **Automated Publishing:** For pushes to `main` (including Renovate PR
     merges), GitHub Actions publishes `dist/diskless/` as-is: an immutable
     GitHub Release `v<image-version>` and an ORAS OCI artifact
     `ghcr.io/<owner>/bluefin-server:<ver>,latest`. Nodes verify updates
     against the `SHA256SUMS` / `SHA256SUMS.gpg` already in that set. Every
-    pull request rehearses this path in `release-dry-run`, so the publish
-    code is exercised before it first runs on main. Attestations, the SBOM
+    pull request that builds rehearses this path in `release-dry-run`, so the
+    publish code is exercised before it first runs on main. Attestations, the SBOM
     and the verify commands are in
     [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md).
 
@@ -235,12 +238,15 @@ per-set cost is estimated at under 10 min.
   `boot-keys.bst`. FSDK's `components/linux.bst` only stages the public
   certificate (`bluefin-server/keys/linux-module-cert.bst`), so the kernel is
   the candidate worth listing.
-- **Pull requests still build the kernel.** `just gen-dev-keys` makes a new
-  module certificate on every PR run, so the PR kernel's cache key never
-  matches anything cached. Caching it needs a stable, non-release PR module
-  key pair that PR builds can use (fork PRs get no secrets) and a job that
-  pushes the kernel built with it; that is a maintainer decision about key
-  handling, not a workflow change.
+- **Most pull requests do not build the image.** The full build costs about
+  1.5 h, most of it FSDK's kernel, so a pull request builds only with the
+  `full-build` label or when it changes `elements/freedesktop-sdk.bst` or
+  `patches/` (an untested FSDK bump would otherwise merge unbuilt); the rest
+  run `validate`. A regression outside those paths shows up in the next
+  `main` build or the nightly build, both of which block nothing but the
+  release that contains it. When a pull request does build, it still builds
+  the kernel: `just gen-dev-keys` makes a new module certificate on every
+  run, so the PR kernel's cache key never matches anything cached.
 - **No `actions/cache` for sources or artifacts.** The kernel source fetch
   (6 min, 1 of the 85 fetches) is the only one on the critical path, and it
   only matters when the kernel is rebuilt anyway. The runner's BuildStream
