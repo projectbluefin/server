@@ -71,6 +71,8 @@ installer UI of its own.
    `yes` to begin. This is the only confirmation.
 4. sysinstall installs, and the machine **reboots by itself** when it
    succeeds. Remove the stick when the screen goes blank.
+5. **First boot of the installed disk** asks, on the monitor (tty1), for a new
+   **root password** (typed twice). Then log in as `root` with it.
 
 Only two answers cancel: an empty answer at either prompt, and `no` at the
 confirmation (`Installation not confirmed, cancelling.`). Anything else
@@ -98,15 +100,26 @@ already passes `--erase=yes --variables=yes`), plus `StandardInput=null` so any
 leftover prompt fails instead of hanging. `scripts/dogfood-installer.sh` drives
 exactly this path in QEMU and is the reference for the drop-in contents.
 
-## First-boot prompt
+## First-boot prompts
 
 Root ships locked as `!unprovisioned`, which `systemd-firstboot` reads as
 "root not configured yet"; upstream's `--prompt-root-password` would block
-the installer's console on a password prompt. The
+every headless boot (netboot, Booty installs) and the installer's console on
+a password prompt. The
 `systemd-firstboot.service.d/10-bluefin-no-root-prompt.conf` drop-in removes
-only that prompt: the `passwd.hashed-password.root` /
-`passwd.plaintext-password.root` credentials still apply, and without one
-root stays locked. See [tpm2-credential-sealing.md](tpm2-credential-sealing.md).
+that prompt from `systemd-firstboot.service`.
+
+A disk installed from the stick needs a way in, so the installer's drop-in
+passes `--set-credential=bluefin.prompt-root-password:1` to sysinstall, which
+stores it next to the installed UKI. On that disk's first boot
+`bluefin-root-password-prompt.service` (`ConditionCredential=` on it, and
+`ConditionFirstBoot=yes`) runs stock `systemd-firstboot --prompt-root-password`
+on tty1, the monitor (the disk UKI's `/dev/console` is the serial port).
+Nodes installed any other way never get the credential and never prompt. A
+`passwd.hashed-password.root` / `passwd.plaintext-password.root` credential
+sets the password instead of the prompt, as `scripts/dogfood-installer.sh`
+does for the unattended test. See
+[tpm2-credential-sealing.md](tpm2-credential-sealing.md).
 
 ## Credentials and the ESP
 

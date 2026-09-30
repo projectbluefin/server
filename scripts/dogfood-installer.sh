@@ -203,10 +203,13 @@ ExecStart=/bin/bash ${CREDENTIALS_DIRECTORY}/dogfood.probe
 WantedBy=multi-user.target
 UNIT
 printf '[Unit]\nWants=dogfood-probe.service\n' > "${state}/probe-wants.conf"
+# The installed disk asks for a root password on its first boot
+# (bluefin-root-password-prompt.service); a passwd credential answers it.
 probe_creds=(
     -smbios "$(cred dogfood.probe "${state}/probe.sh")"
     -smbios "$(cred systemd.extra-unit.dogfood-probe.service "${state}/probe.service")"
     -smbios "$(cred systemd.unit-dropin.multi-user.target~dogfood-probe "${state}/probe-wants.conf")"
+    -smbios "$(cred passwd.hashed-password.root "${state}/passwd.hashed-password.root")"
 )
 
 check_disk_boot() {
