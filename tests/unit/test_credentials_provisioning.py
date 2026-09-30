@@ -31,9 +31,20 @@ NETWORK_GENERATOR_DROPIN = (
     / "systemd-network-generator.service.d"
     / "10-bluefin-credentials.conf"
 )
+SYSUSERS_DROPIN = (
+    REPO_ROOT
+    / "files"
+    / "os"
+    / "creds"
+    / "systemd"
+    / "system"
+    / "systemd-sysusers.service.d"
+    / "10-bluefin-user-credentials.conf"
+)
 FIRSTBOOT_HELPER = REPO_ROOT / "files" / "os" / "libexec" / "bluefin-firstboot-credentials"
 NETWORK = REPO_ROOT / "files" / "os" / "systemd" / "network" / "20-wired.network"
 TPM2_SKILL = REPO_ROOT / "docs" / "skills" / "tpm2-credential-sealing.md"
+USB_INSTALLER_SKILL = REPO_ROOT / "docs" / "skills" / "usb-installer.md"
 
 
 def test_creds_provisioning_element_stages_all_credential_consumers() -> None:
@@ -116,6 +127,17 @@ def test_network_credentials_override_dhcp_without_removing_fallback() -> None:
     assert "systemd-network-generator" in skill
     assert "/run/systemd/network/" in skill
     assert preset("systemd-network-generator.service", PRESETS) == "enable"
+
+
+def test_sysusers_imports_password_credentials_for_every_user() -> None:
+    # Upstream systemd-sysusers.service imports passwd.*-password.root only,
+    # so an account created from the sysusers.extra credential would get no
+    # password field. The glob forms are the whole fix: keep them pinned.
+    assert set(SystemdFile(SYSUSERS_DROPIN).values("Service", "ImportCredential")) == {
+        "passwd.hashed-password.*",
+        "passwd.plaintext-password.*",
+    }
+    assert "passwd.hashed-password." in USB_INSTALLER_SKILL.read_text(encoding="utf-8")
 
 
 def test_tpm2_sealing_docs_cover_all_supported_credential_names() -> None:
