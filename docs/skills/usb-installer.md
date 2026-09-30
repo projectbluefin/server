@@ -156,15 +156,24 @@ printf 'd /home/%s 0700 %s %s -\nd /home/%s/.ssh 0700 %s %s -\nf+~ /home/%s/.ssh
   "$user" "$user" "$user" "$user" "$user" "$user" "$user" "$user" "$user" "$(printf '%s\n' "$key" | base64 -w0)" \
   "$user" "$(printf '%s ALL=(ALL:ALL) NOPASSWD: ALL\n' "$user" | base64 -w0)" \
   | enc tmpfiles.extra tmpfiles.extra.cred
-printf 22 | enc ssh.listen ssh.listen.cred
+# ssh.listen is read by systemd-ssh-generator, which only takes the binary
+# form (v261 read_credential_with_decryption() does not unbase64); services
+# only take the base64 form that systemd-creds writes.
+printf 22 | enc ssh.listen - | base64 -d > ssh.listen.cred
+# "*": no password login, but not locked like sysusers' default "!*", which
+# sshd (UsePAM no) refuses even for keys
+printf '*' | enc "passwd.hashed-password.$user" "passwd.hashed-password.$user.cred"
 printf '!*' | enc passwd.hashed-password.root passwd.hashed-password.root.cred
-# copy the four .cred files into /loader/credentials/ on the stick's
+# copy the five .cred files into /loader/credentials/ on the stick's
 # "bluefin-installer" partition
 ```
 
 `passwd.hashed-password.root` answers the first-boot root password prompt
 (root stays locked; the admin user has sudo), so the node boots straight to
-SSH on port 22 with no one at the console.
+SSH on port 22 with no one at the console. `passwd.hashed-password.<user>`
+reaches systemd-sysusers through the image's
+`systemd-sysusers.service.d/10-bluefin-user-credentials.conf` (upstream imports
+root's only).
 
 ## Secure Boot
 
