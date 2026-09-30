@@ -73,8 +73,18 @@ installer UI of its own.
    succeeds. Remove the stick when the screen goes blank.
 5. **First boot of the installed disk** asks, on the monitor (tty1), for a new
    **root password**, then asks again to confirm. It shows what you type unless
-   you press **Tab** first. Do not leave it empty: an empty answer skips the
-   prompt and root stays locked. Then log in as `root` with it.
+   you press **Tab** first. Then log in as `root` with it.
+   **Do not answer this one with an empty password.** It is stock
+   `systemd-firstboot`, which reads an empty answer as "skip" and writes the
+   locked, invalid hash `!*` into the installed `/etc/shadow`.
+   `bluefin-root-password-prompt.service` is `ConditionFirstBoot=yes`, so it
+   never asks again, and a `passwd.*.root` credential added afterwards is
+   ignored — root is then locked for good. Unless the stick also provisioned
+   an admin user with `sudo` ("Developer mode" below), there is no login to
+   recover from and no fix short of reinstalling or editing `/etc/shadow`
+   from another system.
+   Type a password at both prompts, or pre-set one with a credential (see
+   "First-boot prompts" below).
 
 Only two answers cancel: an empty answer at either prompt, and `no` at the
 confirmation (`Installation not confirmed, cancelling.`). Anything else

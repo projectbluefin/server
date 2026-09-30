@@ -60,7 +60,13 @@ node:
   `systemd-firstboot.service` applies them instead: it treats `!unprovisioned`
   as unconfigured. Its interactive root password prompt is removed
   (`files/os/creds/systemd/system/systemd-firstboot.service.d/`) so a node
-  without the credential boots unattended and stays locked.
+  without the credential boots unattended and stays locked. One path is
+  deliberately exempt: a disk installed from the USB stick carries the
+  `bluefin.prompt-root-password` credential the installer sets on it, and
+  `bluefin-root-password-prompt.service` asks for a root password on tty1 on
+  that disk's first boot, because the person who ran the installer is at the
+  console (see [usb-installer.md](usb-installer.md)). Either credential above
+  answers that prompt unattended; an empty answer at it locks root for good.
 
 `systemd-firstboot` runs on first boot only. A diskless node rebuilds `/etc`
 from `/usr/share/factory/etc` and is on its first boot every time, so the
