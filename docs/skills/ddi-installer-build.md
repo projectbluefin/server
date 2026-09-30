@@ -31,6 +31,9 @@ just build-sysext      # build oci/k0s-sysext.bst
 just export-sysext     # export k0s sysext + SHA256SUMS to dist/sysext/
 just build-zfs-sysext  # build oci/zfs-sysext.bst
 just export-zfs-sysext # export OpenZFS sysext + SHA256SUMS to dist/sysext/
+just build-nvidia-container-toolkit-sysext   # build oci/nvidia-container-toolkit-sysext.bst
+just export-nvidia-container-toolkit-sysext  # export NVIDIA Container Toolkit (CDI)
+                       # sysext + SHA256SUMS to dist/sysext/
 just version / just tags  # FSDK-derived point release and tag set
 ```
 

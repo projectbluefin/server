@@ -6,7 +6,7 @@ Bluefin Server is an image-based Linux server OS composed from freedesktop-sdk (
 - the OS DDI `bluefin-server_<ver>.raw` (usr + usr-verity + ESP), which doubles as the installer payload for diskless installs
 - a netboot ESP image with signed systemd-boot and Secure Boot key enrollment payloads
 - an offline USB installer `bluefin-server-installer_<ver>.raw` (usr + usr-verity + ESP with systemd-boot, the installer UKI, the disk UKI and `repart.d`) that boots into `systemd-sysinstall`
-- optional opt-in `systemd-sysext` images: `oci/k0s-sysext.bst` (controller, or worker when `/etc/k0s/token` exists), `oci/kubestellar-sysext.bst` (Argo CD, KubeStellar, kiosk; needs k0s), `oci/kubeadm-sysext.bst` (kubeadm worker: kubelet, containerd) and `oci/zfs-sysext.bst`
+- optional opt-in `systemd-sysext` images: `oci/k0s-sysext.bst` (controller, or worker when `/etc/k0s/token` exists), `oci/kubestellar-sysext.bst` (Argo CD, KubeStellar, kiosk; needs k0s), `oci/kubeadm-sysext.bst` (kubeadm worker: kubelet, containerd), `oci/zfs-sysext.bst` and `oci/nvidia-container-toolkit-sysext.bst` (CDI only: `nvidia-ctk`, `nvidia-cdi-hook`)
 - an SPDX 2.3 SBOM `bluefin-server_<ver>.spdx.json` (`oci/bluefin-server-sbom.bst`)
 - a `SHA256SUMS` over the whole set, signed in-element (`SHA256SUMS.gpg`); nodes verify it against `/etc/systemd/import-pubring.pgp`
 
@@ -58,6 +58,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | `just publish-oci REF [DIR] [PLAIN_HTTP]` | Push `dist/diskless/` as an ORAS OCI artifact tagged `<version>,latest` (one layer per file). Local rehearsal; CI publishes via `scripts/publish-release.sh`. |
 | `just build-sysext` / `just export-sysext` | Build and export the k0s and KubeStellar `systemd-sysext` images. |
 | `just build-zfs-sysext` / `just export-zfs-sysext` | Build and export the OpenZFS `systemd-sysext`. |
+| `just build-nvidia-container-toolkit-sysext` / `just export-nvidia-container-toolkit-sysext` | Build and export the NVIDIA Container Toolkit (CDI) `systemd-sysext`. |
 
 ## Skill routing
 
