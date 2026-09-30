@@ -62,6 +62,14 @@ and follow OS updates through the optional `zfs` and `kubestellar` sysupdate
 `30-zfs.transfer`, `31-kubestellar.transfer`), enabled per node with
 `updatectl enable zfs` or a drop-in such as
 `/etc/sysupdate.d/zfs.feature.d/enable.conf` containing `[Feature] Enabled=true`.
+The automatic update service runs `bluefin-sysupdate-feature-guard` before staging
+an OS update: if both `zfs` and `nvidia-open-595` are enabled, it refuses the
+update, because both sysexts supply kernel `modules.*` indexes. Disable one
+with `updatectl disable` before retrying. `updatectl enable` only writes a
+feature drop-in; it does not validate conflicts. Direct invocations of
+`systemd-sysupdate update` bypass the service preflight, so operators must not
+stage both features manually. The boot-time NVIDIA guard remains a last-resort
+check for images staged outside the service.
 Only the k0s sysext stays a separate component
 (`files/os/sysupdate.k0s.d/`, `systemd-sysupdate --component=k0s update`) with
 its own version axis. Diskless nodes update by rebooting into a newer

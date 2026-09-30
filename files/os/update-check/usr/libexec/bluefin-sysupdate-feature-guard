@@ -1,0 +1,25 @@
+#!/bin/sh
+# Refuse an unsafe pair before the automatic OS update stages a new boot slot.
+set -eu
+
+feature_enabled() {
+    # Ask systemd rather than reimplementing feature/drop-in precedence. The
+    # vertical 'updatectl features NAME' view has an 'Enabled yes/no' row.
+    output=$("${BLUEFIN_UPDATECTL:-/usr/bin/updatectl}" --no-pager features "$1") || return 2
+    printf '%s\n' "$output" | awk '$1 == "Enabled" { found=1; if ($2 == "yes") exit 0; if ($2 == "no") exit 1; exit 2 } END { if (!found) exit 2 }'
+}
+
+# Older releases do not have the NVIDIA feature at all.
+[ -e "${BLUEFIN_SYSUPDATE_FEATURE_DIR:-/usr/lib/sysupdate.d}/nvidia-open-595.feature" ] || exit 0
+
+if feature_enabled zfs; then
+    if feature_enabled nvidia-open-595; then
+        echo 'zfs and nvidia-open-595 cannot both be enabled: their sysexts conflict in modules.*; disable one with updatectl disable before updating' >&2
+        exit 1
+    fi
+    status=$?
+    [ "$status" -eq 1 ] || exit "$status"
+else
+    status=$?
+    [ "$status" -eq 1 ] || exit "$status"
+fi
