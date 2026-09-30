@@ -128,11 +128,42 @@ does for the unattended test. See
 The installer needs no login: `systemd-sysinstall` runs on the console.
 sysinstall stores a few system credentials next to the installed UKI (`extra`
 lines in the boot entry): `firstboot.locale`, `firstboot.keymap`,
-`firstboot.timezone`, and `bluefin.prompt-root-password`. It does not copy
-other credentials from the installer, so provision anything else (SSH keys,
-hostname, network) by placing encrypted `.cred` files in
-`/loader/credentials/` on the installed disk's ESP before its first boot
-(details in [tpm2-credential-sealing.md](tpm2-credential-sealing.md)).
+`firstboot.timezone`, and `bluefin.prompt-root-password`.
+
+Anything else (users, SSH keys, sudoers, hostname, network) goes in the
+stick's own `/loader/credentials/`: the stick's ESP definition copies that
+directory onto the installed disk's ESP (`CopyFiles=`), and systemd-stub hands
+it to **every** boot of the installed system. The installer's own boot sees
+the same credentials. Credentials from an ESP land in
+`/run/credentials/@encrypted` and must be encrypted (`import-creds.c`);
+plaintext files are ignored. `systemd-creds encrypt --with-key=null` works
+with Secure Boot off; with Secure Boot on, null-key credentials are refused.
+See [tpm2-credential-sealing.md](tpm2-credential-sealing.md) for the
+credential names.
+
+### Developer mode: an admin user with SSH and passwordless sudo
+
+For a node that agents manage over SSH, after writing the stick (Secure Boot
+off on the target):
+
+```bash
+user=jorge; key="$(cat ~/.ssh/*.pub)"
+enc() { systemd-creds encrypt --with-key=null --name="$1" - "$2"; }
+printf 'u %s - "%s" /home/%s /bin/bash\nm %s wheel\n' "$user" "$user" "$user" "$user" \
+  | enc sysusers.extra sysusers.extra.cred
+printf 'd /home/%s/.ssh 0700 %s %s -\nf+~ /home/%s/.ssh/authorized_keys 0600 %s %s - %s\nf+~ /etc/sudoers.d/50-%s 0440 root root - %s\n' \
+  "$user" "$user" "$user" "$user" "$user" "$user" "$(printf '%s\n' "$key" | base64 -w0)" \
+  "$user" "$(printf '%s ALL=(ALL:ALL) NOPASSWD: ALL\n' "$user" | base64 -w0)" \
+  | enc tmpfiles.extra tmpfiles.extra.cred
+printf 22 | enc ssh.listen ssh.listen.cred
+printf '!*' | enc passwd.hashed-password.root passwd.hashed-password.root.cred
+# copy the four .cred files into /loader/credentials/ on the stick's
+# "bluefin-installer" partition
+```
+
+`passwd.hashed-password.root` answers the first-boot root password prompt
+(root stays locked; the admin user has sudo), so the node boots straight to
+SSH on port 22 with no one at the console.
 
 ## Secure Boot
 

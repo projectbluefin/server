@@ -152,6 +152,12 @@ config:
     # stick; systemd-sysinstall --kernel= installs it onto the target disk.
     install -Dm644 /boot-out/%{disk-uki} "${esp}/bluefin/%{disk-uki}"
     install -Dm644 -t "${esp}/bluefin/repart.d" /boot-out/repart.d/*.conf
+    # Credentials placed in the stick's /loader/credentials/ (encrypted, see
+    # docs/skills/usb-installer.md) are copied onto the installed disk's ESP,
+    # where systemd-stub hands them to every boot of the installed system.
+    # Only the stick's copy of the ESP definition carries this line.
+    mkdir -p "${esp}/loader/credentials"
+    printf 'CopyFiles=/run/bluefin/installer/loader/credentials:/loader/credentials\n' >> "${esp}/bluefin/repart.d/10-esp.conf"
     install -Dm644 -t "${esp}/loader/keys/auto" /boot-out/efi-keys/*.auth
     printf 'timeout 3\nconsole-mode keep\nsecure-boot-enroll if-safe\n' > "${esp}/loader/loader.conf"
     d=/tmp/installer.repart.d
