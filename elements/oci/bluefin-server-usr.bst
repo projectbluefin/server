@@ -2,8 +2,10 @@ kind: script
 description: |
   Bluefin Server /usr image: a discoverable disk image (UAPI.3 DDI) with an
   erofs usr partition and its dm-verity hash partition, built offline by
-  systemd-repart. /etc is empty on every boot; its defaults live in
-  /usr/share/factory/etc and are copied in by systemd-tmpfiles.
+  systemd-repart. /etc holds no image content: its defaults live in
+  /usr/share/factory/etc and are copied in by systemd-tmpfiles. A diskless
+  node keeps /etc on tmpfs, so it starts empty every boot; a disk install
+  keeps it on the root partition, where it persists across A/B updates.
 
   Outputs (assembled into the full DDI by bluefin-server-image.bst):
     bluefin-server_<ver>.usr.raw          erofs usr partition (sysupdate source)
@@ -106,15 +108,70 @@ config:
     # which would let any local user rewrite /etc/sudoers.d or unit files.
     # Clear group/other write on everything but sticky directories.
     factory=/sysroot/usr/share/factory/etc
-    conf=/sysroot/usr/lib/tmpfiles.d/00-bluefin-factory-etc.conf
-    find "${factory}" -mindepth 1 \( -type d ! -perm -1000 -o -type f \) -perm /022 -printf '%P\n' | sort > /tmp/etc-writable
-    find /sysroot \( -type d ! -perm -1000 -o -type f \) -perm /022 -exec chmod go-w {} +
-    # C only copies what is missing and /etc persists across updates, so
-    # repair the copies earlier images installed in place.
+    # tmpfiles C only copies what is missing, and a disk install keeps /etc
+    # across A/B updates, so a fixed image does not by itself fix a node
+    # installed from an older one. Record what needs repairing there; the
+    # one-shot unit below clears the same bits on the node's next boot.
+    # A z line would do it too, but z asserts the factory mode on *every*
+    # boot and would undo an operator's own tightening of, say, a
+    # sshd_config.d drop-in; chmod go-w only ever removes access.
+    mkdir -p /sysroot/usr/lib/bluefin /sysroot/usr/libexec
+    list=/sysroot/usr/lib/bluefin/etc-mode-repair.list
+    find "${factory}" -mindepth 1 \( -type d ! -perm -1000 -o -type f \) -perm /022 -printf '%P\n' | LC_ALL=C sort > "${list}"
+
+    cat > /sysroot/usr/libexec/bluefin-repair-etc-modes <<'EOF'
+    #!/usr/bin/bash
+    # bluefin-repair-etc-modes — one-shot repair of /etc modes on nodes
+    # installed from an image built before the sysroot modes were fixed.
+    #
+    # Only clears group/other write. It never widens a mode and never
+    # re-asserts a factory mode, so an operator who tightened a path keeps
+    # their mode. Runs once; a stamp in /var suppresses later boots.
+    set -euo pipefail
+    list=/usr/lib/bluefin/etc-mode-repair.list
+    stamp=/var/lib/bluefin/etc-mode-repair.stamp
+    repaired=0
     while IFS= read -r rel; do
-      printf 'z /etc/%s %s - - -\n' "${rel}" "$(stat -c %04a "${factory}/${rel}")" >> "${conf}"
-    done < /tmp/etc-writable
-    echo "Cleared group/other write; /etc paths repaired in place: $(wc -l < /tmp/etc-writable)"
+        path="/etc/${rel}"
+        # Skip what the node no longer has, symlinks (chmod would follow
+        # them out of /etc) and sticky dirs, which are meant to be 1777.
+        if [ ! -e "${path}" ] || [ -L "${path}" ] || [ -k "${path}" ]; then
+            continue
+        fi
+        chmod go-w "${path}"
+        repaired=$(( repaired + 1 ))
+    done < "${list}"
+    mkdir -p "$(dirname "${stamp}")"
+    : > "${stamp}"
+    echo "Cleared group/other write from ${repaired} path(s) under /etc"
+    EOF
+    chmod 0755 /sysroot/usr/libexec/bluefin-repair-etc-modes
+
+    unit=/sysroot/usr/lib/systemd/system/bluefin-repair-etc-modes.service
+    cat > "${unit}" <<'EOF'
+    [Unit]
+    Description=Clear group/other write from /etc paths left by older images
+    Documentation=file:/usr/libexec/bluefin-repair-etc-modes
+    ConditionPathExists=!/var/lib/bluefin/etc-mode-repair.stamp
+    ConditionPathExists=/usr/lib/bluefin/etc-mode-repair.list
+    After=systemd-tmpfiles-setup.service
+    # Finish before anything can log in and before sshd reads its drop-ins.
+    Before=systemd-user-sessions.service sshd.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    ExecStart=/usr/libexec/bluefin-repair-etc-modes
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    mkdir -p /sysroot/usr/lib/systemd/system/multi-user.target.wants
+    ln -sf ../bluefin-repair-etc-modes.service \
+      /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-repair-etc-modes.service
+
+    find /sysroot \( -type d ! -perm -1000 -o -type f \) -perm /022 -exec chmod go-w {} +
+    echo "Cleared group/other write; /etc paths to repair in place: $(wc -l < "${list}")"
 
   - |
     set -eu

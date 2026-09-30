@@ -52,8 +52,11 @@ verifies the pushed manifest against the local files.
 The /usr image itself is built by `oci/bluefin-server-usr.bst` with an offline
 `systemd-repart`: an erofs partition (`bluefin_usr_<ver>`) plus its dm-verity
 hash partition (`bluefin_usr_verity_<ver>`), and the root hash is recorded in
-`bluefin-server_<ver>.usrhash`. `/etc` is empty on every boot; its defaults
-live in `/usr/share/factory/etc` and are copied in by `systemd-tmpfiles`.
+`bluefin-server_<ver>.usrhash`. `/etc` holds no image content: its defaults
+live in `/usr/share/factory/etc` and are copied in by `systemd-tmpfiles`. A
+diskless node keeps `/etc` on tmpfs, so it starts empty on every boot; a disk
+install keeps it on the root partition (`files/os/repart.d/50-root.conf`),
+where it persists across A/B updates.
 
 ## The boot chain
 
