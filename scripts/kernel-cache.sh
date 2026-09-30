@@ -56,7 +56,12 @@ seed() {
     # Inside the cache directory, on the same (large) disk, and left out of
     # the tarball with logs, build trees and temporary files.
     work="$(mktemp -d "${cache_dir}/kernel-cache.XXXXXX")"
-    mapfile -t dirs < <(find "${cache_dir}" -mindepth 1 -maxdepth 1 ! -name logs ! -name tmp ! -name build ! -name 'kernel-cache.*' -printf '%f\n')
+    # The trailing slash descends into a symlinked cache (CI links it to /mnt).
+    mapfile -t dirs < <(find "${cache_dir}/" -mindepth 1 -maxdepth 1 ! -name logs ! -name tmp ! -name build ! -name 'kernel-cache.*' -printf '%f\n')
+    if [ "${#dirs[@]}" -eq 0 ] || [ ! -d "${cache_dir}/cas" ]; then
+        echo "kernel-cache: nothing to pack in ${cache_dir}" >&2
+        exit 1
+    fi
     tar -C "${cache_dir}" -cf - "${dirs[@]}" | zstd -T0 -3 -q | split -b "${PART_SIZE}" - "${work}/cache.tar.zst."
     (cd "${work}" && oras push --artifact-type "${ARTIFACT_TYPE}" "${repo}:${tag}" cache.tar.zst.*)
     echo "kernel-cache: pushed ${repo}:${tag} ($(du -ch "${work}"/cache.tar.zst.* | tail -n1 | cut -f1))"

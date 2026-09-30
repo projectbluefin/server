@@ -42,8 +42,10 @@ def env(tmp_path: Path) -> dict[str, str]:
     for name, body in (("just", JUST), ("oras", ORAS)):
         (bin_dir / name).write_text(body, encoding="utf-8")
         (bin_dir / name).chmod(0o755)
-    for d in ("store", "log", "home"):
-        (tmp_path / d).mkdir()
+    for d in ("store", "log", "home/.cache", "mnt-buildstream"):
+        (tmp_path / d).mkdir(parents=True)
+    # As on the CI runner: the BuildStream cache is a symlink to /mnt.
+    (tmp_path / "home" / ".cache" / "buildstream").symlink_to(tmp_path / "mnt-buildstream")
     return {
         **os.environ,
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
