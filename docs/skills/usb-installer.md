@@ -148,11 +148,12 @@ off on the target):
 
 ```bash
 user=jorge; key="$(cat ~/.ssh/*.pub)"
-enc() { systemd-creds encrypt --with-key=null --name="$1" - "$2"; }
+# encrypting goes through io.systemd.Credentials, which needs privileges
+enc() { sudo systemd-creds encrypt --with-key=null --name="$1" - "$2"; }
 printf 'u %s - "%s" /home/%s /bin/bash\nm %s wheel\n' "$user" "$user" "$user" "$user" \
   | enc sysusers.extra sysusers.extra.cred
-printf 'd /home/%s/.ssh 0700 %s %s -\nf+~ /home/%s/.ssh/authorized_keys 0600 %s %s - %s\nf+~ /etc/sudoers.d/50-%s 0440 root root - %s\n' \
-  "$user" "$user" "$user" "$user" "$user" "$user" "$(printf '%s\n' "$key" | base64 -w0)" \
+printf 'd /home/%s 0700 %s %s -\nd /home/%s/.ssh 0700 %s %s -\nf+~ /home/%s/.ssh/authorized_keys 0600 %s %s - %s\nf+~ /etc/sudoers.d/50-%s 0440 root root - %s\n' \
+  "$user" "$user" "$user" "$user" "$user" "$user" "$user" "$user" "$user" "$(printf '%s\n' "$key" | base64 -w0)" \
   "$user" "$(printf '%s ALL=(ALL:ALL) NOPASSWD: ALL\n' "$user" | base64 -w0)" \
   | enc tmpfiles.extra tmpfiles.extra.cred
 printf 22 | enc ssh.listen ssh.listen.cred
