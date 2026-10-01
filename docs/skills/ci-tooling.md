@@ -169,6 +169,10 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
     off. `--check` now fails unless the probe reports
     `secureboot=enabled` (or, for tamper runs, the kernel logs
     `Secure boot enabled`). Bump the pin by hand; Renovate does not track it.
+    The runner package step explicitly installs `mtools`, which provides `mcopy`
+    for selecting the signed installer UKI profile in the ESP. Do not rely on
+    hosted runner preinstalls; use `apt-get update` before `apt-get install`
+    ([runner customization](https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/customize-runners)).
     - diskless netboot, no failed units; `tests/fixtures/nfs/netdb.probe`
       must see `tcp` and `sunrpc` resolve, the local portmapper answer
       `rpcinfo`, and an NFSv3 mount get past the protocol lookup
