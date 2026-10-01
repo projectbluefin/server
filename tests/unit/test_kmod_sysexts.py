@@ -85,7 +85,11 @@ def test_load_units_go_through_the_helper() -> None:
     assert zfs.commands() == [[HELPER_PATH, "zfs"]]
     assert "systemd-sysext.service" in zfs.words("Unit", "After")
     nvidia = SystemdFile(NVIDIA_SRC / "nvidia-load.service")
-    assert nvidia.commands() == [[HELPER_PATH, "nvidia", "nvidia-uvm", "nvidia-modeset", "nvidia-drm"]]
+    # First ExecStart loads through the helper with `|| true` so a card
+    # nouveau already holds (Pascal in a Pascal+Turing box) does not fail
+    # the unit; the second verifies /proc/driver/nvidia/gpus/ came up.
+    commands = nvidia.commands()
+    assert commands[0] == [HELPER_PATH, "nvidia", "nvidia-uvm", "nvidia-modeset", "nvidia-drm", "||", "true"]
     assert "systemd-sysext.service" in nvidia.words("Unit", "After")
 
 
