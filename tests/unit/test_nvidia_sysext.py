@@ -186,9 +186,26 @@ def test_units_skip_themselves_without_an_nvidia_gpu() -> None:
     load_unit = SystemdFile(SRC / "nvidia-load.service")
     assert load_unit.words("Unit", "Requires") == ["nvidia-flavour-guard.service"]
     assert {"nvidia-flavour-guard.service", "systemd-sysext.service"} <= set(load_unit.words("Unit", "After"))
-    assert load_unit.commands() == [
-        ["/usr/libexec/bluefin-sysext-modules", "nvidia", "nvidia-uvm", "nvidia-modeset", "nvidia-drm"]
+    # First ExecStart: load the modules through the sysext helper, tolerating
+    # modprobe returning non-zero when nvidia refuses to bind a card nouveau
+    # already holds (a Pascal GPU on a mixed Pascal+Turing host). Second
+    # ExecStart: verify /proc/driver/nvidia/gpus/ came up non-empty and log
+    # the bound cards; the unit fails only when nothing came up at all.
+    commands = load_unit.commands()
+    assert commands[0] == [
+        "/usr/libexec/bluefin-sysext-modules",
+        "nvidia",
+        "nvidia-uvm",
+        "nvidia-modeset",
+        "nvidia-drm",
+        "||",
+        "true",
     ]
+    assert len(commands) == 2
+    assert commands[1][0] == "/usr/bin/sh" and commands[1][1] == "-c"
+    assert "/proc/driver/nvidia/gpus" in commands[1][2]
+    assert commands[1][2].startswith("gpus=")
+    assert "exit 1" in commands[1][2]
     nodes = SystemdFile(SRC / "nvidia-device-nodes.service")
     assert nodes.words("Unit", "After") == ["nvidia-load.service"]
     assert nodes.value("Unit", "ConditionPathIsDirectory") == "/sys/module/nvidia"
@@ -252,6 +269,35 @@ def test_flavour_guard(tmp_path: Path, merged: list[str], ok: bool) -> None:
 def test_nouveau_stays_off_the_gpu() -> None:
     lines = [line for line in (SRC / "modprobe-nvidia.conf").read_text().splitlines() if line and line[0] != "#"]
     assert "blacklist nouveau" in lines and "options nouveau modeset=0" in lines
+
+
+@pytest.mark.parametrize(
+    "gpus,ok",
+    [
+        ([], False),
+        (["0"], True),
+        (["0", "1"], True),
+    ],
+)
+def test_nvidia_load_succeeds_when_at_least_one_gpu_bound(tmp_path: Path, gpus: list[str], ok: bool) -> None:
+    # /proc/driver/nvidia/gpus/ is created by the kernel when the nvidia
+    # module binds a card. The second ExecStart of nvidia-load.service uses
+    # its directory listing as the "did anything bind?" signal, so a
+    # Pascal+Turing host where nvidia refused the 1070 but bound the 1660
+    # still succeeds; a node with no supported GPU fails the unit and stops
+    # nvidia-cdi-refresh from writing a CDI spec for nothing.
+    procd = tmp_path / "proc" / "driver" / "nvidia" / "gpus"
+    procd.mkdir(parents=True)
+    for name in gpus:
+        (procd / name).mkdir()
+        (procd / name / "information").write_text("Model: GeForce GTX 1660\n")
+    commands = SystemdFile(SRC / "nvidia-load.service").commands()
+    argv = commands[1]
+    argv[-1] = argv[-1].replace("/proc/driver/nvidia/gpus", str(procd))
+    result = subprocess.run(argv, capture_output=True, check=False)
+    assert result.returncode == (0 if ok else 1)
+    if gpus:
+        assert "nvidia-load: bound GPU" in result.stderr.decode() or "nvidia-load: bound GPU" in result.stdout.decode()
 
 
 def test_nothing_in_the_base_image_enables_or_ships_the_driver() -> None:

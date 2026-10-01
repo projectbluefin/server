@@ -181,6 +181,22 @@ from vendor `0x10de`), `nvidia-device-nodes.service` and
 toolkit's drop-in skips `nvidia-cdi-refresh.service` on the same PCI check.
 `nvidia-ldconfig.service` and the flavour guard run on every node.
 
+### Mixed-generation NVIDIA hosts
+
+A host with an unsupported (pre-Turing) card alongside a supported one
+hits a known load-order problem: `nouveau` is already bound to the
+unsupported GPU by the time `nvidia-load.service` runs, so
+`modprobe nvidia` returns non-zero once the driver refuses that card. The
+unit still succeeds when at least one GPU came up: the first `ExecStart`
+runs the sysext helper with `|| true`, the second checks
+`/proc/driver/nvidia/gpus/` and exits 0 (logging the bound cards) when
+non-empty, 1 when empty. `nvidia-device-nodes.service` then iterates the
+bound cards only, and `nvidia-cdi-refresh.service` writes a CDI spec
+covering the supported ones. The `blacklist nouveau` + `options nouveau
+modeset=0` lines in `modprobe-nvidia.conf` (shipped at
+`/usr/lib/modprobe.d/nvidia.conf`) keep nouveau from binding supported
+GPUs on a normal boot.
+
 ### Containers (CDI)
 
 Once the toolkit is merged, and after `nvidia-ldconfig.service` and
