@@ -33,7 +33,8 @@ Bluefin Server is currently in **Alpha**:
 - **Optional disk install with A/B rollback** — a running diskless node *is* the installer: see [ddi-installer.md](docs/skills/ddi-installer.md) (`systemd-sysinstall` copies `/usr` into slot A). The first disk boot creates slot B and a persistent xfs root. `systemd-sysupdate` fills the inactive slot on a timer and reboots into it nightly (Kubernetes nodes leave the reboot to kured), and UKI boot counting rolls back an update that does not boot cleanly: a boot-counted boot that has not reached `boot-complete.target` (any failed unit counts) within 15 minutes reboots, or on Kubernetes nodes is flagged for kured, until systemd-boot falls back to the previous image, which then stays put until a newer release. `/run/reboot-lock` or `/etc/reboot-lock` holds these reboots.
 - **Secure Boot on** — signed systemd-boot, signed UKIs, signed kernel modules, `lockdown=integrity`. UEFI HTTP boot is supported; [Booty](https://github.com/jeefy/booty) serves the UKI, the OS DDI, the signed manifest, and a per-node `bluefin-node.ign`.
 - **Opt-in per-node state via Ignition** — pass an `ignition.config` / `ignition.config.url` system credential (or, on UEFI HTTP boot, a `bluefin-node.ign` next to the UKI) and Ignition runs in the initrd on every boot; configs must be idempotent.
-- **Separately delivered runtime** — Complete selects pinned Flatcar Kubernetes/containerd extensions and the Server support extension; they never enter the base `/usr`. Core leaves runtime inactive. Existing opt-in k0s, KubeStellar, kubeadm-worker and OpenZFS consumers remain separate from the Complete runtime.
+- **Separately delivered runtime** — Complete selects pinned Flatcar Kubernetes/containerd extensions and the Server support extension; they never enter the base `/usr`. Core leaves runtime inactive.
+- **Opt-in sysexts** — k0s (Kubernetes), KubeStellar, kubeadm, OpenZFS, the NVIDIA driver (open kernel modules) and the NVIDIA Container Toolkit ship as separate `systemd-sysext` images, never in the base `/usr`, and remain separate from the Complete runtime. The image-locked ones (ZFS, KubeStellar, kubeadm, NVIDIA driver) follow OS updates through optional sysupdate features.
 
 > **Remote diagnostics:** OpenSSH is installed for on-demand diagnostics, but is disabled by default via systemd presets. It can be started manually with `systemctl start sshd` when remote access is needed. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
 
@@ -54,12 +55,13 @@ Verify the download against the GPG-signed `SHA256SUMS` before use; the release 
 ## Install and use
 
 1. Verify the USB installer, write it to a spare USB device, and boot it. Complete is profile `@0`; the native boot menu offers Core for builders as `@1`.
-2. Select the target disk and confirm its erasure in stock `systemd-sysinstall`. Complete does not ask for an OS root password.
+2. Select the target disk and confirm its erasure in stock `systemd-sysinstall`. Complete does not ask for an OS root password; Core asks on first disk boot (see [usb-installer.md](docs/skills/usb-installer.md)).
 3. Complete brings up its standalone cluster and pinned platform. Initial
    container acquisition needs upstream registries unless images are cached.
-4. Configure supported upstream Console authentication privately before use.
-   The deployment is initially ClusterIP-only; there is no custom owner claim,
-   browser Add Node or physical account-recovery API in the stock image.
+4. Stock Console is optional and stays inactive until its supported upstream
+   authentication is configured privately. It remains ClusterIP-only; there is
+   no custom owner claim, browser Add Node or physical account-recovery API in
+   the stock image.
 
 Workers use private kubeadm provisioning rather than a public installer token
 or the removed fork's browser pairing. A worker adds capacity, not control-plane

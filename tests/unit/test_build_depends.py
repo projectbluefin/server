@@ -130,5 +130,11 @@ def test_sbom_lists_every_published_sysext_and_its_payload():
 
     assert sysexts
     assert sysexts <= sbom, f"SBOM misses {sorted(sysexts - sbom)}"
-    assert {"k0s/k0s-bin.bst", "kubeadm/kubeadm-bin.bst", "zfs/openzfs.bst"} <= sbom
+    assert {
+        "k0s/k0s-bin.bst",
+        "kubeadm/kubeadm-bin.bst",
+        "zfs/openzfs.bst",
+        "nvidia/nvidia-open-595.bst",
+        "nvidia/nvidia-container-toolkit.bst",
+    } <= sbom
 

@@ -69,6 +69,14 @@ variables:
   common-cmdline: >-
     mount.usr=/dev/mapper/usr mount.usrfstype=erofs mount.usrflags=ro
     lockdown=integrity
+  # Transitional, netboot UKI only: bluefin.ignition.allow-unsigned lets a
+  # node apply an unsigned bluefin-node.ign (a 404 for bluefin-node.ign.gpg)
+  # until Booty signs per-node configs with a dedicated config key
+  # (projectbluefin/server#327); UEFI HTTP Boot with Secure Boot has no other
+  # way to pass the credential. A bad signature, or a .gpg that fails with
+  # anything but 404, still fails the boot closed. An on-path attacker can
+  # still force the unsigned path by answering 404, so this is not yet
+  # protection against on-path attackers.
   netboot-cmdline: >-
     root=tmpfs
     rd.systemd.pull=raw,machine,verify=signature,blockdev,bootorigin:rootdisk:%{image-name}.raw
@@ -77,6 +85,7 @@ variables:
     systemd.default_device_timeout_sec=300
     rd.systemd.mask=systemd-repart.service systemd.mask=systemd-repart.service
     systemd.mask=boot.automount systemd.mask=boot.mount
+    systemd.set_credential=bluefin.ignition.allow-unsigned:1
     console=tty0 console=ttyS0,115200
   disk-cmdline: >-
     rw

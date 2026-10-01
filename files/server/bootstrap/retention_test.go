@@ -15,7 +15,7 @@ func TestProtectsBootedActivePreviousAndPendingReleases(t *testing.T) {
 	if err := e.protectReleases(&pending); err != nil {
 		t.Fatal(err)
 	}
-	config, err := os.ReadFile(e.path("/etc/sysupdate.d/33-server-bundle.transfer.d/protect.conf"))
+	config, err := os.ReadFile(e.path("/etc/sysupdate.d/34-server-bundle.transfer.d/protect.conf"))
 	if err != nil {
 		t.Fatal(err)
 	}

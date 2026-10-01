@@ -89,6 +89,12 @@ def test_docs_and_unit_test_changes_skip(path):
         "elements/notes.md",
         "tests/fixtures/ignition/apply-marker.ign",
         "scripts/dogfood-diskless.sh",
+        # The NVIDIA sysexts are part of the image set.
+        "files/nvidia/sysext/nvidia-load.service",
+        "files/nvidia-container-toolkit/sysext/nvidia-cdi-refresh-bluefin.conf",
+        "elements/nvidia/nvidia-open-595.bst",
+        "include/nvidia.yml",
+        "include/nvidia-container-toolkit.yml",
         "renovate.json",
         "a-new-top-level-file",
     ],

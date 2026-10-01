@@ -28,7 +28,7 @@ def publish_commands(job: dict) -> list[str]:
 
 
 def test_both_jobs_publish_through_the_script_only() -> None:
-    assert publish_commands(RELEASE) == ["verify", "release", "oci"]
+    assert publish_commands(RELEASE) == ["verify", "taggable", "release", "oci"]
     assert publish_commands(DRY_RUN) == ["verify", "release", "oci"]
     for job in (RELEASE, DRY_RUN):
         runs = "\n".join(s.get("run", "") for s in job["steps"])
@@ -50,7 +50,7 @@ def test_build_and_dry_run_check_out_the_triggering_commit() -> None:
 
 
 def test_dry_run_is_read_only_and_secret_free() -> None:
-    assert DRY_RUN["if"] == "${{ github.event_name == 'pull_request' }}"
+    assert "github.event_name == 'pull_request'" in DRY_RUN["if"]
     assert DRY_RUN["permissions"] == {"contents": "read"}
     assert "secrets." not in json.dumps(DRY_RUN)
     assert "@sha256:" in DRY_RUN["services"]["registry"]["image"]
@@ -83,3 +83,23 @@ def test_boot_test_uploads_every_harness_log_directory() -> None:
     paths = upload["with"]["path"].split()
     for d in ("dist/dogfood-install/", "dist/dogfood-installer/"):
         assert any(p.startswith(d) for p in paths), d
+
+
+def test_jobs_after_build_run_when_kernel_cache_is_skipped() -> None:
+    # kernel-cache only runs for release builds; without an explicit check of
+    # build's result, a skipped kernel-cache skips every job downstream of build.
+    for name in ("boot-test", "release-dry-run"):
+        cond = JOBS[name].get("if", "")
+        assert "!cancelled()" in cond and "needs.build.result == 'success'" in cond, name
+
+
+def test_release_publishes_nothing_once_the_commit_cannot_be_tagged() -> None:
+    names = [s.get("name") for s in RELEASE["steps"]]
+    check = names.index("Check this commit can still be tagged")
+    step = RELEASE["steps"][check]
+    assert step["id"] == "taggable" and "if" not in step
+    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert "verify" in RELEASE["steps"][check - 1].get("run", "")
+    for later in RELEASE["steps"][check + 1 :]:
+        assert later.get("if") == "steps.taggable.outputs.publish == 'true'", later.get("name")
+    assert "taggable" not in json.dumps(DRY_RUN)

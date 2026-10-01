@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server boot chain, the d
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-09-30"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -38,8 +38,9 @@ GPT partition label with room to spare):
 | `bluefin-server-netboot_<ver>.efi` | Netboot UKI (diskless nodes); the UEFI HTTP boot / PXE target. |
 | `bluefin-server-netboot_<ver>.esp.raw` | Netboot ESP image: signed systemd-boot, the netboot UKI, and Secure Boot key enrollment payloads. Write it to a USB stick to boot diskless without HTTP boot. |
 | `bluefin-server-installer_<ver>.raw` | Offline USB installer; write to a stick to install without a network. See [usb-installer.md](usb-installer.md). |
-| `zfs_<ver>.raw.zst` / `kubestellar_<ver>.raw.zst` / `kubeadm_<ver>.raw.zst` | Opt-in sysext assets locked to this image version; installed nodes fetch them through the `zfs` / `kubestellar` / `kubeadm` sysupdate features. |
+| `zfs_<ver>.raw.zst` / `kubestellar_<ver>.raw.zst` / `kubeadm_<ver>.raw.zst` / `nvidia-open-595_<ver>.raw.zst` | Opt-in sysext assets locked to this image version; installed nodes fetch them through the `zfs` / `kubestellar` / `kubeadm` / `nvidia-open-595` sysupdate features. |
 | `k0s-<k0s-ver>.raw.zst` | Opt-in k0s sysext asset, on its own version axis. |
+| `nvidia-container-toolkit-<ctk-ver>.raw.zst` | Opt-in NVIDIA Container Toolkit (CDI) sysext asset, on its own version axis like k0s. |
 | `efi-keys/` | PK/KEK/db enrollment payloads. |
 | `SHA256SUMS` / `SHA256SUMS.gpg` | One manifest over every file above, signed in-element with `files/boot-keys/sysupdate-signing.asc`; the image trusts the matching `import-pubring.pgp` (see `systemd-sysupdate-verification.md`). |
 
@@ -103,11 +104,12 @@ directly from the boot server; no systemd-boot runs. systemd-stub records the
 boot URL in the `StubDeviceURL` EFI variable, and the initrd derives the URL
 of `bluefin-server_<ver>.raw` (and of `SHA256SUMS` / `SHA256SUMS.gpg`) from
 the same directory. `bluefin-ignition-credentials` also uses it: with no
-`ignition.config` / `ignition.config.url` credential it HEADs
-`bluefin-node.ign` next to the UKI and applies it through `config.replace`
-when present. Because HTTP boot skips systemd-boot's key enrollment, the
-firmware must already trust the image DB key; `scripts/dogfood-diskless.sh`
-with `DOGFOOD_BOOT=http` enrolls once from the netboot ESP first.
+`ignition.config` / `ignition.config.url` credential it looks for
+`bluefin-node.ign` next to the UKI and applies it only as "Per-node
+configuration" in [booty-integration.md](booty-integration.md) allows.
+Because HTTP boot skips systemd-boot's key enrollment, the firmware must
+already trust the image DB key; `scripts/dogfood-diskless.sh` with
+`DOGFOOD_BOOT=http` enrolls once from the netboot ESP first.
 
 ### Installed disk (disk UKI)
 
@@ -159,13 +161,18 @@ Installed nodes update with `systemd-sysupdate` against the transfers in
   usr-verity slot (matched by `bluefin_usr_@v` partition labels).
 - `20-uki.transfer` installs the new disk UKI into `/EFI/Linux` with boot
   counting (`TriesLeft=3`, at most 2 UKIs kept).
-- `30-zfs.transfer` and `31-kubestellar.transfer` are optional **features**
+- `30-zfs.transfer`, `31-kubestellar.transfer`, `32-kubeadm.transfer` and
+  `33-nvidia-open-595.transfer` are optional **features**
   (enabled with `updatectl enable zfs` or a drop-in
   `/etc/sysupdate.d/zfs.feature.d/enable.conf` with `[Feature] Enabled=true`).
   When enabled, the matching sysext is downloaded with every OS update into
   `/var/lib/extensions` (two versions kept, `ProtectVersion=%A`); systemd-sysext
   merges only the one matching the booted image, so a boot-counted rollback
-  keeps ZFS.
+  keeps ZFS (or the NVIDIA driver).
+
+The k0s and NVIDIA Container Toolkit sysexts are separate sysupdate components
+on their own version axes (`sysupdate.k0s.d/`,
+`sysupdate.nvidia-container-toolkit.d/`); see `systemd-sysupdate-verification.md`.
 
 Sources are the release assets on GitHub Releases, verified against the
 GPG-signed `SHA256SUMS` with `Verify=yes` (see
@@ -287,10 +294,10 @@ signed UKI, the `ignition.config.url=` karg cannot be used; configs arrive as
 
 `bluefin-ignition-credentials` stages whichever is set into
 `/run/ignition/user.ign`; the downstream Ignition units are conditioned on
-that file, so a node with no config runs none of it. A UEFI HTTP-booted node
-needs no credential: the script reads the boot URL from the `StubDeviceURL`
-EFI variable and, when the server offers `bluefin-node.ign` next to the UKI,
-applies it. Ignition runs on **every** boot (there is no first-boot marker on
+that file, so a node with no config runs none of it. A network-booted node
+needs no credential: a `bluefin-node.ign` next to its UKI is staged only as
+"Per-node configuration" in [booty-integration.md](booty-integration.md)
+allows. Ignition runs on **every** boot (there is no first-boot marker on
 a tmpfs root), so configs must be idempotent. See
 `tests/fixtures/ignition/var-on-disk.ign` for a dogfood-tested example
 (persistent /var on a second disk plus an SSH key). The supported stages and

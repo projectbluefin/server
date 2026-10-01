@@ -16,9 +16,10 @@ the OS image.
 
 ## When to Use
 
-- Modifying `files/os/sysupdate.d/*.transfer` (including the `zfs` and
-  `kubestellar` feature transfers) or the k0s component directory
-  (`files/os/sysupdate.k0s.d/`).
+- Modifying `files/os/sysupdate.d/*.transfer` (including the `zfs`,
+  `kubestellar`, `kubeadm` and `nvidia-open-595` feature transfers) or a
+  component directory (`files/os/sysupdate.k0s.d/`,
+  `files/os/sysupdate.nvidia-container-toolkit.d/`).
 - Rotating or replacing the image signing key.
 - Debugging `systemd-sysupdate` or diskless `rd.systemd.pull` failures related
   to `SHA256SUMS.gpg` verification.
@@ -56,15 +57,16 @@ Installed nodes carry A/B usr and usr-verity slots plus matching UKIs. The usr
 and usr-verity transfers live in `sysupdate.d` and fill the inactive slot; the
 UKI transfer installs the new disk UKI into `/EFI/Linux` with boot counting
 (`TriesLeft=3`), so a failed image rolls back to the previous slot on its own.
-The optional OpenZFS and KubeStellar sysexts are version-locked to the image
-and follow OS updates through the optional `zfs` and `kubestellar` sysupdate
-**features** (`files/os/sysupdate.d/zfs.feature`, `kubestellar.feature`,
-`30-zfs.transfer`, `31-kubestellar.transfer`), enabled per node with
-`updatectl enable zfs` or a drop-in such as
+The optional OpenZFS, KubeStellar, kubeadm and NVIDIA driver sysexts are
+version-locked to the image and follow OS updates through the optional `zfs`,
+`kubestellar`, `kubeadm` and `nvidia-open-595` sysupdate **features**
+(`files/os/sysupdate.d/<name>.feature` and `3N-<name>.transfer`), enabled per
+node with `updatectl enable zfs` or a drop-in such as
 `/etc/sysupdate.d/zfs.feature.d/enable.conf` containing `[Feature] Enabled=true`.
-Only the k0s sysext stays a separate component
-(`files/os/sysupdate.k0s.d/`, `systemd-sysupdate --component=k0s update`) with
-its own version axis. Diskless nodes update by rebooting into a newer
+The k0s and NVIDIA Container Toolkit sysexts stay separate components
+(`files/os/sysupdate.k0s.d/`, `files/os/sysupdate.nvidia-container-toolkit.d/`;
+`systemd-sysupdate --component=<name> update`) with their own version axes.
+Diskless nodes update by rebooting into a newer
 image; `systemd-sysupdate.service` is disabled when booted diskless.
 Update scheduling, the kured flag, and the boot health gate are covered in
 [ddi-installer.md](ddi-installer.md) under "Updates".
@@ -77,7 +79,7 @@ foreign-signed manifest never sets `/run/reboot-required`.
 
 ## Complete runtime generations
 
-Complete opts into the `server` feature. `33-server-bundle.transfer` downloads
+Complete opts into the `server` feature. `34-server-bundle.transfer` downloads
 `server-bundle_<ver>.tar.zst` as one verified directory under
 `/var/lib/bluefin/server/runtime/incoming/<ver>`. Downloading an OS or bundle
 never switches active Kubernetes/containerd binaries.
@@ -119,8 +121,10 @@ skew preflight remain authoritative; no worker is silently deleted or adopted.
 ## Signing happens inside the image build
 
 `oci/bluefin-server-image.bst` assembles the whole release set (OS images,
-UKIs, netboot ESP, Complete runtime/Console/coherent bundle and the existing
-optional sysext assets), writes one combined `SHA256SUMS` over all of it, and signs it in-element with
+UKIs, netboot ESP, Complete runtime/optional stock Console/coherent bundle,
+and the k0s, KubeStellar, kubeadm, OpenZFS, NVIDIA driver and NVIDIA Container
+Toolkit sysext assets), writes one combined `SHA256SUMS` over all of it, and
+signs it in-element with
 `files/boot-keys/sysupdate-signing.asc` (gpg `--detach-sign`). It then proves
 the shipped keyring accepts the signature with
 `gpgv --keyring /boot-keys/import-pubring.pgp SHA256SUMS.gpg SHA256SUMS`, so a
@@ -129,9 +133,26 @@ no separate CI signing step: a release publishes `dist/diskless/` as-is.
 
 `elements/bluefin-server/os-sysupdate-keys.bst` installs the matching public
 keyring from `files/boot-keys/import-pubring.pgp` to
-`/etc/systemd/import-pubring.pgp`. systemd reads that path before the vendor
-`/usr/lib/systemd/import-pubring.pgp` that FSDK ships, so the image trusts
-exactly the key that signed the build.
+`/usr/lib/systemd/import-pubring.pgp`, replacing FSDK's vendor keyring. A
+runtime dependency on FSDK's systemd orders the replacement, and a narrow
+BuildStream overlap whitelist permits that file alone. Both the OS and initrd
+therefore trust the build keyring. The OS keyring lives on the immutable `/usr`
+image, so A/B updates and rollbacks change it with the image. It is not copied
+into persistent `/etc` by factory tmpfiles rules.
+
+`/etc/systemd/import-pubring.pgp` remains an operator override and takes
+precedence over the image keyring. Nodes installed before this change retain
+the old factory copy there. After booting an image containing this fix, inspect
+that file and the vendor keyring; if it is only the old factory copy, back it up
+outside systemd's keyring paths and remove it to follow the image keyring.
+Preserve intentional operator overrides. There is no automatic deletion,
+since an old factory copy cannot reliably be distinguished from an override.
+
+A dev-installed node still cannot authenticate its first official update with
+a dev key. Provision the authenticated release public keyring as an `/etc`
+override through a trusted administrative channel for that transition; after
+booting the official image with this fix, remove the temporary override to
+follow its vendor keyring. Do not disable signature verification.
 
 The diskless pull verifies the same signature: the initrd ships gnupg and the
 keyring (`bluefin-server/initrd/initrd-stack.bst` depends on
@@ -219,9 +240,10 @@ Use `--type spdxjson` to get the SBOM attestation instead.
   key and public keyring for a build (gitignored). Where they come from
   locally and in CI: [secure-boot-keys.md](secure-boot-keys.md).
 - `elements/bluefin-server/os-sysupdate-keys.bst` — installs
-  `files/boot-keys/import-pubring.pgp` as `/etc/systemd/import-pubring.pgp`.
-- `files/os/sysupdate.d/*.transfer` and the k0s component directory
-  (`files/os/sysupdate.k0s.d/`) — each transfer points its static `Path=` at
+  `files/boot-keys/import-pubring.pgp` as `/usr/lib/systemd/import-pubring.pgp`.
+- `files/os/sysupdate.d/*.transfer` and the component directories
+  (`files/os/sysupdate.k0s.d/`, `files/os/sysupdate.nvidia-container-toolkit.d/`)
+  — each transfer points its static `Path=` at
   `https://github.com/projectbluefin/server/releases/latest/download/` so all
   transfers share the same signed manifest.
 
@@ -244,17 +266,25 @@ Use `--type spdxjson` to get the SBOM attestation instead.
    EOF
    gpg --batch --gen-key "$GNUPGHOME/keygen"
    KEYID=$(gpg --list-keys --with-colons 'releases@projectbluefin.io' | awk -F: '/^pub:/ {print $5; exit}')
-   gpg --export --output files/os/sysupdate-keys/import-pubring.gpg "$KEYID"
+   gpg --export --output /secure/offline/new-public.pgp "$KEYID"
    gpg --export-secret-keys --armor "$KEYID" > /secure/offline/backup.asc
    rm -rf "$GNUPGHOME"
    ```
-2. Update the GitHub Actions repository secret `SYSUPDATE_SIGNING_KEY` with the
+2. Combine the existing release public keys with `/secure/offline/new-public.pgp`
+   in `files/os/sysupdate-keys/import-pubring.gpg`. Before switching signers,
+   ship a bridge release carrying this combined vendor keyring, signed by the
+   **old** private key. Keep `SYSUPDATE_SIGNING_KEY` unchanged for that release. Ensure nodes
+   have booted it and any legacy `/etc` factory copies have been migrated as
+   described above before proceeding. Nodes that skip the bridge need their
+   trust provisioned through a trusted administrative channel.
+3. Update the GitHub Actions repository secret `SYSUPDATE_SIGNING_KEY` with the
    new ASCII-armored private key.
-3. Rebuild and publish a release under a new `image-version` (a key rotation
+4. Rebuild and publish a release under a new `image-version` (a key rotation
    is never a rebuild of an existing version; see
    "Keys" in [ddi-installer-build.md](ddi-installer-build.md)). Existing hosts only
    trust updates signed by the key in their keyring, so plan the rotation
-   around a release boundary.
+   around a release boundary. Retire the old public key in a later image
+   only after the transition is complete.
 
 For a throwaway local signing key, `just gen-dev-keys` writes the pair on its
 own; see [secure-boot-keys.md](secure-boot-keys.md).
@@ -282,8 +312,8 @@ own; see [secure-boot-keys.md](secure-boot-keys.md).
 
 ## Verification
 
-- [ ] `files/os/sysupdate.d/*.transfer` and `files/os/sysupdate.k0s.d/` do not
-      contain `Verify=no`.
+- [ ] `files/os/sysupdate.d/*.transfer` and the `files/os/sysupdate.*.d/`
+      component directories do not contain `Verify=no`.
 - [ ] `elements/bluefin-server/os-stack.bst` and
       `elements/bluefin-server/initrd/initrd-stack.bst` include
       `bluefin-server/os-sysupdate-keys.bst`.

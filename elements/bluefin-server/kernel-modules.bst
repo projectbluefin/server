@@ -30,14 +30,24 @@ config:
       rm -f "${kdir}vmlinux" "${kdir}System.map" "${kdir}build"
     done
 
+  # One module per worker, all cores at once. The output matches a serial
+  # run: sign-file adds no signing time and zstd compresses each file alone.
+  # Any failing worker makes xargs, and so the build, fail.
   - |
-    set -eu
+    set -euo pipefail
     openssl x509 -inform PEM -outform DER \
       -in /boot-keys/modules/linux-module-cert.crt -out module-cert.der
-    find "%{install-root}%{indep-libdir}/modules" -type f -name '*.ko.zst' -exec zstd -d --rm -q {} ';'
-    find "%{install-root}%{indep-libdir}/modules" -type f -name '*.ko' \
-      -exec sign-file sha512 /boot-keys/linux-module-cert.key module-cert.der {} ';' \
-      -exec zstd -19 --rm -q {} ';'
+    find "%{install-root}%{indep-libdir}/modules" -type f \( -name '*.ko' -o -name '*.ko.zst' \) -print0 |
+      xargs -0 -r -n1 -P"$(nproc)" sh -euc '
+        ko="${1%.zst}"
+        if [ "${ko}" != "$1" ]; then zstd -d --rm -q "$1"; fi
+        sign-file sha512 /boot-keys/linux-module-cert.key module-cert.der "${ko}"
+        if [ "$(modinfo -F sig_hashalgo "${ko}")" != sha512 ]; then
+          echo "ERROR: ${ko} is not signed with sha512" >&2
+          exit 1
+        fi
+        zstd -19 --rm -q "${ko}"
+      ' sh
 
   - |
     set -eu

@@ -19,10 +19,11 @@ From a release `v<ver>` (GitHub Releases or the ORAS OCI artifact at
 UKI `bluefin-server-netboot_<ver>.efi`, the OS DDI `bluefin-server_<ver>.raw`,
 `SHA256SUMS` and `SHA256SUMS.gpg`, and any listed sysext assets
 (`zfs_<ver>.raw.zst`, `kubestellar_<ver>.raw.zst`, `kubeadm_<ver>.raw.zst`,
-`k0s-<k0s-ver>.raw.zst`), verifies them against `SHA256SUMS` (and, with
-`--bluefinKeyring`, against the GPG signature), and serves them over plain
-HTTP. The netboot ESP image, the disk UKI and the USB installer are not
-synced; they are for booting without Booty.
+`nvidia-open-<branch>_<ver>.raw.zst`, `k0s-<k0s-ver>.raw.zst`,
+`nvidia-container-toolkit-<ctk-ver>.raw.zst`), verifies them against
+`SHA256SUMS` (and, with `--bluefinKeyring`, against the GPG signature), and
+serves them over plain HTTP. The netboot ESP image, the disk UKI and the USB
+installer are not synced; they are for booting without Booty.
 
 ## Boot paths
 
@@ -35,12 +36,60 @@ synced; they are for booting without Booty.
 ## Per-node configuration
 
 Booty renders a `bluefin-node.ign` (Ignition spec 3.6.0) per MAC address and
-serves it next to the UKI. A node with no `ignition.config` /
-`ignition.config.url` credential HEADs it next to its boot origin and, when
-present, applies it through a `config.replace` stub (see
-[ddi-installer.md](ddi-installer.md), "Ignition"). Fields include hostname,
-SSH keys (which also enable `sshd.service`, disabled by preset in the image),
-state disk, extensions (any of `zfs`, `kubestellar`, `k0s`), and a k0s token.
+serves it next to the UKI. Fields include hostname, SSH keys (which also
+enable `sshd.service`, disabled by preset in the image), state disk,
+extensions (any of `zfs`, `kubestellar`, `k0s`, `nvidia-container-toolkit`,
+and at most one NVIDIA driver flavour `nvidia-open-<branch>`, which combines
+with `zfs`), and a k0s token. The image-locked extensions land in
+`/etc/extensions/<name>_<ver>.raw` and the toolkit in
+`/etc/extensions/nvidia-container-toolkit.raw`, so they merge at boot. Booty's
+NVIDIA rules are in the Booty README's
+[NVIDIA GPU hosts](https://github.com/jeefy/booty#nvidia-gpu-hosts).
+
+A node with no `ignition.config` / `ignition.config.url` credential HEADs
+`bluefin-node.ign` next to its boot origin. Nothing there means nothing to
+apply. If it is there, `bluefin-ignition-credentials` in the initrd applies it
+only if it is signed:
+
+- It fetches `bluefin-node.ign.gpg` from the same directory and verifies it
+  with `gpgv` against the import keyring (the `/etc/systemd/import-pubring.pgp`
+  override, else the image's `/usr/lib/systemd/import-pubring.pgp`: the same
+  root as the image pull), then stages the verified bytes inline at
+  `/run/ignition/user.ign`, so Ignition applies exactly what was signed. The
+  signature is the gate, not the transport: plain `http://` works, as it does
+  for the `/usr` pull. A keyring that cannot be read (say, a dangling `/etc`
+  symlink) fails the boot; the other one is never tried instead.
+- Only an HTTP 404 on the `.gpg` counts as "unsigned". An unsigned config is
+  applied only with the system credential `bluefin.ignition.allow-unsigned`
+  (any non-empty value), and is logged as `UNAUTHENTICATED`. Any other failure
+  fetching the `.gpg` (5xx, timeout, dropped connection), or a signature that
+  does not verify, fails the boot into emergency mode with or without the
+  credential (`bluefin-ignition-credentials.service` has
+  `OnFailure=emergency.target`); the unit's journal carries `gpgv`'s reason.
+- A signed config must be self-contained. Ignition fetches
+  `ignition.config.merge` / `replace` targets and remote
+  `storage.files[].contents.source` URLs without checking them against any
+  signature, so each such source needs a `verification.hash`.
+
+### Transitional: unsigned configs on netboot
+
+Booty does not sign `bluefin-node.ign` yet; it answers 404 for the `.gpg`. A
+UEFI HTTP Boot node with Secure Boot has no other way to receive the opt-out
+credential: the signed UKI's own command line wins, there is no ESP for
+`/loader/credentials`, and real firmware sets no SMBIOS type 11 strings. So
+the netboot UKI carries it on its command line,
+`systemd.set_credential=bluefin.ignition.allow-unsigned:1` (`netboot-cmdline`
+in `elements/oci/bluefin-server-boot.bst`); the disk and installer UKIs do
+not. Booty's iPXE chainload and BIOS paths boot with the UKI's own `.cmdline`,
+rewriting only the `rd.systemd.pull` URL, so they carry it too.
+
+Booty-provisioned nodes keep applying their per-node config, and a bad
+signature or a `.gpg` failure other than 404 still fails closed. This is not
+yet protection against an on-path attacker, who can answer 404 for the `.gpg`
+to force the unsigned path. The default goes away once Booty signs each
+node's config with a dedicated config key, trusted in the initrd separately
+from the release key that signs `SHA256SUMS`
+([#327](https://github.com/projectbluefin/server/issues/327), following #284).
 
 ## Install to disk
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=NVIDIA Persistence Daemon
+After=nvidia-device-nodes.service
+ConditionPathExists=/dev/nvidiactl
+
+[Service]
+Type=forking
+# The sysext merges after systemd-sysusers.service ran at boot.
+ExecStartPre=/usr/bin/systemd-sysusers nvidia.conf
+ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced
+ExecStopPost=/usr/bin/rm -rf /run/nvidia-persistenced

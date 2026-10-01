@@ -221,7 +221,7 @@ hint() {
     systemd-veritysetup@*|sysusr-usr.mount|sysroot-usr.mount)
       echo "/usr could not be verified or mounted: the OS image does not match the usrhash= of this UKI" ;;
     bluefin-ignition-credentials.service)
-      echo "staging the Ignition config failed (invalid ignition.config.url?). ${DOCS}#ignition" ;;
+      echo "staging the Ignition config failed: a refused bluefin-node.ign (the lines below say why) or an invalid ignition.config.url. ${DOCS}#ignition" ;;
     ignition-*.service)
       stage="${1#ignition-}"
       stage="${stage%.service}"

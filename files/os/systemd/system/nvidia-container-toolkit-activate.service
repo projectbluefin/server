@@ -1,0 +1,25 @@
+[Unit]
+Description=Activate the NVIDIA Container Toolkit sysext on boot
+Wants=nvidia-container-toolkit-fetch.service
+After=nvidia-container-toolkit-fetch.service
+RequiresMountsFor=/var/lib/nvidia-container-toolkit
+
+[Service]
+Type=oneshot
+# Once per boot: bluefin-sysext-activate.service re-requests
+# multi-user.target, which would otherwise run this merge again.
+RemainAfterExit=yes
+StateDirectory=nvidia-container-toolkit
+Restart=on-failure
+RestartSec=30s
+ExecStartPre=/usr/bin/test -e /var/lib/nvidia-container-toolkit/nvidia-container-toolkit.raw
+ExecStart=/usr/bin/install -D -m 0644 /var/lib/nvidia-container-toolkit/nvidia-container-toolkit.raw /run/extensions/nvidia-container-toolkit.raw
+ExecStart=/usr/bin/systemd-sysext refresh
+ExecStart=/usr/bin/systemctl daemon-reload
+# Merged after PID 1 built the boot transaction, so start the sysext's units
+# by name (like k0s-first-boot.service); re-requesting multi-user.target
+# would pull this unit and bluefin-sysext-activate.service in again.
+ExecStart=/usr/bin/systemctl start --no-block nvidia-cdi-refresh.path nvidia-cdi-refresh.service
+
+[Install]
+WantedBy=multi-user.target

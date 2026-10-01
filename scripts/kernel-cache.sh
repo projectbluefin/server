@@ -78,6 +78,14 @@ restore() {
         echo "::warning title=No kernel cache::${repo}:${tag} is not available; the kernel builds from source."
         return 0
     fi
+    # Read the whole stream (zstd checksums, every tar header) before writing
+    # anything: a half-extracted cache has artifact refs without their CAS
+    # objects, which BuildStream takes as cached and fails on much later.
+    if ! cat "${work}"/cache.tar.zst.* | zstd -dcq | tar -t > /dev/null; then
+        rm -rf "${work}"
+        echo "::warning title=Corrupt kernel cache::${repo}:${tag} did not verify; the kernel builds from source."
+        return 0
+    fi
     cat "${work}"/cache.tar.zst.* | zstd -dcq | tar -x -C "${cache_dir}/"
     rm -rf "${work}"
     echo "kernel-cache: restored ${repo}:${tag}"

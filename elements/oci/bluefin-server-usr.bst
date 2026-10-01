@@ -90,10 +90,21 @@ config:
     mv /sysroot/etc "${factory}"
     mkdir /sysroot/etc
     conf=/sysroot/usr/lib/tmpfiles.d/00-bluefin-factory-etc.conf
+    # Read-only reference data is linked, not copied. C never overwrites,
+    # and a disk install keeps /etc across A/B updates, so a copy would stay
+    # at the version the node first booted; a link follows /usr. An operator
+    # can still replace the link with a file, which L leaves alone.
+    # protocols, services: IANA registries (components/iana-config.bst).
+    linked='protocols services'
+    for entry in ${linked}; do
+      test -f "${factory}/${entry}"
+    done
     printf 'd /etc 0755 root root -\n' > "${conf}"
     for entry in $(ls -A "${factory}"); do
       if [ -L "${factory}/${entry}" ]; then
         printf 'L /etc/%s - - - - %s\n' "${entry}" "$(readlink "${factory}/${entry}")" >> "${conf}"
+      elif printf '%s\n' ${linked} | grep -qxF "${entry}"; then
+        printf 'L /etc/%s - - - - ../usr/share/factory/etc/%s\n' "${entry}" "${entry}" >> "${conf}"
       else
         printf 'C /etc/%s - - - - %s\n' "${entry}" "/usr/share/factory/etc/${entry}" >> "${conf}"
       fi

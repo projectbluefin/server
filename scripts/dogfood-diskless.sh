@@ -26,7 +26,9 @@
 #   DOGFOOD_BOOT=http          UEFI HTTP boot the netboot UKI (the initrd derives the
 #                              /usr image URL from the boot URL); enrolls keys first
 #   DOGFOOD_BOOT_URL=<url>     HTTP boot from another server (e.g. Booty) instead
-#   DOGFOOD_NODE_IGN=<file>    serve it as bluefin-node.ign next to the UKI (HTTP boot)
+#   DOGFOOD_NODE_IGN=<file>    serve it, unsigned, as bluefin-node.ign next to the UKI
+#                              (HTTP boot); the netboot UKI's transitional
+#                              bluefin.ignition.allow-unsigned default accepts it
 #   DOGFOOD_SERVE_EXTRA=<dir>  also serve the files in <dir>
 #   DOGFOOD_TAMPER=raw|sums    serve a corrupted image (raw), or a corrupted image with
 #                              SHA256SUMS re-hashed to match it but no longer matching

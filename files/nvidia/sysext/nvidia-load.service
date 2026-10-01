@@ -1,0 +1,17 @@
+[Unit]
+Description=Load the NVIDIA kernel modules
+Requires=nvidia-flavour-guard.service
+After=nvidia-flavour-guard.service systemd-sysext.service systemd-udev-trigger.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Skip (not fail) unless a PCI display controller (class 0x03) from NVIDIA
+# (vendor 0x10de) is present.
+ExecCondition=/usr/bin/sh -c 'for d in /sys/bus/pci/devices/*; do [ "$$(cat "$$d/vendor")" = 0x10de ] && case "$$(cat "$$d/class")" in 0x03*) exit 0 ;; esac; done; exit 1'
+# The sysext ships no module index; the base image's helper indexes the merged
+# module tree under /run and resolves the in-tree dependencies (drm,
+# drm_kms_helper, video, ...). All four load here, nvidia-uvm included, so
+# nvidia-modprobe (nvidia-device-nodes.service) finds them loaded and never
+# runs a bare modprobe, which could not find them.
+ExecStart=/usr/libexec/bluefin-sysext-modules nvidia nvidia-uvm nvidia-modeset nvidia-drm

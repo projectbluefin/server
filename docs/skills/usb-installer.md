@@ -45,10 +45,14 @@ not warn about executable definition files). The
 `systemd-sysinstall.service.d/10-bluefin-installer.conf` drop-in passes
 `--definitions=${BLUEFIN_INSTALL_REPART}` and
 `--kernel=${BLUEFIN_INSTALL_KERNEL}` (the disk UKI), `--erase=yes`, and
-`--reboot=no` with `SuccessAction=reboot`. The signed installer profile supplies
-those environment values and forwards the nonsecret `bluefin.server-profile`
-credential through native sysinstall. The disk UKI sits outside `EFI/Linux`
-on the stick so systemd-boot never offers it there.
+`--reboot=no` with `SuccessAction=reboot`, plus `RemainAfterExit=no` so that
+still fires once upstream's unit is `Type=oneshot` with `RemainAfterExit=yes`
+(systemd v262). It also sets `FailureAction=none` and leaves out upstream's
+`--mute-console=yes`; what that changes is described after the install steps
+below. The signed installer profile supplies those environment values and
+forwards the nonsecret `bluefin.server-profile` credential through native
+sysinstall. The disk UKI sits outside `EFI/Linux` on the stick so systemd-boot
+never offers it there.
 
 ## Complete and Core profiles
 
@@ -59,9 +63,10 @@ the same OS partitions and retain the existing verity/signing inputs.
 
 Complete selects `bluefin/repart.d/complete`, copies the coherent signed payload
 set and public profile marker onto the installed ESP, and leaves the OS root
-account locked. Core selects `bluefin/repart.d/core`, omits the homelab payloads,
-and may retain the builder root-password prompt. Neither profile puts join,
-account, TLS or session secrets on public media.
+account locked without a root-password prompt. Core selects
+`bluefin/repart.d/core`, omits the homelab payloads, and enables the builder
+root-password prompt on first disk boot. Neither profile puts join, account,
+TLS or session secrets on public media.
 
 The base launcher persists profile intent in `/etc/bluefin/server/profile`.
 Core and installations with no intent do not activate Server state/runtime;
@@ -101,20 +106,40 @@ installer UI of its own.
    `yes` to begin. This is the only confirmation.
 4. sysinstall installs, and the machine **reboots by itself** when it
    succeeds. Remove the stick when the screen goes blank.
-5. **Complete:** the native lifecycle brings up its cluster/platform; configure
-   supported upstream Console authentication privately before use. There is no
-   custom owner claim flow. **Core:** its first disk boot asks on tty1 for a root
-   password, then confirmation; **Tab** hides typing and an empty answer leaves
-   root locked. Builder OS login is not the planned cluster identity.
+5. **Complete:** the native lifecycle brings up its cluster/platform without a
+   root-password prompt. Stock Console is optional; configure its supported
+   upstream authentication privately before enabling it. There is no custom
+   owner claim flow. **Core:** the first boot of the installed disk asks on the
+   monitor (tty1) for a new **root password**, then asks again to confirm. It
+   shows what you type unless you press **Tab** first. Then log in as `root`
+   with it. Builder OS login is not the planned cluster identity.
+   **Do not answer Core's password prompt with an empty password.** It is stock
+   `systemd-firstboot`, which reads an empty answer as "skip" and writes the
+   locked, invalid hash `!*` into the installed `/etc/shadow`.
+   `bluefin-root-password-prompt.service` is `ConditionFirstBoot=yes`, so it
+   never asks again, and a `passwd.*.root` credential added afterwards is
+   ignored. Unless the stick also provisioned an admin user with `sudo`
+   ("Developer mode" below), there is no login to recover from and no fix short
+   of reinstalling or editing `/etc/shadow` from another system.
+   Type a password at both Core prompts, or pre-set one with a credential (see
+   "First-boot prompts" below).
 
 Only two answers cancel: an empty answer at either prompt, and `no` at the
 confirmation (`Installation not confirmed, cancelling.`). Anything else
 upstream does not accept — a typo, an out-of-range number — is rejected with
 `Invalid input …` and the same prompt is asked again, so a mistyped answer
-never halts the machine. After a cancel or a real install failure, upstream's
-`FailureAction=halt` halts the machine — it stops at `System halted` with the
-message still on screen, but does not power off. Power-cycle and boot the stick
-again to retry.
+never ends the install.
+
+After a cancel or a failed install the machine stays up: the drop-in sets
+`FailureAction=none` where upstream's unit halts. sysinstall's error stays on
+the monitor, and the journal, which lives only in RAM, is kept until you power
+off (`journalctl -u systemd-sysinstall`, for example over SSH with the
+developer-mode credentials below). sysinstall runs without upstream's
+`--mute-console=yes`, so kernel and service-manager messages, such as disk I/O
+errors, reach the monitor too and can land between its prompts; its own output
+is shown either way. A failure after sysinstall has erased the disk leaves it
+blank ([#308](https://github.com/projectbluefin/server/issues/308)).
+Power-cycle and boot the stick again to retry.
 
 The installed OS layout retains `files/os/repart.d/` and its native
 `systemd-sysinstall` contract. Profile-specific ESP copy definitions add public
@@ -149,9 +174,11 @@ argument. On Core's first disk boot, `bluefin-root-password-prompt.service`
 `systemd-firstboot --prompt-root-password` on tty1. Other paths do not acquire
 this prompt implicitly. Core may instead receive an explicitly private
 `passwd.hashed-password.root` / `passwd.plaintext-password.root` credential.
-Complete uses local product-account recovery, not a default root password or
-passwordless rescue shell. See [tpm2-credential-sealing.md](tpm2-credential-sealing.md)
-for the separate advanced OS-credential boundary.
+Complete leaves root locked without a prompt; stock Console does not provide
+the planned local product-account recovery. Those acceptance gaps remain in
+[server-profile.md](server-profile.md). See
+[tpm2-credential-sealing.md](tpm2-credential-sealing.md) for the separate advanced
+OS-credential boundary.
 
 ## Credentials and the ESP
 

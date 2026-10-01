@@ -47,7 +47,7 @@ func (e *Engine) protectReleases(pending *Runtime) error {
 	if err != nil {
 		return err
 	}
-	return writeConfiguration(e.path("/etc/sysupdate.d/33-server-bundle.transfer.d/protect.conf"), "[Transfer]\nProtectVersion="+strings.Join(versions, "\nProtectVersion=")+"\n", true)
+	return writeConfiguration(e.path("/etc/sysupdate.d/34-server-bundle.transfer.d/protect.conf"), "[Transfer]\nProtectVersion="+strings.Join(versions, "\nProtectVersion=")+"\n", true)
 }
 func (e *Engine) enableServerUpdates() error {
 	if e.State.Profile != "complete" {

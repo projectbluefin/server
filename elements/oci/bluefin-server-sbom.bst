@@ -42,6 +42,10 @@ build-depends:
 - server/containerd-image.bst
 - server/platform-payload.bst
 - oci/server-sysext.bst
+- oci/nvidia-open-595-sysext.bst
+- nvidia/nvidia-open-595.bst
+- oci/nvidia-container-toolkit-sysext.bst
+- nvidia/nvidia-container-toolkit.bst
 
 config:
   path: /bluefin-server.spdx.json

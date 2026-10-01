@@ -1,0 +1,16 @@
+# DOGFOOD_EXTRA_PROBE: /etc/protocols and /etc/services resolve (#316), so
+# libtirpc reaches the local portmapper and an NFSv3 mount gets past the
+# "tcp" protocol lookup. 127.0.0.1 exports nothing: the mount must fail, but
+# with an RPC error, not "Failed to find 'tcp' protocol".
+protocols=$(getent protocols tcp >/dev/null; echo $?)
+services=$(getent services sunrpc >/dev/null; echo $?)
+rpcinfo=$(rpcinfo -p 127.0.0.1 >/dev/null 2>&1; echo $?)
+mnt=$(mktemp -d)
+nfs3=$(timeout 60 mount -t nfs -o ro,vers=3,proto=tcp,mountproto=tcp,retry=0 -v 127.0.0.1:/none "${mnt}" 2>&1)
+umount "${mnt}" 2>/dev/null; rmdir "${mnt}"
+case "${nfs3}" in
+    *"Failed to find"*"protocol"*|*"Protocol not supported"*) mount_tcp=unresolved ;;
+    *) mount_tcp=resolved ;;
+esac
+echo "PROBE netdb protocols=${protocols} services=${services} rpcinfo=${rpcinfo} nfs3-tcp=${mount_tcp} link=$(readlink /etc/protocols),$(readlink /etc/services)"
+printf '%s\n' "${nfs3}" | tail -n 4 | sed 's/^/PROBE-LOG nfs3: /'

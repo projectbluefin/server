@@ -12,6 +12,8 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -135,14 +137,17 @@ config:
 
 
 class Upstream:
-    """Serves registered URLs; everything else is a 404."""
+    """Serves registered URLs; `status` forces an HTTP error, anything else is a 404."""
 
     def __init__(self):
         self.files: dict[str, bytes] = {}
+        self.status: dict[str, int] = {}
         self.requests: list[urllib.request.Request] = []
 
     def urlopen(self, request, timeout=None):
         self.requests.append(request)
+        if request.full_url in self.status:
+            raise urllib.error.HTTPError(request.full_url, self.status[request.full_url], "Error", Message(), None)
         if request.full_url not in self.files:
             raise urllib.error.HTTPError(request.full_url, 404, "Not Found", Message(), None)
         return io.BytesIO(self.files[request.full_url])
@@ -189,8 +194,9 @@ def repo(tmp_path):
     return tmp_path
 
 
-def snapshot(root: Path) -> dict[str, str]:
-    return {path: (root / path).read_text(encoding="utf-8") for path in FILES}
+def snapshot(root: Path, extra=()) -> dict[str, str]:
+    paths = list(FILES) + list(extra)
+    return {path: (root / path).read_text(encoding="utf-8") for path in paths}
 
 
 def changed_lines(before: dict[str, str], root: Path) -> dict[str, list[tuple[str, str]]]:
@@ -543,7 +549,7 @@ def test_no_op_run_leaves_multi_arch_files_byte_identical(repo, upstream, capsys
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("name", [n for n, c in track.COMPONENTS.items() if isinstance(c, track.BstComponent)])
+@pytest.mark.parametrize("name", [n for n, c in track.COMPONENTS.items() if isinstance(c, track.BstComponent) and c.multi_arch])
 def test_real_elements_pin_amd64_and_arm64_alike(name):
     pins = track.COMPONENTS[name].pins(track.Tree(ROOT))
     by_arch = {arch: sorted(p.url.replace(arch, "ARCH") for p in pins if arch in p.url) for arch in ("amd64", "arm64")}
@@ -560,7 +566,14 @@ def test_real_pins_are_readable(name):
     assert pins
     for pin in pins:
         assert pin.url.startswith("https://") and "%{" not in pin.url
-        assert track.SUMS_LINE_RE.match(track.read_pin(tree, pin)), pin
+        # Nothing is written unless it verifies against something upstream
+        # publishes: a checksum file, or for a git tag the GitHub API's commit.
+        assert pin.sums.startswith("https://") and pin.sums != pin.url, pin
+        value = track.read_pin(tree, pin)
+        if isinstance(component, track.GitTagComponent):
+            assert component.COMMIT_RE.fullmatch(value), pin
+        else:
+            assert track.SUMS_LINE_RE.match(value), pin
 
 
 def test_every_pinned_source_belongs_to_exactly_one_component():
@@ -572,3 +585,321 @@ def test_every_pinned_source_belongs_to_exactly_one_component():
             if match:
                 owners = [c.name for c in track.COMPONENTS.values() if getattr(c, "marker", None) and c.marker in match["url"]]
                 assert len(owners) == 1, f"{element}: {match['url']} is tracked by {owners}"
+
+
+NVIDIA_INDEX = "https://download.nvidia.com/XFree86/Linux-x86_64/"
+NVIDIA_PIN = "e421c202e4c79f58c3c7f3161bbe71454ebb3d88936f88205a0e327cd04c59ca"
+NVIDIA_FILES = {
+    "include/aliases.yml": FILES["include/aliases.yml"] + "  nvidia_download: https://download.nvidia.com/\n",
+    "include/nvidia.yml": f"""variables:
+  # nvidia-open-595: production branch 595
+  nvidia-open-595-version: "595.104.02"
+  nvidia-open-595-sha256: "{NVIDIA_PIN}"
+""",
+    "elements/nvidia/nvidia-open-595.bst": """kind: manual
+
+(@):
+- include/nvidia.yml
+
+sources:
+- kind: remote
+  url: nvidia_download:XFree86/Linux-x86_64/%{nvidia-version}/NVIDIA-Linux-x86_64-%{nvidia-version}.run
+  ref: "%{nvidia-open-595-sha256}"
+
+variables:
+  nvidia-version: "%{nvidia-open-595-version}"
+""",
+}
+
+
+@pytest.fixture
+def nvidia(repo, upstream, monkeypatch):
+    for path, text in NVIDIA_FILES.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(track, "COMPONENTS", {"nvidia-open-595": track.COMPONENTS["nvidia-open-595"]})
+    return upstream
+
+
+def nvidia_index(*versions: str) -> bytes:
+    """download.nvidia.com's listing: version directories among other entries."""
+    entries = ["..", "../../style/directory_listing.css", "1.0-4499/", *(f"{v}/" for v in versions), "latest.txt"]
+    links = "\n".join(f"<li><span class='dir'><a href='{e}'>{e}</a></span></li>" for e in entries)
+    return f"<!doctype html><ul class='directorycontents'>\n{links}\n</ul>".encode()
+
+
+def nvidia_release(upstream: Upstream, version: str, run: bool = True, sums: bool = True) -> str:
+    run_url = f"{NVIDIA_INDEX}{version}/NVIDIA-Linux-x86_64-{version}.run"
+    data = f"payload of {run_url}".encode()
+    if run:
+        upstream.files[run_url] = data
+    if sums:
+        upstream.files[run_url + ".sha256sum"] = f"{sha(data)}  NVIDIA-Linux-x86_64-{version}.run\n".encode()
+    return sha(data)
+
+
+def test_nvidia_driver_proposes_the_newest_uploaded_release_of_its_branch(repo, nvidia):
+    nvidia.files[NVIDIA_INDEX] = nvidia_index(
+        "595.99.02", "595.104.02", "595.105.00", "595.110.03", "595.115.00", "595.120.01", "610.43.02")
+    nvidia_release(nvidia, "595.105.00")
+    nvidia_release(nvidia, "595.110.03")
+    nvidia_release(nvidia, "595.115.00", sums=False)
+    nvidia_release(nvidia, "595.120.01", run=False)
+    nvidia_release(nvidia, "610.43.02")
+
+    assert newest("nvidia-open-595", repo) == "595.110.03"
+
+    probes = [(r.get_method(), r.full_url.removeprefix(NVIDIA_INDEX)) for r in nvidia.requests if r.full_url != NVIDIA_INDEX]
+    assert {method for method, _ in probes} == {"HEAD"}, "check never downloads a .run"
+    assert {url.split("/")[0] for _, url in probes} == {"595.105.00", "595.110.03", "595.115.00", "595.120.01"}
+
+
+def test_nvidia_driver_outage_is_an_error_not_up_to_date(repo, nvidia):
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", "595.105.00")
+    nvidia_release(nvidia, "595.105.00")
+    nvidia.status[f"{NVIDIA_INDEX}595.105.00/NVIDIA-Linux-x86_64-595.105.00.run"] = 503
+    with pytest.raises(track.TrackError, match="HEAD .*595.105.00.run: HTTP 503"):
+        newest("nvidia-open-595", repo)
+
+
+def test_check_reports_an_index_that_no_longer_lists_the_pin(repo, nvidia, capsys):
+    nvidia.files[NVIDIA_INDEX] = b"<ul><li><a href=\"595.105.00\">595.105.00</a></li></ul>"
+    assert track.main(["check"], root=repo) == 1
+    assert f"ERROR: nvidia-open-595: {NVIDIA_INDEX} does not list the pinned 595.104.02" in capsys.readouterr().err
+
+
+def test_check_reports_the_driver_branch_as_the_series(repo, nvidia, capsys):
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", "595.105.00")
+    nvidia_release(nvidia, "595.105.00")
+    assert track.main(["check", "--json"], root=repo) == 0
+    out, err = capsys.readouterr()
+    assert json.loads(out) == [{"component": "nvidia-open-595", "series": "595", "current": "595.104.02", "latest": "595.105.00"}]
+    assert "nvidia-open-595 595    595.104.02     595.105.00     update" in err
+
+
+def test_nvidia_driver_bump_writes_the_include_sha256_atom(repo, nvidia, tmp_path):
+    new = "595.105.00"
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", new)
+    new_pin = nvidia_release(nvidia, new)
+    body = tmp_path / "body.md"
+    before = snapshot(repo, NVIDIA_FILES)
+
+    assert track.main(["apply", "nvidia-open-595", "--summary", str(body)], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        "include/nvidia.yml": [
+            ('  nvidia-open-595-version: "595.104.02"', f'  nvidia-open-595-version: "{new}"'),
+            (f'  nvidia-open-595-sha256: "{NVIDIA_PIN}"', f'  nvidia-open-595-sha256: "{new_pin}"'),
+        ],
+    }
+    text = body.read_text()
+    assert f"Patch release of **nvidia-open-595** in the pinned `595` series: `595.104.02` → `{new}`." in text
+    assert f"Release notes: {NVIDIA_INDEX}{new}/" in text
+    assert f"- {NVIDIA_INDEX}{new}/NVIDIA-Linux-x86_64-{new}.run.sha256sum" in text
+    assert "a new driver branch is a new flavour (docs/skills/nvidia-sysext.md)." in text
+    assert "apply nvidia-open-595 --version" not in text
+
+
+def test_nvidia_driver_refuses_to_write_a_tampered_run(repo, nvidia, capsys):
+    new = "595.105.00"
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", new)
+    nvidia_release(nvidia, new)
+    nvidia.files[f"{NVIDIA_INDEX}{new}/NVIDIA-Linux-x86_64-{new}.run"] = b"tampered"
+    before = snapshot(repo, NVIDIA_FILES)
+
+    assert track.main(["apply", "nvidia-open-595"], root=repo) == 1
+
+    assert snapshot(repo, NVIDIA_FILES) == before
+    assert f"{NVIDIA_INDEX}{new}/NVIDIA-Linux-x86_64-{new}.run hashes to {sha(b'tampered')}" in capsys.readouterr().err
+
+
+def test_nvidia_driver_never_leaves_its_branch(repo, nvidia):
+    before = snapshot(repo, NVIDIA_FILES)
+    with pytest.raises(track.TrackError, match="`610.43.02` does not match"):
+        track.apply(repo, "nvidia-open-595", "610.43.02")
+    assert nvidia.requests == []
+    assert snapshot(repo, NVIDIA_FILES) == before
+
+
+def test_every_nvidia_flavour_is_tracked():
+    flavours = re.findall(r"^\s+(nvidia-open-\d+)-version:", (ROOT / "include/nvidia.yml").read_text(encoding="utf-8"), re.M)
+    tracked = [n for n, c in track.COMPONENTS.items() if isinstance(c, track.NvidiaDriverComponent)]
+    assert flavours and sorted(flavours) == sorted(tracked)
+
+
+CTK_REPO = "NVIDIA/nvidia-container-toolkit"
+CTK_GIT = f"https://github.com/{CTK_REPO}.git"
+CTK_PIN = "dffc40b4f820ce5c512633bac9e0418d0e05a2ee"
+CTK_FILES = {
+    "include/nvidia-container-toolkit.yml": f"""variables:
+  # NVIDIA/nvidia-container-toolkit release tag, without the leading "v".
+  nvidia-container-toolkit-version: "1.20.1"
+  # The commit that tag points to.
+  nvidia-container-toolkit-commit: "{CTK_PIN}"
+""",
+    "elements/nvidia/nvidia-container-toolkit.bst": """kind: manual
+
+(@):
+- include/nvidia-container-toolkit.yml
+
+sources:
+- kind: git_repo
+  url: github:NVIDIA/nvidia-container-toolkit.git
+  ref: "v%{nvidia-container-toolkit-version}-0-g%{nvidia-container-toolkit-commit}"
+""",
+}
+
+
+class Remote:
+    """Stands in for `git ls-remote`: serves the refs each test registers per URL."""
+
+    def __init__(self):
+        self.refs: dict[str, dict[str, str]] = {}
+        self.commands: list[list[str]] = []
+
+    def run(self, command, **kwargs):
+        self.commands.append(command)
+        assert command[:2] == ["git", "ls-remote"] and kwargs.get("check"), command
+        url, *patterns = command[2:]
+        if url not in self.refs:
+            raise subprocess.CalledProcessError(128, command, "", f"fatal: repository '{url}' not found\n")
+        listing = "".join(f"{sha}\t{name}\n" for name, sha in self.refs[url].items() if name in patterns)
+        return subprocess.CompletedProcess(command, 0, listing, "")
+
+    def tag(self, tag: str, commit: str, annotated: bool = True) -> None:
+        refs = self.refs.setdefault(CTK_GIT, {})
+        if annotated:
+            refs[f"refs/tags/{tag}"] = sha(tag.encode())[:40]
+            refs[f"refs/tags/{tag}^{{}}"] = commit
+        else:
+            refs[f"refs/tags/{tag}"] = commit
+
+
+@pytest.fixture
+def ctk(repo, upstream, monkeypatch):
+    for path, text in CTK_FILES.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(track, "COMPONENTS", {"nvidia-container-toolkit": track.COMPONENTS["nvidia-container-toolkit"]})
+    remote = Remote()
+    monkeypatch.setattr(subprocess, "run", remote.run)
+    return remote
+
+
+def ctk_api(upstream: Upstream, tag: str, commit: str) -> str:
+    url = f"https://api.github.com/repos/{CTK_REPO}/commits/refs/tags/{tag}"
+    upstream.files[url] = json.dumps({"sha": commit, "commit": {"message": tag}}).encode()
+    return url
+
+
+def commit(n: int) -> str:
+    return sha(str(n).encode())[:40]
+
+
+def test_toolkit_proposes_the_newest_stable_release_of_its_series(repo, upstream, ctk):
+    upstream.releases(CTK_REPO, [
+        release("v1.21.0", "nvidia-container-toolkit_1.21.0_rpm_x86_64.tar.gz"),
+        release("v1.21.0-rc.1", prerelease=True),
+        release("v1.20.4", prerelease=True),
+        release("v1.20.3", draft=True),
+        release("v1.20.3-rc.1", prerelease=True),
+        release("v1.20.2"),
+        release("v1.20.1"),
+        release("v1.19.9"),
+    ])
+    assert newest("nvidia-container-toolkit", repo) == "1.20.2"
+    assert ctk.commands == [], "check never asks the git remote"
+
+
+def test_toolkit_apply_writes_the_tags_commit_and_version(repo, upstream, ctk, tmp_path, capsys):
+    upstream.releases(CTK_REPO, [release("v1.20.2"), release("v1.20.1")])
+    api = ctk_api(upstream, "v1.20.2", commit(2))
+    ctk.tag("v1.20.2", commit(2))
+    before = snapshot(repo, CTK_FILES)
+    body = tmp_path / "body.md"
+
+    assert track.main(["apply", "nvidia-container-toolkit", "--summary", str(body)], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        "include/nvidia-container-toolkit.yml": [
+            ('  nvidia-container-toolkit-version: "1.20.1"', '  nvidia-container-toolkit-version: "1.20.2"'),
+            (f'  nvidia-container-toolkit-commit: "{CTK_PIN}"', f'  nvidia-container-toolkit-commit: "{commit(2)}"'),
+        ],
+    }
+    assert capsys.readouterr().out.split() == ["include/nvidia-container-toolkit.yml"]
+    assert ctk.commands == [["git", "ls-remote", CTK_GIT, "refs/tags/v1.20.2", "refs/tags/v1.20.2^{}"]]
+    text = body.read_text()
+    assert "Patch release of **nvidia-container-toolkit** in the pinned `1.20` series: `1.20.1` → `1.20.2`." in text
+    assert "| File | Asset | commit |" in text
+    assert f"`{commit(2)}` (was `{CTK_PIN}`)" in text
+    assert f"- the GitHub API: {api}" in text
+    assert f"- the git remote: `git ls-remote {CTK_GIT} refs/tags/v1.20.2 'refs/tags/v1.20.2^{{}}'`" in text
+    assert "https://github.com/NVIDIA/nvidia-container-toolkit/releases/tag/v1.20.2" in text
+
+
+def test_toolkit_lightweight_tag_is_its_own_commit(repo, upstream, ctk):
+    ctk_api(upstream, "v1.20.2", commit(2))
+    ctk.tag("v1.20.2", commit(2), annotated=False)
+    track.apply(repo, "nvidia-container-toolkit", "1.20.2")
+    assert f'nvidia-container-toolkit-commit: "{commit(2)}"' in (repo / "include/nvidia-container-toolkit.yml").read_text()
+
+
+@pytest.mark.parametrize("annotated", [True, False])
+def test_toolkit_api_and_git_remote_that_disagree_write_nothing(repo, upstream, ctk, capsys, annotated):
+    upstream.releases(CTK_REPO, [release("v1.20.2")])
+    api = ctk_api(upstream, "v1.20.2", commit(2))
+    ctk.tag("v1.20.2", commit(3), annotated=annotated)
+    before = {p: (repo / p).read_bytes() for p in CTK_FILES}
+
+    assert track.main(["apply", "nvidia-container-toolkit"], root=repo) == 1
+
+    assert {p: (repo / p).read_bytes() for p in CTK_FILES} == before
+    assert f"ERROR: {api} says v1.20.2 is {commit(2)}, but the git remote {CTK_GIT} says {commit(3)}" in capsys.readouterr().err
+
+
+def test_toolkit_tag_missing_from_the_git_remote_writes_nothing(repo, upstream, ctk, capsys):
+    ctk_api(upstream, "v1.20.2", commit(2))
+    ctk.tag("v1.20.1", CTK_PIN)
+    before = {p: (repo / p).read_bytes() for p in CTK_FILES}
+
+    assert track.main(["apply", "nvidia-container-toolkit", "--version", "1.20.2"], root=repo) == 1
+
+    assert {p: (repo / p).read_bytes() for p in CTK_FILES} == before
+    assert f"ERROR: {CTK_GIT} has no refs/tags/v1.20.2" in capsys.readouterr().err
+
+
+def test_toolkit_api_without_a_commit_id_writes_nothing(repo, upstream, ctk):
+    url = f"https://api.github.com/repos/{CTK_REPO}/commits/refs/tags/v1.20.2"
+    upstream.files[url] = json.dumps({"message": "No commit found for SHA: refs/tags/v1.20.2"}).encode()
+    ctk.tag("v1.20.2", commit(2))
+    before = snapshot(repo, CTK_FILES)
+    with pytest.raises(track.TrackError, match="gives no commit id for v1.20.2"):
+        track.apply(repo, "nvidia-container-toolkit", "1.20.2")
+    assert snapshot(repo, CTK_FILES) == before
+
+
+def test_toolkit_no_op_leaves_files_byte_identical(repo, upstream, ctk, capsys):
+    upstream.releases(CTK_REPO, [release("v1.20.1"), release("v1.20.1-rc.1", prerelease=True)])
+    before = {p: (repo / p).read_bytes() for p in CTK_FILES}
+
+    assert track.main(["apply", "nvidia-container-toolkit"], root=repo) == 0
+
+    assert {p: (repo / p).read_bytes() for p in CTK_FILES} == before
+    assert capsys.readouterr().out == ""
+    assert ctk.commands == []
+
+
+def test_toolkit_refuses_an_element_ref_that_does_not_read_both_atoms(repo, upstream, ctk):
+    bst = repo / "elements/nvidia/nvidia-container-toolkit.bst"
+    bst.write_text(bst.read_text().replace("%{nvidia-container-toolkit-commit}", CTK_PIN))
+    with pytest.raises(track.TrackError, match="not `v%{nvidia-container-toolkit-version}-0-g%{nvidia-container-toolkit-commit}`"):
+        track.apply(repo, "nvidia-container-toolkit", "1.20.2")
+    assert upstream.requests == [] and ctk.commands == []
+
+
+def test_real_toolkit_element_pins_the_include_atoms():
+    tree = track.Tree(ROOT)
+    component = track.COMPONENTS["nvidia-container-toolkit"]
+    (pin,) = component.pins(tree)
+    assert (pin.path, pin.key, pin.url) == ("include/nvidia-container-toolkit.yml", "nvidia-container-toolkit-commit", CTK_GIT)
+    assert pin.sums == f"https://api.github.com/repos/{CTK_REPO}/commits/refs/tags/v{component.current(tree)}"

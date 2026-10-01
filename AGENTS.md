@@ -6,10 +6,10 @@ Bluefin Server is an image-based Linux server OS composed from freedesktop-sdk (
 - the OS DDI `bluefin-server_<ver>.raw` (usr + usr-verity + ESP), which doubles as the installer payload for diskless installs
 - a netboot ESP image with signed systemd-boot and Secure Boot key enrollment payloads
 - the normal USB installer `bluefin-server-installer_<ver>.raw` (same usr/verity as Core, native sysinstall/repart, signed Complete payload inventory on its ESP; Core omits homelab payloads on the target)
-- optional opt-in `systemd-sysext` images: `oci/k0s-sysext.bst` (controller, or worker when `/etc/k0s/token` exists), `oci/kubestellar-sysext.bst` (Argo CD, KubeStellar, kiosk; needs k0s), `oci/kubeadm-sysext.bst` (kubeadm worker: kubelet, containerd) and `oci/zfs-sysext.bst`
+- optional opt-in `systemd-sysext` images: `oci/k0s-sysext.bst` (controller, or worker when `/etc/k0s/token` exists), `oci/kubestellar-sysext.bst` (Argo CD, KubeStellar, kiosk; needs k0s), `oci/kubeadm-sysext.bst` (kubeadm worker: kubelet, containerd), `oci/zfs-sysext.bst`, `oci/nvidia-open-595-sysext.bst` (NVIDIA open kernel modules) and `oci/nvidia-container-toolkit-sysext.bst` (CDI; own version axis like k0s)
 - Complete host payloads: unchanged pinned Flatcar Kubernetes/containerd raws, `oci/server-sysext.bst`, `profile.json` and signed `server-bundle_<ver>.tar.zst`; application images are canonical upstream digest pins pulled by nodes, not custom compiled OCI archives
 - an SPDX 2.3 SBOM `bluefin-server_<ver>.spdx.json` (`oci/bluefin-server-sbom.bst`)
-- a `SHA256SUMS` over the whole set, signed in-element (`SHA256SUMS.gpg`); nodes verify it against `/etc/systemd/import-pubring.pgp`
+- a `SHA256SUMS` over the whole set, signed in-element (`SHA256SUMS.gpg`); nodes verify it against the image keyring (see the sysupdate verification skill)
 
 A release publishes `dist/diskless/` as-is: a GitHub Release `v<ver>` and an ORAS OCI artifact `ghcr.io/<owner>/bluefin-server:<ver>,latest`, both with provenance and SBOM attestations; pull requests that build rehearse it in `release-dry-run`. Most pull requests run only `validate`; the full build runs on `main`, nightly, and on pull requests labeled `full-build` or changing the FSDK junction or its patches.
 
@@ -57,10 +57,12 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | `just build-image` / `just export-image` | Build and export the release image set to `dist/diskless/`. |
 | `just prepare-server` / `just verify-server-platform` | Inspect the stock baseline / explicitly run its optional disposable compatibility proof. |
 | `just dogfood` / `just dogfood-check` | Boot `dist/diskless/` diskless in QEMU with Secure Boot (interactive / headless probe). |
-| `just dogfood-install NEXT=<dir>` | QEMU end-to-end: diskless boot, install to disk, boot it, then A/B update to NEXT. |
+| `just dogfood-install [<next-dir> [<broken-dir>]]` | QEMU end-to-end: diskless boot, install to disk, boot it, A/B update to `<next-dir>`, then roll back from a broken `<broken-dir>` (`DOGFOOD_SYSEXT=nvidia` or `zfs,nvidia` follows the NVIDIA sysexts instead of, or with, ZFS). |
 | `just publish-oci REF [DIR] [PLAIN_HTTP]` | Push `dist/diskless/` as an ORAS OCI artifact tagged `<version>,latest` (one layer per file). Local rehearsal; CI publishes via `scripts/publish-release.sh`. |
 | `just build-sysext` / `just export-sysext` | Build and export the k0s and KubeStellar `systemd-sysext` images. |
 | `just build-zfs-sysext` / `just export-zfs-sysext` | Build and export the OpenZFS `systemd-sysext`. |
+| `just build-nvidia-sysext` / `just export-nvidia-sysext` | Build and export an NVIDIA open-kernel-module `systemd-sysext` (`FLAVOUR=nvidia-open-595`). |
+| `just dogfood-nvidia` | Install `dist/diskless/` in QEMU, merge its NVIDIA sysext and probe it (no GPU). |
 
 ## Skill routing
 
@@ -75,6 +77,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
 | Build or run the kubeadm worker sysext | [`docs/skills/kubeadm-sysext.md`](docs/skills/kubeadm-sysext.md) |
 | Build or ship the k0s sysext | [`docs/skills/k0s-sysext.md`](docs/skills/k0s-sysext.md), [`docs/skills/k0s-sysext-ops.md`](docs/skills/k0s-sysext-ops.md) |
+| Build, bump or debug NVIDIA driver / Container Toolkit sysexts | [`docs/skills/nvidia-sysext.md`](docs/skills/nvidia-sysext.md) |
 | Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
 | CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
 | Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |

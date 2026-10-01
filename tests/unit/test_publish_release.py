@@ -44,7 +44,9 @@ def release_files(version: str) -> list[str]:
         f"server-containerd_{version}.raw",
         f"server_{version}.raw.zst",
         f"server-bundle_{version}.tar.zst",
+        f"nvidia-open-595_{version}.raw.zst",
         "k0s-1.36.4-k0s.0.raw.zst",
+        "nvidia-container-toolkit-1.20.1.raw.zst",
     ]
 
 
@@ -209,3 +211,71 @@ def test_dry_run_renders_gh_release_for_top_level_files_only(release: Path) -> N
     for name in [*release_files(VERSION), "SHA256SUMS", "SHA256SUMS.gpg"]:
         assert f"{release}/{name}" in command
     assert "efi-keys" not in command
+
+
+WORKFLOW_REF = "projectbluefin/server/.github/workflows/build.yml@refs/heads/main"
+FAKE_GH = """#!/bin/sh
+printf '%s\\n' "$*" >> "$GH_CALLS"
+[ -n "$GH_BLOB" ] || exit 1
+echo "$GH_BLOB"
+"""
+
+
+@pytest.fixture
+def checkout(tmp_path: Path) -> tuple[Path, str, str]:
+    repo = tmp_path / "repo"
+    (repo / ".github" / "workflows").mkdir(parents=True)
+    (repo / ".github" / "workflows" / "build.yml").write_text("name: build\n")
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+           "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-qm", "build"], check=True)
+    sha = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    blob = subprocess.run([*git, "rev-parse", "HEAD:.github/workflows/build.yml"], check=True, capture_output=True, text=True).stdout.strip()
+    return repo, sha, blob
+
+
+def taggable(checkout: tuple[Path, str, str], default_branch_blob: str, tmp_path: Path) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+    repo, sha, _ = checkout
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "gh").write_text(FAKE_GH)
+    (bin_dir / "gh").chmod(0o755)
+    files = {name: tmp_path / name for name in ("calls", "output", "summary")}
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "GH_CALLS": str(files["calls"]),
+        "GH_BLOB": default_branch_blob,
+        "GITHUB_SHA": sha,
+        "GITHUB_REPOSITORY": "projectbluefin/server",
+        "GITHUB_WORKFLOW_REF": WORKFLOW_REF,
+        "GITHUB_OUTPUT": str(files["output"]),
+        "GITHUB_STEP_SUMMARY": str(files["summary"]),
+    }
+    result = subprocess.run(["bash", str(SCRIPT), "taggable", VERSION], cwd=repo, env=env, capture_output=True, text=True)
+    return result, {name: path.read_text() if path.exists() else "" for name, path in files.items()}
+
+
+def test_commit_with_the_default_branch_workflow_is_published(checkout, tmp_path: Path) -> None:
+    result, out = taggable(checkout, checkout[2], tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert out["output"] == "publish=true\n"
+    assert out["calls"] == "api repos/projectbluefin/server/contents/.github/workflows/build.yml --jq .sha\n"
+    assert "::warning" not in result.stdout
+
+
+def test_commit_whose_workflow_changed_on_the_default_branch_is_skipped(checkout, tmp_path: Path) -> None:
+    result, out = taggable(checkout, "f" * 40, tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert out["output"] == "publish=false\n"
+    assert f"::warning title=Release skipped::v{VERSION} is not published" in result.stdout
+    assert f"v{VERSION} is not published" in out["summary"]
+
+
+@pytest.mark.parametrize("blob", ["", "not-a-blob"], ids=["api-error", "bad-response"])
+def test_unreadable_default_branch_workflow_fails_instead_of_skipping(checkout, tmp_path: Path, blob: str) -> None:
+    result, out = taggable(checkout, blob, tmp_path)
+    assert result.returncode != 0
+    assert "publish=" not in out["output"]

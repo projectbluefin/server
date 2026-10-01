@@ -1,0 +1,10 @@
+[Unit]
+Description=Add the NVIDIA libraries to the dynamic linker cache
+After=systemd-sysext.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/systemd-tmpfiles --create nvidia.conf
+# -X: /usr is read-only; the SONAME links ship in the sysext.
+ExecStart=/usr/bin/ldconfig -X

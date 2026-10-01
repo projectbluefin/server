@@ -58,9 +58,10 @@ def test_sysinstall_does_not_reboot_itself_so_no_key_press_is_awaited():
 def test_the_service_manager_reboots_when_the_install_succeeds():
     unit = SystemdFile(DROPIN)
     assert unit.value("Unit", "SuccessAction") == "reboot"
-    # A failure must stay on screen instead of rebooting into a retry loop, so
-    # upstream's FailureAction=halt is left alone.
-    assert unit.value("Unit", "FailureAction") is None
+    # SuccessAction= only fires when the unit goes inactive. From systemd v262
+    # upstream's unit is Type=oneshot with RemainAfterExit=yes, which would
+    # leave it "active (exited)" after a good install and never reboot.
+    assert unit.value("Service", "RemainAfterExit") == "no"
 
 
 def test_the_installer_is_still_registered_in_the_firmware_boot_menu():

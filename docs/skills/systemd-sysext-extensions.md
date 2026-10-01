@@ -4,7 +4,7 @@ description: Extensibility via systemd-sysext and systemd-confext for Bluefin Se
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-27"
+  last_updated: "2026-09-30"
   context7-sources:
     - /systemd/systemd
 ---
@@ -51,6 +51,14 @@ The first-party extensions make opposite choices:
 
 - **k0s** (`files/k0s/sysext/extension-release.k0s`) uses `ID=_any` and does
   not pin the image version, so it merges on any host image.
+- **NVIDIA Container Toolkit** (`oci/nvidia-container-toolkit-sysext.bst`,
+  version in `include/nvidia-container-toolkit.yml`) follows k0s: `ID=_any`,
+  its own version, merged as `nvidia-container-toolkit.raw`. It is CDI only:
+  `nvidia-ctk`, `nvidia-cdi-hook` and `nvidia-cdi-refresh.{service,path}`,
+  which write `/var/run/cdi/nvidia.yaml` at boot for containerd (CDI is on by
+  default in containerd 2.x). No `nvidia-container-runtime`, OCI hook or
+  `nvidia` runtime class. The refresh is ordered after the driver sysext's
+  units without requiring them, and skips on nodes without an NVIDIA GPU.
 - **OpenZFS and KubeStellar** are version-locked to the image: their
   extension-release file is named after the versioned image file
   (`extension-release.zfs_<image-version>`,
@@ -65,6 +73,38 @@ The first-party extensions make opposite choices:
   (see `systemd-sysupdate-verification.md`); diskless nodes get them from
   Ignition, which writes `/etc/extensions/<name>_<ver>.raw` with a sha256
   verification hash.
+
+The NVIDIA driver sysexts (`nvidia-open-<branch>_<image-version>.raw`, open
+kernel modules only; flavours and pins in `include/nvidia.yml`) are
+version-locked the same way and ship in the signed release set; installed
+nodes follow the OS with them through the optional `nvidia-open-<branch>`
+sysupdate feature, exactly like `zfs`. `just dogfood-nvidia` checks one in
+QEMU, and `DOGFOOD_SYSEXT=nvidia scripts/dogfood-install.sh` (or
+`zfs,nvidia`, both module sysexts merged together) carries it through an A/B
+update and a rollback. Their units skip themselves on a node without an
+NVIDIA GPU, and `nvidia-flavour-guard.service` fails when two flavours are
+merged.
+
+The toolkit is delivered like k0s: the sysupdate component
+`nvidia-container-toolkit` (`/usr/lib/sysupdate.nvidia-container-toolkit.d/`)
+stages it in `/var/lib/nvidia-container-toolkit/` behind the
+`nvidia-container-toolkit.raw` symlink, outside the directories systemd-sysext
+scans, because two versions of an `ID=_any` image there would both merge.
+`nvidia-container-toolkit-activate.service` (opt-in, disabled by
+`80-bluefin-opt-in.preset`) runs `nvidia-container-toolkit-fetch.service`
+(`systemd-sysupdate --component=nvidia-container-toolkit update`) when nothing
+is staged, then once per boot copies the image to `/run/extensions/`,
+refreshes the merge and starts `nvidia-cdi-refresh.{path,service}` by name. It
+must not re-request `multi-user.target` the way `bluefin-sysext-activate.service`
+does: two oneshots doing that pull each other back in until start limits fail
+units. A node opts in with
+`systemctl enable nvidia-container-toolkit-activate.service`; newer toolkit
+releases arrive with `systemd-sysupdate --component=nvidia-container-toolkit update`.
+
+The GPU-present path (`nvidia-load.service`, `nvidia-device-nodes.service`,
+`nvidia-persistenced.service`) is not exercised by `just dogfood-nvidia`, which
+runs on a QEMU guest with no NVIDIA GPU and asserts only that those units skip
+themselves. It is verified on real hardware during the GPU rollout phase.
 
 Compatible third-party userspace extensions are supported and encouraged.
 Prefer an existing [Flatcar System Extension Bakery](https://extensions.flatcar.org/)
@@ -128,6 +168,39 @@ create a fresh pod. Restarting only containerd can leave kubelet using its old
 cgroupfs driver; new pod sandboxes then fail with
 `expected cgroupsPath to be of format "slice:prefix:name"`. Existing Ready
 pods do not prove new sandbox creation works. Verify again after reboot.
+
+## Kernel-module sysexts
+
+**A sysext that carries kernel modules ships no `modules.*` index; the base
+image's `/usr/libexec/bluefin-sysext-modules` loads them.** Each module sysext
+(OpenZFS, NVIDIA) ships only its own signed modules under
+`/usr/lib/modules/<kver>/extra/<name>/`, plus its firmware, units and
+userspace; the element build fails if a `modules.*` file would ship. An index
+in a sysext would shadow the base image's and every other extension's through
+the overlay, so any two module sysexts could not merge together.
+
+`bluefin-sysext-modules MODULE...` builds a module index for the merged tree
+under `/run/bluefin/kmods`: `lib/modules/<kver>/` there links `kernel/`,
+`extra/`, `updates/` and the depmod inputs (`modules.order`,
+`modules.builtin*`) back to `/usr/lib/modules/<kver>/`, and `depmod -b` writes
+a fresh index beside them. It then runs `modprobe -d /run/bluefin/kmods -a
+MODULE...`, so in-tree dependencies (`drm`, `drm_kms_helper`, ...),
+cross-extension dependencies and softdeps resolve, and `modprobe.d` options
+and blacklists from `/usr/lib`, `/run` and `/etc` apply as usual (`-d` only
+moves the module directory). The kernel reads the same signed `.ko` files
+from `/usr`, so lockdown and signature checks are unchanged. The index is
+rebuilt only when the merged module set changes, under a lock. `--basedir`
+rebuilds it if needed and prints the base directory for manual use, e.g.
+`modinfo -b "$(/usr/libexec/bluefin-sysext-modules --basedir)" zfs`. The
+helper does nothing until a unit calls it: `zfs-load-module.service` loads
+`zfs`, `nvidia-load.service` loads `nvidia nvidia-uvm nvidia-modeset
+nvidia-drm`.
+
+Caveat: a bare `modprobe zfs` or `modprobe nvidia` (and udev's modalias
+autoloading) only sees the base image's index and reports the module as not
+found. The load units run at boot; libzfs only calls `modprobe` when
+`/dev/zfs` is missing, and `nvidia-modprobe` only when a module is not
+loaded yet.
 
 ## Adding an extension
 

@@ -138,6 +138,11 @@ kubelet reported for every NFS PV. Client only: no server daemons, no
 GSS/Kerberos (`sec=krb5*` mounts are unsupported). `80-bluefin-nfs.preset`
 enables `nfs-client.target` and `rpcbind.socket`; `mount.nfs` starts
 `rpc-statd.service` on demand for NFSv3 locking (NFSv4 needs neither).
+NFSv3's portmapper and mountd lookups go through libtirpc, which resolves
+`tcp`/`udp` and `sunrpc` from `/etc/protocols` and `/etc/services`; without
+them `mount.nfs` fails with `Failed to find 'tcp' protocol`. Both come from
+FSDK's `components/iana-config.bst` in `os-base.bst` and are linked (tmpfiles
+`L`, not copied) from the factory `/etc`, so an A/B update refreshes them.
 `/var/lib/nfs/statd` comes from tmpfiles.d, owned by `rpcuser`; on a
 diskless node it is lost at reboot, so NFSv3 servers are not notified when a
 rebooted diskless client held locks. NFSv4 id mapping uses the kernel

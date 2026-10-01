@@ -23,9 +23,12 @@ description: |
                                            enrollment, and the disk UKI + repart.d that
                                            systemd-sysinstall lays onto the target disk
     efi-keys/                              Secure Boot enrollment payloads
-    zfs_<ver>.raw.zst, kubestellar_<ver>.raw.zst, kubeadm_<ver>.raw.zst
-                                           opt-in sysexts locked to this image version
+    zfs_<ver>.raw.zst, kubestellar_<ver>.raw.zst, kubeadm_<ver>.raw.zst,
+    nvidia-open-595_<ver>.raw.zst          opt-in sysexts locked to this image version
     k0s-<k0s-ver>.raw.zst                  opt-in k0s sysext (own version axis)
+    nvidia-container-toolkit-<ctk-ver>.raw.zst
+                                           opt-in NVIDIA Container Toolkit sysext
+                                           (own version axis)
     bluefin-server_<ver>.spdx.json         SPDX 2.3 SBOM (oci/bluefin-server-sbom.bst)
     SHA256SUMS, SHA256SUMS.gpg             manifest of all of the above, signed with
                                            files/boot-keys/sysupdate-signing.asc; the
@@ -83,6 +86,12 @@ build-depends:
 - filename: server/platform-payload.bst
   config:
     location: /platform
+- filename: oci/nvidia-open-595-sysext.bst
+  config:
+    location: /sysext/nvidia-open-595
+- filename: oci/nvidia-container-toolkit-sysext.bst
+  config:
+    location: /sysext/nvidia-container-toolkit
 - filename: oci/bluefin-server-sbom.bst
   config:
     location: /sbom
@@ -236,7 +245,9 @@ config:
     set -eu
     cp /sysext/k0s/k0s-*.raw.zst /sysext/kubestellar/kubestellar_%{image-version}.raw.zst \
        /sysext/zfs/zfs_%{image-version}.raw.zst \
-       /sysext/kubeadm/kubeadm_%{image-version}.raw.zst "%{install-root}/"
+       /sysext/kubeadm/kubeadm_%{image-version}.raw.zst \
+       /sysext/nvidia-open-595/nvidia-open-595_%{image-version}.raw.zst \
+       /sysext/nvidia-container-toolkit/nvidia-container-toolkit-*.raw.zst "%{install-root}/"
 
   - |
     set -eu

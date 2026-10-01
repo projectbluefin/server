@@ -69,7 +69,7 @@ validate: gen-dev-keys
     python3 .github/scripts/check-release-version.py
     python3 .github/scripts/check-k0s-version.py
     python3 .github/scripts/check-renovate-series.py
-    just bst show --deps all oci/bluefin-server-image.bst oci/server-sysext.bst oci/k0s-sysext.bst oci/kubestellar-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst
+    just bst show --deps all oci/bluefin-server-image.bst oci/server-sysext.bst oci/k0s-sysext.bst oci/kubestellar-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst oci/nvidia-open-595-sysext.bst oci/nvidia-container-toolkit-sysext.bst
 
 # Run Python, native lifecycle and Bats unit regressions (container Bats fallback).
 [group('dev')]
@@ -149,10 +149,13 @@ set-version VERSION:
     sed -i 's/^  image-version: .*/  image-version: "{{VERSION}}"/' include/image.yml
     grep image-version include/image.yml
 
-# Install diskless -> disk, then (with NEXT) sysupdate A->B and reboot, all in QEMU.
+# Install diskless -> disk, then (with NEXT) sysupdate A->B and reboot, and (with
+# BROKEN) break that update and prove the boot-counted rollback, all in QEMU.
+# DOGFOOD_SYSEXT=nvidia follows the NVIDIA driver and toolkit sysexts instead of ZFS,
+# DOGFOOD_SYSEXT=zfs,nvidia follows both.
 [group('diskless')]
-dogfood-install NEXT="":
-    bash scripts/dogfood-install.sh dist/diskless {{NEXT}}
+dogfood-install NEXT="" BROKEN="":
+    bash scripts/dogfood-install.sh dist/diskless {{NEXT}} {{BROKEN}}
 
 # Boot the offline USB installer, install unattended to a blank disk, boot it (QEMU).
 [group('diskless')]
@@ -209,10 +212,47 @@ export-zfs-sysext: build-zfs-sysext
     rm -rf dist/zfs-checkout
     mkdir -p dist/sysext
     just bst artifact checkout oci/zfs-sysext.bst --directory /src/dist/zfs-checkout
-    cp dist/zfs-checkout/zfs-*.raw.zst dist/sysext/
+    cp dist/zfs-checkout/zfs_*.raw.zst dist/sysext/
     grep 'raw.zst$' dist/zfs-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
     rm -rf dist/zfs-checkout
     @echo "==> wrote zfs sysext:" && ls -lh dist/sysext/
+
+# Build an NVIDIA driver sysext (open kernel modules; locked to one image version).
+[group('sysext')]
+build-nvidia-sysext FLAVOUR="nvidia-open-595": gen-dev-keys
+    just bst build oci/{{FLAVOUR}}-sysext.bst
+
+# Export an NVIDIA driver sysext + SHA256SUMS to dist/sysext/.
+[group('sysext')]
+export-nvidia-sysext FLAVOUR="nvidia-open-595": (build-nvidia-sysext FLAVOUR)
+    rm -rf dist/{{FLAVOUR}}-checkout
+    mkdir -p dist/sysext
+    just bst artifact checkout oci/{{FLAVOUR}}-sysext.bst --directory /src/dist/{{FLAVOUR}}-checkout
+    cp dist/{{FLAVOUR}}-checkout/{{FLAVOUR}}_*.raw.zst dist/sysext/
+    grep 'raw.zst$' dist/{{FLAVOUR}}-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
+    rm -rf dist/{{FLAVOUR}}-checkout
+    @echo "==> wrote {{FLAVOUR}} sysext:" && ls -lh dist/sysext/
+
+# Install dist/diskless/ in QEMU, merge its NVIDIA sysext and probe it (no GPU).
+[group('sysext')]
+dogfood-nvidia FLAVOUR="nvidia-open-595":
+    bash scripts/dogfood-nvidia.sh dist/diskless "dist/diskless/{{FLAVOUR}}_$(sed -n 's/^  image-version: "\(.*\)"$/\1/p' include/image.yml).raw.zst"
+
+# Build the NVIDIA Container Toolkit (CDI) systemd-sysext (own version axis).
+[group('sysext')]
+build-nvidia-container-toolkit-sysext:
+    just bst build oci/nvidia-container-toolkit-sysext.bst
+
+# Export the NVIDIA Container Toolkit sysext + SHA256SUMS to dist/sysext/.
+[group('sysext')]
+export-nvidia-container-toolkit-sysext: build-nvidia-container-toolkit-sysext
+    rm -rf dist/nvidia-ctk-checkout
+    mkdir -p dist/sysext
+    just bst artifact checkout oci/nvidia-container-toolkit-sysext.bst --directory /src/dist/nvidia-ctk-checkout
+    cp dist/nvidia-ctk-checkout/nvidia-container-toolkit-*.raw.zst dist/sysext/
+    grep 'raw.zst$' dist/nvidia-ctk-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
+    rm -rf dist/nvidia-ctk-checkout
+    @echo "==> wrote nvidia-container-toolkit sysext:" && ls -lh dist/sysext/
 
 # Set up KubeStellar kc-agent for the user in ONE command.
 [group('test')]

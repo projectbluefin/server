@@ -10,7 +10,7 @@
 #   files/boot-keys/modules/linux-module-cert.crt public, baked into the kernel's trusted keyring
 #   files/boot-keys/sysupdate-signing.asc         OpenPGP secret key that signs SHA256SUMS
 #   files/boot-keys/import-pubring.pgp            its public keyring, installed as
-#                                                 /etc/systemd/import-pubring.pgp (importd, sysupdate)
+#                                                 /usr/lib/systemd/import-pubring.pgp (importd, sysupdate)
 #
 # Existing keys are never overwritten without --force: every key is baked
 # into or signs the image, so replacing one needs a new image-version (see

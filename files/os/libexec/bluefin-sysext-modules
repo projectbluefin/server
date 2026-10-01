@@ -1,0 +1,99 @@
+#!/usr/bin/bash
+# bluefin-sysext-modules — load kernel modules shipped by system extensions.
+#
+#   bluefin-sysext-modules MODULE...   load MODULE... and their dependencies
+#   bluefin-sysext-modules --basedir   print the module base directory, for
+#                                      modprobe -d / modinfo -b
+#
+# A sysext ships its modules under /usr/lib/modules/<kver>/extra/<name>/ and
+# no modules.* index: two merged extensions shipping one would hide each
+# other's. The base image's index only knows the base image's modules, so
+# this helper indexes the merged tree under /run: <basedir>/lib/modules/<kver>
+# links kernel/, extra/, updates/ and the depmod inputs (modules.order,
+# modules.builtin*) back to /usr/lib/modules/<kver>, and depmod writes a fresh
+# index next to them. `modprobe -d <basedir>` then resolves in-tree and
+# cross-extension dependencies and softdeps; module paths stay relative, so
+# the kernel reads the same signed .ko files from /usr. modprobe.d
+# configuration (/etc, /run, /usr/lib) is read as usual: -d only moves the
+# module directory.
+#
+# The index is rebuilt once per change of the merged module set (the
+# extension-release files plus a listing of extra/ and updates/), under a
+# lock so concurrent callers build it once. Without module sysexts it is
+# never called.
+#
+# Test overrides: BLUEFIN_KMOD_USR (/usr), BLUEFIN_KMOD_BASEDIR
+# (/run/bluefin/kmods), BLUEFIN_KVER (uname -r).
+
+set -euo pipefail
+shopt -s inherit_errexit
+export LC_ALL=C
+
+usr="${BLUEFIN_KMOD_USR:-/usr}"
+basedir="${BLUEFIN_KMOD_BASEDIR:-/run/bluefin/kmods}"
+kver="${BLUEFIN_KVER:-$(uname -r)}"
+src="${usr}/lib/modules/${kver}"
+
+usage() {
+  echo "usage: ${0##*/} MODULE... | --basedir" >&2
+  exit 2
+}
+
+[ "$#" -gt 0 ] || usage
+case "$1" in
+  --basedir) [ "$#" -eq 1 ] || usage ;;
+  -*) usage ;;
+esac
+[ -d "${src}" ] || { echo "${0##*/}: no modules for kernel ${kver} in ${src}" >&2; exit 1; }
+
+stamp() {
+  printf 'kver %s\n' "${kver}"
+  ls -1 "${usr}/lib/extension-release.d" 2>/dev/null || true
+  local d
+  for d in extra updates; do
+    if [ -d "${src}/${d}" ]; then
+      ls -lnR "${src}/${d}"
+    fi
+  done
+}
+
+index() {
+  local tmp mod entry count
+  tmp="$(mktemp -d "${basedir}.XXXXXX")"
+  # shellcheck disable=SC2064 # expand now: tmp is local
+  trap "rm -rf '${tmp}'" EXIT
+  mod="${tmp}/usr/lib/modules/${kver}"
+  mkdir -p "${mod}"
+  # kmod looks in <basedir>/lib/modules or <basedir>/usr/lib/modules,
+  # depending on how it was built.
+  ln -s usr/lib "${tmp}/lib"
+  for entry in kernel extra updates \
+      modules.order modules.builtin modules.builtin.modinfo modules.builtin.ranges; do
+    if [ -e "${src}/${entry}" ]; then
+      ln -s "${src}/${entry}" "${mod}/${entry}"
+    fi
+  done
+  depmod -b "${tmp}" "${kver}"
+  count="$(wc -l < "${mod}/modules.dep")"
+  printf '%s\n' "${current}" > "${tmp}/stamp"
+  rm -rf "${basedir}"
+  mv "${tmp}" "${basedir}"
+  trap - EXIT
+  echo "${0##*/}: indexed ${count// /} modules for ${kver} in ${basedir}" >&2
+}
+
+mkdir -p "${basedir%/*}"
+exec 9> "${basedir}.lock"
+flock 9
+
+current="$(stamp)"
+if [ ! -f "${basedir}/stamp" ] || [ "$(cat "${basedir}/stamp")" != "${current}" ]; then
+  index
+fi
+
+if [ "$1" = --basedir ]; then
+  echo "${basedir}"
+  exit 0
+fi
+
+exec modprobe -d "${basedir}" -S "${kver}" -a -- "$@"

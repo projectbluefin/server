@@ -1,9 +1,10 @@
 name: Track upstream binaries
 
-# Proposes patch releases of the upstream binaries pinned by version and
-# sha256 (the kubeadm sysext payload, k0s, ORAS): one pull request per
-# component, on its own auto/track-binaries/<component> branch. What is
-# tracked, how each sha256 is verified, and why this is not a Renovate rule:
+# Proposes patch releases of the upstream components pinned by version and
+# sha256 or git commit (the kubeadm sysext payload, k0s, the NVIDIA driver and
+# Container Toolkit, ORAS): one pull request per component, on its own
+# auto/track-binaries/<component> branch. What is tracked, how each pin is
+# verified, and why this is not a Renovate rule:
 # .github/scripts/track-binaries.py.
 #
 # Same shape as track-junctions.yml: schedule and manual dispatch only, never
