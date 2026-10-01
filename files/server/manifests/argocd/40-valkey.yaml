@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-valkey
+  namespace: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-valkey
+  template:
+    metadata:
+      labels:
+        bluefin.io/platform: 'true'
+        app.kubernetes.io/name: argocd-valkey
+    spec:
+      serviceAccountName: argocd-valkey
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      nodeSelector:
+        bluefin.io/controller: 'true'
+      containers:
+      - name: valkey
+        image: docker.io/valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+        command:
+        - sh
+        - -ec
+        args:
+        - exec valkey-server --bind 0.0.0.0 --port 6379 --save "" --appendonly no --maxmemory 192mb --maxmemory-policy noeviction
+          --requirepass "$VALKEY_PASSWORD"
+        env:
+        - name: VALKEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: argocd-valkey
+              key: auth
+        - name: VALKEYCLI_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: argocd-valkey
+              key: auth
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+          runAsUser: 999
+          runAsGroup: 999
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        ports:
+        - containerPort: 6379
+          name: cache
+        readinessProbe:
+          exec:
+            command:
+            - valkey-cli
+            - ping
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - valkey-cli
+            - ping
+          periodSeconds: 20
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        emptyDir:
+          sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-valkey
+  namespace: argocd
+spec:
+  selector:
+    app.kubernetes.io/name: argocd-valkey
+  ports:
+  - name: cache
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argocd-valkey
+  namespace: argocd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-valkey
+  policyTypes:
+  - Ingress
+  - Egress
+  egress: []
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: argocd-repo-server
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: argocd-application-controller
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: argocd-applicationset-controller
+    ports:
+    - port: 6379
+      protocol: TCP

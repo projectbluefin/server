@@ -1,8 +1,26 @@
 # Bluefin Server
 
-An immutable, Freedesktop-SDK-based Linux server operating system providing native systemd update and extension mechanisms.
+An immutable, Freedesktop-SDK-based Linux server operating system with native systemd installation/update mechanisms and a separately delivered Complete homelab profile. Release readiness requires the native user-journey proofs, not just source integration.
 
 ## Language
+
+**Local-first**:
+An owner-controlled, locally usable homelab. Detailed requirements live in the [Server profile contract](docs/skills/server-profile.md).
+
+**Cluster identity**:
+A required dedicated local product identity for dashboard, API, and MCP, independent of OS accounts. Stock Console does not yet supply that account flow; the [Server profile contract](docs/skills/server-profile.md) records this acceptance gap.
+
+**Bluefin Server Core**:
+The minimal immutable operating-system component shared by every Bluefin Server node. Core is an advanced builder download or optional installer choice; Complete is the normal product. Both use the same OS build and update channel.
+
+**Bluefin Server**:
+The public product name. Complete combines the Kubernetes homelab and KubeStellar Console on one standalone machine, with privately enrolled workers for additional capacity. Alpha suitability and verified-release limits remain visible in the README.
+
+**Profile**:
+A persistent product selection: Complete by default in the native installer, or minimal Core for builders. Private join provisioning selects worker participation instead of initializing another cluster. Existing installations with no profile remain inert; an OS update cannot implicitly opt them in or change their role.
+
+**Module**:
+A separately maintained capability selected by the profile, such as the runtime, networking, GitOps reconciliation, workflow execution or dashboard. Modules use one pinned signed inventory rather than independent, unchecked binary replacement.
 
 **OS DDI**:
 The discoverable disk image (`bluefin-server_<ver>.raw`) carrying the `/usr` erofs partition, its dm-verity hash partition, and an ESP with the disk UKI. Diskless nodes pull it into RAM; on a diskless boot it is also the installer payload.

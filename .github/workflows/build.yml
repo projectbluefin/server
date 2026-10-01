@@ -101,9 +101,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "image=${image} release=${release} validate=${validate}"
 
-  # The cheap check every pull request gets: resolves every shipped element
-  # graph and runs the version-invariant checks (`just validate`), with
-  # throwaway keys.
+  # Version invariants and graph resolution only; no upstream builds or kind proof.
   validate:
     needs: changes
     if: needs.changes.outputs.validate == 'true'
@@ -316,8 +314,8 @@ jobs:
       - name: Build and export the image set
         run: just export-image
 
-      # The image set carries its own signed SHA256SUMS(.gpg) covering the
-      # OS images, UKIs and the k0s/KubeStellar/OpenZFS sysexts.
+      # Signed inventory covers OS/UKIs, unchanged Flatcar runtime raws,
+      # Server support sysext and the coherent signed Server update bundle.
       - name: Upload image artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

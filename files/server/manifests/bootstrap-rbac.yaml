@@ -1,0 +1,439 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-application-controller
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - namespaces
+  - nodes
+  - persistentvolumes
+  verbs: &id001
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs: *id001
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs: *id001
+- nonResourceURLs:
+  - /api
+  - /api/*
+  - /apis
+  - /apis/*
+  - /version
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-baseline-controller
+  namespace: kube-system
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - events
+  verbs: &id001
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ''
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ''
+  resources:
+  - configmaps
+  verbs:
+  - update
+  - patch
+  resourceNames:
+  - cilium-config
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  - replicasets
+  verbs: *id001
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  verbs:
+  - update
+  - patch
+  resourceNames:
+  - cilium
+  - kured
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - update
+  - patch
+  resourceNames:
+  - cilium-operator
+- apiGroups: ['apps']
+  resources: ['daemonsets','deployments']
+  verbs: ['create']
+- apiGroups: ['']
+  resources: ['configmaps']
+  verbs: ['create']
+- apiGroups: ['networking.k8s.io']
+  resources: ['networkpolicies']
+  verbs: ['create']
+- apiGroups: ['networking.k8s.io']
+  resources: ['networkpolicies']
+  resourceNames: ['bluefin-kured']
+  verbs: ['update', 'patch']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-baseline-controller
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-baseline-controller
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-baseline-controller
+  namespace: argocd
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - services
+  - configmaps
+  verbs: &id001
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ''
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
+  verbs: *id001
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs: *id001
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs: *id001
+- apiGroups:
+  - ''
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  - applications/status
+  - applications/finalizers
+  - appprojects
+  - applicationsets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-baseline-controller
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-baseline-controller
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-baseline-controller
+  namespace: argo
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - services
+  - configmaps
+  verbs: &id001
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ''
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
+  verbs: *id001
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs: *id001
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs: *id001
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflowtemplates
+  verbs: &id002
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ''
+  resources:
+  - resourcequotas
+  - limitranges
+  verbs: ['get', 'list', 'watch']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-baseline-controller
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-baseline-controller
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-baseline-controller
+  namespace: bluefin-system
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - services
+  - configmaps
+  verbs: &id001
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ''
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
+  verbs: *id001
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs: *id001
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs: *id001
+- apiGroups:
+  - ''
+  resources:
+  - persistentvolumeclaims
+  - serviceaccounts
+  - resourcequotas
+  - limitranges
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-baseline-controller
+  namespace: bluefin-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-baseline-controller
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-baseline-controller
+  namespace: bluefin-apps
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - services
+  - configmaps
+  verbs: &id001
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ''
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
+  verbs: *id001
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs: *id001
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs: *id001
+- apiGroups:
+  - ''
+  resources:
+  - persistentvolumeclaims
+  - serviceaccounts
+  - resourcequotas
+  - limitranges
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-baseline-controller
+  namespace: bluefin-apps
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-baseline-controller
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+  namespace: argocd

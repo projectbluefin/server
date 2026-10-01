@@ -1,0 +1,23 @@
+[Unit]
+Description=Bluefin Server durable cluster lifecycle
+After=local-fs.target systemd-sysext.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/bluefin/server/profile
+RequiresMountsFor=/etc /var/lib/bluefin/server
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/bluefin-server-bootstrap
+Restart=on-failure
+RestartSec=10s
+UMask=0077
+RuntimeDirectory=bluefin-server
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+TimeoutStopSec=30s
+# This helper manages sysext mounts and kubeadm; it cannot be put in a private
+# mount namespace or DynamicUser without making host changes invisible.
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

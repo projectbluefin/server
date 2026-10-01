@@ -102,6 +102,16 @@ variables:
     systemd.setenv=BLUEFIN_INSTALL_KERNEL=/run/bluefin/installer/bluefin/bluefin-server-%{image-version}.efi
     systemd.set_credential=firstboot.keymap:us
     console=ttyS0,115200 console=tty0
+  installer-complete-cmdline: >-
+    %{installer-cmdline}
+    systemd.set_credential=bluefin.server-profile:complete
+    systemd.setenv=BLUEFIN_INSTALL_REPART=/run/bluefin/installer/bluefin/repart.d/complete
+    systemd.setenv=BLUEFIN_INSTALL_ROOT_PROMPT=
+  installer-core-cmdline: >-
+    %{installer-cmdline}
+    systemd.set_credential=bluefin.server-profile:core
+    systemd.setenv=BLUEFIN_INSTALL_REPART=/run/bluefin/installer/bluefin/repart.d/core
+    systemd.setenv=BLUEFIN_INSTALL_ROOT_PROMPT=--set-credential=bluefin.prompt-root-password:1
 
 config:
   commands:
@@ -186,23 +196,35 @@ config:
     mkdir -p "%{install-root}/efi-keys"
     usrhash="$(cat /usr-image/%{image-name}.usrhash)"
     uki() {
-      printf 'usrhash=%s %s %s' "${usrhash}" "$2" "%{common-cmdline}" > "/tmp/$1.cmdline"
-      echo "$1: $(cat "/tmp/$1.cmdline")"
+      name="$1"
+      printf 'usrhash=%s %s %s' "${usrhash}" "$2" "%{common-cmdline}" > "/tmp/${name}.cmdline"
+      echo "${name}: $(cat "/tmp/${name}.cmdline")"
+      shift 2
       ukify build \
         --linux=/tmp/vmlinuz \
         --initrd=/tmp/initrd.cpio.zst \
-        --cmdline=@"/tmp/$1.cmdline" \
+        --cmdline=@"/tmp/${name}.cmdline" \
         --os-release=@/osrel/usr/lib/os-release \
         --uname="$(ls /kmods/usr/lib/modules)" \
         --signtool=systemd-sbsign \
         --no-sign-kernel \
         --secureboot-private-key=/boot-keys/DB.key \
         --secureboot-certificate=/boot-keys/DB.crt \
-        --output="%{install-root}/$1.efi"
-      sbverify --cert /boot-keys/DB.crt "%{install-root}/$1.efi"
+        "$@" \
+        --output="%{install-root}/${name}.efi"
+      sbverify --cert /boot-keys/DB.crt "%{install-root}/${name}.efi"
     }
     uki bluefin-server-netboot_%{image-version} "%{netboot-cmdline}"
     uki bluefin-server-%{image-version} "%{disk-cmdline}"
-    uki bluefin-server-installer_%{image-version} "%{installer-cmdline}"
+    # Complete is the explicit base profile: ukify otherwise inserts ID=main
+    # at @0. Join only Core so the signed choices are exactly @0 and @1.
+    printf 'ID=complete\nTITLE=Install Bluefin Server\n' > /tmp/installer-complete.profile
+    printf 'ID=core\nTITLE=Install Bluefin Server Core (builders)\n' > /tmp/installer-core.profile
+    printf 'usrhash=%s %s %s' "${usrhash}" "%{installer-core-cmdline}" "%{common-cmdline}" > /tmp/installer-core.cmdline
+    ukify build --profile=@/tmp/installer-core.profile \
+      --cmdline=@/tmp/installer-core.cmdline \
+      --output=/tmp/installer-core.efi
+    uki bluefin-server-installer_%{image-version} "%{installer-complete-cmdline}" \
+      --profile=@/tmp/installer-complete.profile --join-profile=/tmp/installer-core.efi
     cp /efi-keys/usr/share/bluefin-server/efi-keys/*.auth "%{install-root}/efi-keys/"
     ls -l "%{install-root}"

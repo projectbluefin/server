@@ -1,0 +1,314 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bluefin-console
+  namespace: bluefin-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bluefin-app-workload
+  namespace: bluefin-apps
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bluefin-console-reader
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - nodes
+  - namespaces
+  verbs: &id001
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - services
+  - configmaps
+  - events
+  - resourcequotas
+  - limitranges
+  verbs: *id001
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
+  verbs: *id001
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs: *id001
+- nonResourceURLs:
+  - /api
+  - /api/*
+  - /apis
+  - /apis/*
+  - /version
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bluefin-console-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bluefin-console-reader
+subjects:
+- kind: ServiceAccount
+  name: bluefin-console
+  namespace: bluefin-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-console
+  namespace: bluefin-apps
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - services
+  - configmaps
+  verbs: &id001
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+- apiGroups:
+  - ''
+  resources:
+  - pods/log
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
+  - deployments/scale
+  - statefulsets/scale
+  - replicasets/scale
+  verbs: *id001
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs: *id001
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-console
+  namespace: bluefin-apps
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-console
+subjects:
+- kind: ServiceAccount
+  name: bluefin-console
+  namespace: bluefin-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-console
+  namespace: argo
+rules:
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflows
+  - workflowtemplates
+  - cronworkflows
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflowtaskresults
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - pods/log
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-console
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-console
+subjects:
+- kind: ServiceAccount
+  name: bluefin-console
+  namespace: bluefin-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-console
+  namespace: argocd
+rules:
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - appprojects
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-console
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-console
+subjects:
+- kind: ServiceAccount
+  name: bluefin-console
+  namespace: bluefin-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bluefin-native-mcp
+  namespace: bluefin-system
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bluefin-mcp-client
+  namespace: bluefin-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bluefin-mcp-discovery
+rules:
+- apiGroups: ['']
+  resources: [namespaces]
+  verbs: [get, list]
+- nonResourceURLs: [/api, '/api/*', /apis, '/apis/*', /version]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bluefin-mcp-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bluefin-mcp-discovery
+subjects:
+- kind: ServiceAccount
+  name: bluefin-mcp-client
+  namespace: bluefin-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bluefin-mcp-reader
+rules:
+- apiGroups: ['']
+  resources: [pods, pods/log, services, events, resourcequotas, limitranges]
+  verbs: [get, list, watch]
+- apiGroups: [apps]
+  resources: [deployments, statefulsets, daemonsets, replicasets]
+  verbs: [get, list, watch]
+- apiGroups: [batch]
+  resources: [jobs, cronjobs]
+  verbs: [get, list, watch]
+- apiGroups: [argoproj.io]
+  resources: [workflows, workflowtemplates, cronworkflows, workflowtaskresults, applications, appprojects]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-mcp-reader
+  namespace: bluefin-apps
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bluefin-mcp-reader
+subjects:
+- kind: ServiceAccount
+  name: bluefin-mcp-client
+  namespace: bluefin-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-mcp-reader
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bluefin-mcp-reader
+subjects:
+- kind: ServiceAccount
+  name: bluefin-mcp-client
+  namespace: bluefin-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-mcp-reader
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bluefin-mcp-reader
+subjects:
+- kind: ServiceAccount
+  name: bluefin-mcp-client
+  namespace: bluefin-system

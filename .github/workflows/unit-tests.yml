@@ -51,7 +51,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y bats nodejs shellcheck
+          sudo apt-get update && sudo apt-get install -y bats golang-go nodejs shellcheck
           pip install pytest pyyaml
 
       # Ubuntu's AppArmor policy blocks unprivileged user namespaces; the

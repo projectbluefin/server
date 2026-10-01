@@ -1,0 +1,136 @@
+#!/usr/bin/bash
+# Native sysinstall profile consumer. This never installs or erases a disk.
+set -euo pipefail
+export LC_ALL=C
+umask 077
+state=/var/lib/bluefin/server
+config=/etc/bluefin/server
+stage_only=false
+version=
+case "${1:-}" in
+  '') ;;
+  --stage=*) stage_only=true; version=${1#--stage=} ;;
+  *) echo 'invalid profile launcher argument' >&2; exit 2 ;;
+esac
+[[ $# -le 1 ]] || exit 2
+credential=${CREDENTIALS_DIRECTORY:-/run/credentials/bluefin-server-profile.service}/bluefin.server-profile
+marker=
+esp=$(bootctl --print-esp-path 2>/dev/null || true)
+for candidate in "${esp:-/efi}/bluefin/server-profile" /efi/bluefin/server-profile /boot/bluefin/server-profile; do
+  if [[ -f "$candidate" ]]; then
+    value=$(<"$candidate")
+    [[ "$value" == complete || "$value" == core ]] || { echo 'invalid public profile intent' >&2; exit 1; }
+    [[ -z "$marker" || "$marker" == "$value" ]] || { echo 'conflicting public profile intent' >&2; exit 1; }
+    marker=$value
+  fi
+done
+intent=$marker
+if [[ -f "$credential" ]]; then
+  native=$(<"$credential")
+  [[ "$native" == complete || "$native" == core ]] || exit 1
+  [[ -z "$intent" || "$intent" == "$native" ]] || { echo 'native and public profile disagree' >&2; exit 1; }
+  intent=$native
+fi
+if [[ -f "$config/profile" ]]; then
+  selection=$(<"$config/profile")
+  [[ -z "$intent" || "$intent" == "$selection" ]] || { echo 'persisted profile cannot be switched by boot intent' >&2; exit 1; }
+elif [[ -n "$intent" ]]; then
+  selection=$intent
+  mkdir -p "$config"
+  printf '%s\n' "$selection" > "$config/.profile.new"
+  sync -f "$config/.profile.new"
+  mv -T "$config/.profile.new" "$config/profile"
+  sync -f "$config"
+else
+  # A missing profile on an existing installation is not permission to opt in.
+  exit 0
+fi
+[[ "$selection" == complete || "$selection" == core ]] || exit 1
+[[ "$selection" == complete ]] || exit 0
+# Public traversal is required by Console UID1001; never follow a redirected or
+# group/world-writable state ancestor created by another identity.
+for directory in /var/lib/bluefin "$state"; do
+  [[ ! -L "$directory" ]] || { echo 'unsafe Server state directory' >&2; exit 1; }
+  if [[ -e "$directory" ]]; then
+    [[ -d "$directory" && $(stat -c %u "$directory") == 0 ]] || exit 1
+    permissions=$(stat -c %a "$directory")
+    (( (8#$permissions & 0022) == 0 )) || { echo 'unsafe Server state permissions' >&2; exit 1; }
+  fi
+done
+install -d -m0755 /var/lib/bluefin
+install -d -m0711 "$state"
+mkdir -p "$config" "$state" /run/bluefin-server
+exec 9>/run/bluefin-server/profile.lock
+flock 9
+# Do not remap root to a writable tmpfs/overlay on a controller.
+for mountpoint in /etc /var; do
+  filesystem=$(findmnt -T "$mountpoint" -n -o FSTYPE)
+  case "$filesystem" in tmpfs|overlay|squashfs|erofs) echo 'Complete needs persistent /etc and /var' >&2; exit 1 ;; esac
+done
+if [[ -z "$version" ]]; then
+  . /usr/lib/os-release
+  version=$IMAGE_VERSION
+fi
+[[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || exit 1
+store=$state/payloads/$version
+source=
+for candidate in "$store" "$state/runtime/incoming/$version"; do
+  if [[ -f "$candidate/SHA256SUMS" && -f "$candidate/SHA256SUMS.gpg" ]]; then source=$candidate; break; fi
+done
+if [[ -z "$source" && "$stage_only" == false ]]; then
+  esp=$(bootctl --print-esp-path)
+  candidate=$esp/bluefin/payloads/$version
+  if [[ -f "$candidate/SHA256SUMS" && -f "$candidate/SHA256SUMS.gpg" ]]; then source=$candidate; fi
+fi
+[[ -n "$source" ]] || { echo 'signed Server payload inventory unavailable' >&2; exit 1; }
+gpgv --keyring /etc/systemd/import-pubring.pgp "$source/SHA256SUMS.gpg" "$source/SHA256SUMS"
+mkdir -p "$store"
+seen_server=false
+seen_kubernetes=false
+seen_containerd=false
+seen_profile=false
+while IFS= read -r entry || [[ -n "$entry" ]]; do
+  [[ "$entry" =~ ^([a-f0-9]{64})[[:space:]][\ *]([A-Za-z0-9][A-Za-z0-9._-]*)$ ]] || { echo 'invalid payload inventory' >&2; exit 1; }
+  digest=${BASH_REMATCH[1]}; name=${BASH_REMATCH[2]}
+  payload_source=$source/$name
+  [[ -f "$payload_source" && ! -L "$payload_source" ]] || exit 1
+  printf '%s  %s\n' "$digest" "$payload_source" | sha256sum --check --status
+  if [[ "$payload_source" != "$store/$name" ]]; then
+    cp --reflink=auto --preserve=mode "$payload_source" "$store/.$name.new"
+    chmod 0600 "$store/.$name.new"
+    sync -f "$store/.$name.new"
+    mv -T "$store/.$name.new" "$store/$name"
+  fi
+  case "$name" in
+    "server_$version.raw.zst"|"server_$version.raw") seen_server=true; server_name=$name ;;
+    "server-kubernetes_$version.raw") seen_kubernetes=true ;;
+    "server-containerd_$version.raw") seen_containerd=true ;;
+    profile.json) seen_profile=true ;;
+  esac
+done < "$source/SHA256SUMS"
+[[ "$seen_server" == true && "$seen_kubernetes" == true && "$seen_containerd" == true && "$seen_profile" == true ]] || { echo 'incomplete signed payload set' >&2; exit 1; }
+if [[ "$source" != "$store" ]]; then
+  cp "$source/SHA256SUMS" "$source/SHA256SUMS.gpg" "$store/"
+  sync -f "$store"
+fi
+if [[ "$server_name" == *.zst ]]; then
+  if [[ ! -f "$store/server_$version.raw" ]]; then
+    rm -f "$store/.server_$version.raw.new"
+    /usr/lib/systemd/systemd-import --direct --read-only raw "$store/$server_name" "$store/.server_$version.raw.new"
+    mv -T "$store/.server_$version.raw.new" "$store/server_$version.raw"
+    sync -f "$store"
+  fi
+fi
+[[ "$stage_only" == false ]] || exit 0
+# Do not silently activate runtime on OS updates. The root helper owns that transaction.
+mkdir -p /etc/systemd/system/multi-user.target.d /var/lib/extensions
+for provider in kubelet containerd; do
+  ln -sfn /dev/null "/etc/systemd/system/multi-user.target.d/10-$provider-service.conf"
+done
+# Server support itself is selected independently from the immutable active runtime pair.
+ln -sfn "$store/server_$version.raw" /var/lib/extensions/.server.raw.new
+mv -Tf /var/lib/extensions/.server.raw.new /var/lib/extensions/server.raw
+sync -f /var/lib/extensions
+systemd-sysext refresh
+systemctl daemon-reload
+systemctl start --no-block bluefin-server-bootstrap.service bluefin-server-physical.service

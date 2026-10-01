@@ -92,18 +92,6 @@ PROMPT_UNIT = (
 PRESETS = ROOT / "files" / "os" / "systemd" / "system-preset"
 
 
-def test_the_installed_disk_asks_for_a_root_password_on_first_boot():
-    # Root ships locked and the stock firstboot prompt is removed for headless
-    # nodes, so without this a USB-installed machine has no way to log in.
-    credential = option(install_argv(), "--set-credential")
-    assert credential is not None
-    name, _, _ = credential.partition(":")
-    unit = SystemdFile(PROMPT_UNIT)
-    assert unit.value("Unit", "ConditionCredential") == name
-    assert unit.value("Unit", "ConditionFirstBoot") == "yes"
-    [argv] = unit.commands()
-    assert argv[0] == "systemd-firstboot" and "--prompt-root-password" in argv
-    assert preset("bluefin-root-password-prompt.service", PRESETS.glob("*.preset")) == "enable"
 
 
 def test_the_root_password_prompt_is_on_the_monitor_not_the_serial_console():

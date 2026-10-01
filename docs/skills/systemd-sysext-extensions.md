@@ -66,9 +66,68 @@ The first-party extensions make opposite choices:
   Ignition, which writes `/etc/extensions/<name>_<ver>.raw` with a sha256
   verification hash.
 
-Third-party extensions built for another distribution (for example the Flatcar
-System Extension Bakery) only merge with `systemd-sysext merge --force`, and
-only if they are pure userspace.
+Compatible third-party userspace extensions are supported and encouraged.
+Prefer an existing [Flatcar System Extension Bakery](https://extensions.flatcar.org/)
+image over rebuilding an equivalent bundle when it satisfies the host's runtime
+contract. This does not permit other-distro binaries in the base OS image.
+
+Inspect the downloaded image's `extension-release` before activation. An image
+using `ID=_any` with the matching architecture can merge normally; an image
+locked to another distribution is not automatically compatible. Do not use
+`--force` as an installation default or bypass kernel-module version checks.
+Third-party userspace extensions still depend on the host's kernel features,
+libraries, writable paths, and runtime configuration; verify their binaries and
+exercise the intended workload after merging and after reboot.
+
+Pin the image version and verify its digest before merging. A checksum fetched
+from the same publisher proves integrity, not publisher authenticity. Use signed
+manifests or verified provenance where available; do not silently enable
+unattended `Verify=false` updates. Keep extension update paths and symlinks
+consistent with the active merge path; see
+[systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
+
+### Flatcar Kubernetes and containerd runtime notes
+
+The inspected bakery Kubernetes `v1.37.1` and containerd `2.4.1` images use
+`ID=_any`, `ARCHITECTURE=x86-64`, and `EXTENSION_RELOAD_MANAGER=1`. They merge
+normally on the matching Bluefin Server architecture; inspect every selected
+release rather than assuming all bakery extensions have the same metadata.
+
+**Updates and trust.** The bakery's transfer examples use `Verify=false` and
+do not supply the signed manifest/keyring contract used by Bluefin's updater.
+Checking bakery `SHA256SUMS` detects corruption but does not independently
+authenticate the publisher. Keep direct unsigned updates operator-reviewed:
+pin approved digests and verify provenance/signatures when available. For
+automatic product delivery, include approved payloads in the signed Bluefin
+release inventory instead of pulling unchecked upstream releases on nodes.
+Never disable the base `systemd-sysupdate` service/timer to stop component
+pulls; remove only the component-update drop-ins. Keep transfer targets and
+active symlinks consistent, and do not shadow them with higher-precedence
+`/etc/extensions` links.
+
+**Containerd and kubelet.** The inspected containerd image's unit sets
+`CONTAINERD_CONFIG=/usr/share/containerd/config.toml`. An `/etc` config alone
+does not override it. Use a systemd unit drop-in with:
+
+```ini
+[Service]
+Environment=CONTAINERD_CONFIG=/etc/containerd/config.toml
+```
+
+For containerd 2.4.x, the seeded TOML uses `version = 4` and sets
+`SystemdCgroup = true` under
+`[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc.options]`.
+The quoted plugin name is required: omitting quotes creates unrelated nested
+tables that containerd ignores. Confirm the running unit's config path and its
+effective config dump, not just the override file.
+
+After changing the runtime config, reload systemd and restart containerd,
+then restart kubelet. Modern kubelet can obtain and cache its cgroup driver
+from CRI at startup. Confirm its journal reports `cgroupDriver="systemd"` and
+create a fresh pod. Restarting only containerd can leave kubelet using its old
+cgroupfs driver; new pod sandboxes then fail with
+`expected cgroupsPath to be of format "slice:prefix:name"`. Existing Ready
+pods do not prove new sandbox creation works. Verify again after reboot.
 
 ## Adding an extension
 

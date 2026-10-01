@@ -4,7 +4,7 @@ description: The offline USB installer bluefin-server-installer_<ver>.raw. Load 
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-09-30"
   context7-sources:
     - /systemd/systemd
 ---
@@ -14,8 +14,10 @@ metadata:
 release set: the same usr and usr-verity images as the OS DDI (labelled
 `bluefin-installer-usr` / `bluefin-installer-usr-verity`) plus an ESP with
 signed systemd-boot, the installer UKI, the Secure Boot key enrollment
-payloads, and the disk UKI + install-time `repart.d` under `bluefin/`. Write
-it to a USB stick to install without a network:
+payloads, and the disk UKI + profile-specific install-time `repart.d` under
+`bluefin/`. Complete also carries the signed Server payload inventory. Write
+it to a USB stick to install the OS and host payloads without a network;
+initial container pulls still need registries unless cached:
 
 ```bash
 sudo dd if=bluefin-server-installer_<ver>.raw of=/dev/<usb> bs=4M conv=fsync status=progress
@@ -41,20 +43,48 @@ initrd masks `systemd-networkd-wait-online`, as the disk UKI already does.
 `/run/bluefin/installer` (with `fmask=0133,dmask=0022`, so systemd-repart does
 not warn about executable definition files). The
 `systemd-sysinstall.service.d/10-bluefin-installer.conf` drop-in passes
-`--definitions=/run/bluefin/installer/bluefin/repart.d` and
-`--kernel=${BLUEFIN_INSTALL_KERNEL}` (the disk UKI, named by the installer
-UKI's `systemd.setenv=`), `--erase=yes`, and `--reboot=no` with
-`SuccessAction=reboot`. The disk UKI sits outside `EFI/Linux` on the stick
-so systemd-boot never offers it there.
+`--definitions=${BLUEFIN_INSTALL_REPART}` and
+`--kernel=${BLUEFIN_INSTALL_KERNEL}` (the disk UKI), `--erase=yes`, and
+`--reboot=no` with `SuccessAction=reboot`. The signed installer profile supplies
+those environment values and forwards the nonsecret `bluefin.server-profile`
+credential through native sysinstall. The disk UKI sits outside `EFI/Linux`
+on the stick so systemd-boot never offers it there.
+
+## Complete and Core profiles
+
+One signed multi-profile installer UKI supplies Complete as default profile
+`@0` and Core for builders as `@1`. The native boot menu selects the profile;
+there is no custom sysinstall screen or worker-role flag. Both profiles install
+the same OS partitions and retain the existing verity/signing inputs.
+
+Complete selects `bluefin/repart.d/complete`, copies the coherent signed payload
+set and public profile marker onto the installed ESP, and leaves the OS root
+account locked. Core selects `bluefin/repart.d/core`, omits the homelab payloads,
+and may retain the builder root-password prompt. Neither profile puts join,
+account, TLS or session secrets on public media.
+
+The base launcher persists profile intent in `/etc/bluefin/server/profile`.
+Core and installations with no intent do not activate Server state/runtime;
+an OS update is not permission to opt in or change profile. Complete requires
+persistent `/etc` and `/var`. Fresh explicitly Complete initializes once or
+joins from validated private provisioning; invalid join data never creates a
+controller. Stock authentication and missing browser-pairing/account-recovery
+features are documented in [server-profile.md](server-profile.md).
+
+The boot producer explicitly names Complete as ukify's base profile and joins
+only Core. Omitting the base profile would insert an extra `ID=main` at `@0`
+and shift both product selections. The compiled PE profile smoke checks actual
+profile IDs, retained verity/lockdown inputs and edition-specific prompt intent;
+native installation/boot proof remains separate.
 
 ## Using the installer
 
 This is stock `systemd-sysinstall` (systemd-sysinstall(8)); Bluefin adds no
 installer UI of its own.
 
-1. Boot the stick. The installer UKI sets the `firstboot.keymap` credential
-   (`us`), so `systemd-firstboot` asks nothing, and the screen goes straight to
-   **Operating System Installer**.
+1. Boot the stick, retaining Complete or choosing Core in the native boot menu.
+   The installer UKI sets the `firstboot.keymap` credential (`us`), so
+   `systemd-firstboot` asks nothing before **Operating System Installer**.
 2. **Target disk.** sysinstall lists every disk it can install to as a
    numbered menu, labelled with its `/dev/disk/by-id/` name (model and serial,
    which is how you tell disks apart). The USB stick itself is never listed.
@@ -71,10 +101,11 @@ installer UI of its own.
    `yes` to begin. This is the only confirmation.
 4. sysinstall installs, and the machine **reboots by itself** when it
    succeeds. Remove the stick when the screen goes blank.
-5. **First boot of the installed disk** asks, on the monitor (tty1), for a new
-   **root password**, then asks again to confirm. It shows what you type unless
-   you press **Tab** first. Do not leave it empty: an empty answer skips the
-   prompt and root stays locked. Then log in as `root` with it.
+5. **Complete:** the native lifecycle brings up its cluster/platform; configure
+   supported upstream Console authentication privately before use. There is no
+   custom owner claim flow. **Core:** its first disk boot asks on tty1 for a root
+   password, then confirmation; **Tab** hides typing and an empty answer leaves
+   root locked. Builder OS login is not the planned cluster identity.
 
 Only two answers cancel: an empty answer at either prompt, and `no` at the
 confirmation (`Installation not confirmed, cancelling.`). Anything else
@@ -85,9 +116,9 @@ never halts the machine. After a cancel or a real install failure, upstream's
 message still on screen, but does not power off. Power-cycle and boot the stick
 again to retry.
 
-The installed disk is identical to one a diskless node installs: stock
-`systemd-sysinstall` with the layout from `files/os/repart.d/` (see
-[ddi-installer.md](ddi-installer.md), "Installing to disk").
+The installed OS layout retains `files/os/repart.d/` and its native
+`systemd-sysinstall` contract. Profile-specific ESP copy definitions add public
+intent and, for Complete, verified payloads; see [ddi-installer.md](ddi-installer.md).
 
 ## Unattended installs
 
@@ -111,24 +142,23 @@ a password prompt. The
 `systemd-firstboot.service.d/10-bluefin-no-root-prompt.conf` drop-in removes
 that prompt from `systemd-firstboot.service`.
 
-A disk installed from the stick needs a way in, so the installer's drop-in
-passes `--set-credential=bluefin.prompt-root-password:1` to sysinstall, which
-stores it next to the installed UKI. On that disk's first boot
-`bluefin-root-password-prompt.service` (`ConditionCredential=` on it, and
-`ConditionFirstBoot=yes`) runs stock `systemd-firstboot --prompt-root-password`
-on tty1, the monitor (the disk UKI's `/dev/console` is the serial port).
-Nodes installed any other way never get the credential and never prompt. A
-`passwd.hashed-password.root` / `passwd.plaintext-password.root` credential
-sets the password instead of the prompt, as `scripts/dogfood-installer.sh`
-does for the unattended test. See
-[tpm2-credential-sealing.md](tpm2-credential-sealing.md).
+The Core installer profile supplies
+`--set-credential=bluefin.prompt-root-password:1`; Complete supplies no such
+argument. On Core's first disk boot, `bluefin-root-password-prompt.service`
+(`ConditionCredential=` and `ConditionFirstBoot=yes`) runs stock
+`systemd-firstboot --prompt-root-password` on tty1. Other paths do not acquire
+this prompt implicitly. Core may instead receive an explicitly private
+`passwd.hashed-password.root` / `passwd.plaintext-password.root` credential.
+Complete uses local product-account recovery, not a default root password or
+passwordless rescue shell. See [tpm2-credential-sealing.md](tpm2-credential-sealing.md)
+for the separate advanced OS-credential boundary.
 
 ## Credentials and the ESP
 
 The installer needs no login: `systemd-sysinstall` runs on the console.
-sysinstall stores a few system credentials next to the installed UKI (`extra`
-lines in the boot entry): `firstboot.locale`, `firstboot.keymap`,
-`firstboot.timezone`, and `bluefin.prompt-root-password`.
+sysinstall stores locale, keymap, timezone and the selected nonsecret
+`bluefin.server-profile` credential next to the installed UKI (`extra` lines
+in the boot entry). Only Core includes `bluefin.prompt-root-password`.
 
 Anything else (users, SSH keys, sudoers, hostname, network) goes in the
 stick's own `/loader/credentials/`: the stick's ESP definition copies that
@@ -202,3 +232,4 @@ turn Secure Boot off.
   credentials and ESP credential files.
 - [secure-boot-keys.md](secure-boot-keys.md) — the keys that sign the stick.
 - [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (Installer).
+

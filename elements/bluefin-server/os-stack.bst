@@ -44,6 +44,10 @@ depends:
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
 
+  # Native profile staging only; runtime and application programs stay in
+  # verified optional Server payloads, never in the Core filesystem.
+  - bluefin-server/os-server-profile.bst
+
   # System Management Justfile
   - bluefin-server/os-justfile.bst
 

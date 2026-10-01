@@ -1,0 +1,14 @@
+# Approved unchanged Flatcar runtime payloads. These pins establish byte
+# integrity; Bluefin's signed inventory establishes downstream delivery trust.
+# Upstream SHA256SUMS alone is not independent publisher authentication.
+variables:
+  server-kubernetes-version: "1.36.5"
+  server-containerd-version: "2.4.1"
+  server-pause-image: "registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4"
+  (?):
+    - arch == "x86_64":
+        server-kubernetes-sha256: "0035f8566bb5312ea936fae40150d08087657057b69c8c97d40faefef2a83f2a"
+        server-containerd-sha256: "7da0099dd3f03608014f629b5f01bcfb88650a3ad8a7244d8053b8d5c432f6c8"
+    - arch == "aarch64":
+        server-kubernetes-sha256: "5b4f449c7694496e8e1809416f0bdc57b59e646fadc1bab12415d4f8ba5117ad"
+        server-containerd-sha256: "41d1805eac26f7a3b864cab1641dcd797cc7b4dd89af3bf28462e27b723f41ef"

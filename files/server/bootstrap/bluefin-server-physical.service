@@ -1,0 +1,19 @@
+[Unit]
+Description=Bluefin Server private lifecycle status and resume
+After=bluefin-server-bootstrap.service
+ConditionPathExists=/etc/bluefin/server/profile
+Conflicts=getty@tty1.service
+
+[Service]
+ExecStart=/usr/libexec/bluefin-server-bootstrap physical
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Restart=always
+RestartSec=3s
+UMask=0077
+NoNewPrivileges=yes
+ProtectHome=yes

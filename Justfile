@@ -8,6 +8,7 @@ export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4")
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:64eb0b4930d57a92710822898fb73af6cc1ae35d")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
+server_proof_provider := env("SERVER_PROOF_PROVIDER", "podman")
 
 # Prefix for podman calls: empty when rootless podman works, "sudo" otherwise.
 sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } else { "sudo" }
@@ -68,14 +69,15 @@ validate: gen-dev-keys
     python3 .github/scripts/check-release-version.py
     python3 .github/scripts/check-k0s-version.py
     python3 .github/scripts/check-renovate-series.py
-    just bst show --deps all oci/bluefin-server-image.bst oci/k0s-sysext.bst oci/kubestellar-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst
+    just bst show --deps all oci/bluefin-server-image.bst oci/server-sysext.bst oci/k0s-sysext.bst oci/kubestellar-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst
 
-# Run the unit test suite (pytest + bats; bats from a container if not installed).
+# Run Python, native lifecycle and Bats unit regressions (container Bats fallback).
 [group('dev')]
 test-unit:
     #!/usr/bin/env bash
     set -euo pipefail
-    python3 -m pytest tests/unit -q
+    python3 -m pytest tests/unit files/server/manifests/tests -q
+    (cd files/server/bootstrap && GOTOOLCHAIN=go1.26.6 go test ./...)
     if command -v bats >/dev/null 2>&1; then
         exec bats tests/unit
     fi
@@ -113,6 +115,17 @@ export-sysext: build-sysext
 gen-dev-keys *ARGS:
     bash scripts/gen-dev-keys.sh {{ARGS}}
 
+
+# Generate the upstream-manifest snapshot for inspection. Native image builds
+# generate it in BuildStream; no application source compilation is required.
+[group('server')]
+prepare-server:
+    python3 scripts/prepare-server.py --provider {{server_proof_provider}}
+
+# Explicit optional runtime compatibility proof, never part of graph validation.
+[group('server')]
+verify-server-platform:
+    python3 scripts/prepare-server.py --verify --provider {{server_proof_provider}}
 # Build the release image set: DDI, sysupdate sources, signed UKIs, netboot ESP.
 [group('diskless')]
 build-image: gen-dev-keys
@@ -120,7 +133,8 @@ build-image: gen-dev-keys
 
 # Export the release image set (default: dist/diskless/).
 [group('diskless')]
-export-image OUT="dist/diskless": build-image
+export-image OUT="dist/diskless": gen-dev-keys
+    just bst build oci/bluefin-server-image.bst
     rm -rf {{OUT}}
     just bst artifact checkout oci/bluefin-server-image.bst --directory /src/{{OUT}}
     @echo "==> wrote image artifacts:" && ls -lh {{OUT}}/
@@ -144,6 +158,7 @@ dogfood-install NEXT="":
 [group('diskless')]
 dogfood-installer:
     bash scripts/dogfood-installer.sh dist/diskless
+
 
 # REF=ghcr.io/<owner>/bluefin-server or <registry-host>:30500/bluefin-server
 # (PLAIN_HTTP=1); log in with podman login first. One layer per file.

@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cilium-config
+  namespace: kube-system
+data:
+  routing-mode: tunnel
+  tunnel-protocol: vxlan
+  ipam: kubernetes
+  kube-proxy-replacement: 'true'
+  identity-allocation-mode: crd
+  identity-management-mode: agent
+  enable-lb-ipam: 'false'
+  mesh-auth-enabled: 'false'
+  mesh-auth-mutual-enabled: 'false'
+  clustermesh-enable-endpoint-sync: 'false'
+  clustermesh-enable-mcs-api: 'false'
+  clustermesh-mcs-api-install-crds: 'false'
+  enable-ipv4: 'true'
+  enable-ipv6: 'false'
+  enable-ipv4-masquerade: 'true'
+  enable-bpf-masquerade: 'true'
+  enable-l7-proxy: 'false'
+  enable-envoy-config: 'false'
+  enable-hubble: 'false'
+  enable-ingress-controller: 'false'
+  enable-gateway-api: 'false'
+  enable-bgp-control-plane: 'false'
+  enable-l2-announcements: 'false'
+  enable-cilium-endpoint-slice: 'false'
+  enable-policy: default
+  enable-k8s-networkpolicy: 'true'
+  k8s-require-ipv4-pod-cidr: 'true'
+  bpf-root: /sys/fs/bpf
+  cgroup-root: /run/cilium/cgroupv2
+  cilium-endpoint-gc-interval: 5m0s
+  operator-api-serve-addr: 127.0.0.1:9234
+  skip-crd-creation: 'true'
+  synchronize-k8s-nodes: 'true'
+  remove-cilium-node-taints: 'true'
+  set-cilium-is-up-condition: 'true'
+  unmanaged-pod-watcher-interval: '0'
+  write-cni-conf-when-ready: /host/etc/cni/net.d/05-cilium.conflist
+  cni-exclusive: 'true'
+  cni-log-file: /var/run/cilium/cilium-cni.log
+  clean-cilium-state: 'false'
+  clean-cilium-bpf-state: 'false'

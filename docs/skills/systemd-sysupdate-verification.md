@@ -4,7 +4,7 @@ description: Configure and operate GPG signature verification for Bluefin Server
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-28"
+  last_updated: "2026-09-30"
   context7-sources:
     - /systemd/systemd
 ---
@@ -75,11 +75,52 @@ root: it trusts a newer release only after `gpgv` verifies the boot server's
 (`/etc/systemd/import-pubring.pgp`, else the vendor keyring). An unsigned or
 foreign-signed manifest never sets `/run/reboot-required`.
 
+## Complete runtime generations
+
+Complete opts into the `server` feature. `33-server-bundle.transfer` downloads
+`server-bundle_<ver>.tar.zst` as one verified directory under
+`/var/lib/bluefin/server/runtime/incoming/<ver>`. Downloading an OS or bundle
+never switches active Kubernetes/containerd binaries.
+
+The bundle contains an inner signed `SHA256SUMS` for `profile.json`, the Server
+support extension and unchanged pinned Flatcar runtime images. The profile
+launcher/root lifecycle verifies its signature and exact member hashes before
+staging a protected generation. Application images are upstream registry pulls.
+The embedded bundle signature uses a fixed signing epoch: the maximum of
+`SOURCE_DATE_EPOCH` and the imported signing key/subkey creation timestamps.
+The `--faked-system-time` value ends in `!` to freeze, rather than offset, its
+clock while signing. Slow input must not advance the embedded timestamp.
+For the RSA release key this keeps bundle/installer signature bytes repeatable
+without creating a signature earlier than its key. This is not an upstream
+container publisher attestation or a wall-clock build timestamp.
+Only selected stable links enter `/var/lib/extensions`; retained payloads stay
+outside extension merge-search paths. Active, previous and in-flight versions
+are protected explicitly with one `ProtectVersion=` line per version; spaces
+inside a single value are not a version list. Five transfer slots include the
+booted OS and next candidate.
+The pinned systemd `261.2` parser appends each value with `strv_extend`; vacuum
+tests every retained value with `strv_contains`, not just the last line.
+Source: [pinned transfer parser](https://github.com/systemd/systemd/blob/4925d9f07fc697efccd98a93046ff535b8832445/src/sysupdate/sysupdate-transfer.c).
+
+A root-authorized native lifecycle request selects a signed image-version transition. The
+root helper checks supported actual worker skew, snapshots etcd before a
+controller version transition, performs native kubeadm migration, restarts
+containerd before kubelet and checks actual readiness plus a fresh pod sandbox.
+An OS rollback is not an etcd restore or permission to downgrade a migrated
+runtime. Durable stages resume with the generation appropriate to that stage.
+
+A healthy controller commits its own transition independently of registered
+workers. Other nodes require manual per-node signed runtime updates; status
+records that requirement without pretending they were updated. It does not
+permanently block the next controller transition on a removed browser updater.
+Stock Console has no custom upgrade/pairing UI. Native role and actual Kubernetes
+skew preflight remain authoritative; no worker is silently deleted or adopted.
+
 ## Signing happens inside the image build
 
 `oci/bluefin-server-image.bst` assembles the whole release set (OS images,
-UKIs, netboot ESP, and the k0s/KubeStellar/OpenZFS sysext assets), writes one
-combined `SHA256SUMS` over all of it, and signs it in-element with
+UKIs, netboot ESP, Complete runtime/Console/coherent bundle and the existing
+optional sysext assets), writes one combined `SHA256SUMS` over all of it, and signs it in-element with
 `files/boot-keys/sysupdate-signing.asc` (gpg `--detach-sign`). It then proves
 the shipped keyring accepts the signature with
 `gpgv --keyring /boot-keys/import-pubring.pgp SHA256SUMS.gpg SHA256SUMS`, so a
@@ -122,6 +163,10 @@ tell a human or a policy engine which commit and workflow run produced it.
   set was built. The SBOM ships as `bluefin-server_<ver>.spdx.json`, listed
   in `SHA256SUMS`, so the GPG signature covers it too. No transfer matches
   it, so nodes never download it.
+
+  Complete merges the stock platform's SPDX fragment for actual upstream
+  source/resources/image pins with the BuildStream SBOM by SPDX identity.
+  There is no custom Console/Argo source or npm/toolchain provenance to claim.
 - **Publishing.** In CI, `scripts/publish-release.sh` is the only publish
   path (`just publish-oci` pushes to a local or personal registry for
   rehearsal and runs none of the script's checks).

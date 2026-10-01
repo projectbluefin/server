@@ -1,0 +1,408 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-user-ownership
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - '*'
+      operations: &id001
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - pods
+      - configmaps
+      - services
+    - apiGroups:
+      - apps
+      apiVersions:
+      - '*'
+      operations: *id001
+      resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    - apiGroups:
+      - batch
+      apiVersions:
+      - '*'
+      operations: *id001
+      resources:
+      - jobs
+  validations:
+  - expression: request.namespace == 'bluefin-apps'
+    message: Only the user workload namespace is writable
+  - expression: has(variables.r.metadata.labels) && 'bluefin.io/ownership' in variables.r.metadata.labels && variables.r.metadata.labels['bluefin.io/ownership']
+      == 'top-level-user' && (!has(variables.r.metadata.ownerReferences) || size(variables.r.metadata.ownerReferences) ==
+      0) && (!has(variables.r.metadata.annotations) || !('argocd.argoproj.io/tracking-id' in variables.r.metadata.annotations))
+      && (!has(variables.r.metadata.labels) || !('app.kubernetes.io/managed-by' in variables.r.metadata.labels) || variables.r.metadata.labels['app.kubernetes.io/managed-by']
+      != 'argocd')
+    message: Missing explicit top-level ownership or Git/controller-owned target
+  - expression: request.resource.resource != 'pods' || request.operation == 'DELETE' || !has(object.metadata.labels) || object.metadata.labels.all(k, !(k in ['bluefin.io/controller-id','controller-uid','job-name','batch.kubernetes.io/controller-uid','batch.kubernetes.io/job-name']))
+    message: Standalone user pods cannot forge controller-child selectors
+  - expression: request.operation != 'UPDATE' || (has(oldObject.metadata.labels) && oldObject.metadata.labels['bluefin.io/ownership']
+      == 'top-level-user' && (!has(oldObject.metadata.ownerReferences) || size(oldObject.metadata.ownerReferences)==0) &&
+      (!has(oldObject.metadata.annotations) || !('argocd.argoproj.io/tracking-id' in oldObject.metadata.annotations)))
+    message: Cannot adopt or strip existing ownership
+  - expression: request.userInfo.username != 'system:serviceaccount:bluefin-system:bluefin-console' || request.operation ==
+      'CREATE' || (request.operation == 'UPDATE' && (!has(object.spec) || object.spec == oldObject.spec) && (!has(object.data)
+      || object.data == oldObject.data))
+    message: Stock Console cannot change or delete existing workload contents
+  variables:
+  - name: r
+    expression: 'object != null ? object : oldObject'
+  matchConditions:
+  - name: product-identities
+    expression: request.userInfo.username == 'system:serviceaccount:bluefin-system:bluefin-console'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-user-ownership
+spec:
+  policyName: bluefin-user-ownership
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-bounded-pods
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+  validations:
+  - expression: '!has(variables.p.hostNetwork) || !variables.p.hostNetwork'
+    message: Host networking is forbidden
+  - expression: (!has(variables.p.hostPID) || !variables.p.hostPID) && (!has(variables.p.hostIPC) || !variables.p.hostIPC)
+    message: Host PID/IPC is forbidden
+  - expression: request.operation == 'UPDATE' || !has(variables.p.nodeName) || variables.p.nodeName == ''
+    message: Direct node assignment is forbidden
+  - expression: has(variables.p.securityContext) && variables.p.securityContext.runAsNonRoot == true && variables.p.securityContext.runAsUser
+      == 1001 && variables.p.securityContext.seccompProfile.type == 'RuntimeDefault'
+    message: UID1001 nonroot RuntimeDefault is required
+  - expression: variables.cs.all(c, has(c.securityContext) && (!has(c.securityContext.privileged) || !c.securityContext.privileged)
+      && c.securityContext.allowPrivilegeEscalation == false && c.securityContext.readOnlyRootFilesystem == true && has(c.securityContext.capabilities)
+      && c.securityContext.capabilities.drop.exists(v,v=='ALL') && (!has(c.securityContext.capabilities.add) || size(c.securityContext.capabilities.add)==0))
+    message: No privileged containers or extra capabilities
+  - expression: variables.cs.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$') && (!has(c.ports) || c.ports.all(p,!has(p.hostPort)
+      || p.hostPort == 0)))
+    message: Immutable images and no host ports required
+  - expression: variables.cs.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e,!has(e.valueFrom) || (!has(e.valueFrom.secretKeyRef)
+      && !has(e.valueFrom.configMapKeyRef)))))
+    message: No secret or ConfigMap credential injection
+  - expression: '!has(variables.p.imagePullSecrets) || size(variables.p.imagePullSecrets)==0'
+    message: Credential mounts are forbidden
+  - expression: '!has(variables.p.ephemeralContainers) || size(variables.p.ephemeralContainers)==0'
+    message: Ephemeral bypass containers are forbidden
+  - expression: request.namespace != 'bluefin-apps' || (variables.p.serviceAccountName == 'bluefin-app-workload' && variables.p.automountServiceAccountToken
+      == false && (!has(variables.p.volumes) || size(variables.p.volumes)==0))
+    message: User pods use the unprivileged account without API tokens or volumes
+  - expression: >-
+      request.namespace != 'argo' || (variables.p.serviceAccountName == 'bluefin-workflow' && variables.p.automountServiceAccountToken == true && (!has(variables.p.shareProcessNamespace) || !variables.p.shareProcessNamespace) && (!has(variables.p.volumes) || variables.p.volumes.all(v,has(v.emptyDir) || (has(v.projected) && v.projected.sources.all(s,has(s.serviceAccountToken) || (has(s.configMap) && s.configMap.name=='kube-root-ca.crt') || has(s.downwardAPI))))))
+    message: Stock workflow Pods use only bounded task-result identity and transient or Kubernetes-projected volumes
+  - expression: >-
+      request.namespace != 'argo' || (request.operation == 'CREATE' ? request.userInfo.username == 'system:serviceaccount:argo:workflow-controller' : (request.userInfo.username == 'system:serviceaccount:argo:workflow-controller' || object.spec == oldObject.spec))
+    message: Workflow Pods are controller-produced, never caller-supplied
+  - expression: '!has(object.metadata.labels) || !(''bluefin.io/platform'' in object.metadata.labels) || object.metadata.labels[''bluefin.io/platform''] != ''true'''
+    message: User pods cannot exempt themselves from reboot drain
+  - expression: '!has(object.metadata.labels) || !(''bluefin.io/maintenance'' in object.metadata.labels) || object.metadata.labels[''bluefin.io/maintenance''] != ''true'''
+    message: User pods cannot manufacture platform reboot holds
+  variables:
+  - name: p
+    expression: object.spec
+  - name: cs
+    expression: 'object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : [])'
+  matchConditions:
+  - name: user-runtime
+    expression: request.namespace == 'bluefin-apps' || (request.namespace == 'argo' && object.spec.serviceAccountName != 'workflow-controller')
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-bounded-pods
+spec:
+  policyName: bluefin-bounded-pods
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-bounded-workloads
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - apps
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    - apiGroups:
+      - batch
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - jobs
+      - cronjobs
+  validations:
+  - expression: '!has(variables.p.hostNetwork) || !variables.p.hostNetwork'
+    message: Host networking is forbidden
+  - expression: (!has(variables.p.hostPID) || !variables.p.hostPID) && (!has(variables.p.hostIPC) || !variables.p.hostIPC)
+    message: Host PID/IPC is forbidden
+  - expression: request.operation == 'UPDATE' || !has(variables.p.nodeName) || variables.p.nodeName == ''
+    message: Direct node assignment is forbidden
+  - expression: has(variables.p.securityContext) && variables.p.securityContext.runAsNonRoot == true && variables.p.securityContext.runAsUser
+      == 1001 && variables.p.securityContext.seccompProfile.type == 'RuntimeDefault'
+    message: UID1001 nonroot RuntimeDefault is required
+  - expression: variables.cs.all(c, has(c.securityContext) && (!has(c.securityContext.privileged) || !c.securityContext.privileged)
+      && c.securityContext.allowPrivilegeEscalation == false && c.securityContext.readOnlyRootFilesystem == true && has(c.securityContext.capabilities)
+      && c.securityContext.capabilities.drop.exists(v,v=='ALL') && (!has(c.securityContext.capabilities.add) || size(c.securityContext.capabilities.add)==0))
+    message: No privileged containers or extra capabilities
+  - expression: variables.cs.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$') && (!has(c.ports) || c.ports.all(p,!has(p.hostPort)
+      || p.hostPort == 0)))
+    message: Immutable images and no host ports required
+  - expression: variables.cs.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e,!has(e.valueFrom) || (!has(e.valueFrom.secretKeyRef)
+      && !has(e.valueFrom.configMapKeyRef)))))
+    message: No secret or ConfigMap credential injection
+  - expression: '!has(variables.p.imagePullSecrets) || size(variables.p.imagePullSecrets)==0'
+    message: Credential mounts are forbidden
+  - expression: '!has(variables.p.ephemeralContainers) || size(variables.p.ephemeralContainers)==0'
+    message: Ephemeral bypass containers are forbidden
+  - expression: variables.p.serviceAccountName == 'bluefin-app-workload' && variables.p.automountServiceAccountToken == false && (!has(variables.p.volumes) || size(variables.p.volumes)==0)
+    message: User workload controllers cannot select privileged identities or mounts
+  - expression: >-
+      object.kind == 'CronJob' ? (!has(object.spec.jobTemplate.spec.template.metadata.labels) || !('bluefin.io/platform' in object.spec.jobTemplate.spec.template.metadata.labels) || object.spec.jobTemplate.spec.template.metadata.labels['bluefin.io/platform'] != 'true') : (!has(object.spec.template.metadata.labels) || !('bluefin.io/platform' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['bluefin.io/platform'] != 'true')
+    message: User pod templates cannot exempt themselves from reboot drain
+  - expression: >-
+      object.kind == 'CronJob' ? (!has(object.spec.jobTemplate.spec.template.metadata.labels) || !('bluefin.io/maintenance' in object.spec.jobTemplate.spec.template.metadata.labels) || object.spec.jobTemplate.spec.template.metadata.labels['bluefin.io/maintenance'] != 'true') : (!has(object.spec.template.metadata.labels) || !('bluefin.io/maintenance' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['bluefin.io/maintenance'] != 'true')
+    message: User pod templates cannot manufacture platform reboot holds
+  variables:
+  - name: p
+    expression: 'object.kind == ''CronJob'' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec'
+  - name: cs
+    expression: 'variables.p.containers + (has(variables.p.initContainers) ? variables.p.initContainers : [])'
+  matchConditions:
+  - name: user-workloads
+    expression: request.namespace == 'bluefin-apps'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-bounded-workloads
+spec:
+  policyName: bluefin-bounded-workloads
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-application-boundaries
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - argoproj.io
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - applications
+  validations:
+  - expression: has(variables.r.spec.source) && !has(variables.r.spec.sources) && !has(variables.r.spec.sourceHydrator) &&
+      !has(variables.r.spec.source.helm) && !has(variables.r.spec.source.plugin) && !has(variables.r.spec.source.chart) &&
+      (!has(variables.r.spec.source.directory) || !has(variables.r.spec.source.directory.jsonnet)) && (!has(variables.r.spec.source.kustomize)
+      || !has(variables.r.spec.source.kustomize.components))
+    message: Only single-source directory/Kustomize applications, without Helm/plugins/hydration
+  - expression: 'variables.r.spec.project == ''bluefin-platform'' ? (variables.r.metadata.name == ''bluefin-platform'' &&
+      variables.r.spec.source.repoURL == ''file:///bluefin-baseline/baseline.git'' && variables.r.spec.source.path == ''platform''
+      && variables.r.spec.source.targetRevision == ''@@BASELINE_COMMIT@@'' && request.userInfo.username != ''system:serviceaccount:bluefin-system:bluefin-console'')
+      : (variables.r.spec.project == ''bluefin-user'' && variables.r.spec.destination.namespace == ''bluefin-apps'' && variables.r.spec.destination.server
+      == ''https://kubernetes.default.svc'' && (variables.r.spec.source.repoURL.startsWith(''https://'') || variables.r.spec.source.repoURL.startsWith(''http://'')
+      || variables.r.spec.source.repoURL.startsWith(''ssh://'') || variables.r.spec.source.repoURL.startsWith(''git@'')) &&
+      variables.r.spec.source.targetRevision.matches(''^([a-f0-9]{40}|[a-f0-9]{64})$''))'
+    message: Fixed immutable baseline or exact-commit user destination/source required
+  - expression: 'request.userInfo.username != ''system:serviceaccount:bluefin-system:bluefin-console''
+      || (has(variables.r.metadata.labels) && ''bluefin.io/ownership'' in variables.r.metadata.labels && variables.r.metadata.labels[''bluefin.io/ownership'']
+      == ''top-level-user'' && (!has(variables.r.metadata.ownerReferences) || size(variables.r.metadata.ownerReferences) ==
+      0) && (!has(variables.r.metadata.annotations) || !(''argocd.argoproj.io/tracking-id'' in variables.r.metadata.annotations))
+      && (!has(variables.r.metadata.labels) || !(''app.kubernetes.io/managed-by'' in variables.r.metadata.labels) || variables.r.metadata.labels[''app.kubernetes.io/managed-by'']
+      != ''argocd'') && (!has(variables.r.metadata.finalizers) || size(variables.r.metadata.finalizers)==0) && (!has(variables.r.spec.syncPolicy)
+      || !has(variables.r.spec.syncPolicy.automated) || !has(variables.r.spec.syncPolicy.automated.prune) || !variables.r.spec.syncPolicy.automated.prune))'
+    message: Product may manage only explicit top-level nonpruning user Applications
+  - expression: request.userInfo.username != 'system:serviceaccount:bluefin-system:bluefin-console' || request.operation ==
+      'CREATE' || (request.operation=='UPDATE' && object.spec == oldObject.spec)
+    message: Stock Console cannot change an existing Application revision
+  - expression: >-
+      variables.r.spec.project == 'bluefin-platform' || !has(variables.r.operation) || (variables.r.operation.all(k,k in ['sync','initiatedBy','info','retry']) && has(variables.r.operation.sync) && variables.r.operation.sync.all(k,k in ['revision','prune','syncOptions','source','sources','revisions']) && variables.r.operation.sync.revision == variables.r.spec.source.targetRevision && (!has(variables.r.operation.sync.prune) || !variables.r.operation.sync.prune) && (!has(variables.r.operation.sync.sources) || size(variables.r.operation.sync.sources)==0) && (!has(variables.r.operation.sync.revisions) || variables.r.operation.sync.revisions == [variables.r.spec.source.targetRevision]) && (!has(variables.r.operation.sync.source) || (variables.r.operation.sync.source.repoURL == variables.r.spec.source.repoURL && variables.r.operation.sync.source.targetRevision == variables.r.spec.source.targetRevision && variables.r.operation.sync.source.path == variables.r.spec.source.path && has(variables.r.operation.sync.source.directory) && variables.r.operation.sync.source.directory.recurse == true && variables.r.operation.sync.source.all(k,k in ['repoURL','targetRevision','path','directory']) && variables.r.operation.sync.source.directory.all(k,k in ['recurse','jsonnet']) && (!has(variables.r.operation.sync.source.directory.jsonnet) || size(variables.r.operation.sync.source.directory.jsonnet)==0))) && (!has(variables.r.operation.sync.syncOptions) || variables.r.operation.sync.syncOptions.all(v,v in ['ServerSideApply=true','FailOnSharedResource=true'])))
+    message: A user sync cannot change the resolved revision or acquire pruning/hook authority
+  - expression: >-
+      request.userInfo.username != 'system:serviceaccount:bluefin-system:bluefin-console' || request.operation != 'UPDATE' || (has(oldObject.metadata.labels) && 'bluefin.io/ownership' in oldObject.metadata.labels && oldObject.metadata.labels['bluefin.io/ownership'] == 'top-level-user' && (!has(oldObject.metadata.ownerReferences) || size(oldObject.metadata.ownerReferences)==0) && (!has(oldObject.metadata.annotations) || !('argocd.argoproj.io/tracking-id' in oldObject.metadata.annotations)))
+    message: Missing tracking metadata alone never permits Application adoption
+  - expression: >-
+      variables.r.spec.project == 'bluefin-platform' || (has(variables.r.spec.source.directory) && variables.r.spec.source.directory.recurse == true && variables.r.spec.source.directory.all(k,k=='recurse') && has(variables.r.spec.syncPolicy) && has(variables.r.spec.syncPolicy.syncOptions) && variables.r.spec.syncPolicy.syncOptions.exists(v,v=='FailOnSharedResource=true') && variables.r.spec.syncPolicy.syncOptions.all(v,v in ['ServerSideApply=true','FailOnSharedResource=true']))
+    message: User sources are explicitly plain manifests and cannot adopt another Application's resources
+  variables:
+  - name: r
+    expression: 'object != null ? object : oldObject'
+  matchConditions:
+  - name: application-namespace
+    expression: request.namespace == 'argocd'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-application-boundaries
+spec:
+  policyName: bluefin-application-boundaries
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-bounded-workflows
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - argoproj.io
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - workflows
+      - workflowtemplates
+      - cronworkflows
+  validations:
+  - expression: variables.s.serviceAccountName == 'bluefin-workflow'
+    message: Bounded stock workflow identity required
+  - expression: has(variables.s.activeDeadlineSeconds) && variables.s.activeDeadlineSeconds > 0 && variables.s.activeDeadlineSeconds <= 600 && has(variables.s.parallelism) && variables.s.parallelism > 0 && variables.s.parallelism <= 2
+    message: Finite workflow deadline and parallelism required
+  - expression: '!has(variables.s.workflowTemplateRef) && !has(variables.s.volumeClaimTemplates) && !has(variables.s.podSpecPatch) && !has(variables.s.templateDefaults) && !has(variables.s.artifactRepositoryRef) && !has(variables.s.imagePullSecrets) && !has(variables.s.arguments) && !has(variables.s.podDisruptionBudget)'
+    message: No mutable references, credentials, PVCs, artifact stores or pod patches
+  - expression: '!has(variables.s.volumes) || (variables.s.serviceAccountName == ''bluefin-workflow'' && size(variables.s.volumes)==1 && variables.s.volumes[0].name == ''bluefin-scratch'' && has(variables.s.volumes[0].emptyDir) && variables.s.volumes[0].emptyDir.sizeLimit == ''128Mi'')'
+    message: Ordinary computations may use only bounded transient scratch
+  - expression: >-
+      variables.s.all(k,k in ['entrypoint','templates','serviceAccountName','automountServiceAccountToken','securityContext','activeDeadlineSeconds','parallelism','volumes','suspend','shutdown','podGC','ttlStrategy']) && variables.s.securityContext.runAsNonRoot == true && variables.s.securityContext.runAsUser == 1001 && variables.s.securityContext.seccompProfile.type == 'RuntimeDefault' && variables.s.automountServiceAccountToken == true
+    message: Stock computation shares only the bounded task-result ServiceAccount
+  - expression: >-
+      variables.s.templates.all(t,t.all(k,k in ['name','container','outputs','steps','dag']) && !has(t.resource) && !has(t.script) && !has(t.http) && !has(t.plugin) && !has(t.templateRef) && !has(t.podSpecPatch) && !has(t.volumes) && !has(t.inputs) && !has(t.initContainers) && !has(t.sidecars) && (has(t.container) || has(t.steps) || has(t.dag)))
+    message: Inline templates cannot override pod identity, executor credentials, or bounded effects
+  - expression: variables.s.templates.all(t, !has(t.outputs) || (variables.s.serviceAccountName == 'bluefin-workflow' && t.outputs.all(k,k=='parameters') && t.outputs.parameters.all(p,p.all(k,k in ['name','valueFrom']) && p.valueFrom.all(k,k=='path') && p.valueFrom.path.matches('^/workspace/[A-Za-z0-9_./-]+$') && !p.valueFrom.path.contains('..'))))
+    message: Only scratch-local result parameter paths; stock executor does not confine symlink targets
+  - expression: variables.s.templates.all(t, !has(t.container) || (t.container.image.matches('^.+@sha256:[a-f0-9]{64}$') && t.container.all(k,k in ['name','image','command','args','securityContext','resources','volumeMounts']) && has(t.container.securityContext) && t.container.securityContext.allowPrivilegeEscalation == false && t.container.securityContext.readOnlyRootFilesystem == true && t.container.securityContext.runAsNonRoot == true && t.container.securityContext.capabilities.drop.exists(v,v=='ALL') && (!has(t.container.securityContext.capabilities.add) || size(t.container.securityContext.capabilities.add)==0) && (!has(t.container.volumeMounts) || (variables.s.serviceAccountName == 'bluefin-workflow' && size(t.container.volumeMounts)==1 && t.container.volumeMounts[0].name == 'bluefin-scratch' && t.container.volumeMounts[0].mountPath == '/workspace' && t.container.volumeMounts[0].all(k,k in ['name','mountPath'])))))
+    message: Immutable unprivileged containers with no credential or lifecycle injection
+  - expression: variables.s.templates.all(t, (!has(t.steps) || t.steps.all(g,g.all(s,!has(s.templateRef) && !has(s.arguments))))
+      && (!has(t.dag) || t.dag.tasks.all(s,!has(s.templateRef) && !has(s.arguments))))
+    message: No mutable nested template references or substituted arguments
+  - expression: request.operation != 'UPDATE' || oldObject.spec == object.spec || (request.userInfo.username == 'system:serviceaccount:argocd:argocd-application-controller' && object.kind == 'WorkflowTemplate' && object.metadata.name == 'bluefin-result' && variables.s.serviceAccountName == 'bluefin-workflow')
+    message: Stock clients cannot replace an existing workflow revision
+  - expression: object.kind != 'CronWorkflow' || (object.spec.concurrencyPolicy == 'Forbid' && has(object.spec.startingDeadlineSeconds) && object.spec.startingDeadlineSeconds <= 60 && has(object.spec.stopStrategy) && object.spec.stopStrategy.expression == 'cronworkflow.succeeded + cronworkflow.failed >= 32')
+    message: Scheduled runs are finite and never overlap
+  variables:
+  - name: s
+    expression: 'object.kind == ''CronWorkflow'' ? object.spec.workflowSpec : object.spec'
+  matchConditions:
+  - name: workflow-namespace
+    expression: request.namespace == 'argo'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-bounded-workflows
+spec:
+  policyName: bluefin-bounded-workflows
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-no-normal-workflow-delete
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - argoproj.io
+      apiVersions:
+      - '*'
+      operations:
+      - DELETE
+      resources:
+      - workflows
+      - workflowtemplates
+      - cronworkflows
+  validations:
+  - expression: request.userInfo.username != 'system:serviceaccount:bluefin-system:bluefin-console'
+    message: Stock Console cannot delete workflows
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-no-normal-workflow-delete
+spec:
+  policyName: bluefin-no-normal-workflow-delete
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-normal-scale
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [apps]
+      apiVersions: ['*']
+      operations: [UPDATE]
+      resources: [deployments/scale, statefulsets/scale, replicasets/scale]
+  matchConditions:
+  - name: normal-identity
+    expression: request.userInfo.username == 'system:serviceaccount:bluefin-system:bluefin-console'
+  validations:
+  - expression: request.namespace == 'bluefin-apps' && object.spec.replicas >= oldObject.spec.replicas
+    message: Stock Console cannot scale workloads down
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-normal-scale
+spec:
+  policyName: bluefin-normal-scale
+  validationActions: [Deny]

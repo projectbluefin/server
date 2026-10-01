@@ -4,7 +4,7 @@ description: How to add, split, rename, and refactor docs/skills files for Bluef
 metadata:
   type: meta-skill
   status: stable
-  last_updated: "2026-09-07"
+  last_updated: "2026-09-30"
 ---
 # Skill Improvement — How to Maintain Agent Docs
 
@@ -101,7 +101,7 @@ A skill should split when it exceeds 300 lines or mixes a decision tree with lon
 - [ ] `just validate` passes (if any code or build element changed).
 - [ ] No skill file exceeds 500 lines.
 - [ ] No `TODO/FIXME/draft` markers remain in changed `.md` files.
-- [ ] All internal Markdown links resolve.
+- [ ] All internal Markdown links resolve. Cross-file `file.md#heading` links require both an existing target file and a matching GitHub-style heading slug; fenced-code headings do not count as anchors.
 - [ ] New or renamed skills are listed in `docs/skills/index.md` and `AGENTS.md`.
 
 ## See also

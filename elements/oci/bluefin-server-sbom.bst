@@ -38,6 +38,10 @@ build-depends:
 - kubeadm/kubeadm-bin.bst
 - oci/zfs-sysext.bst
 - zfs/openzfs.bst
+- server/kubernetes-image.bst
+- server/containerd-image.bst
+- server/platform-payload.bst
+- oci/server-sysext.bst
 
 config:
   path: /bluefin-server.spdx.json

@@ -1,0 +1,65 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-trusted-core
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+    - apiGroups:
+      - apps
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - deployments
+      - statefulsets
+  matchConditions:
+  - name: trusted-core-namespace
+    expression: request.namespace == 'argocd'
+  variables:
+  - name: p
+    expression: 'object.kind == ''Pod'' ? object.spec : object.spec.template.spec'
+  - name: cs
+    expression: 'variables.p.containers + (has(variables.p.initContainers) ? variables.p.initContainers : [])'
+  validations:
+  - expression: variables.p.serviceAccountName in ['argocd-application-controller','argocd-applicationset-controller','argocd-repo-server','argocd-valkey']
+    message: Only fixed Core service identities may run in the privileged platform namespace
+  - expression: (!has(variables.p.hostNetwork) || !variables.p.hostNetwork) && (!has(variables.p.hostPID) || !variables.p.hostPID)
+      && (!has(variables.p.hostIPC) || !variables.p.hostIPC)
+    message: Core does not use host networking/PID/IPC
+  - expression: variables.cs.all(c, c.image in ['quay.io/argoproj/argocd:v3.5.3@sha256:dd3f47d5a5e4da563a7a398506e892481b358a7cec50abdf320c71aa55904bfa','docker.io/valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11']
+      && has(c.securityContext) && c.securityContext.runAsNonRoot == true && c.securityContext.allowPrivilegeEscalation ==
+      false && c.securityContext.readOnlyRootFilesystem == true && (!has(c.securityContext.privileged) || !c.securityContext.privileged)
+      && c.securityContext.capabilities.drop.exists(v,v=='ALL') && (!has(c.securityContext.capabilities.add) || size(c.securityContext.capabilities.add)==0)
+      && c.securityContext.seccompProfile.type == 'RuntimeDefault')
+    message: Core uses pinned nonprivileged read-only containers, not a namespace-wide privilege exception
+  - expression: '!has(variables.p.volumes) || variables.p.volumes.all(v,!has(v.persistentVolumeClaim) && (!has(v.hostPath)
+      || (variables.p.serviceAccountName == ''argocd-repo-server'' && v.name == ''baseline'' && v.hostPath.path == ''/var/lib/bluefin/server/baselines''
+      && v.hostPath.type == ''Directory'')))'
+    message: Only repo-server can mount the public immutable source directory; no private host paths or PVCs
+  - expression: variables.cs.all(c, !has(c.volumeMounts) || c.volumeMounts.all(m,m.name != 'baseline' || m.readOnly == true))
+    message: The snapshot directory is always mounted read-only
+  - expression: variables.p.serviceAccountName != 'argocd-repo-server' || (variables.p.automountServiceAccountToken == false
+      && size(variables.cs)==1)
+    message: Repo-server has no ambient Kubernetes credential or plugin sidecars
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-trusted-core
+spec:
+  policyName: bluefin-trusted-core
+  validationActions:
+  - Deny

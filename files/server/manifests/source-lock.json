@@ -1,0 +1,402 @@
+{
+  "baseline": {
+    "application_outside_snapshot": true,
+    "mount": "/bluefin-baseline/baseline.git",
+    "packaged": "/usr/share/bluefin-server/baseline.git",
+    "path": "platform",
+    "retained": "/var/lib/bluefin/server/baselines/<commit>.git",
+    "selected": "/var/lib/bluefin/server/baselines/baseline.git",
+    "url": "file:///bluefin-baseline/baseline.git"
+  },
+  "cache": {
+    "compatibility_proof": "explicit disposable host operation, never a BuildStream graph or artifact dependency",
+    "proof_cases": [
+      "sync",
+      "drift_repair",
+      "cache_flush",
+      "cache_restart",
+      "controller_restart",
+      "repo_server_restart",
+      "offline_snapshot"
+    ]
+  },
+  "images": {
+    "argocd": {
+      "digest": "sha256:dd3f47d5a5e4da563a7a398506e892481b358a7cec50abdf320c71aa55904bfa",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        {
+          "architecture": "s390x",
+          "os": "linux"
+        },
+        {
+          "architecture": "ppc64le",
+          "os": "linux"
+        }
+      ],
+      "ref": "quay.io/argoproj/argocd:v3.5.3@sha256:dd3f47d5a5e4da563a7a398506e892481b358a7cec50abdf320c71aa55904bfa"
+    },
+    "argoexec": {
+      "digest": "sha256:ec2a867c2db200d33acda0e9141898070266c1f678bb995bd08cea68ace89c40",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        {
+          "architecture": "amd64",
+          "os": "windows",
+          "os.version": "10.0.20348.5622"
+        }
+      ],
+      "ref": "quay.io/argoproj/argoexec:v4.1.4@sha256:ec2a867c2db200d33acda0e9141898070266c1f678bb995bd08cea68ace89c40"
+    },
+    "cilium": {
+      "digest": "sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        }
+      ],
+      "ref": "quay.io/cilium/cilium:v1.20.2@sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01"
+    },
+    "cilium-operator": {
+      "digest": "sha256:64d8798350e8569b8e7622563fed6e44dce2625f311e4651b774816516c744fc",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        }
+      ],
+      "ref": "quay.io/cilium/operator-generic:v1.20.2@sha256:64d8798350e8569b8e7622563fed6e44dce2625f311e4651b774816516c744fc"
+    },
+    "console": {
+      "configs": {
+        "amd64": {
+          "config_digest": "sha256:71624ab463d29b1effc12d660636365245efcce6517cbe4387496f980b8e68fe",
+          "entrypoint": [
+            "./entrypoint.sh"
+          ],
+          "env": [
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PORT=8080",
+            "BACKEND_PORT=8081",
+            "DATABASE_PATH=/app/data/console.db",
+            "HOME=/app"
+          ],
+          "manifest_digest": "sha256:4b8c63372b3e26794e57656aa57cba1e57cd4e50b192730115aa79c8dcc4df91",
+          "user": "appuser",
+          "working_directory": "/app"
+        },
+        "arm64": {
+          "config_digest": "sha256:d88031ec86c90f0c2d4719e82ea8b0679ac7f8fffe9ab343b03b74acf4adef79",
+          "entrypoint": [
+            "./entrypoint.sh"
+          ],
+          "env": [
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PORT=8080",
+            "BACKEND_PORT=8081",
+            "DATABASE_PATH=/app/data/console.db",
+            "HOME=/app"
+          ],
+          "manifest_digest": "sha256:529482d3126ab11da431853bcc2e25f6abcf178f5a21ae6cf92efefb636525ea",
+          "user": "appuser",
+          "working_directory": "/app"
+        }
+      },
+      "digest": "sha256:89610ec0cbda09c9cb74bfe425afa87be454ca3e863dff5d96691f818f4f7717",
+      "platforms": [
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        }
+      ],
+      "ref": "ghcr.io/kubestellar/console:v0.3.42@sha256:89610ec0cbda09c9cb74bfe425afa87be454ca3e863dff5d96691f818f4f7717"
+    },
+    "kured": {
+      "digest": "sha256:8dfd3c2e889337595731d801afc5c031b545876a29427897b3f711d2983f30c4",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v7"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v6"
+        },
+        {
+          "architecture": "386",
+          "os": "linux"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        }
+      ],
+      "ref": "ghcr.io/kubereboot/kured:1.23.0@sha256:8dfd3c2e889337595731d801afc5c031b545876a29427897b3f711d2983f30c4"
+    },
+    "native-mcp": {
+      "digest": "sha256:e47f6ccc5347e1ea6be495d8d9ab55ac8a995fe87800fb984fa770cebe14ad44",
+      "entrypoint": [
+        "/app/kubernetes-mcp-server"
+      ],
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux",
+          "variant": "v8"
+        },
+        {
+          "architecture": "s390x",
+          "os": "linux"
+        },
+        {
+          "architecture": "ppc64le",
+          "os": "linux"
+        }
+      ],
+      "ref": "quay.io/containers/kubernetes_mcp_server:v0.0.67@sha256:e47f6ccc5347e1ea6be495d8d9ab55ac8a995fe87800fb984fa770cebe14ad44"
+    },
+    "valkey": {
+      "digest": "sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v7"
+        },
+        {
+          "architecture": "ppc64le",
+          "os": "linux"
+        }
+      ],
+      "ref": "docker.io/valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11"
+    },
+    "workflow-controller": {
+      "digest": "sha256:86a1acba574f7809566827a2e742e1306320092979562d355312466329e9732e",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        }
+      ],
+      "ref": "quay.io/argoproj/workflow-controller:v4.1.4@sha256:86a1acba574f7809566827a2e742e1306320092979562d355312466329e9732e"
+    }
+  },
+  "maintained_resources": {
+    "admission.yaml.in": "1c527e8178d4c0f9330500b57094861ef3989a546c91d11635ac23096f4cf007",
+    "argocd/10-core.yaml": "c3484813e91893f43f08def808d89f43dbe29df457b02a4d87bc4bd031981492",
+    "argocd/20-rbac.yaml": "cd48f6f1ccc284ddafb9a1af657583289b496c09fd11c347be4c93c57c573acd",
+    "argocd/21-cache-rbac.yaml": "6f9de6bb54e57117e58ba7680c0cb534e46f95ea7a2273ddba1bf475fb202d03",
+    "argocd/22-pod-policy.yaml": "e51a6fe2c6c238b38ba39258ed6051ba3e924f8e174d5828a768a81ac5f905a1",
+    "argocd/30-baseline.yaml.in": "11bbf2fc82c3823d6c00c0fdefd77ab6ed1f6a846cb41fd72d16c0bfd128576f",
+    "argocd/40-valkey.yaml": "1229c5484271320b55cb3f31af0e5f9f6b54433a0f59f578c8d081e2aeebf1e2",
+    "argocd/50-network.yaml": "95c657f5fac1276b0e32dfa1b87b18bac2c4c38a16b1970565519d6b1938a1bd",
+    "argocd/crds/00-crds.yaml": "58630c91c884ab0fd61a2fe7489f341616323a48e4165f7df5fc29fe7a645739",
+    "argocd/kustomization.yaml": "a1f61ea9f45c5adda933403dec7c0abdcf639918819dc1b24ca8e7fcfc45bf8e",
+    "bootstrap-rbac.yaml": "8ef8f45949b7042837a4b87e7e0b7055382ce00308f6a57273a685175b25d30a",
+    "cilium/10-rbac.yaml": "336a9b841b0b195cc16556ea2c87026770b25abd363cdf2c37228076bd05b408",
+    "cilium/20-config.yaml": "bb66d5c9b1d0e191074c81ffd0b1284eb133992ab74efa4e34c8de3333826dd9",
+    "cilium/30-agent.yaml": "5655c71873d3be6cc8494ce408cbab450b6420b4ba8eeb30a62ef81d0604fe59",
+    "cilium/40-operator.yaml": "055983ce40e765d7da828abc4a758cc6c5c20a24d333e5eb5fb0937247216795",
+    "cilium/50-api-policies.yaml": "5d7aaa03cc3867d36a6b70c398b69456ed9d9abb2c179e2d81eb5e1f93357729",
+    "cilium/51-platform-admission.yaml": "710de4070bbcc10ce476fbfe4efbf3a28fdaafac432e79ed154f2008f788311e",
+    "cilium/crds/00-crds.yaml": "3319b26859654803b83b6372103ede29b200ca2778b248b03459f61c505580a5",
+    "cilium/kustomization.yaml": "7fba9c546db37e98eb3df139338bdda8943d8173b9df171dc9e6a0ae4818da2f",
+    "dashboard/10-storage.yaml": "5aa33b1d32d35a1302e9fd473691a3e64697fa5aa11b2767c85e5e1bfd09f95e",
+    "dashboard/20-console.yaml.in": "48fcdcf5d9e32785e76972916f1bd1898af7357e41d9bd14c218ec3f9b999dc5",
+    "dashboard/30-network.yaml": "1196225be465c333689f2c89f2e16d75132555b6167630ffb7f776edaf3737b6",
+    "dashboard/kustomization.yaml": "1fd7babae0608f696781c5d106a821a053529977fc8c2103499b803980acbf14",
+    "mcp/10-config.yaml": "26fb613bbf71fd48af562e6d11bf9b24a9720565839926fd397c9a577b800315",
+    "mcp/20-rbac.yaml": "598e11a4e561736969cbb5435ee94f06f4e84eb4d430e9b27c619813496c713a",
+    "mcp/30-apps-bounds.yaml": "f70e2160946c18fa1019e91f93c11982ef7ff392cf6b99a7265d469ecca7db80",
+    "mcp/40-server.yaml": "654e06a7aa204198db3fd44c0264f10cd8966b47f8d101d9ab838abb58ef9d5a",
+    "mcp/50-api-policy.yaml": "7fdc24f948871b9f89256ee4fb7b826253ecc719390163694cf80e2ef7db60fc",
+    "mcp/kustomization.yaml": "ea6f2fa824ad139aa8eda88cf1181629bc891c6da8c2232b94df5815f0fa87c1",
+    "namespaces.yaml": "b2a0ef271e8f634f5cd477d5315dbaed53eac31dc7fb02464abb88b262ab9a31",
+    "reboot/10-kured.yaml": "b83a841a3839929f392f0ad88b133c845201ebf9e1ab7dc613b759da5d2a6c59",
+    "reboot/10-rbac.yaml": "0e8c8208e9c66a297431d52eab042cd616dc452042b076e907ac0057a7b87c50",
+    "reboot/20-api-policy.yaml": "c464dabb8cadafbc4c83f55747aae8f9d82ced965580bbd1dfd2a9e5aec689d6",
+    "reboot/30-network.yaml": "965e0d335b0207990276488ab9ac444ea47ccc7fbc0138cc34b52efdc9529a32",
+    "reboot/kustomization.yaml": "faf28ce0c60b4b4c8d583e562d657ae494cb5480f7e4acc1935e3f557a81c0db",
+    "workflows/10-controller.yaml.in": "cff971da6e9d11681f6e977dcfd3982ec825bc5cb26412619affe8b58c01f5b0",
+    "workflows/10-rbac.yaml": "f94d379b3eb23748c81427ea10897b7372b991298f1f754faf923c0a015bf5aa",
+    "workflows/20-executor-rbac.yaml": "98f97c255250775679881099bccc0b06ce81345c03ef60e8712159b286952321",
+    "workflows/30-bounds.yaml": "75627382468444082fa44454d5ab3f18bf1bb7ddfd9efdfd39602833a1a39097",
+    "workflows/40-result.yaml.in": "361144c9906d36b645ec3bf3dda5e5ba98d3b89ea178201d362930a4a818cd6b",
+    "workflows/50-network.yaml": "3532a53a82c55f90e17ce93453c68a173649b08d94e5c07a0867cc8d980b1d5e",
+    "workflows/crds/clusterworkflowtemplates.argoproj.io.yaml": "489bf2c316f02e918b1bf4927f8232e6505a0d08b3e655d21e9652f34f1d3438",
+    "workflows/crds/cronworkflows.argoproj.io.yaml": "4b40648c4da6f22dc6ad31e10f32a21c66d9327b38dd469ca42436cfb91f1d2f",
+    "workflows/crds/workflowartifactgctasks.argoproj.io.yaml": "ee2e593aa9b3f08eab510c32dbb533b7f85b4ef163793d4384763030d1641f8c",
+    "workflows/crds/workfloweventbindings.argoproj.io.yaml": "0a3bf2b9a8586c1eca5cf54e3fb2d63b002a7730030e6035254a752cfc1eafae",
+    "workflows/crds/workflows.argoproj.io.yaml": "ade236cf3d49fe702a27d6fffee59fdabceda4aa40d45a95eccab45f6ff1347c",
+    "workflows/crds/workflowtaskresults.argoproj.io.yaml": "1aeacffbf36118248baaee910412b90a835318ee98c34c0018c5db8d2a0f30e7",
+    "workflows/crds/workflowtasksets.argoproj.io.yaml": "1575b56a1edefa922b45b49e184da1899de11f57b62be870b173a188fd095895",
+    "workflows/crds/workflowtemplates.argoproj.io.yaml": "f47cd0d060bb7ac81c404047639f2fce9097db150bc4aed5f05e0c21b3afe357",
+    "workflows/kustomization.yaml": "60af03a05529a303cfb91059b3e09a2fee718f56a46d601d195269de7a1d47e6"
+  },
+  "producer_sha256": "1a889d4f0a7fd95152a1cf2b64b1833295c23592ae50cb5ea03302ca2c588c74",
+  "schema": 1,
+  "sources": {
+    "argocd": {
+      "commit": "c9c369efcc5b2a0bd720803f8d14a1c3eaddf579",
+      "sha256": "1a87025d8eb2eae621653fd312fb9ca51df1b4b3b6992a030e3a9ef38e45c448",
+      "url": "https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.3/manifests/core-install.yaml",
+      "version": "3.5.3"
+    },
+    "cilium": {
+      "commit": "e0dc92bd6dac33d7ba3b5eace82a0448bbb13aac",
+      "files": {
+        "install/kubernetes/cilium/templates/cilium-agent/clusterrole.yaml": "1db51bbf87d56c30a858d3e31c18a917993a0b58ef64abba6f1ed0344e94d9b0",
+        "install/kubernetes/cilium/templates/cilium-agent/clusterrolebinding.yaml": "9e609330ff0e64f731292b60a5748068e99b0ec67b351d75f9f33ad0e5fdd4a3",
+        "install/kubernetes/cilium/templates/cilium-agent/daemonset.yaml": "987cd2021c49e7a2f27cd67ffbaa1e5457f487d9804464e6af2e678eaaff49e3",
+        "install/kubernetes/cilium/templates/cilium-agent/dashboards-configmap.yaml": "230c2baea311e42a7ff32a185acad4bd32422d09a070fd5418d3f5a68a3fccd1",
+        "install/kubernetes/cilium/templates/cilium-agent/role.yaml": "5ec07e41cc8db49050ecb9fabdc18ab94ef31fa4eadd30684952016184c0d8a1",
+        "install/kubernetes/cilium/templates/cilium-agent/rolebinding.yaml": "ba4228ac22b467c31f55faf23730d2fa51ad914ddf3b319aff2d87c59b2e75ec",
+        "install/kubernetes/cilium/templates/cilium-agent/service.yaml": "02ea04a9013d9c30418a8868bc4601ac6c68ba138b4f4b8708b5bc6765edb984",
+        "install/kubernetes/cilium/templates/cilium-agent/serviceaccount.yaml": "5ed6842da6523ec0512e83a40031f21b6cb661379b5c4a1125723759612ca163",
+        "install/kubernetes/cilium/templates/cilium-agent/servicemonitor.yaml": "5a3ba1ecaa251b3e0743e626c62262059e916e554264bfc9bd97206504796d8e",
+        "install/kubernetes/cilium/templates/cilium-configmap.yaml": "1db2a5bea86ee52bfcca956e297c593f5224a4d7df64ec066e7ccf87c0717730",
+        "install/kubernetes/cilium/templates/cilium-operator/_helpers.tpl": "d9cff6ddd2f6dc4e474ecda34c6cd72d7e63ebe4a9c1027cb522f9ac1e10f2bd",
+        "install/kubernetes/cilium/templates/cilium-operator/clusterrole.yaml": "df58e5351f1d250c2065d68f93819ae611e278b7601dd92f803ac71b27b5bd04",
+        "install/kubernetes/cilium/templates/cilium-operator/clusterrolebinding.yaml": "f7867832c93ef792249b45a28065a53a678c37c13bfb06ced0af13ff463989f8",
+        "install/kubernetes/cilium/templates/cilium-operator/dashboards-configmap.yaml": "74d2bdbc2bc19b58b197f7908c92cda1bf46dd5f442844f5fb377597b4b100bd",
+        "install/kubernetes/cilium/templates/cilium-operator/deployment.yaml": "d7627a9e3e7d6bd07c5abef772978bef5a65464985f4e54ac1cc359103be72d9",
+        "install/kubernetes/cilium/templates/cilium-operator/poddisruptionbudget.yaml": "7ef642ca44277c07a6834d610d7cb4b5f1377daca121708d443394edb71e10fb",
+        "install/kubernetes/cilium/templates/cilium-operator/role.yaml": "025b4461934386591bdb78af9f7e540f47ec2911d7eabf3d758a987c8710b0ad",
+        "install/kubernetes/cilium/templates/cilium-operator/rolebinding.yaml": "11f11a8f73a0f2c52e795df56aaa8f5982781dfa01a750a6cc1d181ea6ee85f8",
+        "install/kubernetes/cilium/templates/cilium-operator/secret.yaml": "d36d500db9fc1f30c95d95e549873be3999cf4d21e798bff6fb3ca895bd30a1d",
+        "install/kubernetes/cilium/templates/cilium-operator/service.yaml": "4bec76b11a053eb5719bb5975bddca838651082947f3d11806490efe1ee75b09",
+        "install/kubernetes/cilium/templates/cilium-operator/serviceaccount.yaml": "6727c9c0186b16cdae1f31355841ab020249cc9db42c167f4a7f9d673ae1fe44",
+        "install/kubernetes/cilium/templates/cilium-operator/servicemonitor.yaml": "f4dbf19bc00ac125db267a204f7c16164b0103eb410756d65876b6a397c531dc",
+        "install/kubernetes/cilium/values.yaml": "1a3c9d25c00c3b932079465f5c7a0237295fb4b0c680249657e6b5f629dc19a6",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumbgpadvertisements.yaml": "44f04798cdfcfece42128630836086ee8c160ece8a4801dcb02eb03b1eadc5f7",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumbgpclusterconfigs.yaml": "51206558786549a8962fa7c6e178583409a655a480f9fc5e5c277fb48969908c",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumbgpnodeconfigoverrides.yaml": "8032d71df06d36600de9e6d7c6808e719537118feb5ffa528d692adbb4552238",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumbgpnodeconfigs.yaml": "fcc8689b3e2985935e4badf23b545e5c4343e878e78c567fde28b035c56272b8",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumbgppeerconfigs.yaml": "91ab4563c9b4a6fd4314e9fe0b128fcd77f15b50f3a5be6a32a7703dede70f60",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumcidrgroups.yaml": "8060269a3ef63271578a090bbe5be135d0dad2932f7ccc7204b37820c990e535",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumclusterwideenvoyconfigs.yaml": "99fb35a331563f37031b9f8aabc42aee2e371eb28f98fa1b25af810417eff614",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumclusterwidenetworkpolicies.yaml": "ae65e44fdee9da399cb7257a8464f197bea5270fdc213f6343700309c39abad6",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumegressgatewaypolicies.yaml": "c92dc81014168aff5d8d2f730c28c992f97ee85e5483f473555f1e5bc4a90298",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumendpoints.yaml": "fecfbb3886d3683e93b6adce98553db7c6f52cbc4442de253db488df0ad44a7e",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumenvoyconfigs.yaml": "7fc86c57011374cc3447839eea290c6c4bbb5f1c9d613c4be76893f9cb51e484",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumidentities.yaml": "6584bb0e5bd3cb41d6f1e1ff80b866407d21a44cba00d35b1c39abab0a2d0d57",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumloadbalancerippools.yaml": "31dd3d26d987e46bc04d66ec2f9bdcf2aa2b13b7b368e515ca324961b55d65b1",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumlocalredirectpolicies.yaml": "e4673421422e46bb43e16d4e214c57fef6f07a3f95b0aaca92a4044a7e59ae91",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumnetworkpolicies.yaml": "62c6de8f358da125b94468d39187edb1cea157d79503fdc50ccec8a6aaa79a76",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumnodeconfigs.yaml": "89aae253c84e12785034a4a06ead94c8a61ee0954e6d60816e79fcd584aa6d59",
+        "pkg/k8s/apis/cilium.io/client/crds/v2/ciliumnodes.yaml": "cc3e57ace385353b237b04f466fb99fd9c75c96682044063daae3e0150d2247f",
+        "pkg/k8s/apis/cilium.io/client/crds/v2alpha1/ciliumdatapathplugins.yaml": "c235378e12ae3e8108dac90188068de92e8e4ff54df3720cc4d394ec7a1973ed",
+        "pkg/k8s/apis/cilium.io/client/crds/v2alpha1/ciliumendpointslices.yaml": "bb6626fd03bc2d70ef39ae182420da42fecbc41cbca40c484082a7ce6a7fb705",
+        "pkg/k8s/apis/cilium.io/client/crds/v2alpha1/ciliumgatewayclassconfigs.yaml": "8e06be025a6bd04dab073ba4396e382278ff19059c7d1183aaa11fed4f530946",
+        "pkg/k8s/apis/cilium.io/client/crds/v2alpha1/ciliuml2announcementpolicies.yaml": "5a5ada1455e5169d1f95d4814302677ebff4bf477b5298483e9b827a70feee7a",
+        "pkg/k8s/apis/cilium.io/client/crds/v2alpha1/ciliumpodippools.yaml": "34dd4b4a6a6f588b1936e1b01acb72fb9cb2c9cf7c3fefead7b5b253a356a9e8"
+      },
+      "reference_only_helm_templates": true,
+      "version": "1.20.2"
+    },
+    "console": {
+      "commit": "2a082d0896bcd990b54b7338a1e69acde6c5c929",
+      "files": {
+        "Dockerfile": "43f43f73a5e747caa4f8562508bcdff09b6c074a99c221a57a52489b5961bc4e",
+        "deploy/kustomize/base/deployment.yaml": "3d19847b3c19fbff60ef1bab3dac3b2c49b7401af732f06e24d951a9b3d6cbdd",
+        "entrypoint.sh": "f73d55b5c7ba4282389eae8f4b5fda7797ae9f2dc8ea4c16f638e7a897ba4302",
+        "pkg/api/config.go": "4b7fcaab79ac2bc592a9ed734451936b4b46892898cc36ac36a8c93d4697fd91"
+      },
+      "version": "0.3.42"
+    },
+    "kured": {
+      "commit": "ef3c90b2bd58c0571e6eae7b893f0de3709cc98f",
+      "sha256": "8572f7f2118ae7c943e9a3624f2385162ff9ec4e49283b65fd0c091714a2c662",
+      "url": "https://github.com/kubereboot/kured/releases/download/1.23.0/kured-1.23.0-combined.yaml",
+      "version": "1.23.0"
+    },
+    "native-mcp": {
+      "commit": "fcd9bbe672c98bb81c2ce93da8c0add548023672",
+      "files": {
+        "docs/configuration.md": "8b49eb40f2cf101383fd9da6bdbebd885cd8061ff64dd91611af94153aec0f65",
+        "pkg/http/authorization.go": "f8c17f831d29ffe102c0ceda1c0888fa9e2c84d5fbc2871b0a8077211568cad0"
+      },
+      "health_endpoint": "/healthz",
+      "protocol_sdk": {
+        "module": "github.com/modelcontextprotocol/go-sdk",
+        "version": "v1.8.0"
+      },
+      "version": "0.0.67"
+    },
+    "workflows": {
+      "commit": "b5b4d665e9be9b87c115f943584c3e0ae96fe073",
+      "sha256": "947bbab7f9c99eb1e6b5ba47866afa531c1f485f3ad2586f6bfbc081a0057498",
+      "url": "https://github.com/argoproj/argo-workflows/releases/download/v4.1.4/namespace-install.yaml",
+      "version": "4.1.4"
+    }
+  }
+}

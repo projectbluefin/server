@@ -1,0 +1,6 @@
+# GitHub publishes this hosted label in actions/runner-images/README.md.
+# actionlint 1.7.12's March-2026 built-in catalog predates Ubuntu 26.04;
+# its extra-label schema extends validation without ignoring any rule.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

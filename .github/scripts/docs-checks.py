@@ -11,6 +11,8 @@ Enforces:
 import re
 import sys
 from pathlib import Path
+from html import unescape
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = ROOT / "docs"
@@ -125,6 +127,44 @@ def check_stale_flags(path):
         err(path, "contains 'draft' marker")
 
 
+def heading_anchors(text):
+    anchors = set()
+    fence = None
+    previous = ""
+    for line in text.splitlines():
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+        if marker:
+            chars, tail = marker.groups()
+            if fence is None:
+                fence = chars
+            elif chars[0] == fence[0] and len(chars) >= len(fence) and not tail.strip():
+                fence = None
+            previous = ""
+            continue
+        if fence is not None:
+            continue
+        heading = re.match(r"^ {0,3}#{1,6}(?:[ \t]+|$)(.*)$", line)
+        title = None
+        if heading:
+            title = re.sub(r"[ \t]+#+[ \t]*$", "", heading.group(1)).strip()
+        elif previous and re.fullmatch(r" {0,3}(?:=+|-+)[ \t]*", line):
+            title = previous
+        if title is None:
+            previous = line.strip() if not line.startswith("    ") else ""
+            continue
+        previous = ""
+        title = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", title)
+        title = re.sub(r"<[^>]+>", "", title)
+        slug = re.sub(r"[^\w -]", "", unescape(title).lower()).replace(" ", "-")
+        anchor = slug
+        suffix = 0
+        while anchor in anchors:
+            suffix += 1
+            anchor = f"{slug}-{suffix}"
+        anchors.add(anchor)
+    return anchors
+
+
 def check_internal_links(path, md_files):
     text = path.read_text()
     for label, target in LINK_RE.findall(text):
@@ -132,16 +172,19 @@ def check_internal_links(path, md_files):
             continue
         if target.startswith("#"):
             continue
-        # Resolve relative to the current file's directory
-        if target.startswith("/"):
-            resolved = ROOT / target.lstrip("/")
+        # A heading fragment is not part of the target's filesystem path.
+        target_path, _, fragment = target.partition("#")
+        if target_path.startswith("/"):
+            resolved = ROOT / target_path.lstrip("/")
         else:
-            resolved = path.parent / target
+            resolved = path.parent / target_path
         resolved = resolved.resolve()
         # Accept a link to a Markdown file or a directory with an INDEX.md
         if resolved.suffix == ".md":
             if resolved not in md_files:
                 err(path, f"broken internal link: [{label}]({target})")
+            elif fragment and unquote(fragment) not in heading_anchors(resolved.read_text()):
+                err(path, f"broken internal heading link: [{label}]({target})")
         elif resolved.is_dir():
             if not (resolved / "index.md").exists() and not (resolved / "INDEX.md").exists():
                 err(path, f"broken internal link (no index.md): [{label}]({target})")

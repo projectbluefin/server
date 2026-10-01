@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kured
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      name: kured
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        bluefin.io/platform: 'true'
+        name: kured
+    spec:
+      serviceAccountName: kured
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      hostPID: true
+      restartPolicy: Always
+      volumes:
+      - name: sentinel
+        hostPath:
+          path: /var/run
+          type: Directory
+      - name: host-etc
+        hostPath:
+          path: /etc
+          type: Directory
+      containers:
+      - name: kured
+        image: ghcr.io/kubereboot/kured:1.23.0@sha256:8dfd3c2e889337595731d801afc5c031b545876a29427897b3f711d2983f30c4
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+        ports:
+        - containerPort: 8080
+          name: metrics
+        env:
+        - name: KURED_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - mountPath: /sentinel
+          name: sentinel
+          readOnly: true
+        - name: host-etc
+          mountPath: /host-etc
+          readOnly: true
+        command:
+        - /usr/bin/kured
+        - --ds-namespace=kube-system
+        - --ds-name=kured
+        - --concurrency=1
+        - --period=10m
+        - --reboot-days=sun,mon,tue,wed,thu,fri,sat
+        - --start-time=03:00
+        - --end-time=05:00
+        - --time-zone=UTC
+        - --force-reboot=false
+        - --drain-timeout=10m
+        - --drain-pod-selector=bluefin.io/platform!=true
+        - --blocking-pod-selector=bluefin.io/maintenance=true
+        - --reboot-sentinel-command=/bin/sh -ec 'test -f /sentinel/reboot-required && test ! -e /sentinel/reboot-lock && test
+          ! -e /host-etc/reboot-lock'
+        - --reboot-command=/usr/bin/sh -ec 'test ! -e /run/reboot-lock && test ! -e /etc/reboot-lock && exec /usr/bin/systemctl
+          reboot'
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 8080
+          periodSeconds: 20
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 8080
+          periodSeconds: 30

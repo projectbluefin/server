@@ -24,7 +24,10 @@
 # Usage: dogfood-installer.sh <dir with bluefin-server-installer_<ver>.raw>
 # Environment:
 #   DOGFOOD_STATE=<dir>        logs, target disk and UEFI vars (default dist/dogfood-installer)
-#   DOGFOOD_TARGET_DISK=<file> target disk image, recreated blank (default <state>/target.raw)
+#   DOGFOOD_PROFILE=complete|core native signed UKI profile (default complete)
+#   DOGFOOD_DISK_SIZE=<size>   blank target size (default 32G)
+#   DOGFOOD_INSTALL_ONLY=1    return after installation, before first target boot
+#   DOGFOOD_TARGET_DISK=<file> fresh blank target image (default <state>/target.raw)
 #   DOGFOOD_TARGET_DEV=<path>  target device the installer is told to use
 #                              (default /dev/disk/by-id/virtio-bluefin-target)
 #   DOGFOOD_SYSINSTALL_ARGS=.. extra systemd-sysinstall arguments
@@ -39,13 +42,17 @@ dir="$(realpath "${1:?usage: $0 <artifact dir>}")"
 state="$(realpath -m "${DOGFOOD_STATE:-dist/dogfood-installer}")"
 mem="${DOGFOOD_MEM:-4096}"
 timeout_s="${DOGFOOD_TIMEOUT:-600}"
+profile="${DOGFOOD_PROFILE:-complete}"
+case "${profile}" in complete) profile_index=0 ;; core) profile_index=1 ;; *) echo 'ERROR: DOGFOOD_PROFILE must be complete or core' >&2; exit 1 ;; esac
 target_serial=bluefin-target
 target_dev="${DOGFOOD_TARGET_DEV:-/dev/disk/by-id/virtio-${target_serial}}"
 install_args="${DOGFOOD_SYSINSTALL_ARGS:---confirm=no}"
 dropin_src="${here}/../files/os/systemd/system/systemd-sysinstall.service.d/10-bluefin-installer.conf"
 
-installer="$(ls "${dir}"/bluefin-server-installer_*.raw 2>/dev/null | tail -n1)" \
-    || { echo "ERROR: no bluefin-server-installer_<ver>.raw in ${dir}" >&2; exit 1; }
+shopt -s nullglob
+installers=("${dir}"/bluefin-server-installer_*.raw)
+[ "${#installers[@]}" = 1 ] || { echo "ERROR: expected exactly one installer in ${dir}" >&2; exit 1; }
+installer="${installers[0]}"
 ver="${installer##*/bluefin-server-installer_}"; ver="${ver%.raw}"
 
 first_existing() { for f in "$@"; do [ -f "$f" ] && { echo "$f"; return 0; }; done; return 1; }
@@ -60,19 +67,32 @@ vars_tmpl="${OVMF_VARS:-$(first_existing \
     /usr/share/OVMF/OVMF_VARS.fd \
     /usr/share/edk2/x64/OVMF_VARS.4m.fd)}" || { echo "ERROR: no blank OVMF_VARS found (set OVMF_VARS)" >&2; exit 1; }
 
-rm -rf "${state}"
+[ ! -e "${state}" ] || { echo "ERROR: state already exists: ${state}; choose a fresh DOGFOOD_STATE" >&2; exit 1; }
 mkdir -p "${state}"
 target="${DOGFOOD_TARGET_DISK:-${state}/target.raw}"
 [ -b "${target}" ] && { echo "ERROR: ${target} is a block device; use a disk image file" >&2; exit 1; }
-rm -f "${target}"
-truncate -s 16G "${target}"
+[ ! -e "${target}" ] || { echo "ERROR: target already exists: ${target}" >&2; exit 1; }
+truncate -s "${DOGFOOD_DISK_SIZE:-32G}" "${target}"
 vars="${state}/vars.fd"
 cp "${vars_tmpl}" "${vars}"
+# Changing loader selection on an owned copy selects the signed @0/@1 UKI
+# profile; no made-up SMBIOS profile or password masks the native path.
+cp --reflink=auto --sparse=always "${installer}" "${state}/installer.raw"
+installer="${state}/installer.raw"
+esp_offset="$(sfdisk --json "${installer}" | jq -er '.partitiontable as $t | $t.partitions[] | select((.type | ascii_downcase) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b") | .start * $t.sectorsize')"
+mcopy -i "${installer}@@${esp_offset}" ::/loader/loader.conf "${state}/loader.conf"
+printf '\ndefault bluefin-server-installer_%s.efi@%s\ntimeout 0\n' "${ver}" "${profile_index}" >> "${state}/loader.conf"
+mcopy -o -i "${installer}@@${esp_offset}" "${state}/loader.conf" ::/loader/loader.conf
 
 fail() {
     echo "FAIL: $* (logs: ${state})" >&2
     exit 1
 }
+active_pid=
+cleanup() { [ -z "${active_pid}" ] || { kill "${active_pid}" 2>/dev/null || true; wait "${active_pid}" 2>/dev/null || true; }; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 cred() { printf 'type=11,value=io.systemd.credential.binary:%s=%s' "$1" "$(base64 -w0 < "$2")"; }
 
@@ -99,6 +119,7 @@ boot() {
         -serial "file:${log}.ttyS0" -serial "file:${log}.ttyS1" -serial "file:${log}.ttyS2" \
         </dev/null >"${log}.qemu.log" 2>&1 &
     local pid=$! deadline=$(( $(date +%s) + timeout_s ))
+    active_pid="${pid}"
     while kill -0 "${pid}" 2>/dev/null && [ "$(date +%s)" -lt "${deadline}" ]; do
         # A few seconds of grace so the journal mirror catches up.
         [ -n "${done_re}" ] && grep -aqE "${done_re}" "${log}.ttyS1" 2>/dev/null && { sleep 3; break; }
@@ -110,6 +131,7 @@ boot() {
         kill "${pid}" 2>/dev/null || true
     fi
     wait "${pid}" 2>/dev/null || true
+    active_pid=
     for s in ttyS0 ttyS1 ttyS2; do
         sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1bP[^\x1b]*\x1b\\//g' "${log}.${s}" 2>/dev/null \
             | tr -d '\r' > "${log}.${s}.log" || true
@@ -148,10 +170,14 @@ EOF
 install_creds=(-smbios "$(cred systemd.extra-unit.dogfood-journal.service "${state}/journal.service")")
 # systemd-firstboot prompts on the installer console first; answer it the
 # unattended way. sysinstall copies locale, keymap and timezone to the target.
-for kv in firstboot.locale=C.UTF-8 firstboot.keymap=us firstboot.timezone=UTC 'passwd.hashed-password.root=!*'; do
+for kv in firstboot.locale=C.UTF-8 firstboot.keymap=us firstboot.timezone=UTC; do
     printf '%s' "${kv#*=}" > "${state}/${kv%%=*}"
     install_creds+=(-smbios "$(cred "${kv%%=*}" "${state}/${kv%%=*}")")
 done
+if [ "${profile}" = core ]; then
+    printf '!*' > "${state}/passwd.hashed-password.root"
+    install_creds+=(-smbios "$(cred passwd.hashed-password.root "${state}/passwd.hashed-password.root")")
+fi
 if [ "${DOGFOOD_SYSINSTALL_CRED:-1}" != 0 ]; then
     install_creds+=(-smbios "$(cred systemd.unit-dropin.systemd-sysinstall.service "${state}/sysinstall.conf")")
 fi
@@ -164,6 +190,10 @@ grep -aq 'PROBE sysinstall=success' "${state}/2-install.ttyS1.log" \
     || { grep -a 'sysinstall' "${state}/2-install.ttyS2.log" | grep -v audit | tail -n 20 >&2 || true; fail "systemd-sysinstall did not succeed"; }
 grep -aq 'PROBE installed-slot-b=0' "${state}/2-install.ttyS1.log" \
     || fail "slot B exists before the first boot of the target"
+if [ "${DOGFOOD_INSTALL_ONLY:-0}" = 1 ]; then
+    echo "PASS: ${profile} native installation prepared; target and enrolled vars retained in ${state}"
+    exit 0
+fi
 
 {
     printf 'ver=%q\ntarget=/dev/disk/by-id/virtio-%s\n' "${ver}" "${target_serial}"
@@ -184,6 +214,11 @@ boots=$(( $(cat /var/lib/dogfood-boots 2>/dev/null || echo 0) + 1 ))
 echo "${boots}" > /var/lib/dogfood-boots
 echo "PROBE boots=${boots}"
 sync
+echo "PROBE server-profile=$(cat /boot/bluefin/server-profile 2>/dev/null || echo absent)"
+echo "PROBE root-prompt=$(systemctl show -P ConditionResult bluefin-root-password-prompt.service)"
+echo "PROBE root-locked=$(getent shadow root | cut -d: -f2 | cut -c1)"
+echo "PROBE server-runtime=$(systemctl is-active bluefin-server-bootstrap.service 2>/dev/null || true)"
+echo "PROBE server-extensions=$(find /var/lib/extensions -maxdepth 1 -name 'server*' -print 2>/dev/null | wc -l)"
 echo "PROBE failed=$(systemctl --failed --no-legend | wc -l) $(systemctl --failed --no-legend --plain | cut -d' ' -f1 | tr '\n' ' ')"
 PROBE
 } > "${state}/probe.sh"
@@ -203,14 +238,16 @@ ExecStart=/bin/bash ${CREDENTIALS_DIRECTORY}/dogfood.probe
 WantedBy=multi-user.target
 UNIT
 printf '[Unit]\nWants=dogfood-probe.service\n' > "${state}/probe-wants.conf"
-# The installed disk asks for a root password on its first boot
-# (bluefin-root-password-prompt.service); a passwd credential answers it.
+# Only Core's explicit OS-password path receives a credential. Complete must
+# reach the real setup listener with locked root and no password/login blocker.
 probe_creds=(
     -smbios "$(cred dogfood.probe "${state}/probe.sh")"
     -smbios "$(cred systemd.extra-unit.dogfood-probe.service "${state}/probe.service")"
     -smbios "$(cred systemd.unit-dropin.multi-user.target~dogfood-probe "${state}/probe-wants.conf")"
-    -smbios "$(cred passwd.hashed-password.root "${state}/passwd.hashed-password.root")"
 )
+if [ "${profile}" = core ]; then
+    probe_creds+=(-smbios "$(cred passwd.hashed-password.root "${state}/passwd.hashed-password.root")")
+fi
 
 check_disk_boot() {
     local log="${state}/$1.ttyS1.log" serial0="${state}/$1.ttyS0.log" b
@@ -225,6 +262,18 @@ check_disk_boot() {
             || fail "$1: /usr backed by ${b#PROBE usr-backing=}, not the target's bluefin_usr_${ver} slot"
     done < <(grep -aoE 'PROBE usr-backing=.*' "${log}")
     grep -aq 'PROBE failed=0' "${log}" || fail "$1: failed units: $(grep -ao 'PROBE failed=.*' "${log}")"
+    grep -aq 'PROBE secureboot=enabled' "${log}" || fail "$1: Secure Boot is not enabled"
+    grep -aq "PROBE server-profile=${profile}" "${log}" || fail "$1: native profile marker missing"
+    if [ "${profile}" = complete ]; then
+        grep -aq 'PROBE root-prompt=no' "${log}" || fail "$1: Complete entered the root-password prompt"
+        grep -aq 'PROBE root-locked=!' "${log}" || fail "$1: Complete unlocked the OS root account"
+    else
+        grep -aq 'PROBE server-extensions=0' "${log}" || fail "$1: Core activated Server extensions"
+        ! grep -aq 'PROBE server-runtime=active' "${log}" || fail "$1: Core initialized the Server runtime"
+        if [ "$2" = 1 ]; then
+            grep -aq 'PROBE root-prompt=yes' "${log}" || fail "$1: Core native root-password path was not selected"
+        fi
+    fi
     ! grep -a '\[FAILED\]' "${serial0}" >&2 || fail "$1: units failed during boot"
 }
 

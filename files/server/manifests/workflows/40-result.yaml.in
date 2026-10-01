@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: bluefin-result
+  namespace: argo
+spec:
+  entrypoint: result
+  serviceAccountName: bluefin-workflow
+  activeDeadlineSeconds: 60
+  parallelism: 1
+  automountServiceAccountToken: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  templates:
+  - name: result
+    container:
+      image: '@@CONSOLE_IMAGE@@'
+      command: [/bin/sh, -c]
+      args: ['printf "%s\n" "Bluefin workflow completed"']
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi

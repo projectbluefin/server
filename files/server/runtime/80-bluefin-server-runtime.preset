@@ -1,0 +1,4 @@
+# Lifecycle activates the selected pair and starts these in order. Merely
+# installing Server support must not enable a runtime or choose a node role.
+disable containerd.service
+disable kubelet.service

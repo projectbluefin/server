@@ -1,0 +1,47 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: bluefin-controller-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: bluefin-console
+spec:
+  capacity:
+    storage: 2Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: bluefin-controller-local
+  local:
+    path: /var/lib/bluefin/server/console
+  claimRef:
+    namespace: bluefin-system
+    name: bluefin-console
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: bluefin.io/controller
+          operator: In
+          values:
+          - 'true'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bluefin-console
+  namespace: bluefin-system
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: bluefin-controller-local
+  volumeName: bluefin-console
+  resources:
+    requests:
+      storage: 2Gi

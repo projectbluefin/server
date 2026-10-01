@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-controller-configmap
+  namespace: argo
+data:
+  config: |
+    parallelism: 2
+    namespaceParallelism: 2
+    podGCDeleteDelayDuration: 10m
+    initlessPod:
+      enabled: false
+    executor:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+    workflowDefaults:
+      spec:
+        serviceAccountName: bluefin-workflow
+        automountServiceAccountToken: true
+        parallelism: 2
+        activeDeadlineSeconds: 600
+        podGC:
+          strategy: OnPodCompletion
+        ttlStrategy:
+          secondsAfterCompletion: 86400
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          seccompProfile:
+            type: RuntimeDefault
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-controller
+  namespace: argo
+spec:
+  selector:
+    matchLabels:
+      app: workflow-controller
+  template:
+    metadata:
+      labels:
+        bluefin.io/platform: 'true'
+        app: workflow-controller
+    spec:
+      containers:
+      - args:
+        - --namespaced
+        - --executor-image=@@ARGOEXEC_IMAGE@@
+        command:
+        - workflow-controller
+        env:
+        - name: LEADER_ELECTION_IDENTITY
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: ARGO_NAMESPACE
+          value: argo
+        image: quay.io/argoproj/workflow-controller:v4.1.4@sha256:86a1acba574f7809566827a2e742e1306320092979562d355312466329e9732e
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 6060
+          initialDelaySeconds: 90
+          periodSeconds: 60
+          timeoutSeconds: 30
+        name: workflow-controller
+        ports:
+        - containerPort: 9090
+          name: metrics
+        - containerPort: 6060
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 6060
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      nodeSelector:
+        bluefin.io/controller: 'true'
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: workflow-controller
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      automountServiceAccountToken: true
+  replicas: 1

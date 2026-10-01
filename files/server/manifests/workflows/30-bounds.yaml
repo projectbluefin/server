@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: bluefin-workflows
+  namespace: argo
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 500m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 50m
+      memory: 64Mi
+    max:
+      cpu: '2'
+      memory: 1Gi
+    min:
+      cpu: 1m
+      memory: 4Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: bluefin-workflows
+  namespace: argo
+spec:
+  hard:
+    pods: '16'
+    requests.cpu: '4'
+    requests.memory: 4Gi
+    limits.cpu: '8'
+    limits.memory: 8Gi
+    count/workflows.argoproj.io: '64'
+    count/cronworkflows.argoproj.io: '16'
+    count/workflowtemplates.argoproj.io: '32'
+    persistentvolumeclaims: '0'
+    services.nodeports: '0'
+    services.loadbalancers: '0'

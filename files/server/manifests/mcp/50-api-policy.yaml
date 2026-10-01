@@ -1,0 +1,18 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bluefin-native-mcp-api
+  namespace: bluefin-system
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:app.kubernetes.io/name: bluefin-native-mcp
+  egress:
+  - toEntities:
+    - kube-apiserver
+    toPorts:
+    - ports:
+      - port: '6443'
+        protocol: TCP
+      - port: '443'
+        protocol: TCP

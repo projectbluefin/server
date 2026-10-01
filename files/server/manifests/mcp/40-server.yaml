@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bluefin-native-mcp
+  namespace: bluefin-system
+  annotations:
+    bluefin.io/auth-requirement: Kubernetes bearer tokens are validated by the API; protocol discovery is not proof of token validity or owner confirmation.
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bluefin-native-mcp
+  template:
+    metadata:
+      labels:
+        bluefin.io/platform: 'true'
+        app.kubernetes.io/name: bluefin-native-mcp
+    spec:
+      serviceAccountName: bluefin-native-mcp
+      automountServiceAccountToken: true
+      nodeSelector:
+        bluefin.io/controller: 'true'
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: native-mcp
+        image: quay.io/containers/kubernetes_mcp_server:v0.0.67@sha256:e47f6ccc5347e1ea6be495d8d9ab55ac8a995fe87800fb984fa770cebe14ad44
+        args: [--config, /etc/bluefin-mcp/config.toml]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        ports:
+        - name: http
+          containerPort: 8081
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 20
+        volumeMounts:
+        - name: config
+          mountPath: /etc/bluefin-mcp
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: bluefin-native-mcp
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bluefin-native-mcp
+  namespace: bluefin-system
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: bluefin-native-mcp
+  ports:
+  - name: http
+    port: 8081
+    targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bluefin-native-mcp
+  namespace: bluefin-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bluefin-native-mcp
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

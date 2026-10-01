@@ -2,11 +2,12 @@
 
 Bluefin Server is an image-based Linux server OS composed from freedesktop-sdk (FSDK) 26.08 components with BuildStream 2. One build of `oci/bluefin-server-image.bst` produces the full release set for one image version:
 - the /usr image (`oci/bluefin-server-usr.bst`): an erofs partition plus its dm-verity hash partition, with the root hash recorded in a `usrhash` file
-- three signed UKIs (`oci/bluefin-server-boot.bst`): a netboot UKI that pulls the OS DDI into RAM for a diskless boot, a disk UKI for installed nodes, and an installer UKI for the USB installer
+- three signed UKIs (`oci/bluefin-server-boot.bst`): a netboot UKI, a disk UKI, and one native installer UKI with Complete `@0` and Core-for-builders `@1` profiles
 - the OS DDI `bluefin-server_<ver>.raw` (usr + usr-verity + ESP), which doubles as the installer payload for diskless installs
 - a netboot ESP image with signed systemd-boot and Secure Boot key enrollment payloads
-- an offline USB installer `bluefin-server-installer_<ver>.raw` (usr + usr-verity + ESP with systemd-boot, the installer UKI, the disk UKI and `repart.d`) that boots into `systemd-sysinstall`
+- the normal USB installer `bluefin-server-installer_<ver>.raw` (same usr/verity as Core, native sysinstall/repart, signed Complete payload inventory on its ESP; Core omits homelab payloads on the target)
 - optional opt-in `systemd-sysext` images: `oci/k0s-sysext.bst` (controller, or worker when `/etc/k0s/token` exists), `oci/kubestellar-sysext.bst` (Argo CD, KubeStellar, kiosk; needs k0s), `oci/kubeadm-sysext.bst` (kubeadm worker: kubelet, containerd) and `oci/zfs-sysext.bst`
+- Complete host payloads: unchanged pinned Flatcar Kubernetes/containerd raws, `oci/server-sysext.bst`, `profile.json` and signed `server-bundle_<ver>.tar.zst`; application images are canonical upstream digest pins pulled by nodes, not custom compiled OCI archives
 - an SPDX 2.3 SBOM `bluefin-server_<ver>.spdx.json` (`oci/bluefin-server-sbom.bst`)
 - a `SHA256SUMS` over the whole set, signed in-element (`SHA256SUMS.gpg`); nodes verify it against `/etc/systemd/import-pubring.pgp`
 
@@ -25,12 +26,13 @@ A release publishes `dist/diskless/` as-is: a GitHub Release `v<ver>` and an ORA
 
 ## Hard rules
 
-1. The OS composes from FSDK components via BuildStream. No Flatcar or other-distro binaries. Never use `platform.bst`.
+1. Build the base OS from FSDK via BuildStream; allow and encourage compatible Flatcar userspace sysexts per [systemd-sysext-extensions.md](docs/skills/systemd-sysext-extensions.md), but no other-distro binaries in the base image and no `platform.bst`.
 2. Keep the CPU baseline broad: no `x86_64_v3`.
 3. Installation stays `systemd-sysinstall`-native and `systemd-repart`-based; no shell installers or non-native installer scripts.
 4. Kubernetes, ZFS, and container runtimes ship only as opt-in `systemd-sysext` images, never in the base /usr, and no preset enables them.
 5. /usr is a read-only erofs filesystem verified by dm-verity, pinned by `usrhash=` in a signed UKI. Boot and root selection uses discoverable partitions and verity-derived UUIDs; never hardcode device paths.
 6. One canonical source per fact; do not duplicate content across docs.
+7. Local-first is a top-level primitive; normal product access and MCP operations use a dedicated cluster identity, not OS credentials. Follow the [Server profile contract](docs/skills/server-profile.md).
 
 ## Commit and attribution conventions
 
@@ -48,11 +50,12 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 
 | Command | Purpose |
 |---|---|
-| `just validate` | Merge-contract graph check — run this on every change. |
+| `just validate` | Version invariants and shipped graph resolution only; no Console/Argo builds or kind proof. |
 | `just test-unit` | Unit tests (pytest + bats). |
 | `just gen-dev-keys` | Generate throwaway Secure Boot, module, and image (`SHA256SUMS`) signing keys in `files/boot-keys/` (gitignored). |
 | `just set-version V` | Set `image-version` in `include/image.yml` (≤17 chars, increasing under strverscmp). |
 | `just build-image` / `just export-image` | Build and export the release image set to `dist/diskless/`. |
+| `just prepare-server` / `just verify-server-platform` | Inspect the stock baseline / explicitly run its optional disposable compatibility proof. |
 | `just dogfood` / `just dogfood-check` | Boot `dist/diskless/` diskless in QEMU with Secure Boot (interactive / headless probe). |
 | `just dogfood-install NEXT=<dir>` | QEMU end-to-end: diskless boot, install to disk, boot it, then A/B update to NEXT. |
 | `just publish-oci REF [DIR] [PLAIN_HTTP]` | Push `dist/diskless/` as an ORAS OCI artifact tagged `<version>,latest` (one layer per file). Local rehearsal; CI publishes via `scripts/publish-release.sh`. |
@@ -63,6 +66,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 
 | Task | Skill |
 |---|---|
+| Local-first identity, homelab profiles, and MCP operations | [`docs/skills/server-profile.md`](docs/skills/server-profile.md) |
 | Boot / install / update architecture and local build + dogfood | [`docs/skills/ddi-installer.md`](docs/skills/ddi-installer.md), [`docs/skills/ddi-installer-build.md`](docs/skills/ddi-installer-build.md) |
 | Offline USB installer (unattended installs, install-time provisioning) | [`docs/skills/usb-installer.md`](docs/skills/usb-installer.md) |
 | Network boot at scale (Booty: HTTP boot, per-node Ignition) | [`docs/skills/booty-integration.md`](docs/skills/booty-integration.md) |

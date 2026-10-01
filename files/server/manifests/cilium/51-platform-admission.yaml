@@ -1,0 +1,45 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bluefin-platform-repair
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - apps
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - daemonsets
+      - deployments
+    - apiGroups:
+      - ''
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - configmaps
+  matchConditions:
+  - name: baseline-controller
+    expression: request.namespace == 'kube-system' && request.userInfo.username == 'system:serviceaccount:argocd:argocd-application-controller'
+  validations:
+  - expression: 'object.kind == ''ConfigMap'' ? object.metadata.name == ''cilium-config'' : (object.kind == ''Deployment''
+      ? (object.metadata.name == ''cilium-operator'' && object.spec.template.spec.serviceAccountName == ''cilium-operator''
+      && object.spec.replicas == 1) : ((object.metadata.name == ''cilium'' && object.spec.template.spec.serviceAccountName
+      == ''cilium'') || (object.metadata.name == ''kured'' && object.spec.template.spec.serviceAccountName == ''kured''))))'
+    message: Baseline may only repair the fixed privileged platform components
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bluefin-platform-repair
+spec:
+  policyName: bluefin-platform-repair
+  validationActions:
+  - Deny

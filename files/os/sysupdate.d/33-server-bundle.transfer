@@ -1,0 +1,20 @@
+# Downloading the coherent bundle is not runtime activation. Lifecycle verifies
+# its inner inventory before copying payloads into the protected generation store.
+[Transfer]
+Features=server
+ProtectVersion=%A
+Verify=yes
+
+[Source]
+Type=url-tar
+Path=https://github.com/projectbluefin/server/releases/latest/download/
+MatchPattern=server-bundle_@v.tar.zst
+
+[Target]
+Type=directory
+Path=/var/lib/bluefin/server/runtime/incoming
+MatchPattern=@v
+Mode=0700
+# Room for booted OS, active, previous, in-flight and the next candidate.
+# Lifecycle protects active/previous/in-flight versions; age alone is not safe.
+InstancesMax=5

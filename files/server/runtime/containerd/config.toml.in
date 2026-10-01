@@ -1,0 +1,39 @@
+# Seeded into /etc/containerd/config.toml only if absent. The Server sysext
+# producer resolves the sandbox image from include/server.yml before packaging.
+version = 4
+root = "/var/lib/containerd"
+state = "/run/containerd"
+oom_score = -999
+
+[plugins."io.containerd.server.v1.grpc"]
+  address = "/run/containerd/containerd.sock"
+  uid = 0
+  gid = 0
+
+[plugins."io.containerd.cri.v1.images"]
+  snapshotter = "overlayfs"
+
+  [plugins."io.containerd.cri.v1.images".pinned_images]
+    sandbox = "@SERVER_PAUSE_IMAGE@"
+
+  [plugins."io.containerd.cri.v1.images".registry]
+    config_path = "/etc/containerd/certs.d"
+
+[plugins."io.containerd.cri.v1.runtime"]
+  ignore_image_defined_volumes = true
+
+  [plugins."io.containerd.cri.v1.runtime".containerd]
+    default_runtime_name = "runc"
+
+    [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc]
+      runtime_type = "io.containerd.runc.v2"
+
+      [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc.options]
+        BinaryName = "/usr/bin/runc"
+        SystemdCgroup = true
+
+  [plugins."io.containerd.cri.v1.runtime".cni]
+    # The reference plugins remain in the unchanged upstream image; Cilium
+    # installs its plugin into the writable host path, never into /usr.
+    bin_dirs = ["/opt/cni/bin", "/usr/local/bin/cni"]
+    conf_dir = "/etc/cni/net.d"

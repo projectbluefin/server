@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- 10-kured.yaml
+- 10-rbac.yaml
+- 20-api-policy.yaml
+- 30-network.yaml

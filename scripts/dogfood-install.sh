@@ -24,16 +24,21 @@
 # Usage: [DOGFOOD_BROKEN=slot|unit] dogfood-install.sh <dir> [<next-dir> [<broken-dir>]]
 # <next-dir> and <broken-dir> are image sets with increasingly higher versions.
 # DOGFOOD_PORT (default 8765) is shared with dogfood-diskless.sh's server.
+# DOGFOOD_PROFILE=complete|core explicitly selects the signed USB installer
+# profile for installation, then reuses the same disk for the A/B scenarios.
+# Unset/none retains the original diskless, no-profile Core/legacy path.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 dir="$(realpath "${1:?usage: $0 <dir> [<next-dir> [<broken-dir>]]}")"
 next="${2:+$(realpath "$2")}"
 broken="${3:+$(realpath "$3")}"
-state="$(realpath "${DOGFOOD_STATE:-dist/dogfood-install}")"
-rm -rf "${state}"
+profile="${DOGFOOD_PROFILE:-none}"
+case "${profile}" in none|complete|core) ;; *) echo 'ERROR: DOGFOOD_PROFILE must be none, complete or core' >&2; exit 1 ;; esac
+state="$(realpath -m "${DOGFOOD_STATE:-dist/dogfood-install}")"
+[ ! -e "${state}" ] || { echo "ERROR: choose a fresh DOGFOOD_STATE; refusing to delete ${state}" >&2; exit 1; }
 mkdir -p "${state}"
-truncate -s 16G "${state}/disk.raw"
+if [ "${profile}" = none ]; then truncate -s 16G "${state}/disk.raw"; fi
 
 export DOGFOOD_PORT="${DOGFOOD_PORT:-8765}"
 export DOGFOOD_STATE_DISK="${state}/disk.raw"
@@ -86,9 +91,18 @@ systemctl stop kubelet.service
 EOF
 sed -i "s|@DOGFOOD_PORT@|${DOGFOOD_PORT}|" "${state}/update.probe"
 
-echo "==> 1/4 diskless boot + systemd-sysinstall"
-run "${dir}" "${state}/install.probe" | tee "${state}/1-install.log"
-grep -q 'PROBE install=0' "${state}/1-install.log"
+if [ "${profile}" = none ]; then
+    echo "==> 1/4 diskless boot + systemd-sysinstall (no-profile legacy path)"
+    run "${dir}" "${state}/install.probe" | tee "${state}/1-install.log"
+    grep -q 'PROBE install=0' "${state}/1-install.log"
+else
+    echo "==> 1/4 signed native USB installer profile: ${profile}"
+    DOGFOOD_STATE="${state}/native" DOGFOOD_TARGET_DISK="${state}/native/target.raw" \
+        DOGFOOD_INSTALL_ONLY=0 DOGFOOD_PROFILE="${profile}" \
+        bash "${here}/dogfood-installer.sh" "${dir}" | tee "${state}/1-install.log"
+    export DOGFOOD_STATE_DISK="${state}/native/target.raw"
+    export DOGFOOD_VARS="${state}/native/vars.fd"
+fi
 
 echo "==> 2/4 boot the installed disk"
 DOGFOOD_BOOT=disk run "${dir}" "${state}/disk.probe" | tee "${state}/2-disk.log"

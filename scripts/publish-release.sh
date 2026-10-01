@@ -63,6 +63,10 @@ expected_patterns() {
         "zfs_${v}\\.raw\\.zst" \
         "kubestellar_${v}\\.raw\\.zst" \
         "kubeadm_${v}\\.raw\\.zst" \
+        "server-kubernetes_${v}\\.raw" \
+        "server-containerd_${v}\\.raw" \
+        "server_${v}\\.raw\\.zst" \
+        "server-bundle_${v}\\.tar\\.zst" \
         "k0s-[0-9][0-9A-Za-z.+-]*\\.raw\\.zst"
 }
 

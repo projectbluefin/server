@@ -1,0 +1,276 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cilium
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      k8s-app: cilium
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        bluefin.io/platform: 'true'
+        k8s-app: cilium
+    spec:
+      serviceAccountName: cilium
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      priorityClassName: system-node-critical
+      tolerations:
+      - operator: Exists
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: cilium-agent
+        image: quay.io/cilium/cilium:v1.20.2@sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01
+        command:
+        - cilium-agent
+        args:
+        - --config-dir=/tmp/cilium/config-map
+        env:
+        - &id002
+          name: KUBERNETES_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: bluefin-api-endpoint
+              key: host
+        - &id003
+          name: KUBERNETES_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: bluefin-api-endpoint
+              key: port
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: CILIUM_K8S_NAMESPACE
+          value: kube-system
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: '2'
+            memory: 1Gi
+        startupProbe:
+          httpGet: &id001
+            host: 127.0.0.1
+            path: /healthz
+            port: 9879
+            httpHeaders:
+            - name: brief
+              value: 'true'
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 105
+        readinessProbe:
+          httpGet: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 10
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /cni-uninstall.sh
+        volumeMounts:
+        - name: bpf-maps
+          mountPath: /sys/fs/bpf
+          mountPropagation: Bidirectional
+        - name: cilium-run
+          mountPath: /var/run/cilium
+        - name: cilium-netns
+          mountPath: /var/run/cilium/netns
+          mountPropagation: HostToContainer
+        - name: etc-cni-netd
+          mountPath: /host/etc/cni/net.d
+        - name: lib-modules
+          mountPath: /lib/modules
+          readOnly: true
+        - name: xtables-lock
+          mountPath: /run/xtables.lock
+        - name: config
+          mountPath: /tmp/cilium/config-map
+          readOnly: true
+      initContainers:
+      - name: mount-cgroup
+        image: quay.io/cilium/cilium:v1.20.2@sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01
+        command:
+        - bash
+        - -ec
+        - cp /usr/bin/cilium-mount /hostbin/cilium-mount; nsenter --cgroup=/hostproc/1/ns/cgroup --mount=/hostproc/1/ns/mnt
+          "${BIN_PATH}/cilium-mount" $CGROUP_ROOT; rm /hostbin/cilium-mount
+        env:
+        - name: BIN_PATH
+          value: /opt/cni/bin
+        - name: CGROUP_ROOT
+          value: /run/cilium/cgroupv2
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: hostproc
+          mountPath: /hostproc
+        - name: cni-path
+          mountPath: /hostbin
+      - name: apply-sysctl-overwrites
+        image: quay.io/cilium/cilium:v1.20.2@sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01
+        command:
+        - bash
+        - -ec
+        - cp /usr/bin/cilium-sysctlfix /hostbin/cilium-sysctlfix; nsenter --mount=/hostproc/1/ns/mnt "${BIN_PATH}/cilium-sysctlfix";
+          rm /hostbin/cilium-sysctlfix
+        env:
+        - name: BIN_PATH
+          value: /opt/cni/bin
+        - name: CGROUP_ROOT
+          value: /run/cilium/cgroupv2
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: hostproc
+          mountPath: /hostproc
+        - name: cni-path
+          mountPath: /hostbin
+      - name: mount-bpf-fs
+        image: quay.io/cilium/cilium:v1.20.2@sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01
+        command:
+        - bash
+        - -ec
+        - mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: bpf-maps
+          mountPath: /sys/fs/bpf
+          mountPropagation: Bidirectional
+      - name: clean-cilium-state
+        image: quay.io/cilium/cilium:v1.20.2@sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01
+        command:
+        - /init-container.sh
+        env:
+        - *id002
+        - *id003
+        - name: CILIUM_ALL_STATE
+          valueFrom:
+            configMapKeyRef:
+              name: cilium-config
+              key: clean-cilium-state
+        - name: CILIUM_BPF_STATE
+          valueFrom:
+            configMapKeyRef:
+              name: cilium-config
+              key: clean-cilium-bpf-state
+        - name: WRITE_CNI_CONF_WHEN_READY
+          valueFrom:
+            configMapKeyRef:
+              name: cilium-config
+              key: write-cni-conf-when-ready
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: bpf-maps
+          mountPath: /sys/fs/bpf
+        - name: cilium-cgroup
+          mountPath: /run/cilium/cgroupv2
+          mountPropagation: HostToContainer
+        - name: cilium-run
+          mountPath: /var/run/cilium
+      - name: install-cni-binaries
+        image: quay.io/cilium/cilium:v1.20.2@sha256:2939231d0d3e3ebddcd80fffa168b7ddcc78fdf0dc864d1c8c126ff523c54f01
+        command:
+        - /install-plugin.sh
+        securityContext:
+          runAsUser: 0
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: cni-path
+          mountPath: /host/opt/cni/bin
+      volumes:
+      - name: bpf-maps
+        hostPath:
+          path: /sys/fs/bpf
+          type: DirectoryOrCreate
+      - name: cilium-run
+        hostPath:
+          path: /var/run/cilium
+          type: DirectoryOrCreate
+      - name: cilium-netns
+        hostPath:
+          path: /var/run/netns
+          type: DirectoryOrCreate
+      - name: cilium-cgroup
+        hostPath:
+          path: /run/cilium/cgroupv2
+          type: DirectoryOrCreate
+      - name: hostproc
+        hostPath:
+          path: /proc
+          type: Directory
+      - name: cni-path
+        hostPath:
+          path: /opt/cni/bin
+          type: DirectoryOrCreate
+      - name: etc-cni-netd
+        hostPath:
+          path: /etc/cni/net.d
+          type: DirectoryOrCreate
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+          type: Directory
+      - name: xtables-lock
+        hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+      - name: config
+        configMap:
+          name: cilium-config

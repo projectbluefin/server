@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bluefin-console
+  namespace: bluefin-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bluefin-console
+  policyTypes:
+  - Ingress
+  - Egress
+  # Internal only. Access is via operator port-forward until authenticated TLS
+  # routing and the actual upstream OAuth account have been configured.
+  ingress: []
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.0.0/16]
+    - ipBlock:
+        cidr: '::/0'
+        except: ['fc00::/7', 'fe80::/10', '::1/128']
+    ports:
+    - protocol: TCP
+      port: 443

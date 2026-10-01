@@ -1,0 +1,17 @@
+[Unit]
+Description=Select the native Bluefin Server profile and verified support payload
+After=local-fs.target systemd-tmpfiles-setup.service systemd-sysext.service
+Before=multi-user.target
+Wants=systemd-sysext.service
+RequiresMountsFor=/etc /var /efi
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ImportCredential=bluefin.server-profile
+ExecStart=/usr/libexec/bluefin-server-profile
+UMask=0077
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

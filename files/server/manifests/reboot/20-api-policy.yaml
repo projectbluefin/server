@@ -1,0 +1,16 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bluefin-kubernetes-api
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:name: kured
+  egress:
+  - toEntities:
+    - kube-apiserver
+    toPorts:
+    - ports:
+      - port: '6443'
+        protocol: TCP

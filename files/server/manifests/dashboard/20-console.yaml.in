@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bluefin-console
+  namespace: bluefin-system
+  annotations:
+    bluefin.io/auth-requirement: Stock GitHub OAuth must be privately configured; no local account or pairing provider is supplied.
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+spec:
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bluefin-console
+  template:
+    metadata:
+      labels:
+        bluefin.io/platform: 'true'
+        app.kubernetes.io/name: bluefin-console
+    spec:
+      serviceAccountName: bluefin-console
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        bluefin.io/controller: 'true'
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      initContainers:
+      - name: require-oauth
+        image: '@@CONSOLE_IMAGE@@'
+        command: [/bin/sh, -ec]
+        args:
+        - 'for key in client-id client-secret frontend-url allowed-logins admin-logins; do test -s "/oauth/$key" || { echo "Nonempty private OAuth configuration required" >&2; exit 1; }; done'
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
+        - name: oauth
+          mountPath: /oauth
+          readOnly: true
+      containers:
+      - name: console
+        image: '@@CONSOLE_IMAGE@@'
+        # Use the published entrypoint: console backend plus kc-watcher proxy.
+        env:
+        - name: PORT
+          value: '8080'
+        - name: BACKEND_PORT
+          value: '8081'
+        - name: DATABASE_PATH
+          value: /app/data/console.db
+        - name: HOME
+          value: /app
+        - name: NO_LOCAL_AGENT
+          value: 'true'
+        - name: DEV_MODE
+          value: 'false'
+        - name: SELF_UPGRADE_ENABLED
+          value: 'false'
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: bluefin-console-jwt
+              key: jwt-secret
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: bluefin-console-oauth
+              key: client-id
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: bluefin-console-oauth
+              key: client-secret
+        - name: FRONTEND_URL
+          valueFrom:
+            secretKeyRef:
+              name: bluefin-console-oauth
+              key: frontend-url
+        - name: AUTH_ALLOWED_GITHUB_LOGINS
+          valueFrom:
+            secretKeyRef:
+              name: bluefin-console-oauth
+              key: allowed-logins
+        - name: AUTH_ADMIN_GITHUB_LOGINS
+          valueFrom:
+            secretKeyRef:
+              name: bluefin-console-oauth
+              key: admin-logins
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: '2'
+            memory: 1Gi
+        ports:
+        - name: http
+          containerPort: 8080
+        startupProbe:
+          httpGet:
+            path: /watchdog/health
+            port: http
+          periodSeconds: 5
+          failureThreshold: 12
+        readinessProbe:
+          httpGet:
+            path: /watchdog/ready
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /watchdog/health
+            port: http
+          failureThreshold: 6
+          periodSeconds: 20
+        volumeMounts:
+        - name: console-state
+          mountPath: /app/data
+          subPath: data
+        - name: console-state
+          mountPath: /app/.kc
+          subPath: .kc
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: oauth
+        secret:
+          secretName: bluefin-console-oauth
+      - name: console-state
+        persistentVolumeClaim:
+          claimName: bluefin-console
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bluefin-console
+  namespace: bluefin-system
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: bluefin-console
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http

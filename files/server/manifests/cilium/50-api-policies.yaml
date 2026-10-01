@@ -1,0 +1,52 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bluefin-kubernetes-api
+  namespace: argo
+spec:
+  endpointSelector: {}
+  egress:
+  - toEntities:
+    - kube-apiserver
+    toPorts:
+    - ports:
+      - port: '6443'
+        protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bluefin-kubernetes-api
+  namespace: bluefin-system
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:app.kubernetes.io/name: bluefin-console
+  egress:
+  - toEntities:
+    - kube-apiserver
+    toPorts:
+    - ports:
+      - port: '6443'
+        protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bluefin-kubernetes-api
+  namespace: argocd
+spec:
+  endpointSelector:
+    matchExpressions:
+    - key: k8s:app.kubernetes.io/name
+      operator: In
+      values:
+      - argocd-application-controller
+      - argocd-applicationset-controller
+  egress:
+  - toEntities:
+    - kube-apiserver
+    toPorts:
+    - ports:
+      - port: '6443'
+        protocol: TCP

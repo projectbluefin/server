@@ -1,0 +1,101 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: bluefin-platform
+  namespace: argocd
+spec:
+  sourceRepos:
+  - file:///bluefin-baseline/baseline.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: kube-system
+  - server: https://kubernetes.default.svc
+    namespace: argocd
+  - server: https://kubernetes.default.svc
+    namespace: argo
+  - server: https://kubernetes.default.svc
+    namespace: bluefin-system
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: Pod
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: batch
+    kind: Job
+  - group: batch
+    kind: CronJob
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: argoproj.io
+    kind: WorkflowTemplate
+  orphanedResources:
+    warn: false
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: bluefin-user
+  namespace: argocd
+spec:
+  sourceRepos:
+  - '*'
+  - '!file://*'
+  - '!/*'
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: bluefin-apps
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: Pod
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: batch
+    kind: Job
+  - group: batch
+    kind: CronJob
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  orphanedResources:
+    warn: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bluefin-platform
+  namespace: argocd
+spec:
+  project: bluefin-platform
+  source:
+    repoURL: file:///bluefin-baseline/baseline.git
+    targetRevision: '@@BASELINE_COMMIT@@'
+    path: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+    - FailOnSharedResource=true

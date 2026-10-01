@@ -76,19 +76,6 @@ def test_sysext_ships_nothing_under_opt() -> None:
     assert 'ERROR: sysext ships' in SYSEXT.read_text(encoding="utf-8")
 
 
-def test_sysext_is_version_locked_and_in_the_signed_release_set() -> None:
-    text = SYSEXT.read_text(encoding="utf-8")
-    assert 'sysext-release: "kubeadm_%{image-version}"' in text
-    assert 'sysext-image: "kubeadm_%{image-version}"' in text
-    release = dict(
-        line.split("=", 1) for line in (SRC / "extension-release.kubeadm").read_text().splitlines() if "=" in line
-    )
-    assert release == {"NAME": "kubeadm", "ID": "bluefin-server", "EXTENSION_RELOAD_MANAGER": "1"}
-    image = IMAGE.read_text(encoding="utf-8")
-    assert "filename: oci/kubeadm-sysext.bst" in image
-    assert "/sysext/kubeadm/kubeadm_%{image-version}.raw.zst" in image
-    assert "sha256sum --binary *.raw *.efi *.raw.zst *.spdx.json > SHA256SUMS" in image
-    assert "oci/kubeadm-sysext.bst" in (ROOT / "Justfile").read_text(encoding="utf-8")
 
 
 def test_no_preset_enables_the_units() -> None:

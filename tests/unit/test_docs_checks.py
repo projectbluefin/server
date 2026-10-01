@@ -257,6 +257,51 @@ def test_valid_relative_markdown_link_passes(docs_checks, tmp_path):
     assert docs_checks.errors == []
 
 
+@pytest.mark.parametrize("link", ["other.md#section", "/docs/other.md#section"])
+def test_cross_file_heading_link_resolves_file(docs_checks, tmp_path, link):
+    target = write(tmp_path / "docs" / "other.md", "# Section\n")
+    path = write(tmp_path / "docs" / "doc.md", f"[section]({link})\n")
+    docs_checks.check_internal_links(path, {target.resolve()})
+    assert docs_checks.errors == []
+
+
+def test_heading_link_to_missing_file_is_reported(docs_checks, tmp_path):
+    path = write(tmp_path / "docs" / "doc.md", "[gone](missing.md#section)\n")
+    docs_checks.check_internal_links(path, set())
+    assert any("broken internal link: [gone](missing.md#section)" in e for e in docs_checks.errors)
+
+
+
+def test_existing_file_with_wrong_heading_is_reported(docs_checks, tmp_path):
+    target = write(tmp_path / "docs" / "other.md", "# Section\n")
+    path = write(tmp_path / "docs" / "doc.md", "[gone](other.md#no-such-heading)\n")
+    docs_checks.check_internal_links(path, {target.resolve()})
+    assert len(docs_checks.errors) == 1
+    assert "other.md#no-such-heading" in docs_checks.errors[0]
+
+
+def test_heading_inside_fenced_code_is_not_an_anchor(docs_checks, tmp_path):
+    target = write(tmp_path / "docs" / "other.md", "```md\n# Not a heading\n```\n# Real heading\n")
+    path = write(tmp_path / "docs" / "doc.md", "[gone](other.md#not-a-heading)\n")
+    docs_checks.check_internal_links(path, {target.resolve()})
+    assert len(docs_checks.errors) == 1
+
+
+@pytest.mark.parametrize("fragment", ["api--mcp", "api--mcp-1", "caf%C3%A9"])
+def test_heading_slugs_handle_punctuation_duplicates_and_unicode(docs_checks, tmp_path, fragment):
+    target = write(tmp_path / "docs" / "other.md", "# API & MCP!\n# API & MCP!\n# Café\n")
+    path = write(tmp_path / "docs" / "doc.md", f"[heading](other.md#{fragment})\n")
+    docs_checks.check_internal_links(path, {target.resolve()})
+    assert docs_checks.errors == []
+
+
+def test_setext_heading_link_passes(docs_checks, tmp_path):
+    target = write(tmp_path / "docs" / "other.md", "First login\n===========\n")
+    path = write(tmp_path / "docs" / "doc.md", "[login](other.md#first-login)\n")
+    docs_checks.check_internal_links(path, {target.resolve()})
+    assert docs_checks.errors == []
+
+
 def test_broken_markdown_link_is_reported(docs_checks, tmp_path):
     path = write(tmp_path / "docs" / "doc.md", "[gone](missing.md)\n")
     docs_checks.check_internal_links(path, set())

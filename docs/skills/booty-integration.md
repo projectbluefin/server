@@ -4,7 +4,7 @@ description: How Booty serves Bluefin Server releases to nodes. Load when workin
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-09-30"
 ---
 # Booty Integration
 
@@ -61,6 +61,25 @@ is not one of the host's selectable `extensions`; Booty adds it for the
 profile. How Booty renders and serves this lives in the Booty README; the
 sysext's contents and runtime contract live in
 [kubeadm-sysext.md](kubeadm-sysext.md).
+
+## Complete profile boundary
+
+The existing Booty netboot/DDI and external kubeadm-worker paths retain their
+current behavior. Syncing a newer release is not permission to initialize a
+Complete controller or switch an established node's profile/role. Do not
+activate the old `kubeadm` or k0s provider alongside Complete's selected Flatcar
+runtime images.
+
+Authenticated provisioning that selects Complete must deliver the same
+signed profile and coherent module inventory as the native installer, with
+persistent `/etc` and `/var`. Worker enrollment is private and one-use; never
+put its join token in public HTTP Ignition, generic media or discovery output.
+The appliance path is [the USB installer](usb-installer.md) with privately
+delivered worker provisioning, not the removed fork's Add Node UI. This repository does not add or promise a
+new upstream Booty profile flag; verify a provisioner's authenticated delivery
+support before using it for Complete. Identity/role rules are canonical in
+[server-profile.md](server-profile.md).
+
 
 ## Read more
 

@@ -1,0 +1,36 @@
+# Stock Argo uses a projected token in its Pod. Main shares the bounded identity;
+# it can publish task results only, never mutate workloads or read Secrets.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bluefin-workflow
+  namespace: argo
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bluefin-workflow
+  namespace: argo
+rules:
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflowtaskresults
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bluefin-workflow
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bluefin-workflow
+subjects:
+- kind: ServiceAccount
+  name: bluefin-workflow
+  namespace: argo

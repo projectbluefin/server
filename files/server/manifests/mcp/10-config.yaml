@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bluefin-native-mcp
+  namespace: bluefin-system
+data:
+  config.toml: |
+    port = "8081"
+    bind_address = "0.0.0.0"
+    require_oauth = true
+    # Native passthrough: Kubernetes validates the bearer on each resource call.
+    # MCP protocol discovery only checks presence; it is not token validation.
+    skip_jwt_verification = true
+    cluster_auth_mode = "passthrough"
+    cluster_provider_strategy = "in-cluster"
+    disable_dynamic_client_registration = true
+    stateless = false
+    list_output = "yaml"
+    read_only = true
+    toolsets = ["core"]
+    enabled_tools = ["events_list", "namespaces_list", "pods_list_in_namespace", "pods_get", "pods_log", "resources_list", "resources_get"]
+    confirmation_fallback = "deny"
+    [[confirmation_rules]]
+    destructive = true
+    message = "Stock elicitation is not owner-bound approval; destructive tools are not exposed."
+
+
+    [[denied_resources]]
+
+    group = ""
+
+    version = "v1"
+
+    kind = "Secret"
+
+
+    [[denied_resources]]
+
+    group = ""
+
+    version = "v1"
+
+    kind = "ServiceAccount"
+
+
+    [[denied_resources]]
+
+    group = ""
+
+    version = "v1"
+
+    kind = "PersistentVolume"
+
+
+    [[denied_resources]]
+
+    group = ""
+
+    version = "v1"
+
+    kind = "PersistentVolumeClaim"
+
+
+    [[denied_resources]]
+
+    group = "rbac.authorization.k8s.io"
+
+    version = "v1"
+
+    kind = "Role"
+
+
+    [[denied_resources]]
+
+    group = "rbac.authorization.k8s.io"
+
+    version = "v1"
+
+    kind = "RoleBinding"
+
+
+    [[denied_resources]]
+
+    group = "rbac.authorization.k8s.io"
+
+    version = "v1"
+
+    kind = "ClusterRole"
+
+
+    [[denied_resources]]
+
+    group = "rbac.authorization.k8s.io"
+
+    version = "v1"
+
+    kind = "ClusterRoleBinding"
+
+
+    [[denied_resources]]
+
+    group = "apiextensions.k8s.io"
+
+    version = "v1"
+
+    kind = "CustomResourceDefinition"
+
+
+    [[denied_resources]]
+
+    group = "admissionregistration.k8s.io"
+
+    version = "v1"
+
+    kind = "ValidatingAdmissionPolicy"
+
+
+    [[denied_resources]]
+
+    group = "admissionregistration.k8s.io"
+
+    version = "v1"
+
+    kind = "ValidatingAdmissionPolicyBinding"
+
+
+    [[denied_resources]]
+
+    group = "admissionregistration.k8s.io"
+
+    version = "v1"
+
+    kind = "ValidatingWebhookConfiguration"
+
+
+    [[denied_resources]]
+
+    group = "admissionregistration.k8s.io"
+
+    version = "v1"
+
+    kind = "MutatingWebhookConfiguration"
+

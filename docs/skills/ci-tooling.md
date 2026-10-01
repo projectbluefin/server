@@ -290,6 +290,8 @@ per-set cost is estimated at under 10 min.
 - [ ] Every `uses:` line has a full 40-character SHA and a `# vX` comment.
 - [ ] Every `install-action` `tool:` names an explicit version (`just@1.58.0`).
 - [ ] `just validate` passes after workflow changes.
+- [ ] `just test-unit` runs `tests/unit`, `files/server/manifests/tests`, the
+      native lifecycle Go suite, and Bats; the CI unit job uses this same recipe.
 - [ ] A new directory the build or boot test reads is listed in
       `BUILD_PREFIXES` in `.github/scripts/image-build-needed.py`.
 - [ ] No new mutable action refs introduced.
