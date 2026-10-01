@@ -1,0 +1,26 @@
+[Unit]
+Description=Load the NVIDIA kernel modules
+Requires=nvidia-flavour-guard.service
+After=nvidia-flavour-guard.service systemd-sysext.service systemd-udev-trigger.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Skip (not fail) unless a PCI display controller (class 0x03) from NVIDIA
+# (vendor 0x10de) is present.
+ExecCondition=/usr/bin/sh -c 'for d in /sys/bus/pci/devices/*; do [ "$$(cat "$$d/vendor")" = 0x10de ] && case "$$(cat "$$d/class")" in 0x03*) exit 0 ;; esac; done; exit 1'
+# The sysext ships no module index; the base image's helper indexes the merged
+# module tree under /run and resolves the in-tree dependencies (drm,
+# drm_kms_helper, video, ...). All four load here, nvidia-uvm included, so
+# nvidia-modprobe (nvidia-device-nodes.service) finds them loaded and never
+# runs a bare modprobe, which could not find them.
+#
+# modprobe returns non-zero when it cannot bind a module to every NVIDIA
+# device on the bus (for example, a pre-Turing card already held by nouveau
+# on a mixed Pascal+Turing host). The driver only refuses the unsupported
+# device, so nvidia still binds the supported ones; /proc/driver/nvidia/gpus/
+# lists the cards it did take. Treat the load as a success when at least one
+# GPU came up; log the rest as a warning so the boot does not stall on the
+# CDI refresh that follows.
+ExecStart=/usr/libexec/bluefin-sysext-modules nvidia nvidia-uvm nvidia-modeset nvidia-drm || true
+ExecStart=/usr/bin/sh -c 'gpus=$$(ls /proc/driver/nvidia/gpus 2>/dev/null); if [ -z "$$gpus" ]; then echo "nvidia-load: no NVIDIA GPU came up; the helper exited non-zero and /proc/driver/nvidia/gpus is empty" >&2; exit 1; fi; for g in $$gpus; do info=$$(cat /proc/driver/nvidia/gpus/$$g/information 2>/dev/null); echo "nvidia-load: bound GPU $$g:$${info:+ $$info}"; done'
