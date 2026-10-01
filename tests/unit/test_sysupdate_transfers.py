@@ -90,6 +90,24 @@ def split_match_pattern(pattern: str) -> tuple[str, str]:
     return prefix, suffix
 
 
+def test_sysupdate_directories_are_populated():
+    generic = sorted(p.name for p in SYSUPDATE_DIR.glob("*.transfer"))
+    k0s = sorted(p.name for p in K0S_SYSUPDATE_DIR.glob("*.transfer"))
+    assert generic == [
+        "10-usr.transfer",
+        "11-usr-verity.transfer",
+        "20-uki.transfer",
+        "30-zfs.transfer",
+        "31-kubestellar.transfer",
+        "32-kubeadm.transfer",
+        "33-nvidia-open-595.transfer",
+        "34-server-bundle.transfer",
+    ]
+    assert k0s == ["70-k0s.transfer"]
+    ctk = sorted(p.name for p in CTK_SYSUPDATE_DIR.glob("*.transfer"))
+    assert ctk == ["71-nvidia-container-toolkit.transfer"]
+
+
 @pytest.mark.parametrize("path", transfer_paths(), ids=lambda p: p.name)
 def test_transfer_has_the_three_required_sections(path: Path):
     parser = load_transfer(path)
@@ -112,11 +130,13 @@ def test_transfer_ordering_prefixes_are_unique():
     )
 
 
-
-
 @pytest.mark.parametrize("path", transfer_paths(), ids=lambda p: p.name)
 def test_source_pulls_from_this_repo_release_feed_over_https(path: Path):
     source = load_transfer(path)["Source"]
+    assert source.get("Type") in ("url-file", "url-tar"), (
+        f"{path.name} [Source] Type is {source.get('Type')!r}; OTA payloads are "
+        "fetched as release files or release tarballs"
+    )
     assert source.get("Path") == RELEASE_FEED, (
         f"{path.name} [Source] Path is {source.get('Path')!r}, not {RELEASE_FEED!r}; "
         "updates would be fetched from an unintended origin"
@@ -273,3 +293,37 @@ def test_component_transfer_carries_no_feature_or_version_protection(name: str):
     feature, and are not tied to the booted image version."""
     transfer = load_transfer(COMPONENTS[name]["transfer"])["Transfer"]
     assert "Features" not in transfer and "ProtectVersion" not in transfer
+
+
+IMAGE_ELEMENT = ELEMENTS_DIR / "oci" / "bluefin-server-image.bst"
+
+
+@pytest.mark.parametrize("path", transfer_paths(), ids=lambda p: p.name)
+def test_every_source_artifact_is_in_the_signed_image_set(path: Path):
+    """The asset a transfer downloads must be in the image set, whose signed
+    SHA256SUMS the release publishes as-is (dist/diskless/)."""
+    prefix, _ = split_match_pattern(load_transfer(path)["Source"]["MatchPattern"])
+    image = IMAGE_ELEMENT.read_text()
+    assert prefix in image, f"{path.name}: {prefix!r} assets are not in {IMAGE_ELEMENT.name}"
+    build_yml = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
+    assert "scripts/publish-release.sh release dist/diskless" in build_yml
+    publish = (REPO_ROOT / "scripts" / "publish-release.sh").read_text()
+    assert "-maxdepth 1 -type f" in publish
+    assert "gpg --batch --yes --pinentry-mode loopback" in image
+    assert "gpgv --keyring /boot-keys/import-pubring.pgp SHA256SUMS.gpg SHA256SUMS" in image
+
+
+def test_k0s_release_staging_does_not_use_legacy_k3s_name() -> None:
+    image = IMAGE_ELEMENT.read_text()
+    assert "/sysext/k0s/k0s-*.raw.zst" in image
+    assert "k3s-" not in image
+
+
+def test_component_sysexts_are_staged_into_the_signed_image_set() -> None:
+    image = IMAGE_ELEMENT.read_text()
+    publish = (REPO_ROOT / "scripts" / "publish-release.sh").read_text()
+    for name in COMPONENTS:
+        assert f"filename: oci/{name}-sysext.bst" in image
+        assert f"/sysext/{name}/{name}-*.raw.zst" in image
+        # Own version axis: publish-release.sh accepts any version of it.
+        assert f'"{name}-[0-9][0-9A-Za-z.+-]*\\\\.raw\\\\.zst"' in publish

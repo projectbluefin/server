@@ -93,6 +93,28 @@ PROMPT_UNIT = (
 PRESETS = ROOT / "files" / "os" / "systemd" / "system-preset"
 
 
+def core_cmdline() -> str:
+    text = BOOT_ELEMENT.read_text(encoding="utf-8")
+    return text.split("installer-core-cmdline:")[1].split("\nconfig:")[0]
+
+
+def test_the_installed_disk_asks_for_a_root_password_on_first_boot():
+    # Root ships locked and the stock firstboot prompt is removed for headless
+    # nodes, so without this a USB-installed machine has no way to log in. The
+    # Core profile passes the credential through BLUEFIN_INSTALL_ROOT_PROMPT.
+    assert "$BLUEFIN_INSTALL_ROOT_PROMPT" in DROPIN.read_text(encoding="utf-8")
+    prefix = "systemd.setenv=BLUEFIN_INSTALL_ROOT_PROMPT="
+    [credential] = [w[len(prefix):] for w in core_cmdline().split() if w.startswith(prefix)]
+    assert credential == "--set-credential=bluefin.prompt-root-password:1"
+    name = credential.partition("=")[2].partition(":")[0]
+    unit = SystemdFile(PROMPT_UNIT)
+    assert unit.value("Unit", "ConditionCredential") == name
+    assert unit.value("Unit", "ConditionFirstBoot") == "yes"
+    [argv] = unit.commands()
+    assert argv[0] == "systemd-firstboot" and "--prompt-root-password" in argv
+    assert preset("bluefin-root-password-prompt.service", PRESETS.glob("*.preset")) == "enable"
+
+
 
 
 def test_the_root_password_prompt_is_on_the_monitor_not_the_serial_console():

@@ -174,7 +174,7 @@ func (e *Engine) upgrade() error {
 	}
 	if tx.Stage == "control_plane" {
 		if e.State.Role == "controller" {
-			if _, err := kube("drain", host, "--ignore-daemonsets", "--pod-selector=bluefin.io/platform!=true", "--timeout=300s"); err != nil {
+			if _, err := kube("drain", host, "--ignore-daemonsets", "--delete-emptydir-data", "--pod-selector=bluefin.io/platform!=true", "--timeout=300s"); err != nil {
 				return err
 			}
 		}

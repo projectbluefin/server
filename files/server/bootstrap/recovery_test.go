@@ -65,7 +65,7 @@ func TestInitializeRecoveryNeverChangesWorkerOrMigratingRole(t *testing.T) {
 	s.Profile = "complete"
 	s.Role = "unassigned"
 	s.Phase = "awaiting_owner"
-	if s.initializeAction() != "start" {
-		t.Fatal("fresh claimed Complete cannot initialize")
+	if s.initializeAction() != "" {
+		t.Fatal("unassigned host initialized through the control socket; load() already commits its role")
 	}
 }

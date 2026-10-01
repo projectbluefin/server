@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"os"
 	"syscall"
 	"time"
 )
@@ -65,30 +64,16 @@ func (e *Engine) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			respond(w, 409, map[string]string{"error": "not_ready_or_stale"})
 			return
 		}
+		// The only action reachable here is "resume": load() commits an
+		// unassigned host's role before the socket is served, so a fresh host
+		// never reaches /v1/initialize unassigned.
 		candidate := e.State
-		var err error
-		if action == "start" {
-			if err = e.requireUninitializedHost(); err != nil {
-				e.mu.Unlock()
-				respond(w, 409, map[string]string{"error": err.Error()})
-				return
-			}
-			if _, err = os.Lstat(e.path("/var/lib/bluefin/server/private-join.json")); !os.IsNotExist(err) {
-				e.mu.Unlock()
-				respond(w, 409, map[string]string{"error": "private_join_takes_precedence"})
-				return
-			}
-			err = candidate.commitRole("controller", req.ExpectedRevision)
-		} else {
-			candidate.Phase = "pending"
-			candidate.Error = ""
-			candidate.Revision++
-		}
+		candidate.Phase = "pending"
+		candidate.Error = ""
+		candidate.Revision++
+		err := saveJSON(e.path("/var/lib/bluefin/server/state.json"), candidate)
 		if err == nil {
-			err = saveJSON(e.path("/var/lib/bluefin/server/state.json"), candidate)
-			if err == nil {
-				e.State = candidate
-			}
+			e.State = candidate
 		}
 		e.mu.Unlock()
 		if err != nil {

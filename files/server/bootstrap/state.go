@@ -127,11 +127,11 @@ func (s State) upgradeAction(image string) string {
 	return ""
 }
 func (s State) initializeAction() string {
+	// An unassigned host is not actionable here: load() commits its role
+	// before the control socket is served, so only a failed controller has
+	// anything left to resume.
 	if s.Profile != "complete" || s.Upgrade != nil {
 		return ""
-	}
-	if s.Role == "unassigned" {
-		return "start"
 	}
 	if s.Role == "controller" && s.Phase == "failed" {
 		return "resume"
