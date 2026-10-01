@@ -45,7 +45,14 @@ Initial asset acquisition, version compatibility, update signing, and Kubernetes
 
 - `include/server.yml` pins unchanged Flatcar runtime bytes. The canonical
   `files/server/manifests/source-lock.json` pins upstream container images and
-  vendored resources. Nodes pull those images at first use unless cached;
+  vendored resources. Its `maintained_resources` / `producer_sha256` fields
+  also lock every `.yaml` / `.in` under `files/server/manifests` and
+  `produce-baseline.py` itself: the build aborts with "maintained raw
+  resources differ from source provenance lock" when they drift. After an
+  intentional edit run `just relock-platform`
+  (`produce-baseline.py --relock`), which rewrites only those two fields and
+  re-validates the lock; upstream image/source pins stay a manual, reviewable
+  change. Nodes pull those images at first use unless cached;
   the signed host inventory contains no custom Console/executor OCI archive.
 - Native BuildStream elements assemble the immutable bare Git baseline and
   compile only Bluefin's stdlib lifecycle glue. They do not compile Console,

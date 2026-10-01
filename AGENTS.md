@@ -56,13 +56,14 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | `just set-version V` | Set `image-version` in `include/image.yml` (≤17 chars, increasing under strverscmp). |
 | `just build-image` / `just export-image` | Build and export the release image set to `dist/diskless/`. |
 | `just prepare-server` / `just verify-server-platform` | Inspect the stock baseline / explicitly run its optional disposable compatibility proof. |
+| `just relock-platform` | Refresh `maintained_resources` / `producer_sha256` in `files/server/manifests/source-lock.json` after editing a manifest or the producer; the build fails on a stale lock (`maintained raw resources differ from source provenance lock`). Upstream image/source pins are left untouched. |
 | `just dogfood` / `just dogfood-check` | Boot `dist/diskless/` diskless in QEMU with Secure Boot (interactive / headless probe). |
-| `just dogfood-install [<next-dir> [<broken-dir>]]` | QEMU end-to-end: diskless boot, install to disk, boot it, A/B update to `<next-dir>`, then roll back from a broken `<broken-dir>` (`DOGFOOD_SYSEXT=nvidia` or `zfs,nvidia` follows the NVIDIA sysexts instead of, or with, ZFS). |
+| `just dogfood-install [<next-dir> [<broken-dir>]]` | QEMU end-to-end: diskless boot, install to disk, boot it, A/B update to `<next-dir>`, then roll back from a broken `<broken-dir>` (`DOGFOOD_SYSEXT=nvidia` or `zfs,nvidia` follows the NVIDIA sysexts instead of, or with, ZFS). The recipe deletes its own default state directory (`dist/dogfood-install`) first; the scripts refuse to run on a pre-existing `DOGFOOD_STATE`, so delete an explicit one yourself. |
 | `just publish-oci REF [DIR] [PLAIN_HTTP]` | Push `dist/diskless/` as an ORAS OCI artifact tagged `<version>,latest` (one layer per file). Local rehearsal; CI publishes via `scripts/publish-release.sh`. |
 | `just build-sysext` / `just export-sysext` | Build and export the k0s and KubeStellar `systemd-sysext` images. |
 | `just build-zfs-sysext` / `just export-zfs-sysext` | Build and export the OpenZFS `systemd-sysext`. |
 | `just build-nvidia-sysext` / `just export-nvidia-sysext` | Build and export an NVIDIA open-kernel-module `systemd-sysext` (`FLAVOUR=nvidia-open-595`). |
-| `just dogfood-nvidia` | Install `dist/diskless/` in QEMU, merge its NVIDIA sysext and probe it (no GPU). |
+| `just dogfood-nvidia` | Install `dist/diskless/` in QEMU, merge its NVIDIA sysext and probe it (no GPU). Clears its default `dist/dogfood-nvidia` state first. |
 
 ## Skill routing
 

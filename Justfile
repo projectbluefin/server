@@ -122,6 +122,12 @@ gen-dev-keys *ARGS:
 prepare-server:
     python3 scripts/prepare-server.py --provider {{server_proof_provider}}
 
+# Record an intentional edit under files/server/manifests/ (any .yaml/.in or the
+# producer itself) in source-lock.json; the build refuses a stale lock.
+[group('server')]
+relock-platform:
+    python3 files/server/manifests/produce-baseline.py --relock
+
 # Explicit optional runtime compatibility proof, never part of graph validation.
 [group('server')]
 verify-server-platform:
@@ -155,11 +161,19 @@ set-version VERSION:
 # DOGFOOD_SYSEXT=zfs,nvidia follows both.
 [group('diskless')]
 dogfood-install NEXT="" BROKEN="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The script refuses a pre-existing state directory, so clear this recipe's
+    # own default; an explicit DOGFOOD_STATE is never deleted for you.
+    [ -n "${DOGFOOD_STATE:-}" ] || rm -rf dist/dogfood-install
     bash scripts/dogfood-install.sh dist/diskless {{NEXT}} {{BROKEN}}
 
 # Boot the offline USB installer, install unattended to a blank disk, boot it (QEMU).
 [group('diskless')]
 dogfood-installer:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -n "${DOGFOOD_STATE:-}" ] || rm -rf dist/dogfood-installer
     bash scripts/dogfood-installer.sh dist/diskless
 
 
@@ -236,6 +250,9 @@ export-nvidia-sysext FLAVOUR="nvidia-open-595": (build-nvidia-sysext FLAVOUR)
 # Install dist/diskless/ in QEMU, merge its NVIDIA sysext and probe it (no GPU).
 [group('sysext')]
 dogfood-nvidia FLAVOUR="nvidia-open-595":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -n "${DOGFOOD_STATE:-}" ] || rm -rf dist/dogfood-nvidia
     bash scripts/dogfood-nvidia.sh dist/diskless "dist/diskless/{{FLAVOUR}}_$(sed -n 's/^  image-version: "\(.*\)"$/\1/p' include/image.yml).raw.zst"
 
 # Build the NVIDIA Container Toolkit (CDI) systemd-sysext (own version axis).

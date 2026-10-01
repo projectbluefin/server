@@ -41,6 +41,22 @@ def validate_source_lock(source):
     return lock
 
 
+def relock(source):
+    """Record an intentional local edit: refresh the two self-provenance fields.
+
+    Upstream pins (images, sources, cache) are never touched here; only the
+    SHA256s of the maintained raw resources and of this producer are rewritten,
+    so a reviewer still sees every upstream change as an explicit diff.
+    """
+    source = Path(source)
+    path = source / "source-lock.json"
+    lock = json.loads(path.read_text())
+    lock["maintained_resources"] = maintained_resources(source)
+    lock["producer_sha256"] = hashlib.sha256((source / "produce-baseline.py").read_bytes()).hexdigest()
+    path.write_text(json.dumps(lock, sort_keys=True, indent=2) + "\n")
+    return validate_source_lock(source)
+
+
 # These are initial root-owned security/storage contracts, not reconcilable user
 # authority. CD never gets bind/escalate merely to repair its own broader roles.
 BOOTSTRAP_ONLY = {"10-rbac.yaml", "20-rbac.yaml", "20-executor-rbac.yaml",
@@ -253,9 +269,18 @@ def produce(source, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path(__file__).parent)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--relock", action="store_true",
+                        help="rewrite maintained_resources/producer_sha256 in source-lock.json "
+                             "after an intentional manifest or producer edit, then validate it")
     args = parser.parse_args()
+    if args.relock == (args.output is not None):
+        parser.error("use either --output <dir> or --relock")
     try:
+        if args.relock:
+            relock(args.source)
+            print(args.source / "source-lock.json")
+            return
         print(produce(args.source, args.output))
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, str(error) + "\n")

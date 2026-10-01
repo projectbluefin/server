@@ -302,7 +302,7 @@
     "workflows/crds/workflowtemplates.argoproj.io.yaml": "f47cd0d060bb7ac81c404047639f2fce9097db150bc4aed5f05e0c21b3afe357",
     "workflows/kustomization.yaml": "60af03a05529a303cfb91059b3e09a2fee718f56a46d601d195269de7a1d47e6"
   },
-  "producer_sha256": "1a889d4f0a7fd95152a1cf2b64b1833295c23592ae50cb5ea03302ca2c588c74",
+  "producer_sha256": "ab0968ec3e662dd626da66f85d2fafac255f14e490f93761c2658f7754baaacb",
   "schema": 1,
   "sources": {
     "argocd": {

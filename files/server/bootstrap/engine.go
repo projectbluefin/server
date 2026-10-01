@@ -311,7 +311,7 @@ func (e *Engine) resume() {
 		e.fail(err.Error())
 	}
 }
-func objectUID(namespace, name string) (string, error) {
+func namespaceUID(name string) (string, error) {
 	b, err := kube("get", "namespace", name, "-o", "jsonpath={.metadata.uid}")
 	if err != nil {
 		return "", err
@@ -349,7 +349,7 @@ func (e *Engine) initialize() error {
 		return err
 	}
 	if e.State.ClusterID == "" {
-		path := "/etc/bluefin/server/kubeadm-init.yaml"
+		path := e.path("/etc/bluefin/server/kubeadm-init.yaml")
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 			for _, marker := range []string{"/etc/kubernetes/pki/ca.crt", "/etc/kubernetes/admin.conf", "/etc/kubernetes/manifests/kube-apiserver.yaml"} {
 				if _, er := os.Stat(marker); er == nil {
@@ -365,7 +365,7 @@ func (e *Engine) initialize() error {
 			if err != nil {
 				return err
 			}
-			if err = os.MkdirAll("/etc/bluefin/server", 0700); err != nil {
+			if err = os.MkdirAll(e.path("/etc/bluefin/server"), 0700); err != nil {
 				return err
 			}
 			if err = os.WriteFile(path, []byte(cfg), 0600); err != nil {
@@ -400,21 +400,21 @@ func (e *Engine) initialize() error {
 		}
 	}
 	if !e.State.Handoff && e.State.ClusterID != "" {
-		path := "/etc/bluefin/server/kubeadm-init.yaml"
+		path := e.path("/etc/bluefin/server/kubeadm-init.yaml")
 		if err := ensureProxyDisabled(path); err != nil {
 			return err
 		}
 		if err := e.waitAPIReady(); err != nil {
 			return err
 		}
-		if clusterID, err := objectUID("", "kube-system"); err != nil || clusterID != e.State.ClusterID {
+		if clusterID, err := namespaceUID("kube-system"); err != nil || clusterID != e.State.ClusterID {
 			return errors.New("cluster_identity_changed")
 		}
 		if err := run("kubeadm", "init", "phase", "upload-config", "all", "--config="+path); err != nil {
 			return err
 		}
 	}
-	clusterID, err := objectUID("", "kube-system")
+	clusterID, err := namespaceUID("kube-system")
 	if err != nil {
 		return err
 	}
@@ -471,7 +471,7 @@ func (e *Engine) joinWorker() error {
 	}
 	if _, err := os.Stat("/etc/kubernetes/kubelet.conf"); errors.Is(err, os.ErrNotExist) {
 		var join Join
-		if err = loadJSON("/var/lib/bluefin/server/private-join.json", &join); err != nil {
+		if err = loadJSON(e.path("/var/lib/bluefin/server/private-join.json"), &join); err != nil {
 			return errors.New("private_join_missing")
 		}
 		if err = join.validate(time.Now()); err != nil {
@@ -481,7 +481,7 @@ func (e *Engine) joinWorker() error {
 			return errors.New("cluster_identity_changed")
 		}
 		cfg := fmt.Sprintf("apiVersion: kubeadm.k8s.io/v1beta4\nkind: JoinConfiguration\ndiscovery:\n  bootstrapToken:\n    apiServerEndpoint: %s\n    token: %s\n    caCertHashes: [%s]\nnodeRegistration:\n  criSocket: unix:///run/containerd/containerd.sock\n", join.APIEndpoint, join.Token, join.CAHash)
-		path := "/var/lib/bluefin/server/private-kubeadm-join.yaml"
+		path := e.path("/var/lib/bluefin/server/private-kubeadm-join.yaml")
 		if err = os.WriteFile(path, []byte(cfg), 0600); err != nil {
 			return err
 		}
@@ -492,7 +492,7 @@ func (e *Engine) joinWorker() error {
 			return err
 		}
 		os.Remove(path)
-		os.Remove("/var/lib/bluefin/server/private-join.json")
+		os.Remove(e.path("/var/lib/bluefin/server/private-join.json"))
 	}
 	// The persisted kubelet certificate, not an expired bootstrap token, is reboot authority.
 	if err := run("systemctl", "is-active", "kubelet.service"); err != nil {

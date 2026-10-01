@@ -103,20 +103,26 @@ func (e *Engine) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			respond(w, 409, map[string]string{"error": "enrollment_not_allowed_or_stale"})
 			return
 		}
+		// Reserve the engine, then inspect the host outside e.mu: the renew
+		// path shells out to kubectl (minutes) and must not block /v1/status.
+		// Every mutator refuses while busy, so State cannot change meanwhile.
+		e.busy = true
+		e.mu.Unlock()
 		var err error
 		if action == "renew" {
-			if _, err = e.validatePartialJoin(req.Join); err != nil {
-				e.mu.Unlock()
-				respond(w, 409, map[string]string{"error": err.Error()})
-				return
-			}
+			_, err = e.validatePartialJoin(req.Join)
+		}
+		if err == nil && action == "start" {
+			err = e.requireUninitializedHost()
+		}
+		e.mu.Lock()
+		if err != nil {
+			e.busy = false
+			e.mu.Unlock()
+			respond(w, 409, map[string]string{"error": err.Error()})
+			return
 		}
 		if action == "start" {
-			if err = e.requireUninitializedHost(); err != nil {
-				e.mu.Unlock()
-				respond(w, 409, map[string]string{"error": err.Error()})
-				return
-			}
 			err = candidate.commitRole("worker", req.ExpectedRevision)
 		} else {
 			candidate.Phase = "pending"
@@ -134,6 +140,7 @@ func (e *Engine) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				e.State = candidate
 			}
 		}
+		e.busy = false
 		e.mu.Unlock()
 		if err != nil {
 			respond(w, 409, map[string]string{"error": err.Error()})

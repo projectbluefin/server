@@ -111,6 +111,13 @@ just dogfood-install NEXT=<dir>  # ...then sysupdate A->B to NEXT and boot it
 just dogfood-installer           # offline USB installer: unattended install to a blank disk, boot it with and without the stick
 ```
 
+`dogfood-install.sh` / `dogfood-installer.sh` refuse to run when their state
+directory already exists, so no run ever deletes logs or a disk image you may
+still need. The `just` recipes clear their own defaults
+(`dist/dogfood-install`, `dist/dogfood-installer`, `dist/dogfood-nvidia`)
+before each run; when you set `DOGFOOD_STATE=<dir>` yourself, point it at a
+fresh directory or remove the old one first.
+
 `scripts/dogfood-diskless.sh <dir> [--check]` boots the way a PXE/HTTP-booted
 node would: signed systemd-boot -> signed netboot UKI -> initrd pulls
 `bluefin-server_<ver>.raw` over HTTP into RAM -> dm-verity /usr, tmpfs root.
