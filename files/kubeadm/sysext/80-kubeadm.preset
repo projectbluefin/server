@@ -1,5 +1,0 @@
-# Opt-in: FSDK has no catch-all "disable *", so without these lines a
-# `systemctl preset-all` would enable the units through systemd's implicit
-# default. Ignition (20-ignition.preset, sorted first) enables them per node.
-disable containerd.service
-disable kubelet.service

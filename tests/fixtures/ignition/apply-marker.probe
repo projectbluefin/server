@@ -1,7 +1,0 @@
-# DOGFOOD_EXTRA_PROBE for apply-marker.ign: Ignition wrote the file and the
-# unit, the preset enabled the unit, and PID 1 ran it on this boot.
-marker="$(cat /etc/dogfood-ignition-marker 2>/dev/null || echo missing)"
-unit="$(systemctl is-active dogfood-ignition-marker.service 2>/dev/null || true)"
-enabled="$(systemctl is-enabled dogfood-ignition-marker.service 2>/dev/null || true)"
-ran="$([ -e /run/dogfood-ignition-marker ] && echo yes || echo no)"
-echo "PROBE ignition marker=${marker} unit=${unit} enabled=${enabled} ran=${ran}"

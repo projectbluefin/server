@@ -1,7 +1,0 @@
-# Replaces upstream OpenZFS's 50-zfs.preset. A preset inside a sysext does
-# nothing until the admin runs `systemctl preset`.
-enable zfs.target
-enable zfs-load-module.service
-enable zfs-import-scan.service
-enable zfs-mount.service
-enable zfs-zed.service

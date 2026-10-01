@@ -1,4 +1,0 @@
-variables:
-  # Image version shared by the usr DDI, the UKI, and sysupdate transfers.
-  # sysupdate orders versions with strverscmp(), so keep it monotonic.
-  image-version: "26.09.2"

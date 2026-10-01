@@ -1,3 +1,0 @@
-Bluefin Server (\l)
-No default login; root is locked until set at first boot (USB installs) or by credential. Provision access: https://github.com/projectbluefin/server/blob/main/docs/skills/tpm2-credential-sealing.md#node-access
-

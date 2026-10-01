@@ -1,6 +1,0 @@
-# Opt-in units: FSDK ships no catch-all "disable *", so without these lines
-# systemd would enable them on first boot through its implicit default.
-disable k0s-first-boot.service
-disable k0s-first-boot-fetch.service
-disable nvidia-container-toolkit-activate.service
-disable nvidia-container-toolkit-fetch.service
