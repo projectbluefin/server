@@ -31,6 +31,11 @@ def shellcheck() -> str:
     return _required_tool("shellcheck")
 
 
+@pytest.fixture(scope="session")
+def zstd() -> str:
+    return _required_tool("zstd")
+
+
 def _load_module():
     spec = importlib.util.spec_from_file_location("docs_checks", SCRIPT_PATH)
     module = importlib.util.module_from_spec(spec)

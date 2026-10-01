@@ -82,7 +82,7 @@ def test_restore_miss_is_not_an_error(env: dict[str, str]) -> None:
     assert not any((Path(env["HOME"]) / ".cache" / "buildstream").iterdir())
 
 
-def test_restore_leaves_the_cache_untouched_on_a_corrupt_download(env: dict[str, str]) -> None:
+def test_restore_leaves_the_cache_untouched_on_a_corrupt_download(zstd: str, env: dict[str, str]) -> None:
     assert run(env, "seed", "ghcr.io/x/cache").returncode == 0
     cache = Path(env["HOME"]) / ".cache" / "buildstream"
     for entry in cache.iterdir():
@@ -97,7 +97,7 @@ def test_restore_leaves_the_cache_untouched_on_a_corrupt_download(env: dict[str,
     assert not any(cache.iterdir())
 
 
-def test_seeded_cache_restores_into_an_empty_cache(env: dict[str, str], tmp_path: Path) -> None:
+def test_seeded_cache_restores_into_an_empty_cache(zstd: str, env: dict[str, str], tmp_path: Path) -> None:
     assert run(env, "seed", "ghcr.io/x/cache").returncode == 0
     fresh = tmp_path / "fresh-home"
     fresh.mkdir()
