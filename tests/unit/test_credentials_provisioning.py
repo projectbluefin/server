@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from _systemd import SystemdFile, preset
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ELEMENT = REPO_ROOT / "elements" / "bluefin-server" / "os-creds-prov.bst"
 STACK = REPO_ROOT / "elements" / "bluefin-server" / "os-stack.bst"
@@ -18,22 +20,7 @@ FIRSTBOOT = (
     / "system"
     / "bluefin-firstboot-credentials.service"
 )
-FIRSTBOOT_PRESET = (
-    REPO_ROOT
-    / "files"
-    / "os"
-    / "systemd"
-    / "system-preset"
-    / "80-bluefin-firstboot-credentials.preset"
-)
-NETWORK_GENERATOR_PRESET = (
-    REPO_ROOT
-    / "files"
-    / "os"
-    / "systemd"
-    / "system-preset"
-    / "80-bluefin-systemd-network-generator.preset"
-)
+PRESETS = sorted((REPO_ROOT / "files" / "os" / "systemd" / "system-preset").glob("*.preset"))
 NETWORK_GENERATOR_DROPIN = (
     REPO_ROOT
     / "files"
@@ -44,9 +31,20 @@ NETWORK_GENERATOR_DROPIN = (
     / "systemd-network-generator.service.d"
     / "10-bluefin-credentials.conf"
 )
+SYSUSERS_DROPIN = (
+    REPO_ROOT
+    / "files"
+    / "os"
+    / "creds"
+    / "systemd"
+    / "system"
+    / "systemd-sysusers.service.d"
+    / "10-bluefin-user-credentials.conf"
+)
 FIRSTBOOT_HELPER = REPO_ROOT / "files" / "os" / "libexec" / "bluefin-firstboot-credentials"
 NETWORK = REPO_ROOT / "files" / "os" / "systemd" / "network" / "20-wired.network"
 TPM2_SKILL = REPO_ROOT / "docs" / "skills" / "tpm2-credential-sealing.md"
+USB_INSTALLER_SKILL = REPO_ROOT / "docs" / "skills" / "usb-installer.md"
 
 
 def test_creds_provisioning_element_stages_all_credential_consumers() -> None:
@@ -54,7 +52,7 @@ def test_creds_provisioning_element_stages_all_credential_consumers() -> None:
 
     assert data["kind"] == "manual"
     assert "base/base-stack.bst" in data["build-depends"]
-    assert "bluefin-server/os-creds-prov.bst" in STACK.read_text(encoding="utf-8")
+    assert "bluefin-server/os-creds-prov.bst" in yaml.safe_load(STACK.read_text(encoding="utf-8"))["depends"]
 
     sources = {source["directory"]: source["path"] for source in data["sources"]}
     assert sources == {
@@ -73,61 +71,73 @@ def test_creds_provisioning_element_stages_all_credential_consumers() -> None:
 
 
 def test_firstboot_credentials_are_noninteractive_and_presence_gated() -> None:
-    unit = FIRSTBOOT.read_text(encoding="utf-8")
-
-    for credential in (
+    unit = SystemdFile(FIRSTBOOT)
+    credentials = {
         "firstboot.locale",
         "firstboot.locale-messages",
         "firstboot.keymap",
         "firstboot.timezone",
         "firstboot.hostname",
-    ):
-        assert f"ConditionCredential=|{credential}" in unit
-        assert f"ImportCredential={credential}" in unit
+    }
 
-    # The unit must not call systemd-firstboot: Bluefin's helper applies
-    # firstboot.hostname unconditionally and sets the live kernel hostname,
-    # which systemd-firstboot does not do. It also runs before sysinit.target
-    # with minimal dependencies (bash + coreutils only).
-    assert "systemd-firstboot" not in unit
-    assert "ExecStart=/usr/libexec/bluefin-firstboot-credentials" in unit
-    assert unit.index("ExecStart=/usr/libexec/bluefin-firstboot-credentials") < unit.index(
-        "ExecStartPost=/usr/bin/touch /etc/.bluefin-firstboot-credentials"
-    )
-    assert "--prompt" not in unit
-    assert "ConditionPathIsReadWrite=/etc" in unit
-    assert "ConditionPathExists=!/etc/.bluefin-firstboot-credentials" in unit
-    assert (
-        "After=systemd-remount-fs.service systemd-sysusers.service "
-        "systemd-tmpfiles-setup.service"
-        in unit
-    )
-    assert "WantedBy=sysinit.target" in unit
-    assert FIRSTBOOT_PRESET.read_text(encoding="utf-8") == (
-        "enable bluefin-firstboot-credentials.service\n"
-    )
+    conditions = unit.values("Unit", "ConditionCredential")
+    assert all(c.startswith("|") for c in conditions), "any one credential must trigger the unit"
+    assert {c[1:] for c in conditions} == credentials
+    assert set(unit.values("Service", "ImportCredential")) == credentials
+
+    # The bundled helper applies them, not systemd-firstboot: it also sets the
+    # live kernel hostname before systemd-networkd starts, so the first DHCP
+    # request already carries firstboot.hostname.
+    words = [word for argv in unit.all_commands() for word in argv]
+    assert not [w for w in words if "systemd-firstboot" in w or "--prompt" in w]
+    assert ["/usr/libexec/bluefin-firstboot-credentials"] in unit.commands()
+    assert "systemd-networkd.service" in unit.words("Unit", "Before")
+    # ExecStartPost= runs only after ExecStart= succeeded, so a failed helper
+    # leaves no stamp and runs again on the next boot.
+    assert ["/usr/bin/touch", "/etc/.bluefin-firstboot-credentials"] in unit.commands("ExecStartPost")
+    assert "!/etc/.bluefin-firstboot-credentials" in unit.values("Unit", "ConditionPathExists")
+    assert "/etc" in unit.values("Unit", "ConditionPathIsReadWrite")
+    assert {
+        "systemd-remount-fs.service",
+        "systemd-sysusers.service",
+        "systemd-tmpfiles-setup.service",
+    } <= set(unit.words("Unit", "After"))
+    assert "sysinit.target" in unit.words("Install", "WantedBy")
+    assert preset("bluefin-firstboot-credentials.service", PRESETS) == "enable"
 
 
 def test_network_credentials_override_dhcp_without_removing_fallback() -> None:
-    network = NETWORK.read_text(encoding="utf-8")
     skill = TPM2_SKILL.read_text(encoding="utf-8")
 
-    assert network == "[Match]\nName=e*\n\n[Network]\nDHCP=ipv4\n"
+    # networkd applies the first .network file, in filename order across
+    # /run and /usr, that matches a link: the documented 10-static credential
+    # must sort before every shipped file, which stays the DHCP fallback.
+    assert "10-static.network" in skill
+    shipped = sorted(p.name for p in NETWORK.parent.glob("*.network"))
+    assert shipped and all(name > "10-static.network" for name in shipped), shipped
+    assert SystemdFile(NETWORK).value("Network", "DHCP") == "ipv4"
     assert "network.network.*" in skill
     assert "network.netdev.*" in skill
-    assert NETWORK_GENERATOR_DROPIN.read_text(encoding="utf-8") == (
-        "[Service]\n"
-        "ImportCredential=network.conf.*\n"
-        "ImportCredential=network.link.*\n"
-        "ImportCredential=network.netdev.*\n"
-        "ImportCredential=network.network.*\n"
-    )
+    assert set(SystemdFile(NETWORK_GENERATOR_DROPIN).values("Service", "ImportCredential")) == {
+        "network.conf.*",
+        "network.link.*",
+        "network.netdev.*",
+        "network.network.*",
+    }
     assert "systemd-network-generator" in skill
     assert "/run/systemd/network/" in skill
-    assert "10-static.network" in skill
-    assert NETWORK_GENERATOR_PRESET.read_text(encoding="utf-8") == (
-        "enable systemd-network-generator.service\n"
-    )
+    assert preset("systemd-network-generator.service", PRESETS) == "enable"
+
+
+def test_sysusers_imports_password_credentials_for_every_user() -> None:
+    # Upstream systemd-sysusers.service imports passwd.*-password.root only,
+    # so an account created from the sysusers.extra credential would get no
+    # password field. The glob forms are the whole fix: keep them pinned.
+    assert set(SystemdFile(SYSUSERS_DROPIN).values("Service", "ImportCredential")) == {
+        "passwd.hashed-password.*",
+        "passwd.plaintext-password.*",
+    }
+    assert "passwd.hashed-password." in USB_INSTALLER_SKILL.read_text(encoding="utf-8")
 
 
 def test_tpm2_sealing_docs_cover_all_supported_credential_names() -> None:

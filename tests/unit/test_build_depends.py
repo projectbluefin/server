@@ -19,7 +19,7 @@ def test_manual_and_script_elements_depend_on_base_stack():
     """Ensure all manual/script elements have base/base-stack.bst in build-depends."""
     for bst_path in ELEMENTS_DIR.rglob("*.bst"):
         # Skip external junction declarations
-        if bst_path.name in ("freedesktop-sdk.bst", "gnome-build-meta.bst"):
+        if bst_path.name == "freedesktop-sdk.bst":
             continue
 
         content = bst_path.read_text(encoding="utf-8")
@@ -55,7 +55,7 @@ def test_compose_elements_declare_integration_explicitly():
     integration (the ld.so cache, hwdb) opt in with integrate: True.
     """
     for bst_path in ELEMENTS_DIR.rglob("*.bst"):
-        if bst_path.name in ("freedesktop-sdk.bst", "gnome-build-meta.bst"):
+        if bst_path.name == "freedesktop-sdk.bst":
             continue
 
         content = bst_path.read_text(encoding="utf-8")
@@ -112,4 +112,29 @@ def test_os_countme_depends_on_curl_and_jq():
         "os-countme.bst must include freedesktop-sdk.bst:components/jq.bst "
         "(projectbluefin/server#96)"
     )
+
+
+def _build_depends(element):
+    data = yaml.safe_load((ELEMENTS_DIR / element).read_text(encoding="utf-8"))
+    return {d if isinstance(d, str) else d["filename"] for d in data.get("build-depends", [])}
+
+
+def test_sbom_lists_every_published_sysext_and_its_payload():
+    """collect_manifest follows only runtime dependencies of what it lists.
+
+    A sysext only build-depends on the upstream payload it stages, so the
+    SBOM must list the sysext (its own local sources) and the payload.
+    """
+    sysexts = {d for d in _build_depends("oci/bluefin-server-image.bst") if d.endswith("-sysext.bst")}
+    sbom = _build_depends("oci/bluefin-server-sbom.bst")
+
+    assert sysexts
+    assert sysexts <= sbom, f"SBOM misses {sorted(sysexts - sbom)}"
+    assert {
+        "k0s/k0s-bin.bst",
+        "kubeadm/kubeadm-bin.bst",
+        "zfs/openzfs.bst",
+        "nvidia/nvidia-open-595.bst",
+        "nvidia/nvidia-container-toolkit.bst",
+    } <= sbom
 

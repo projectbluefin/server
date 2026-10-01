@@ -1,6 +1,8 @@
 """Shared fixtures for the unit tests."""
 
 import importlib.util
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -8,6 +10,25 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / ".github" / "scripts" / "docs-checks.py"
+
+
+def _required_tool(name: str) -> str:
+    path = shutil.which(name)
+    if path is None:
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"{name} is not installed; .github/workflows/unit-tests.yml must install it")
+        pytest.skip(f"{name} is not installed")
+    return path
+
+
+@pytest.fixture(scope="session")
+def node() -> str:
+    return _required_tool("node")
+
+
+@pytest.fixture(scope="session")
+def shellcheck() -> str:
+    return _required_tool("shellcheck")
 
 
 def _load_module():

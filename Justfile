@@ -6,6 +6,8 @@ default:
 # Same bst2 container image FSDK/dakota CI uses -- pinned by SHA.
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4")
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:64eb0b4930d57a92710822898fb73af6cc1ae35d")
+# bats for `just test-unit` when none is installed -- pinned by digest.
+export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
 
 # Prefix for podman calls: empty when rootless podman works, "sudo" otherwise.
 sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } else { "sudo" }
@@ -66,13 +68,20 @@ validate: gen-dev-keys
     python3 .github/scripts/check-release-version.py
     python3 .github/scripts/check-k0s-version.py
     python3 .github/scripts/check-renovate-series.py
-    just bst show --deps all oci/bluefin-server-image.bst oci/k0s-sysext.bst oci/kubestellar-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst
+    just bst show --deps all oci/bluefin-server-image.bst oci/k0s-sysext.bst oci/kubestellar-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst oci/nvidia-open-595-sysext.bst oci/nvidia-container-toolkit-sysext.bst
 
-# Run the unit test suite (pytest + bats).
+# Run the unit test suite (pytest + bats; bats from a container if not installed).
 [group('dev')]
 test-unit:
+    #!/usr/bin/env bash
+    set -euo pipefail
     python3 -m pytest tests/unit -q
-    bats tests/unit
+    if command -v bats >/dev/null 2>&1; then
+        exec bats tests/unit
+    fi
+    echo "==> bats is not installed; running it from ${bats_image}" >&2
+    exec {{sudo_cmd}} podman run --rm --security-opt label=disable -e CI \
+        -v "{{justfile_directory()}}:/code:ro" -w /code "${bats_image}" tests/unit
 
 # ── Build ─────────────────────────────────────────────────────────────
 # Build the k0s and KubeStellar systemd-sysext images.
@@ -126,18 +135,31 @@ set-version VERSION:
     sed -i 's/^  image-version: .*/  image-version: "{{VERSION}}"/' include/image.yml
     grep image-version include/image.yml
 
-# Install diskless -> disk, then (with NEXT) sysupdate A->B and reboot, all in QEMU.
+# Install diskless -> disk, then (with NEXT) sysupdate A->B and reboot, and (with
+# BROKEN) break that update and prove the boot-counted rollback, all in QEMU.
+# DOGFOOD_SYSEXT=nvidia follows the NVIDIA driver and toolkit sysexts instead of ZFS,
+# DOGFOOD_SYSEXT=zfs,nvidia follows both.
 [group('diskless')]
-dogfood-install NEXT="":
-    bash scripts/dogfood-install.sh dist/diskless {{NEXT}}
+dogfood-install NEXT="" BROKEN="":
+    bash scripts/dogfood-install.sh dist/diskless {{NEXT}} {{BROKEN}}
+
+# Boot the offline USB installer, install unattended to a blank disk, boot it (QEMU).
+[group('diskless')]
+dogfood-installer:
+    bash scripts/dogfood-installer.sh dist/diskless
 
 # REF=ghcr.io/<owner>/bluefin-server or <registry-host>:30500/bluefin-server
 # (PLAIN_HTTP=1); log in with podman login first. One layer per file.
+# Local rehearsal only: releases are published by scripts/publish-release.sh
+# from .github/workflows/build.yml, which also verifies the pushed manifest
+# against the local files. This recipe pushes the same artifact type,
+# annotations and layout, and nothing else.
 # Publish an image set as an ORAS OCI artifact tagged <version> and latest.
 [group('diskless')]
 publish-oci REF DIR="dist/diskless" PLAIN_HTTP="0":
     #!/usr/bin/env bash
     set -euo pipefail
+    revision="$(git rev-parse HEAD)"
     cd "{{DIR}}"
     uki="$(ls bluefin-server-netboot_*.efi)"
     ver="${uki#bluefin-server-netboot_}"; ver="${ver%.efi}"
@@ -150,6 +172,8 @@ publish-oci REF DIR="dist/diskless" PLAIN_HTTP="0":
         {{oras_image}} push "${extra[@]}" \
         --artifact-type application/vnd.projectbluefin.server.release.v1 \
         --annotation "org.opencontainers.image.version=${ver}" \
+        --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-projectbluefin/server}" \
+        --annotation "org.opencontainers.image.revision=${revision}" \
         "{{REF}}:${ver},latest" "${files[@]}"
 
 # Boot dist/diskless/ in QEMU with Secure Boot, pulling /usr over HTTP.
@@ -173,10 +197,47 @@ export-zfs-sysext: build-zfs-sysext
     rm -rf dist/zfs-checkout
     mkdir -p dist/sysext
     just bst artifact checkout oci/zfs-sysext.bst --directory /src/dist/zfs-checkout
-    cp dist/zfs-checkout/zfs-*.raw.zst dist/sysext/
+    cp dist/zfs-checkout/zfs_*.raw.zst dist/sysext/
     grep 'raw.zst$' dist/zfs-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
     rm -rf dist/zfs-checkout
     @echo "==> wrote zfs sysext:" && ls -lh dist/sysext/
+
+# Build an NVIDIA driver sysext (open kernel modules; locked to one image version).
+[group('sysext')]
+build-nvidia-sysext FLAVOUR="nvidia-open-595": gen-dev-keys
+    just bst build oci/{{FLAVOUR}}-sysext.bst
+
+# Export an NVIDIA driver sysext + SHA256SUMS to dist/sysext/.
+[group('sysext')]
+export-nvidia-sysext FLAVOUR="nvidia-open-595": (build-nvidia-sysext FLAVOUR)
+    rm -rf dist/{{FLAVOUR}}-checkout
+    mkdir -p dist/sysext
+    just bst artifact checkout oci/{{FLAVOUR}}-sysext.bst --directory /src/dist/{{FLAVOUR}}-checkout
+    cp dist/{{FLAVOUR}}-checkout/{{FLAVOUR}}_*.raw.zst dist/sysext/
+    grep 'raw.zst$' dist/{{FLAVOUR}}-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
+    rm -rf dist/{{FLAVOUR}}-checkout
+    @echo "==> wrote {{FLAVOUR}} sysext:" && ls -lh dist/sysext/
+
+# Install dist/diskless/ in QEMU, merge its NVIDIA sysext and probe it (no GPU).
+[group('sysext')]
+dogfood-nvidia FLAVOUR="nvidia-open-595":
+    bash scripts/dogfood-nvidia.sh dist/diskless "dist/diskless/{{FLAVOUR}}_$(sed -n 's/^  image-version: "\(.*\)"$/\1/p' include/image.yml).raw.zst"
+
+# Build the NVIDIA Container Toolkit (CDI) systemd-sysext (own version axis).
+[group('sysext')]
+build-nvidia-container-toolkit-sysext:
+    just bst build oci/nvidia-container-toolkit-sysext.bst
+
+# Export the NVIDIA Container Toolkit sysext + SHA256SUMS to dist/sysext/.
+[group('sysext')]
+export-nvidia-container-toolkit-sysext: build-nvidia-container-toolkit-sysext
+    rm -rf dist/nvidia-ctk-checkout
+    mkdir -p dist/sysext
+    just bst artifact checkout oci/nvidia-container-toolkit-sysext.bst --directory /src/dist/nvidia-ctk-checkout
+    cp dist/nvidia-ctk-checkout/nvidia-container-toolkit-*.raw.zst dist/sysext/
+    grep 'raw.zst$' dist/nvidia-ctk-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
+    rm -rf dist/nvidia-ctk-checkout
+    @echo "==> wrote nvidia-container-toolkit sysext:" && ls -lh dist/sysext/
 
 # Set up KubeStellar kc-agent for the user in ONE command.
 [group('test')]

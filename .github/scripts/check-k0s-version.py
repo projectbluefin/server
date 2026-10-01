@@ -14,7 +14,8 @@ Three consumers restate that version in three different spellings, and all
 three must move together or the sysext silently stops updating:
 
   * ``elements/k0s/k0s-bin.bst``          — the upstream download URL.
-  * ``elements/oci/k0s-sysext.bst``       — the release asset filename, which
+  * ``elements/oci/k0s-sysext.bst``       — the release asset name
+    (``sysext-image``, packed by include/sysext.yml), which
     ``files/os/sysupdate.d/70-k0s.transfer`` reads as the version oracle
     through its ``@v`` wildcard.
   * ``files/k0s/sysext/extension-release.k0s`` — the ``VERSION_ID=`` reported
@@ -100,16 +101,17 @@ def main():
             "restrict k0s-version to [A-Za-z0-9._~^+-] in include/k0s.yml.",
         )
 
-    # The upstream download URL must be derived, not restated.
+    # Every upstream download URL (one per architecture) must be derived.
     bin_text = read(K0S_BIN)
-    url_match = re.search(r"^\s*url:\s*(\S+)\s*$", bin_text, re.MULTILINE)
-    if not url_match:
+    urls = re.findall(r"^\s*url:\s*(\S+)\s*$", bin_text, re.MULTILINE)
+    if not urls:
         fail(
             "elements/k0s/k0s-bin.bst declares no source 'url:'.",
             "restore the pinned upstream k0s release URL.",
         )
-    url = url_match.group(1)
-    if "%{k0s-upstream-tag}" not in url:
+    for url in urls:
+        if "%{k0s-upstream-tag}" in url:
+            continue
         fail(
             "elements/k0s/k0s-bin.bst hardcodes the upstream k0s release tag:\n"
             f"  url: {url}\n"
@@ -121,36 +123,35 @@ def main():
 
     # The asset filename must be on the k0s axis, not the OS release axis.
     sysext_text = read(K0S_SYSEXT)
-    fname_match = re.search(r'^\s*FNAME="([^"]+)"\s*$', sysext_text, re.MULTILINE)
+    fname_match = re.search(r'^\s*sysext-image:\s*"([^"]+)"\s*$', sysext_text, re.MULTILINE)
     if not fname_match:
         fail(
-            'elements/oci/k0s-sysext.bst declares no FNAME="..." asset name.',
-            "restore the sysext asset filename assignment.",
+            'elements/oci/k0s-sysext.bst declares no sysext-image: "..." asset name.',
+            "restore the sysext-image variable.",
         )
     fname_expr = fname_match.group(1)
     if any(axis in fname_expr for axis in ("%{release-version}", "%{installer-version}", "%{image-version}")):
         fail(
             "elements/oci/k0s-sysext.bst names the k0s sysext on an OS release\n"
-            f"  axis: FNAME=\"{fname_expr}\"\n"
+            f"  axis: sysext-image: \"{fname_expr}\"\n"
             "  70-k0s.transfer reads this filename as the version of the k0s it\n"
             "  delivers.",
-            'use FNAME="k0s-%{k0s-version}.raw".',
+            'use sysext-image: "k0s-%{k0s-version}".',
         )
     if "%{k0s-version}" not in fname_expr:
         fail(
             "elements/oci/k0s-sysext.bst does not derive the sysext asset name\n"
-            f"  from the pinned k0s version: FNAME=\"{fname_expr}\"",
-            'use FNAME="k0s-%{k0s-version}.raw".',
+            f"  from the pinned k0s version: sysext-image: \"{fname_expr}\"",
+            'use sysext-image: "k0s-%{k0s-version}".',
         )
 
     # VERSION_ID must be generated, so sysext status matches the asset.
-    if 'echo "VERSION_ID=%{k0s-version}"' not in sysext_text:
+    if 'sysext-version: "%{k0s-version}"' not in sysext_text:
         fail(
             "elements/oci/k0s-sysext.bst does not generate VERSION_ID= from\n"
             "  %{k0s-version}, so `systemd-sysext status` can disagree with the\n"
             "  asset filename an operator sees on disk.",
-            'append \'VERSION_ID=%{k0s-version}\' to the staged '
-            "extension-release.k0s.",
+            'set sysext-version: "%{k0s-version}" in elements/oci/k0s-sysext.bst.',
         )
 
     ext_text = read(EXTENSION_RELEASE)
@@ -184,7 +185,7 @@ def main():
                 )
 
     # The produced asset name must satisfy the sysupdate transfer pattern.
-    asset = fname_expr.replace("%{k0s-version}", version) + ".zst"
+    asset = fname_expr.replace("%{k0s-version}", version) + ".raw.zst"
     transfer_text = read(TRANSFER)
     pattern_match = re.search(
         r"^\s*MatchPattern=(\S*@v\S*\.zst)\s*$", transfer_text, re.MULTILINE
@@ -214,7 +215,7 @@ def main():
             f"  k0s-version    : {version!r}\n"
             "  Hosts compare the captured string against the version they have\n"
             "  installed, so a mismatch means k0s updates silently stop.",
-            "align FNAME in elements/oci/k0s-sysext.bst with MatchPattern in "
+            "align sysext-image in elements/oci/k0s-sysext.bst with MatchPattern in "
             "files/os/sysupdate.d/70-k0s.transfer.",
         )
 

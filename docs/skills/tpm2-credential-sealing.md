@@ -60,7 +60,13 @@ node:
   `systemd-firstboot.service` applies them instead: it treats `!unprovisioned`
   as unconfigured. Its interactive root password prompt is removed
   (`files/os/creds/systemd/system/systemd-firstboot.service.d/`) so a node
-  without the credential boots unattended and stays locked.
+  without the credential boots unattended and stays locked. One path is
+  deliberately exempt: a disk installed from the USB stick carries the
+  `bluefin.prompt-root-password` credential the installer sets on it, and
+  `bluefin-root-password-prompt.service` asks for a root password on tty1 on
+  that disk's first boot, because the person who ran the installer is at the
+  console (see [usb-installer.md](usb-installer.md)). Either credential above
+  answers that prompt unattended; an empty answer at it locks root for good.
 
 `systemd-firstboot` runs on first boot only. A diskless node rebuilds `/etc`
 from `/usr/share/factory/etc` and is on its first boot every time, so the
@@ -74,9 +80,12 @@ password with `passwd` instead.
 Deliver the credentials like any other: SMBIOS type 11 or QEMU fw_cfg on VMs,
 an Ignition-capable boot server, or encrypted `.cred` files in
 `/loader/credentials/` on the ESP (see below). The USB installer needs no
-login: `systemd-sysinstall` runs on the console. It does not carry the
-installer's credentials over, so place them in `/loader/credentials/` on the
-installed disk's ESP before its first boot.
+login: `systemd-sysinstall` runs on the console. Credentials placed in
+`/loader/credentials/` on the stick are copied onto the installed disk's ESP
+(`CopyFiles=` in the stick's ESP definition), so the installer's own boot and
+every boot of the installed node see the same set; see
+[usb-installer.md](usb-installer.md). Credentials can also be added to an
+installed disk's ESP directly, before its first boot.
 
 With root locked, `emergency.target` and `rescue.target` on the booted system
 get no shell: `sulogin` reports the locked account and boot continues. Do not
@@ -142,6 +151,15 @@ ESP credentials are untrusted, so systemd only accepts them encrypted; a
 `--with-key=null` credential is refused on a machine with a TPM2 and Secure
 Boot on. PCR 11 changes with every UKI, so a diskless node that boots each new
 release needs its `--tpm2-pcrs=7+11` credentials re-sealed per release.
+
+A `--with-key=null` credential is encrypted with a fixed, public key: it is
+obfuscated, not secret. Anyone who can read the unencrypted vfat ESP — of the
+installer stick, or of any disk the stick installed, since the stick's
+`/loader/credentials/` is copied onto each — can recover the plaintext. Never
+put a real secret (`passwd.plaintext-password.*`, a `crypt(5)` hash worth
+cracking, a private key) in a null-key credential. Use `--with-key=tpm2` for
+those, and reserve null-key credentials for non-secret payloads such as the
+`*` / `!*` password fields and `ssh.listen` in the installer recipe.
 
 ### SSH key provisioning
 

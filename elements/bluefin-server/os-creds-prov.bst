@@ -18,6 +18,12 @@ description: |
   static hostname honoured only when none is set, while this helper applies
   it unconditionally.
 
+  The same files/os/libexec directory holds /usr/libexec/bluefin-sysext-modules,
+  the generic loader for kernel modules shipped by system extensions (ZFS,
+  NVIDIA): they ship no modules.* index, so it indexes the merged module tree
+  under /run and loads through `modprobe -d`. Nothing in the base image calls
+  it; the extensions' load units do.
+
 build-depends:
   - base/base-stack.bst
 
@@ -47,3 +53,5 @@ config:
       cp -a systemd-src/. "%{install-root}/usr/lib/systemd/system/"
       install -Dm0755 libexec-src/bluefin-firstboot-credentials \
         "%{install-root}/usr/libexec/bluefin-firstboot-credentials"
+      install -Dm0755 libexec-src/bluefin-sysext-modules \
+        "%{install-root}/usr/libexec/bluefin-sysext-modules"

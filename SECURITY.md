@@ -66,7 +66,7 @@ This policy covers everything this repository produces and its build pipeline:
 - Release signing and the `systemd-sysupdate` update/verification flow.
 
 **Out of scope:** vulnerabilities in upstream components such as
-freedesktop-sdk, GNOME build metadata, systemd, or k0s itself. Report those to
+freedesktop-sdk, systemd, or k0s itself. Report those to
 the respective upstream project; report to this repository only when the issue
 is introduced by our integration, build, signing, or packaging of the
 component.

@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server boot chain, the d
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-09-30"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -37,22 +37,27 @@ GPT partition label with room to spare):
 | `bluefin-server-<ver>.efi` | Disk UKI (installed nodes); also the sysupdate source for `$BOOT`. |
 | `bluefin-server-netboot_<ver>.efi` | Netboot UKI (diskless nodes); the UEFI HTTP boot / PXE target. |
 | `bluefin-server-netboot_<ver>.esp.raw` | Netboot ESP image: signed systemd-boot, the netboot UKI, and Secure Boot key enrollment payloads. Write it to a USB stick to boot diskless without HTTP boot. |
-| `bluefin-server-installer_<ver>.raw` | Offline USB installer: the same usr + verity images (labelled `bluefin-installer-usr` / `bluefin-installer-usr-verity`) plus an ESP with signed systemd-boot, the installer UKI, key enrollment payloads, and the disk UKI + install-time `repart.d` under `bluefin/`. Write it to a USB stick to install without a network. |
-| `zfs_<ver>.raw.zst` / `kubestellar_<ver>.raw.zst` / `kubeadm_<ver>.raw.zst` | Opt-in sysext assets locked to this image version; installed nodes fetch them through the `zfs` / `kubestellar` / `kubeadm` sysupdate features. |
+| `bluefin-server-installer_<ver>.raw` | Offline USB installer; write to a stick to install without a network. See [usb-installer.md](usb-installer.md). |
+| `zfs_<ver>.raw.zst` / `kubestellar_<ver>.raw.zst` / `kubeadm_<ver>.raw.zst` / `nvidia-open-595_<ver>.raw.zst` | Opt-in sysext assets locked to this image version; installed nodes fetch them through the `zfs` / `kubestellar` / `kubeadm` / `nvidia-open-595` sysupdate features. |
 | `k0s-<k0s-ver>.raw.zst` | Opt-in k0s sysext asset, on its own version axis. |
+| `nvidia-container-toolkit-<ctk-ver>.raw.zst` | Opt-in NVIDIA Container Toolkit (CDI) sysext asset, on its own version axis like k0s. |
 | `efi-keys/` | PK/KEK/db enrollment payloads. |
 | `SHA256SUMS` / `SHA256SUMS.gpg` | One manifest over every file above, signed in-element with `files/boot-keys/sysupdate-signing.asc`; the image trusts the matching `import-pubring.pgp` (see `systemd-sysupdate-verification.md`). |
 
-A release is this directory published as-is: a GitHub Release `v<ver>` plus an
-ORAS OCI artifact `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per
-file, artifact type `application/vnd.projectbluefin.server.release.v1`).
-`just publish-oci REF [DIR] [PLAIN_HTTP]` pushes the same artifact locally.
+A release publishes this directory as-is (GitHub Release `v<ver>` plus an ORAS
+OCI artifact); see the `release` job in [ci-tooling.md](ci-tooling.md).
+`just publish-oci REF [DIR] [PLAIN_HTTP]` pushes the same artifact locally, as
+a rehearsal; CI publishes through `scripts/publish-release.sh`, which also
+verifies the pushed manifest against the local files.
 
 The /usr image itself is built by `oci/bluefin-server-usr.bst` with an offline
 `systemd-repart`: an erofs partition (`bluefin_usr_<ver>`) plus its dm-verity
 hash partition (`bluefin_usr_verity_<ver>`), and the root hash is recorded in
-`bluefin-server_<ver>.usrhash`. `/etc` is empty on every boot; its defaults
-live in `/usr/share/factory/etc` and are copied in by `systemd-tmpfiles`.
+`bluefin-server_<ver>.usrhash`. `/etc` holds no image content: its defaults
+live in `/usr/share/factory/etc` and are copied in by `systemd-tmpfiles`. A
+diskless node keeps `/etc` on tmpfs, so it starts empty on every boot; a disk
+install keeps it on the root partition (`files/os/repart.d/50-root.conf`),
+where it persists across A/B updates.
 
 ## The boot chain
 
@@ -64,10 +69,9 @@ signed with DB, so Secure Boot locks those command lines. `lockdown=integrity`
 is always on. `os-sd-boot-signed.bst` signs systemd-boot with the same DB key
 so installed disks and the netboot ESP get a loader firmware accepts.
 
-Dev keys come from `just gen-dev-keys` (throwaway keys in the gitignored
-`files/boot-keys/`, including the `sysupdate-signing.asc` /
-`import-pubring.pgp` pair that signs and verifies `SHA256SUMS`); CI builds on
-main use the `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets.
+The signing keys (dev vs CI, and the pair that signs and verifies
+`SHA256SUMS`): [secure-boot-keys.md](secure-boot-keys.md) and
+[systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
 
 ### Diskless (netboot UKI)
 
@@ -100,11 +104,12 @@ directly from the boot server; no systemd-boot runs. systemd-stub records the
 boot URL in the `StubDeviceURL` EFI variable, and the initrd derives the URL
 of `bluefin-server_<ver>.raw` (and of `SHA256SUMS` / `SHA256SUMS.gpg`) from
 the same directory. `bluefin-ignition-credentials` also uses it: with no
-`ignition.config` / `ignition.config.url` credential it HEADs
-`bluefin-node.ign` next to the UKI and applies it through `config.replace`
-when present. Because HTTP boot skips systemd-boot's key enrollment, the
-firmware must already trust the image DB key; `scripts/dogfood-diskless.sh`
-with `DOGFOOD_BOOT=http` enrolls once from the netboot ESP first.
+`ignition.config` / `ignition.config.url` credential it looks for
+`bluefin-node.ign` next to the UKI and applies it only as "Per-node
+configuration" in [booty-integration.md](booty-integration.md) allows.
+Because HTTP boot skips systemd-boot's key enrollment, the firmware must
+already trust the image DB key; `scripts/dogfood-diskless.sh` with
+`DOGFOOD_BOOT=http` enrolls once from the netboot ESP first.
 
 ### Installed disk (disk UKI)
 
@@ -132,34 +137,8 @@ installed disk is identical whichever path installed it. No shell installer.
 
 ### From the USB installer (offline)
 
-```bash
-sudo dd if=bluefin-server-installer_<ver>.raw of=/dev/<usb> bs=4M conv=fsync status=progress
-```
-
-```text
-firmware -> systemd-boot -> bluefin-server-installer_<ver>.efi
-  -> /usr from the stick's bluefin-installer-usr partition (dm-verity, usrhash=)
-  -> tmpfs root, systemd.unit=system-install.target
-  -> systemd-sysinstall.service on the monitor (/dev/console = tty0)
-```
-
-The installer UKI finds its /usr by partition label, not by the
-usrhash-derived UUIDs. Those UUIDs belong to installed usr slots, so an
-existing Bluefin install (including the disk being overwritten) is never opened
-as the installer's /usr, and an installed node booted with the stick still
-plugged in never opens the stick's usr. `run-bluefin-installer.mount` mounts
-the stick's ESP (`bluefin-installer`) at `/run/bluefin/installer`; the
-`systemd-sysinstall.service` drop-in passes
-`--definitions=/run/bluefin/installer/bluefin/repart.d` and
-`--kernel=${BLUEFIN_INSTALL_KERNEL}` (the disk UKI, named by the installer
-UKI's `systemd.setenv=`). The disk UKI sits outside `EFI/Linux` on the stick so
-systemd-boot never offers it there. sysinstall prompts for the target disk,
-erasing it, and confirmation, then reboots; remove the stick when it does.
-
-Secure Boot: the stick's systemd-boot and UKIs are signed with the project DB
-key. On bare metal put the firmware into Setup Mode and pick the enrollment
-entry in the systemd-boot menu (`secure-boot-enroll if-safe` only
-auto-enrolls in VMs), or turn Secure Boot off.
+See [usb-installer.md](usb-installer.md) — the offline installer image, its
+boot flow, unattended installs, and install-time provisioning.
 
 ### From a diskless node
 
@@ -182,13 +161,18 @@ Installed nodes update with `systemd-sysupdate` against the transfers in
   usr-verity slot (matched by `bluefin_usr_@v` partition labels).
 - `20-uki.transfer` installs the new disk UKI into `/EFI/Linux` with boot
   counting (`TriesLeft=3`, at most 2 UKIs kept).
-- `30-zfs.transfer` and `31-kubestellar.transfer` are optional **features**
+- `30-zfs.transfer`, `31-kubestellar.transfer`, `32-kubeadm.transfer` and
+  `33-nvidia-open-595.transfer` are optional **features**
   (enabled with `updatectl enable zfs` or a drop-in
   `/etc/sysupdate.d/zfs.feature.d/enable.conf` with `[Feature] Enabled=true`).
   When enabled, the matching sysext is downloaded with every OS update into
   `/var/lib/extensions` (two versions kept, `ProtectVersion=%A`); systemd-sysext
   merges only the one matching the booted image, so a boot-counted rollback
-  keeps ZFS.
+  keeps ZFS (or the NVIDIA driver).
+
+The k0s and NVIDIA Container Toolkit sysexts are separate sysupdate components
+on their own version axes (`sysupdate.k0s.d/`,
+`sysupdate.nvidia-container-toolkit.d/`); see `systemd-sysupdate-verification.md`.
 
 Sources are the release assets on GitHub Releases, verified against the
 GPG-signed `SHA256SUMS` with `Verify=yes` (see
@@ -310,10 +294,10 @@ signed UKI, the `ignition.config.url=` karg cannot be used; configs arrive as
 
 `bluefin-ignition-credentials` stages whichever is set into
 `/run/ignition/user.ign`; the downstream Ignition units are conditioned on
-that file, so a node with no config runs none of it. A UEFI HTTP-booted node
-needs no credential: the script reads the boot URL from the `StubDeviceURL`
-EFI variable and, when the server offers `bluefin-node.ign` next to the UKI,
-applies it. Ignition runs on **every** boot (there is no first-boot marker on
+that file, so a node with no config runs none of it. A network-booted node
+needs no credential: a `bluefin-node.ign` next to its UKI is staged only as
+"Per-node configuration" in [booty-integration.md](booty-integration.md)
+allows. Ignition runs on **every** boot (there is no first-boot marker on
 a tmpfs root), so configs must be idempotent. See
 `tests/fixtures/ignition/var-on-disk.ign` for a dogfood-tested example
 (persistent /var on a second disk plus an SSH key). The supported stages and
@@ -323,11 +307,12 @@ the Ignition section of [diskless-troubleshooting.md](diskless-troubleshooting.m
 
 ## PXE / HTTP boot service
 
-The intended network boot server is [Booty](https://github.com/jeefy/booty).
-Its `feat/bluefin-http-boot` work (not yet merged) syncs `v<ver>` releases
-from GitHub Releases or from the OCI artifact (`--bluefinOCI`, `--plain-http`
-for plain-HTTP registries), checks the signature with `--bluefinKeyring`,
-answers ProxyDHCP with an `HTTPClient` offer pointing at
+The intended network boot server is [Booty](https://github.com/jeefy/booty)
+(Bluefin support on its `main` since
+[#39](https://github.com/jeefy/booty/pull/39)). It syncs `v<ver>` releases
+from GitHub Releases or from the OCI artifact (`--bluefinOCI`, plain-HTTP
+registries via an `http://` prefix), checks the signature with
+`--bluefinKeyring`, answers ProxyDHCP with an `HTTPClient` offer pointing at
 `http://<booty>/bluefin/<mac>/bluefin-server-netboot.efi`, and serves the UKI,
 the OS DDI, `SHA256SUMS(.gpg)`, and a per-host `bluefin-node.ign` (hostname,
 SSH keys, state disk, extensions, k0s token). Its `doInstall` flag boots the

@@ -24,6 +24,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 |---|---|---|
 | [`avoid-over-engineering.md`](avoid-over-engineering.md) | Cutting scope, deleting code, resisting bloat | Rules and red flags for keeping solutions small. |
 | [`architecture-roadmap.md`](architecture-roadmap.md) | Future architecture direction, long-lead design | Roadmap for systemd-native architecture work. |
+| [`booty-integration.md`](booty-integration.md) | HTTP boot, iPXE chainloading, per-node Ignition, kubeadm worker provisioning via Booty | How the Booty network boot server serves releases to nodes. |
 | [`bump-fsdk-version.md`](bump-fsdk-version.md) | Pinning or retagging the FSDK junction | Update the pinned FSDK release and derived tags. |
 | [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
 | [`ddi-installer-build.md`](ddi-installer-build.md) | Building and dogfooding the image set | Local build, export, and QEMU dogfood workflow. |
@@ -34,11 +35,14 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`kubeadm-sysext.md`](kubeadm-sysext.md) | Joining a kubeadm cluster, kubelet/containerd sysext, Kubernetes kernel options | Build and runtime contract for the kubeadm worker sysext. |
 | [`k0s-sysext-ops.md`](k0s-sysext-ops.md) | Operating k0s or the KubeStellar appliance on Bluefin Server | Runtime operation and troubleshooting for the k0s and KubeStellar sysexts. |
 | [`k0s-sysext.md`](k0s-sysext.md) | Building the k0s sysext | BuildStream element and publish steps for the k0s sysext. |
+| [`nvidia-sysext.md`](nvidia-sysext.md) | Adding, bumping, or debugging an NVIDIA driver (open kernel modules) or Container Toolkit (CDI) sysext | Flavours and adding one, open-modules-only (Turing+) policy, driver and toolkit bumps, CDI and GPU Operator values. |
+| [`secure-boot-keys.md`](secure-boot-keys.md) | Rotating signing keys, setting up CI secrets, debugging signature verification | Key inventory, `gen-dev-keys`, CI secrets, and rotation. |
 | [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
 | [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
 | [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and version matching. |
 | [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md) | Image-based A/B updates and signed manifests | Release signing, `systemd-sysupdate`, and trust model. |
 | [`tpm2-credential-sealing.md`](tpm2-credential-sealing.md) | First-boot credentials, root/SSH node access, TPM2 sealing | Provisioning credentials, node access, and sealing with `systemd-creds`. |
+| [`usb-installer.md`](usb-installer.md) | The offline USB installer image, unattended installs, install-time provisioning | `bluefin-server-installer_<ver>.raw` boot flow, sysinstall drop-in, ESP credentials. |
 
 ## Standing facts
 

@@ -10,10 +10,15 @@
 #   files/boot-keys/modules/linux-module-cert.crt public, baked into the kernel's trusted keyring
 #   files/boot-keys/sysupdate-signing.asc         OpenPGP secret key that signs SHA256SUMS
 #   files/boot-keys/import-pubring.pgp            its public keyring, installed as
-#                                                 /etc/systemd/import-pubring.pgp (importd, sysupdate)
+#                                                 /usr/lib/systemd/import-pubring.pgp (importd, sysupdate)
 #
-# Changing modules/linux-module-cert.crt changes the kernel's cache key and
-# forces a kernel rebuild, so existing keys are kept unless --force is given.
+# Existing keys are never overwritten without --force: every key is baked
+# into or signs the image, so replacing one needs a new image-version (see
+# "Keys" in docs/skills/ddi-installer-build.md), and changing
+# modules/linux-module-cert.crt also forces a kernel rebuild. A partial set
+# (some files of a pair or of the boot set missing) is an error rather than
+# something to fill in, since filling it in would replace the files that do
+# exist.
 set -euo pipefail
 
 dir="$(cd "$(dirname "$0")/.." && pwd)/files/boot-keys"
@@ -37,11 +42,38 @@ gen_signing_key() {
     echo "Generated image signing key in ${dir}"
 }
 
-if [ ! -s "${dir}/sysupdate-signing.asc" ] || [ "${force}" = 1 ]; then
+signing_keys=(sysupdate-signing.asc import-pubring.pgp)
+boot_keys=(PK.key PK.crt KEK.key KEK.crt DB.key DB.crt linux-module-cert.key modules/linux-module-cert.crt)
+
+# Prints "none", "all" or "partial" for the named files under ${dir}.
+key_set_state() {
+    local present=0 f
+    for f in "$@"; do
+        [ -s "${dir}/${f}" ] && present=$((present + 1))
+    done
+    if [ "${present}" = 0 ]; then echo none
+    elif [ "${present}" = "$#" ]; then echo all
+    else echo partial
+    fi
+}
+
+signing_state="$(key_set_state "${signing_keys[@]}")"
+boot_state="$(key_set_state "${boot_keys[@]}")"
+if [ "${force}" = 0 ]; then
+    for state in "signing:${signing_state}" "boot:${boot_state}"; do
+        if [ "${state#*:}" = partial ]; then
+            echo "ERROR: ${dir} holds a partial ${state%%:*} key set; refusing to overwrite the files that exist." >&2
+            echo "       Restore the missing files, or pass --force to regenerate every key (then bump image-version)." >&2
+            exit 1
+        fi
+    done
+fi
+
+if [ "${signing_state}" != all ] || [ "${force}" = 1 ]; then
     gen_signing_key
 fi
 
-if [ -e "${dir}/DB.key" ] && [ "${force}" = 0 ]; then
+if [ "${boot_state}" = all ] && [ "${force}" = 0 ]; then
     echo "Keys already exist in ${dir}; pass --force to regenerate (rebuilds the kernel)."
     exit 0
 fi

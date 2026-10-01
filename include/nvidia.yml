@@ -1,0 +1,23 @@
+# Single source of truth for the NVIDIA driver flavours.
+#
+# A flavour is one NVIDIA driver branch built with the open kernel modules
+# only (Turing and newer GPUs), shipped as the opt-in, image-locked sysext
+# nvidia-open-<branch>_<image-version>.raw. A node pins a branch explicitly;
+# moving to a new branch means adding a flavour, overlapping, then retiring
+# the old one, so a branch name never silently changes what a node runs.
+#
+# Per flavour, only these two atoms are edited on a driver bump: the release
+# inside the branch and the sha256 of its NVIDIA-Linux-x86_64-<version>.run
+# (NVIDIA publishes <file>.sha256sum next to each .run). The shared build
+# recipe is include/nvidia-driver.yml; each flavour owns three elements:
+#
+#   elements/nvidia/nvidia-open-<branch>.bst          driver build
+#   elements/nvidia/nvidia-open-<branch>-signed.bst   module signing
+#   elements/oci/nvidia-open-<branch>-sysext.bst      sysext image
+#
+# A comment line separates each flavour from the next, so per-flavour pull
+# requests never edit adjacent lines and merge in any order.
+variables:
+  # nvidia-open-595: production branch 595
+  nvidia-open-595-version: "595.104.02"
+  nvidia-open-595-sha256: "e421c202e4c79f58c3c7f3161bbe71454ebb3d88936f88205a0e327cd04c59ca"

@@ -47,6 +47,11 @@ HOST_TOOLING = {
     # Release public key; CI copies it to files/boot-keys/import-pubring.pgp,
     # from where bluefin-server/os-sysupdate-keys.bst installs it.
     "files/os/sysupdate-keys/import-pubring.gpg",
+    # Release module certificate; CI copies it to
+    # files/boot-keys/modules/linux-module-cert.crt for the kernel cache
+    # (scripts/kernel-cache.sh), from where the kernel's
+    # linux-module-cert override stages it.
+    "files/release-keys/linux-module-cert.crt",
 }
 
 # Gitignored signing material, absent from every fresh checkout:

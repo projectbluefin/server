@@ -1,0 +1,12 @@
+[Unit]
+Description=Fetch the NVIDIA Container Toolkit sysext when installation did not seed it
+ConditionPathExists=!/var/lib/nvidia-container-toolkit/nvidia-container-toolkit.raw
+Wants=network-online.target
+After=network-online.target
+Before=nvidia-container-toolkit-activate.service
+
+[Service]
+Type=oneshot
+Restart=on-failure
+RestartSec=30s
+ExecStart=/usr/bin/systemd-sysupdate --component=nvidia-container-toolkit update

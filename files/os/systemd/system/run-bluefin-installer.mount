@@ -6,4 +6,6 @@ Documentation=man:systemd-sysinstall(8)
 What=/dev/disk/by-partlabel/bluefin-installer
 Where=/run/bluefin/installer
 Type=vfat
-Options=ro,nosuid,nodev,noexec
+# fmask: vfat has no permission bits; without it every file reads as
+# executable and systemd-repart warns about each repart.d definition.
+Options=ro,nosuid,nodev,noexec,fmask=0133,dmask=0022

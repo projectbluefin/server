@@ -10,7 +10,11 @@ ConditionPathIsDirectory=!/sys/module/zfs
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/modprobe zfs
+# The sysext ships no module index; the base image's helper indexes the merged
+# module tree under /run and loads zfs (and spl) from it. A bare `modprobe zfs`
+# does not find the module, so libzfs, which only runs modprobe when /dev/zfs
+# is missing, relies on this unit having loaded it.
+ExecStart=/usr/libexec/bluefin-sysext-modules zfs
 
 [Install]
 WantedBy=zfs.target

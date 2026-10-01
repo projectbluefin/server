@@ -78,8 +78,8 @@ def test_sysext_ships_nothing_under_opt() -> None:
 
 def test_sysext_is_version_locked_and_in_the_signed_release_set() -> None:
     text = SYSEXT.read_text(encoding="utf-8")
-    assert "extension-release.kubeadm_%{image-version}" in text
-    assert 'FNAME="kubeadm_%{image-version}.raw"' in text
+    assert 'sysext-release: "kubeadm_%{image-version}"' in text
+    assert 'sysext-image: "kubeadm_%{image-version}"' in text
     release = dict(
         line.split("=", 1) for line in (SRC / "extension-release.kubeadm").read_text().splitlines() if "=" in line
     )
@@ -87,7 +87,7 @@ def test_sysext_is_version_locked_and_in_the_signed_release_set() -> None:
     image = IMAGE.read_text(encoding="utf-8")
     assert "filename: oci/kubeadm-sysext.bst" in image
     assert "/sysext/kubeadm/kubeadm_%{image-version}.raw.zst" in image
-    assert "sha256sum --binary *.raw *.efi *.raw.zst > SHA256SUMS" in image
+    assert "sha256sum --binary *.raw *.efi *.raw.zst *.spdx.json > SHA256SUMS" in image
     assert "oci/kubeadm-sysext.bst" in (ROOT / "Justfile").read_text(encoding="utf-8")
 
 

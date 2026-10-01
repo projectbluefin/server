@@ -7,4 +7,8 @@ ConditionPathExists=/dev/disk/by-loop-ref/rootdisk.raw-part3
 What=/dev/disk/by-loop-ref/rootdisk.raw-part3
 Where=/run/bluefin/boot
 Type=vfat
-Options=ro,nosuid,nodev,noexec
+# fmask: vfat has no permission bits; without it every file reads as
+# executable and systemd-repart warns about each repart.d definition it
+# reads from /run/bluefin/boot/bluefin/repart.d. Match run-bluefin-installer.mount
+# (fmask=0133,dmask=0022) so the diskless path is quiet too.
+Options=ro,nosuid,nodev,noexec,fmask=0133,dmask=0022

@@ -11,12 +11,22 @@
 # Results that must outlive the namespace (the call log) are copied back
 # into BATS_TEST_TMPDIR, which is outside both tmpfs masks.
 
+# skip_unless_ci <reason> -- skip locally, but fail in CI (CI=true), where a
+# skip would silently drop every k8s recipe test from the gate.
+skip_unless_ci() {
+    if [ "${CI:-}" = true ]; then
+        echo "CI must run this test, but: $1" >&2
+        return 1
+    fi
+    skip "$1"
+}
+
 setup() {
     if ! unshare --map-root-user --mount true 2>/dev/null; then
-        skip "unprivileged user+mount namespaces are unavailable"
+        skip_unless_ci "unprivileged user+mount namespaces are unavailable"
     fi
     if ! command -v just >/dev/null 2>&1; then
-        skip "just is not installed"
+        skip_unless_ci "just is not installed"
     fi
 
     REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"

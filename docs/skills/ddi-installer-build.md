@@ -4,7 +4,7 @@ description: Build, export, and dogfood the Bluefin Server image set (OS DDI, si
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-09-30"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -31,6 +31,9 @@ just build-sysext      # build oci/k0s-sysext.bst
 just export-sysext     # export k0s sysext + SHA256SUMS to dist/sysext/
 just build-zfs-sysext  # build oci/zfs-sysext.bst
 just export-zfs-sysext # export OpenZFS sysext + SHA256SUMS to dist/sysext/
+just build-nvidia-sysext  # build oci/<flavour>-sysext.bst (nvidia-open-595)
+just export-nvidia-sysext # export NVIDIA sysext + SHA256SUMS to dist/sysext/
+just dogfood-nvidia       # QEMU disk install + merge/probe dist/diskless/'s NVIDIA sysext
 just version / just tags  # FSDK-derived point release and tag set
 ```
 
@@ -54,21 +57,49 @@ just publish-oci <registry-host>:30500/bluefin-server dist/diskless 1  # plain H
 
 Every image build signs: the UKIs and systemd-boot with DB, kernel modules
 with the module signing certificate, and the release `SHA256SUMS` with the
-image signing key. `build-image` (and `validate`) depends on `gen-dev-keys`,
-which generates throwaway keys in `files/boot-keys/` (gitignored) on first
-run: PK/KEK/DB, the module certificate, and the `sysupdate-signing.asc` /
-`import-pubring.pgp` pair. Keys are kept unless `--force` is given. CI builds
-on `main` unpack the `BOOT_KEYS_TARBALL` secret, write `SYSUPDATE_SIGNING_KEY`
-to `files/boot-keys/sysupdate-signing.asc`, and copy the committed release
-keyring `files/os/sysupdate-keys/import-pubring.gpg` to
-`files/boot-keys/import-pubring.pgp`; pull requests get throwaway keys and
-their images are never published.
+image signing key. What each key is, where it lives, what `just gen-dev-keys`
+generates (throwaway keys in the gitignored `files/boot-keys/`, kept unless
+`--force`, a partial set is an error), and how CI supplies the real keys:
+[secure-boot-keys.md](secure-boot-keys.md). The release-signing half
+(`sysupdate-signing.asc` / `import-pubring.pgp`, the committed
+`files/os/sysupdate-keys/import-pubring.gpg`, and rotation):
+[systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
+
+**Rotating any key needs a new `image-version`.** Every key ends up in the
+image bits: DB signs the UKIs and systemd-boot, the module certificate is
+built into the kernel, and `import-pubring.pgp` ships in `/usr`. An image
+version names one immutable set of bits, and `systemd-sysupdate` only
+installs a version newer than the one it runs, so rebuilding the same version
+with new keys publishes different bits under a released name and never
+reaches nodes already on it. Rotate keys, then `just set-version` to a
+version that sorts higher before building.
+
+## Reproducible builds
+
+With the same checkout, keys and `image-version`, rebuilding the final
+assembly gives the same bytes. BuildStream exports `SOURCE_DATE_EPOCH` into
+every sandbox and the assembly steps honor it: `mkfs.erofs` and
+`systemd-repart` clamp file times to it, the initrd and ESP trees are clamped
+before `cpio` and `mcopy` copy them, and `systemd-sbsign` (not `sbsign`)
+uses it as the signing time of systemd-boot and the UKIs. `systemd-repart
+--seed` fixes partition UUIDs.
+
+Two outputs carry a signing time of their own: `SHA256SUMS.gpg` and the
+`efi-keys/*.auth` updates, which `sbvarsign` stamps with the current time
+(they stay fixed as long as `bluefin-server/keys/efi-keys.bst` stays
+cached). `.github/workflows/reproducibility.yml` checks the rest weekly:
+it builds, deletes the final-assembly artifacts, rebuilds them without remote
+caches, and compares every file except `*.gpg`.
 
 ## Dogfood: boot it in QEMU
 
 All dogfood paths boot with Secure Boot firmware (OVMF secboot). The firmware
 starts in setup mode; systemd-boot enrolls the dev keys from the ESP
 (`secure-boot-enroll if-safe`) and reboots, so every later boot is verified.
+`--check` fails if the guest did not boot with Secure Boot enabled: some OVMF
+builds (Ubuntu 26.04's 2025.11) refuse the enrollment and would otherwise boot
+on in setup mode, verifying nothing. Point `OVMF_CODE` / `OVMF_VARS` at
+another build (Fedora's `edk2-ovmf` works) if yours does.
 
 ```bash
 just dogfood                     # interactive diskless boot of dist/diskless/
@@ -77,6 +108,7 @@ just dogfood-check               # headless: pass when the in-guest probe
 just dogfood-install             # diskless boot, systemd-sysinstall to a blank
                                  # disk, then boot the installed disk
 just dogfood-install NEXT=<dir>  # ...then sysupdate A->B to NEXT and boot it
+just dogfood-installer           # offline USB installer: unattended install to a blank disk, boot it with and without the stick
 ```
 
 `scripts/dogfood-diskless.sh <dir> [--check]` boots the way a PXE/HTTP-booted
@@ -97,14 +129,26 @@ Useful environment variables:
   netboot ESP once per variable store first.
 - `DOGFOOD_BOOT_URL=<url>` — HTTP boot from another server (e.g. Booty)
   instead of the built-in one.
-- `DOGFOOD_NODE_IGN=<file>` — serve it as `bluefin-node.ign` next to the UKI
-  (picked up by HTTP-booted nodes with no Ignition credential).
+- `DOGFOOD_NODE_IGN=<file>` — serve it, unsigned, as `bluefin-node.ign` next
+  to the UKI. An HTTP-booted node with no Ignition credential applies it
+  through the netboot UKI's transitional `bluefin.ignition.allow-unsigned`
+  default (see "Per-node configuration" in
+  [booty-integration.md](booty-integration.md)).
 - `DOGFOOD_SERVE_EXTRA=<dir>` — also serve the files in `<dir>`.
-- `DOGFOOD_TAMPER=raw|sums` — serve a corrupted DDI or a re-hashed, unsigned
-  `SHA256SUMS`; the boot must fail, proving the signature check.
+- `DOGFOOD_TAMPER=raw|sums` — serve a corrupted DDI (`raw`), or the corrupted
+  DDI with `SHA256SUMS` re-hashed to match it, so only `SHA256SUMS.gpg` no
+  longer fits (`sums`). `--check` then passes only if the initrd's pull
+  refuses it for that reason (checksum mismatch, bad signature) after the
+  image and both manifest files were served, and nothing booted. Credential
+  drop-ins copy `systemd-importd`'s messages to the serial console.
 - `DOGFOOD_MEM=<MiB>` — guest RAM (default 4096); below the diskless minimum
   the boot must fail with the RAM message (see `diskless-troubleshooting.md`).
 - `DOGFOOD_EXTRA_PROBE=<file>` — shell snippet appended to the in-guest probe.
+- `DOGFOOD_EXPECT=<ERE>` — `--check` also requires the probe output to match,
+  e.g. with `tests/fixtures/ignition/apply-marker.ign` and its `.probe`:
+  `PROBE ignition marker=applied unit=active enabled=enabled ran=yes`.
+- `DOGFOOD_PORT`, `DOGFOOD_MEM`, `DOGFOOD_TIMEOUT` — HTTP port (8765), guest
+  memory in MiB (4096), `--check` deadline in seconds (600).
 
 Every diskless `--check` boot also runs `bluefin-diskless-update-check` once
 and reports `PROBE update-check=<result> flag=<set|none>`. Its origin is the
@@ -122,16 +166,31 @@ lock-step), then asserts the kured flag, the Kubernetes reboot interlock, both
 timers enabled and the new UKI blessed after `boot-complete.target`, and with
 `<broken-dir>` break the update and confirm boot counting rolls the node back
 to `<next-dir>` on its own, with the matching ZFS sysext still merged.
+`DOGFOOD_SYSEXT=nvidia` enables the `nvidia-open-595` feature instead of `zfs`
+and the NVIDIA Container Toolkit component with
+`nvidia-container-toolkit-activate.service`; after the update and after the
+rollback the driver sysext for the booted version must be merged with its
+units skipped (no GPU in QEMU), `bluefin-sysext-modules nvidia` must load the
+signed modules as far as the driver's `No NVIDIA GPU found`, and the toolkit
+must be fetched and merged. `DOGFOOD_SYSEXT=zfs,nvidia` enables both features
+and asserts both sets, with the `zfs` module loaded.
+`just dogfood-install <next-dir> <broken-dir>` runs the whole sequence.
 `DOGFOOD_BROKEN=slot` (default) corrupts the updated usr slot, so the initrd
 fails. `DOGFOOD_BROKEN=unit` adds a unit that fails on `<broken-dir>`'s version
 only and shortens the boot deadline (`DOGFOOD_DEADLINE`, default `2min`): each
 counted boot reaches `multi-user.target`, misses `boot-complete.target`, and
 `bluefin-boot-deadline` reboots it. The run asserts three such boots, the
 fallback boot with the deadline timer inactive, and then no kured flag and a
-skipped `systemd-sysupdate-reboot.service` for the failed version. CI runs the first two stages
-(`dogfood-diskless.sh --check`, `dogfood-install.sh dist/diskless`) as the
-`boot-test` job in `.github/workflows/build.yml` on every pull request and
-push to main.
+skipped `systemd-sysupdate-reboot.service` for the failed version. `<next-dir>` and `<broken-dir>` are
+ordinary image sets with higher versions, e.g.
+`just set-version <next> && just export-image dist/diskless-next` (and a
+higher one into `dist/diskless-broken`); the script breaks the
+broken set itself. The versions must also sort above `1.<ver>` for systemd-boot: the
+Type #1 entry `systemd-sysinstall` writes for the installed image carries
+`version 1.<ver>` (`bluefin-server-commit_1.<ver>.conf`), so after
+installing `0.674` an update to `0.674.1` still boots `0.674`; use `1.674.1`.
+Release versions (`YY.MM.<run>`) sort above it. Which of these scenarios CI runs is listed in
+[ci-tooling.md](ci-tooling.md) (the `boot-test` job).
 
 ## Local builds with a remote cache
 
@@ -152,9 +211,8 @@ projects:
 
 `.github/workflows/build.yml` runs `just validate`, exports the image set
 (already carrying its signed `SHA256SUMS(.gpg)`), runs the QEMU boot test, and
-on `main` publishes `dist/diskless/` as-is: an immutable GitHub Release tagged
-`v<image-version>` plus an ORAS OCI artifact at
-`ghcr.io/<owner>/bluefin-server:<ver>,latest`. One version is published
+on `main` publishes `dist/diskless/` as-is (see the `release` job in
+[ci-tooling.md](ci-tooling.md)). One version is published
 exactly once; creating an existing tag fails rather than overwriting assets
 nodes may already trust.
 

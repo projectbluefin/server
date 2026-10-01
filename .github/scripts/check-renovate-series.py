@@ -36,9 +36,6 @@ JUNCTIONS = {
     "https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git": (
         ROOT / "elements" / "freedesktop-sdk.bst"
     ),
-    "https://gitlab.gnome.org/GNOME/gnome-build-meta.git": (
-        ROOT / "elements" / "gnome-build-meta.bst"
-    ),
 }
 
 TRACK_RE = re.compile(r"^\s*track:\s*[\"']?([^\"'\s]+)[\"']?\s*$", re.MULTILINE)
@@ -54,7 +51,7 @@ def series_of(track):
     """The literal prefix of a track glob, with the trailing '*' removed.
 
     `freedesktop-sdk-26.08*` -> `freedesktop-sdk-26.08`
-    `gnome-50`               -> `gnome-50`   (no glob; the whole value)
+    `stable`                 -> `stable`     (no glob; the whole value)
     """
     return track.split("*", 1)[0]
 

@@ -56,8 +56,9 @@ but never newer. Patch releases change neither constraint.
 - **Patches** are automatic. `.github/workflows/track-binaries.yml` opens one
   pull request per component (Kubernetes, cri-tools, containerd, runc, CNI
   plugins) when a newer patch of its pinned series is out, with the version
-  and its sha256 refs changed together and checked against the checksum files
-  upstream publishes.
+  and its sha256 refs (amd64 and arm64) changed together and checked against
+  the checksum files upstream publishes. A release missing either
+  architecture's asset or checksum is not proposed.
 - **Minors** are manual, once the cluster's control plane runs the new minor:
   1. `python3 .github/scripts/track-binaries.py apply kubernetes --version X.Y.Z`,
      and the same for `cri-tools` (its minor follows Kubernetes). `apply`
@@ -124,9 +125,33 @@ off. `/etc/iscsi/iscsid.conf` comes from the factory `/etc`
 (`30-bluefin-iscsi.conf` restores it and creates `/var/lib/iscsi`), which is
 what democratic-csi's `chroot /host ... iscsiadm` node plugin needs.
 
+## NFS
+
+The base image ships an NFS client built from source
+(`bluefin-server/nfs-utils.bst`, `bluefin-server/rpcbind.bst`; FSDK 26.08
+has neither): `mount.nfs`/`mount.nfs4`/`umount.nfs` in `/usr/bin` (reached
+through `/sbin -> usr/sbin -> bin`), `rpc.statd`, `sm-notify`, `nfsidmap`,
+`nfsstat`, `showmount`. Without `mount.nfs`, util-linux `mount -t nfs`
+falls through to the new mount API and the kernel refuses (`fsconfig()
+failed: NFS: mount program didn't pass remote address`), which is what
+kubelet reported for every NFS PV. Client only: no server daemons, no
+GSS/Kerberos (`sec=krb5*` mounts are unsupported). `80-bluefin-nfs.preset`
+enables `nfs-client.target` and `rpcbind.socket`; `mount.nfs` starts
+`rpc-statd.service` on demand for NFSv3 locking (NFSv4 needs neither).
+NFSv3's portmapper and mountd lookups go through libtirpc, which resolves
+`tcp`/`udp` and `sunrpc` from `/etc/protocols` and `/etc/services`; without
+them `mount.nfs` fails with `Failed to find 'tcp' protocol`. Both come from
+FSDK's `components/iana-config.bst` in `os-base.bst` and are linked (tmpfiles
+`L`, not copied) from the factory `/etc`, so an A/B update refreshes them.
+`/var/lib/nfs/statd` comes from tmpfiles.d, owned by `rpcuser`; on a
+diskless node it is lost at reboot, so NFSv3 servers are not notified when a
+rebooted diskless client held locks. NFSv4 id mapping uses the kernel
+`request-key` upcall to `nfsidmap` (`/etc/request-key.d/id_resolver.conf`).
+
 ## Known gaps
 
-- x86_64 only (amd64 release binaries).
+- aarch64: the arm64 release binaries are pinned, but no aarch64 image has
+  been built or booted.
 
 ## Verify
 

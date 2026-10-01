@@ -23,12 +23,20 @@ description: |
                                            enrollment, and the disk UKI + repart.d that
                                            systemd-sysinstall lays onto the target disk
     efi-keys/                              Secure Boot enrollment payloads
-    zfs_<ver>.raw.zst, kubestellar_<ver>.raw.zst, kubeadm_<ver>.raw.zst
-                                           opt-in sysexts locked to this image version
+    zfs_<ver>.raw.zst, kubestellar_<ver>.raw.zst, kubeadm_<ver>.raw.zst,
+    nvidia-open-595_<ver>.raw.zst          opt-in sysexts locked to this image version
     k0s-<k0s-ver>.raw.zst                  opt-in k0s sysext (own version axis)
+    nvidia-container-toolkit-<ctk-ver>.raw.zst
+                                           opt-in NVIDIA Container Toolkit sysext
+                                           (own version axis)
+    bluefin-server_<ver>.spdx.json         SPDX 2.3 SBOM (oci/bluefin-server-sbom.bst)
     SHA256SUMS, SHA256SUMS.gpg             manifest of all of the above, signed with
                                            files/boot-keys/sysupdate-signing.asc; the
                                            image trusts the matching import-pubring.pgp
+    sysupdate-keys/import-pubring.pgp      that keyring, for the release dry-run to
+                                           check SHA256SUMS.gpg against a pull request's
+                                           throwaway key; like efi-keys/ it is not
+                                           published (releases carry top-level files only)
 
 (@):
 - include/image.yml
@@ -37,6 +45,7 @@ build-depends:
 - base/base-stack.bst
 - freedesktop-sdk.bst:public-stacks/runtime-gnu.bst
 - freedesktop-sdk.bst:components/dosfstools.bst
+- freedesktop-sdk.bst:components/findutils.bst
 - freedesktop-sdk.bst:components/mtools.bst
 - freedesktop-sdk.bst:components/systemd.bst
 - filename: oci/bluefin-server-usr.bst
@@ -49,6 +58,7 @@ build-depends:
   config:
     location: /sd-boot
 - freedesktop-sdk.bst:components/gnupg.bst
+- freedesktop-sdk.bst:components/jq.bst
 - bluefin-server/keys/boot-keys.bst
 - filename: oci/k0s-sysext.bst
   config:
@@ -62,6 +72,15 @@ build-depends:
 - filename: oci/kubeadm-sysext.bst
   config:
     location: /sysext/kubeadm
+- filename: oci/nvidia-open-595-sysext.bst
+  config:
+    location: /sysext/nvidia-open-595
+- filename: oci/nvidia-container-toolkit-sysext.bst
+  config:
+    location: /sysext/nvidia-container-toolkit
+- filename: oci/bluefin-server-sbom.bst
+  config:
+    location: /sbom
 
 variables:
   image-name: bluefin-server_%{image-version}
@@ -72,6 +91,12 @@ variables:
   (?):
   - arch == "aarch64":
       efi-arch: aa64
+
+environment:
+  # dosfstools 4.2 ignores SOURCE_DATE_EPOCH and stamps each ESP's volume
+  # label with the current time; --invariant fixes the label time and the
+  # volume ID.
+  SYSTEMD_REPART_MKFS_OPTIONS_VFAT: --invariant
 
 config:
   commands:
@@ -99,6 +124,8 @@ config:
     printf '[Partition]\nType=usr\nLabel=bluefin_usr_%{image-version}\nUUID=%s\nCopyBlocks=/usr-image/%{image-name}.usr.raw\n' "$(cat /tmp/usr.uuid)" > "${d}/10-usr.conf"
     printf '[Partition]\nType=usr-verity\nLabel=bluefin_usr_verity_%{image-version}\nUUID=%s\nCopyBlocks=/usr-image/%{image-name}.usr-verity.raw\n' "$(cat /tmp/usr-verity.uuid)" > "${d}/20-usr-verity.conf"
     printf '[Partition]\nType=esp\nFormat=vfat\nCopyFiles=%s:/\nSizeMinBytes=128M\nSizeMaxBytes=128M\n' "${esp}" > "${d}/30-esp.conf"
+    # mcopy keeps mtimes; the staged ESP tree carries the build time.
+    find "${esp}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
     systemd-repart --empty=create --size=auto --offline=yes --dry-run=no \
       --seed=6f1b0fe2-3c2a-4f2e-9f0a-b1e5e7a5e003 \
       --definitions="${d}" "%{install-root}/%{image-name}.raw"
@@ -117,6 +144,7 @@ config:
     d=/tmp/netboot.repart.d
     mkdir -p "${d}"
     printf '[Partition]\nType=esp\nFormat=vfat\nCopyFiles=%s:/\nSizeMinBytes=160M\n' "${esp}" > "${d}/10-esp.conf"
+    find "${esp}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
     systemd-repart --empty=create --size=auto --offline=yes --dry-run=no \
       --seed=6f1b0fe2-3c2a-4f2e-9f0a-b1e5e7a5e002 \
       --definitions="${d}" "%{install-root}/%{netboot-name}.esp.raw"
@@ -133,6 +161,12 @@ config:
     # stick; systemd-sysinstall --kernel= installs it onto the target disk.
     install -Dm644 /boot-out/%{disk-uki} "${esp}/bluefin/%{disk-uki}"
     install -Dm644 -t "${esp}/bluefin/repart.d" /boot-out/repart.d/*.conf
+    # Credentials placed in the stick's /loader/credentials/ (encrypted, see
+    # docs/skills/usb-installer.md) are copied onto the installed disk's ESP,
+    # where systemd-stub hands them to every boot of the installed system.
+    # Only the stick's copy of the ESP definition carries this line.
+    mkdir -p "${esp}/loader/credentials"
+    printf 'CopyFiles=/run/bluefin/installer/loader/credentials:/loader/credentials\n' >> "${esp}/bluefin/repart.d/10-esp.conf"
     install -Dm644 -t "${esp}/loader/keys/auto" /boot-out/efi-keys/*.auth
     printf 'timeout 3\nconsole-mode keep\nsecure-boot-enroll if-safe\n' > "${esp}/loader/loader.conf"
     d=/tmp/installer.repart.d
@@ -140,6 +174,7 @@ config:
     printf '[Partition]\nType=usr\nLabel=bluefin-installer-usr\nCopyBlocks=/usr-image/%{image-name}.usr.raw\n' > "${d}/10-usr.conf"
     printf '[Partition]\nType=usr-verity\nLabel=bluefin-installer-usr-verity\nCopyBlocks=/usr-image/%{image-name}.usr-verity.raw\n' > "${d}/20-usr-verity.conf"
     printf '[Partition]\nType=esp\nLabel=bluefin-installer\nFormat=vfat\nCopyFiles=%s:/\nSizeMinBytes=256M\n' "${esp}" > "${d}/30-esp.conf"
+    find "${esp}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
     systemd-repart --empty=create --size=auto --offline=yes --dry-run=no \
       --seed=6f1b0fe2-3c2a-4f2e-9f0a-b1e5e7a5e004 \
       --definitions="${d}" "%{install-root}/bluefin-server-installer_%{image-version}.raw"
@@ -148,12 +183,29 @@ config:
     set -eu
     cp /sysext/k0s/k0s-*.raw.zst /sysext/kubestellar/kubestellar_%{image-version}.raw.zst \
        /sysext/zfs/zfs_%{image-version}.raw.zst \
-       /sysext/kubeadm/kubeadm_%{image-version}.raw.zst "%{install-root}/"
+       /sysext/kubeadm/kubeadm_%{image-version}.raw.zst \
+       /sysext/nvidia-open-595/nvidia-open-595_%{image-version}.raw.zst \
+       /sysext/nvidia-container-toolkit/nvidia-container-toolkit-*.raw.zst "%{install-root}/"
+
+  - |
+    set -eu
+    # SPDX requires a creation time, which the plugin leaves to the build,
+    # and unique SPDXIDs: FSDK bootstrap elements reached through two
+    # junction paths are collected twice, as identical packages.
+    # SOURCE_DATE_EPOCH is BuildStream's fixed sandbox default (1321009871),
+    # so created is always 2011-11-11T11:11:11Z. That keeps the SBOM bit
+    # identical across rebuilds; the real build time lives in the SLSA
+    # provenance attestation, not here.
+    jq --arg created "$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
+      '.creationInfo.created = $created
+       | .packages |= unique_by(.SPDXID)
+       | .relationships |= unique_by(.relatedSpdxElement)' \
+      /sbom/bluefin-server.spdx.json > "%{install-root}/%{image-name}.spdx.json"
 
   - |
     set -eu
     cd "%{install-root}"
-    sha256sum --binary *.raw *.efi *.raw.zst > SHA256SUMS
+    sha256sum --binary *.raw *.efi *.raw.zst *.spdx.json > SHA256SUMS
     cat SHA256SUMS
     export GNUPGHOME=/tmp/gnupg
     mkdir -m 0700 -p "${GNUPGHOME}"
@@ -162,3 +214,4 @@ config:
       --detach-sign --output SHA256SUMS.gpg SHA256SUMS
     # The keyring the image ships must accept this signature.
     gpgv --keyring /boot-keys/import-pubring.pgp SHA256SUMS.gpg SHA256SUMS
+    install -Dm644 /boot-keys/import-pubring.pgp sysupdate-keys/import-pubring.pgp

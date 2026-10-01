@@ -5,20 +5,36 @@ A component is one upstream version plus every sha256 pin derived from it. The
 two move in one change: a new version with an old checksum is a broken
 BuildStream source ref.
 
-  component    version                                 sha256 pins
-  kubernetes   include/kubeadm.yml kubernetes-version  kubelet, kubeadm, kubectl  ref: in
-  cri-tools    include/kubeadm.yml crictl-version      crictl tarball             elements/kubeadm/
-  containerd   include/kubeadm.yml containerd-version  containerd static tarball  kubeadm-bin.bst
-  runc         include/kubeadm.yml runc-version        runc.amd64
-  cni-plugins  include/kubeadm.yml cni-plugins-version CNI plugins tarball
-  k0s          include/k0s.yml k0s-k8s-version and     k0s binary                 ref: in
-               k0s-patch                                                          elements/k0s/k0s-bin.bst
-  oras         Justfile oras_image tag                 setup-oras url + checksum in .github/workflows/*.yml
+  component        version                                  sha256 pins
+  kubernetes       include/kubeadm.yml kubernetes-version   kubelet, kubeadm, kubectl  ref: in
+  cri-tools        include/kubeadm.yml crictl-version       crictl tarball             elements/kubeadm/
+  containerd       include/kubeadm.yml containerd-version   containerd static tarball  kubeadm-bin.bst
+  runc             include/kubeadm.yml runc-version         runc.<arch>
+  cni-plugins      include/kubeadm.yml cni-plugins-version  CNI plugins tarball
+  k0s              include/k0s.yml k0s-k8s-version and      k0s binary                 ref: in
+                   k0s-patch                                                           elements/k0s/k0s-bin.bst
+  nvidia-open-595  include/nvidia.yml                       NVIDIA-Linux-x86_64-       nvidia-open-595-sha256
+                   nvidia-open-595-version                  <version>.run              in include/nvidia.yml
+  oras             Justfile oras_image tag                  setup-oras url + checksum in .github/workflows/*.yml
+
+The .bst pins cover every architecture the element fetches: the top-level
+amd64 sources and the arm64 ones under `(?): arch == "aarch64"`. Every
+`url:` line carrying the component's marker is a pin, wherever it sits, so a
+bump refreshes all architectures at once, and a release counts as a candidate
+only when every architecture's asset and checksum file is attached. ORAS is
+CI tooling and pinned for amd64 runners only. An NVIDIA driver flavour is
+x86_64 only, and its sha256 is an atom next to its version, which the
+element's `ref:` reads. The NVIDIA Container Toolkit is not tracked: it is
+bumped by hand (docs/skills/nvidia-sysext.md).
 
 check   Newest release of each component inside its pinned MAJOR.MINOR series:
-        Kubernetes from dl.k8s.io/release/stable-X.Y.txt, the rest from the
-        project's GitHub releases. Drafts, prereleases and releases that lack
-        the pinned assets do not count.
+        Kubernetes from dl.k8s.io/release/stable-X.Y.txt, an NVIDIA driver
+        flavour from the directory index at
+        download.nvidia.com/XFree86/Linux-x86_64/ (its series is its driver
+        branch; a newer release counts once its .run and .run.sha256sum both
+        answer a HEAD request), the rest from the project's GitHub releases.
+        Drafts, prereleases and releases that lack the pinned assets do not
+        count.
 apply   Moves one component to a version (default: the newest in its series)
         and rewrites every pin derived from it. Each sha256 is read from the
         checksum file the project publishes next to the asset, then confirmed
@@ -28,7 +44,9 @@ apply   Moves one component to a version (default: the newest in its series)
 Only patch releases are proposed automatically. A minor bump is a decision: the
 kubeadm payload follows the minor of the cluster it joins
 (docs/skills/kubeadm-sysext.md). Make it by hand with
-`apply COMPONENT --version X.Y.Z`, which runs the same verification.
+`apply COMPONENT --version X.Y.Z`, which runs the same verification. An NVIDIA
+flavour never leaves its driver branch; a new branch is a new flavour
+(docs/skills/nvidia-sysext.md).
 
 Why not Renovate: a regex manager needs the version and its digest in one
 match, but here the version lives in include/*.yml or the Justfile and the
@@ -76,7 +94,11 @@ class TrackError(Exception):
     pass
 
 
-def _open(url: str):
+class NotFound(TrackError):
+    pass
+
+
+def _open(url: str, method: str = "GET"):
     headers = {"User-Agent": "projectbluefin-server-track-binaries"}
     if url.startswith("https://api.github.com/"):
         headers["Accept"] = "application/vnd.github+json"
@@ -86,16 +108,25 @@ def _open(url: str):
             # which must not see the token.
             headers["Authorization"] = f"Bearer {token}"
     try:
-        return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=TIMEOUT)
+        return urllib.request.urlopen(urllib.request.Request(url, headers=headers, method=method), timeout=TIMEOUT)
     except urllib.error.HTTPError as err:
-        raise TrackError(f"GET {url}: HTTP {err.code}") from None
+        raise (NotFound if err.code == 404 else TrackError)(f"{method} {url}: HTTP {err.code}") from None
     except urllib.error.URLError as err:
-        raise TrackError(f"GET {url}: {err.reason}") from None
+        raise TrackError(f"{method} {url}: {err.reason}") from None
 
 
 def _get(url: str) -> bytes:
     with _open(url) as response:
         return response.read()
+
+
+def _published(url: str) -> bool:
+    """Whether `url` is there, asked with HEAD. Only a 404 means no; other failures raise."""
+    try:
+        with _open(url, "HEAD"):
+            return True
+    except NotFound:
+        return False
 
 
 def _download_sha256(url: str) -> str:
@@ -152,6 +183,10 @@ class Pin:
     key: str
     url: str
     sums: str
+    # When True, `anchor` is unused: the sha256 is the one `key:` line in
+    # `path` (an include atom like `nvidia-open-595-sha256:`), not a
+    # source's `ref:`.
+    standalone_key: bool = False
 
     @property
     def asset(self) -> str:
@@ -173,6 +208,11 @@ def _key_in_mapping(lines: list[str], start: int, column: int, key: str) -> int 
 
 def _checksum_lines(lines: list[str], pin: Pin) -> list[int]:
     """Line numbers of `pin.key:` for every `url: pin.anchor` line; each must have one."""
+    if pin.standalone_key:
+        found = [i for i, line in enumerate(lines) if re.match(rf"^\s*{re.escape(pin.key)}:\s*\S+\s*$", line)]
+        if len(found) != 1:
+            raise TrackError(f"{pin.path}: expected exactly one `{pin.key}:` line, found {len(found)}")
+        return found
     found = []
     for i, line in enumerate(lines):
         match = URL_LINE_RE.match(line)
@@ -189,17 +229,24 @@ def _checksum_lines(lines: list[str], pin: Pin) -> list[int]:
 
 def read_pin(tree: Tree, pin: Pin) -> str:
     lines = tree[pin.path].splitlines(keepends=True)
-    values = {lines[i].split(":", 1)[1].strip() for i in _checksum_lines(lines, pin)}
-    if len(values) != 1:
-        raise TrackError(f"{pin.path}: `url: {pin.anchor}` is pinned to different checksums: {sorted(values)}")
-    return values.pop()
+    raw = {lines[i].split(":", 1)[1].strip() for i in _checksum_lines(lines, pin)}
+    if len(raw) != 1:
+        raise TrackError(f"{pin.path}: `url: {pin.anchor}` is pinned to different checksums: {sorted(raw)}")
+    # The .bst elements pin `ref:` to a bare sha256 (no quotes). The
+    # include files pin atoms (e.g. `nvidia-open-595-sha256:`) to a YAML
+    # double-quoted string. Strip a uniform pair of quotes if present so
+    # the existing SUMS_LINE_RE match keeps working.
+    value = raw.pop()
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        value = value[1:-1]
+    return value
 
 
 def write_pin(tree: Tree, pin: Pin, sha256: str) -> None:
     lines = tree[pin.path].splitlines(keepends=True)
-    value = re.compile(rf"^(\s*{re.escape(pin.key)}:\s*)\S+")
+    value = re.compile(rf"^(\s*{re.escape(pin.key)}:\s*)(\S+)")
     for i in _checksum_lines(lines, pin):
-        lines[i] = value.sub(lambda m: m[1] + sha256, lines[i], count=1)
+        lines[i] = value.sub(lambda m: m[1] + (f'"{sha256}"' if m[2].startswith('"') else sha256), lines[i], count=1)
     tree[pin.path] = "".join(lines)
 
 
@@ -245,6 +292,8 @@ class Component:
     sums: str
     stable_channel = ""
     version_re = r"(\d+\.\d+\.\d+)"
+    # How to go past the pinned series, for the pull request body.
+    beyond_series = "a minor bump is a manual `.github/scripts/track-binaries.py apply {name} --version ...`."
 
     def current(self, tree: Tree) -> str:
         raise NotImplementedError
@@ -254,6 +303,39 @@ class Component:
 
     def pins(self, tree: Tree) -> list[Pin]:
         raise NotImplementedError
+
+    def series(self, version: str) -> str:
+        return _series(version)
+
+    def candidates(self, tree: Tree, series: str) -> list[str]:
+        """Releases in `series`: the stable channel's, or every GitHub release with its pinned assets."""
+        if self.stable_channel:
+            url = self.stable_channel.format(series=series)
+            text = _get(url).decode().strip()
+            if not re.fullmatch(rf"v{re.escape(series)}\.\d+", text):
+                raise TrackError(f"{url} says `{text}`, not a {series}.x release")
+            return [text[1:]]
+        found = []
+        prefix = f"https://github.com/{self.repo}/releases/download/"
+        for release in _github_releases(self.repo):
+            tag = release.get("tag_name", "")
+            if release.get("draft") or release.get("prerelease") or not tag.startswith("v"):
+                continue
+            version = tag[1:]
+            if not re.fullmatch(self.version_re, version) or self.series(version) != series:
+                continue
+            # The pinned assets must be attached already: a release can be
+            # published while its assets are still uploading.
+            names = {asset["name"] for asset in release.get("assets", [])}
+            wanted = {
+                urllib.parse.unquote(url.rsplit("/", 1)[1])
+                for pin in _pins_at(self, tree, version)
+                for url in (pin.url, pin.sums)
+                if url.startswith(prefix)
+            }
+            if wanted <= names:
+                found.append(version)
+        return found
 
     def parse(self, version: str) -> tuple[str, ...]:
         match = re.fullmatch(self.version_re, version)
@@ -271,12 +353,25 @@ class Component:
 class BstComponent(Component):
     """Version atoms in a BuildStream include; sha256 refs on one element's sources."""
 
+    # Whether the element pins every architecture BuildStream fetches, so the
+    # "amd64 == arm64" invariant and its dedicated tests apply. Components
+    # whose upstream only ships one architecture (for example the NVIDIA
+    # driver, which is x86_64 only) override this to False.
+    multi_arch = True
+
     def __init__(self, name, repo, sums, include, variables, element, marker,
-                 stable_channel="", version_re=None, version_fmt="{0}"):
+                 stable_channel="", version_re=None, version_fmt="{0}",
+                 element_variables=()):
         self.name, self.repo, self.sums, self.stable_channel = name, repo, sums, stable_channel
         self.include, self.variables, self.element, self.marker = include, variables, element, marker
         self.version_re = version_re or Component.version_re
         self.version_fmt = version_fmt
+        # Variables the element file sets (e.g. nvidia-version: "%{nvidia-open-595-version}")
+        # that the source URL template depends on. They are merged into the variable
+        # map at expansion time so URLs that interpolate local element variables
+        # resolve. Leave empty unless the URL needs an atom that lives in the
+        # element, not the include.
+        self.element_variables = tuple(element_variables)
 
     def current(self, tree):
         return self.version_fmt.format(*(_variable(tree, self.include, v)["value"] for v in self.variables))
@@ -289,6 +384,13 @@ class BstComponent(Component):
 
     def pins(self, tree):
         variables = {m["name"]: m["value"] for m in VARIABLE_RE.finditer(tree[self.include])}
+        # Element-defined variables override include-defined ones by name. Only the
+        # subset named in `element_variables` is read; reading every variable in
+        # the element would add strip-binaries, etc., that the URL never uses
+        # and would silently mask include variables of the same name.
+        for name in self.element_variables:
+            match = _variable(tree, self.element, name)
+            variables[name] = match["value"]
         aliases = {m["name"]: m["url"] for m in ALIAS_RE.finditer(tree["include/aliases.yml"])}
         version = self.current(tree)
         pins = []
@@ -300,6 +402,57 @@ class BstComponent(Component):
         if not pins:
             raise TrackError(f"{self.element}: no source url contains {self.marker}")
         return pins
+
+
+class NvidiaDriverComponent(BstComponent):
+    """One NVIDIA driver flavour, nvidia-open-<branch>, tracked inside its branch.
+
+    The version and the .run's sha256 are the flavour's two atoms in
+    include/nvidia.yml; the element's `ref:` reads the sha256 atom. NVIDIA
+    publishes each release as a directory under INDEX holding
+    NVIDIA-Linux-x86_64-<version>.run and <file>.sha256sum. A newer release
+    of the branch counts once both answer a HEAD request: `check` never
+    downloads a .run, `apply` downloads and hashes the one it moves to.
+    """
+
+    INDEX = "https://download.nvidia.com/XFree86/Linux-x86_64/"
+    DIR_RE = re.compile(r"""href=["']([^"'/]+)/["']""")
+    multi_arch = False
+    beyond_series = "a new driver branch is a new flavour (docs/skills/nvidia-sysext.md)."
+
+    def __init__(self, flavour: str):
+        branch = flavour.removeprefix("nvidia-open-")
+        super().__init__(flavour, "", "{url}.sha256sum", include="include/nvidia.yml",
+                         variables=(f"{flavour}-version",), element=f"elements/nvidia/{flavour}.bst",
+                         marker="%{nvidia-version}", element_variables=("nvidia-version",),
+                         version_re=rf"({re.escape(branch)}\.\d+(?:\.\d+)?)")
+
+    def series(self, version):
+        return version.split(".", 1)[0]
+
+    def pins(self, tree):
+        pins = super().pins(tree)
+        if len(pins) != 1:
+            raise TrackError(f"{self.element}: expected one source url with {self.marker}, found {len(pins)}")
+        return [Pin(self.include, "", f"{self.name}-sha256", pins[0].url, pins[0].sums, standalone_key=True)]
+
+    def candidates(self, tree, series):
+        current = self.current(tree)
+        index = _get(self.INDEX).decode("utf-8", "replace")
+        listed = {m[1] for m in self.DIR_RE.finditer(index) if re.fullmatch(self.version_re, m[1])}
+        if current not in listed:
+            raise TrackError(f"{self.INDEX} does not list the pinned {current}; did its format change?")
+        found = []
+        for version in sorted(listed, key=_numbers):
+            if _numbers(version) <= _numbers(current):
+                continue
+            (pin,) = _pins_at(self, tree, version)
+            if _published(pin.url) and _published(pin.sums):
+                found.append(version)
+        return found
+
+    def notes(self, version):
+        return f"{self.INDEX}{version}/"
 
 
 class OrasComponent(Component):
@@ -370,6 +523,7 @@ COMPONENTS: dict[str, Component] = {
                      include="include/k0s.yml", variables=("k0s-k8s-version", "k0s-patch"),
                      element="elements/k0s/k0s-bin.bst", marker="%{k0s-upstream-tag}",
                      version_re=r"(\d+\.\d+\.\d+)\+k0s\.(\d+)", version_fmt="{0}+k0s.{1}"),
+        NvidiaDriverComponent("nvidia-open-595"),
         OrasComponent(),
     )
 }
@@ -391,40 +545,10 @@ def _github_releases(repo: str) -> list[dict]:
     raise TrackError(f"{repo}: more than {MAX_RELEASE_PAGES * 100} releases")
 
 
-def _candidates(component: Component, tree: Tree, series: str) -> list[str]:
-    if component.stable_channel:
-        url = component.stable_channel.format(series=series)
-        text = _get(url).decode().strip()
-        if not re.fullmatch(rf"v{re.escape(series)}\.\d+", text):
-            raise TrackError(f"{url} says `{text}`, not a {series}.x release")
-        return [text[1:]]
-    found = []
-    prefix = f"https://github.com/{component.repo}/releases/download/"
-    for release in _github_releases(component.repo):
-        tag = release.get("tag_name", "")
-        if release.get("draft") or release.get("prerelease") or not tag.startswith("v"):
-            continue
-        version = tag[1:]
-        if not re.fullmatch(component.version_re, version) or _series(version) != series:
-            continue
-        # The pinned assets must be attached already: a release can be
-        # published while its assets are still uploading.
-        names = {asset["name"] for asset in release.get("assets", [])}
-        wanted = {
-            urllib.parse.unquote(url.rsplit("/", 1)[1])
-            for pin in _pins_at(component, tree, version)
-            for url in (pin.url, pin.sums)
-            if url.startswith(prefix)
-        }
-        if wanted <= names:
-            found.append(version)
-    return found
-
-
 def newest(component: Component, tree: Tree) -> str:
     """Newest release in the pinned series, or the current version if none is newer."""
     current = component.current(tree)
-    return max([current, *_candidates(component, tree, _series(current))], key=_numbers)
+    return max([current, *component.candidates(tree, component.series(current))], key=_numbers)
 
 
 def published_sha256(text: str, asset: str, url: str) -> str:
@@ -507,8 +631,9 @@ def apply(root: Path, name: str, version: str | None = None) -> Result | None:
 
 def summary(result: Result) -> str:
     component, old, new = result.component, result.old, result.new
-    if _series(old) == _series(new):
-        head = f"Patch release of **{component.name}** in the pinned `{_series(new)}` series: `{old}` → `{new}`."
+    series = component.series(new)
+    if component.series(old) == series:
+        head = f"Patch release of **{component.name}** in the pinned `{series}` series: `{old}` → `{new}`."
     else:
         head = f"Moves **{component.name}** from `{old}` to `{new}`, a series change."
     lines = [head, "", f"Release notes: {component.notes(new)}", "", "| File | Asset | sha256 |", "| --- | --- | --- |"]
@@ -527,8 +652,7 @@ def summary(result: Result) -> str:
         lines += [f"- `{mention}`" for mention in result.mentions]
     lines += [
         "",
-        "Only patch releases inside the pinned series are proposed; a minor bump is a",
-        f"manual `.github/scripts/track-binaries.py apply {component.name} --version ...`.",
+        f"Only patch releases inside the pinned series are proposed; {component.beyond_series.format(name=component.name)}",
         "The tracker regenerates this branch from `main`, so push fixes to a branch",
         "of your own.",
     ]
@@ -545,7 +669,7 @@ def check(root: Path) -> tuple[list[dict], list[str]]:
         except TrackError as err:
             errors.append(f"{name}: {err}")
             continue
-        rows.append({"component": name, "series": _series(current), "current": current, "latest": latest})
+        rows.append({"component": name, "series": component.series(current), "current": current, "latest": latest})
     return rows, errors
 
 
@@ -563,10 +687,11 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     if args.command == "check":
         rows, errors = check(root)
         table = sys.stderr if args.json else sys.stdout
-        print(f"{'component':<12} {'series':<6} {'current':<14} {'latest':<14} state", file=table)
+        width = max(12, *map(len, COMPONENTS))
+        print(f"{'component':<{width}} {'series':<6} {'current':<14} {'latest':<14} state", file=table)
         for row in rows:
             state = "update" if row["latest"] != row["current"] else "current"
-            print(f"{row['component']:<12} {row['series']:<6} {row['current']:<14} {row['latest']:<14} {state}", file=table)
+            print(f"{row['component']:<{width}} {row['series']:<6} {row['current']:<14} {row['latest']:<14} {state}", file=table)
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         if args.json:

@@ -11,11 +11,11 @@ description: |
 (@):
   - include/arch.yml
   - include/k0s.yml
+  - include/sysext.yml
 
 build-depends:
   - base/base-stack.bst
   - freedesktop-sdk.bst:components/erofs-utils.bst
-  - freedesktop-sdk.bst:components/xz.bst
   - freedesktop-sdk.bst:components/zstd.bst
   - filename: k0s/k0s-bin.bst
     config:
@@ -28,43 +28,20 @@ sources:
 
 variables:
   strip-binaries: ""
+  sysext-name: "k0s"
+  sysext-image: "k0s-%{k0s-version}"
+  # Merged as /run/extensions/k0s.raw (k0s-first-boot.service), so the
+  # extension-release name carries no version.
+  sysext-release: "k0s"
+  sysext-version: "%{k0s-version}"
+  sysext-architecture: "%{systemd-arch}"
 
 config:
   install-commands:
     - |
       set -euo pipefail
-      OUT="%{install-root}"
-      FNAME="k0s-%{k0s-version}.raw"
-
-      if [ "%{arch}" != "x86_64" ]; then
-        echo "ERROR: elements/oci/k0s-sysext.bst only supports x86_64 (got %{arch})" >&2
-        exit 1
-      fi
-
-      mkdir -p sysext/usr/bin
-      mkdir -p sysext/usr/lib/systemd/system
-      mkdir -p sysext/usr/lib/extension-release.d
-      mkdir -p "${OUT}"
-
-      # Stage k0s binary
+      mkdir -p sysext/usr/bin sysext/usr/lib/systemd/system
       cp -a /usr/bin/k0s sysext/usr/bin/k0s
       chmod 0755 sysext/usr/bin/k0s
-
-      # Stage systemd service
       cp -a sysext-src/k0scontroller.service sysext-src/k0sworker.service sysext/usr/lib/systemd/system/
-
-      # Stage extension release metadata
-      cp -a sysext-src/extension-release.k0s sysext/usr/lib/extension-release.d/
-      echo "VERSION_ID=%{k0s-version}" >> sysext/usr/lib/extension-release.d/extension-release.k0s
-      echo "ARCHITECTURE=%{systemd-arch}" >> sysext/usr/lib/extension-release.d/extension-release.k0s
-
-      # Build EROFS image
-      mkfs.erofs -d0 "${OUT}/${FNAME}" sysext
-
-      # Compress release asset
-      zstd -T0 -19 -q "${OUT}/${FNAME}" -o "${OUT}/${FNAME}.zst"
-
-      (
-        cd "${OUT}"
-        sha256sum --binary "${FNAME}.zst" > SHA256SUMS
-      )
+    - "%{sysext-pack}"

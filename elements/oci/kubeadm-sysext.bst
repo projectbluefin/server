@@ -17,6 +17,7 @@ description: |
 - include/arch.yml
 - include/image.yml
 - include/kubeadm.yml
+- include/sysext.yml
 
 build-depends:
 - base/base-stack.bst
@@ -33,6 +34,11 @@ sources:
 
 variables:
   strip-binaries: ""
+  sysext-name: "kubeadm"
+  sysext-image: "kubeadm_%{image-version}"
+  sysext-release: "kubeadm_%{image-version}"
+  sysext-version: "%{image-version}"
+  sysext-architecture: "%{systemd-arch}"
 
 config:
   install-commands:
@@ -59,11 +65,6 @@ config:
       *) echo "ERROR: config.toml sandbox image is not %{pause-image} (include/kubeadm.yml)" >&2; exit 1 ;;
     esac
 
-    rel="${lib}/extension-release.d/extension-release.kubeadm_%{image-version}"
-    install -D -m 0644 "${src}/extension-release.kubeadm" "${rel}"
-    echo "VERSION_ID=%{image-version}" >> "${rel}"
-    echo "ARCHITECTURE=%{systemd-arch}" >> "${rel}"
-
     # A sysext may only carry /usr (and /opt, which must stay a plain
     # writable host directory for /opt/cni/bin).
     for entry in sysext/* sysext/.[!.]*; do
@@ -71,11 +72,4 @@ config:
       [ "${entry}" = "sysext%{prefix}" ] || { echo "ERROR: sysext ships ${entry#sysext}" >&2; exit 1; }
     done
 
-  - |
-    set -euo pipefail
-    OUT="%{install-root}"
-    FNAME="kubeadm_%{image-version}.raw"
-    mkdir -p "${OUT}"
-    mkfs.erofs -d0 "${OUT}/${FNAME}" sysext
-    zstd -T0 -19 -q "${OUT}/${FNAME}" -o "${OUT}/${FNAME}.zst"
-    (cd "${OUT}" && sha256sum --binary "${FNAME}.zst" > SHA256SUMS)
+  - "%{sysext-pack}"

@@ -10,6 +10,9 @@ depends:
 - freedesktop-sdk.bst:components/tzdata.bst
 - freedesktop-sdk.bst:components/hosts.bst
 - freedesktop-sdk.bst:components/nsswitch-config.bst
+# /etc/protocols and /etc/services (IANA registries) for getprotobyname()
+# and getservbyname(); libtirpc needs them, e.g. mount.nfs for NFSv3.
+- freedesktop-sdk.bst:components/iana-config.bst
 - freedesktop-sdk.bst:components/bash-config.bst
 - freedesktop-sdk.bst:integration/extra-fs.bst
 - freedesktop-sdk.bst:integration/ldconfig.bst
@@ -38,5 +41,10 @@ depends:
 
 # iSCSI initiator (iscsiadm, iscsid; socket-activated) for iSCSI CSI volumes.
 - freedesktop-sdk.bst:components/open-iscsi.bst
+
+# NFS client (mount.nfs, rpc.statd; nfs-client.target) for NFS CSI/PV volumes.
+# Built from source: FSDK 26.08 has no nfs-utils or rpcbind element.
+- bluefin-server/nfs-utils.bst
+- bluefin-server/rpcbind.bst
 
 - bluefin-server/kernel-modules.bst

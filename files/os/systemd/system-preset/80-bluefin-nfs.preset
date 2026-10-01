@@ -1,0 +1,8 @@
+# NFS client. nfs-client.target orders NFS mounts after remote-fs-pre and
+# runs sm-notify once at boot; mount.nfs starts rpc-statd.service itself
+# (start-statd) the first time an NFSv3 mount needs locking, which pulls in
+# rpcbind through rpcbind.socket. Nothing listens until then except the
+# portmapper socket. FSDK has no catch-all "disable *".
+enable nfs-client.target
+enable rpcbind.socket
+disable rpcbind.service

@@ -17,19 +17,8 @@ config:
         bootstrap_build_arch: 'x86_64'
     - arch == 'aarch64':
         bootstrap_build_arch: 'aarch64'
-    - arch == "ppc64le":
-        bootstrap_build_arch: "ppc64le"
-    - arch == "riscv64":
-        bootstrap_build_arch: "x86_64"
 
   overrides:
     # Our public module signing certificate; FSDK's kernel trusts it and
     # turns on lockdown (see bluefin-server/keys/linux-module-cert.bst).
     components/linux-module-cert.bst: bluefin-server/keys/linux-module-cert.bst
-
-  # FSDK 26.08 dropped components/systemd-base.bst, and gnome-build-meta
-  # (gnome-50 / master) is still pinned to FSDK 25.08 and still depends on it,
-  # so overriding FSDK's systemd onto gnome-build-meta's fails to load.
-  # Use FSDK 26.08's own systemd until gnome-build-meta tracks 26.08.
-  # NOTE: re-evaluate for brew-deps.bst (nspawn machine image), which wanted
-  # gnome-build-meta's nspawn/container patches.

@@ -24,6 +24,9 @@ config:
     set -eu
     src=%{indep-libdir}/systemd/boot/efi/systemd-boot%{efi-arch}.efi
     install -d "%{install-root}%{indep-libdir}/systemd/boot/efi"
-    sbsign --key /boot-keys/DB.key --cert /boot-keys/DB.crt \
-      --output "%{install-root}${src}.signed" "${src}"
+    # systemd-sbsign, unlike sbsign, takes the signing time from
+    # SOURCE_DATE_EPOCH, so the signature is reproducible.
+    %{indep-libdir}/systemd/systemd-sbsign sign \
+      --private-key=/boot-keys/DB.key --certificate=/boot-keys/DB.crt \
+      --output="%{install-root}${src}.signed" "${src}"
     sbverify --cert /boot-keys/DB.crt "%{install-root}${src}.signed"

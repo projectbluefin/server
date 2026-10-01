@@ -37,9 +37,9 @@ There is no application version for these images. Two version axes exist:
 
 2. Update the `ref:` in `elements/freedesktop-sdk.bst` to the new tag/commit.
 
-3. Re-check patches still apply — FSDK ships local patches under
-   `patches/freedesktop-sdk/`. If a release changed the patched files, refresh or
-   drop them. `just validate` surfaces patch failures.
+3. Re-check the local patches in `patches/freedesktop-sdk/`
+   ([`patches/README.md`](../../patches/README.md) says why each exists and
+   when to drop it). `just validate` surfaces a patch that no longer applies.
 
 4. Rebuild and verify:
 
@@ -68,15 +68,19 @@ Before merging a bump:
 
 - Bumping across a minor line (for example, 25.08 → 26.08) may rename/relocate components or restructure runtime stacks:
   - In FSDK 26.08, `public-stacks/runtime-minimal.bst` drops bash and coreutils, which moved to `public-stacks/runtime-gnu.bst`. Stacks whose components carry shell integration commands (like `elements/base/base-stack.bst` for `ldconfig` and `ca-certificates`) need `public-stacks/runtime-gnu.bst` in `depends:`.
-  - `components/systemd-base.bst` was dropped in FSDK 26.08, and FSDK now ships its own systemd directly, so the previous `gnome-build-meta` systemd overrides were removed from `elements/freedesktop-sdk.bst`.
+  - `components/systemd-base.bst` was dropped in FSDK 26.08, and FSDK now ships its own systemd directly.
+- `freedesktop-sdk.bst` is the only junction. `project.conf` takes FSDK's
+  `include/runtime.yml` and the `collect_initial_scripts` plugin straight from
+  it; there is no gnome-build-meta junction to keep in step.
 - A point-release tag is immutable: once a GitHub Release for a given
   `image-version` is published, never republish different bits under it.
-- **Six patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
-  CAS servers to `project.conf`; `0002`–`0005` are FSDK build fixes; **`0006`
+- **Two patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
+  CAS servers to `project.conf`; **`0006`
   carries the Cilium/Kubernetes kernel options** (VXLAN, GENEVE, tc BPF,
   conntrack/ss diagnostics). A bumper must not drop `0006` or the kubeadm and
   k0s sysexts lose their datapath. If a release changed a patched file,
-  refresh the patch in place; never delete `0006` because "it looks small".
+  refresh the patch in place; never delete `0006` because "it looks small". Why each patch exists and when it can be dropped is in
+  [`patches/README.md`](../../patches/README.md).
 - Junction overrides are only meaningful for components your local elements
   reference directly. The 25 GNOME sdk/* overrides (cairo, gtk3, pango, glib,
   gdk-pixbuf…) were dead weight — none of our `base-stack`, `brew-deps` etc. ever
@@ -87,7 +91,7 @@ Before merging a bump:
 
 Point releases are delivered by the scheduled `track-junctions.yml` workflow.
 - **Trigger:** `track-junctions.yml` runs daily and resolves the junction's own `track: freedesktop-sdk-26.08*` glob; it does not wait on a Renovate PR.
-- **Mechanism:** `track-junctions.yml` runs `just bst source track freedesktop-sdk.bst` (alongside `gnome-build-meta.bst`, which overrides it), syncs `project.conf`'s `installer-version` to the tracked point release, and opens its own PR on `auto/track-junctions`. It never runs on `pull_request`, so a junction bump can never be injected into an unrelated dependency PR.
+- **Mechanism:** `track-junctions.yml` runs `just bst source track freedesktop-sdk.bst`, syncs `project.conf`'s `installer-version` to the tracked point release, and opens its own PR on `auto/track-junctions`. It never runs on `pull_request`, so a junction bump can never be injected into an unrelated dependency PR.
 - **Build Loop:** When the PR is merged to `main`, GitHub Actions compiles the image set (OS DDI, UKIs, netboot ESP) and sysexts, and publishes them to a new GitHub Release tagged `v<image-version>`.
 
 ## See also

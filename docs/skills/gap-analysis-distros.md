@@ -97,7 +97,7 @@ kernel). No other distribution's binaries ship in the image.
 | Axis | Bluefin Server (as-implemented) |
 |------|---------------------------------|
 | **Philosophy** | Systemd-native, minimal, image-based server OS; diskless-first (a node boots from a network-pulled image in RAM and updates by rebooting), with an optional disk install. Base /usr includes bash for login and bring-up while heavy developer/debug tools live in sysexts or system containers; container workloads and Kubernetes run via opt-in sysexts. Sources: [AGENTS.md](../../AGENTS.md), [factory-integration.md](factory-integration.md). |
-| **State model** | `/usr` is a read-only erofs filesystem verified by dm-verity, pinned by `usrhash=` on the locked UKI command line. `/etc` is empty on every boot and populated from `/usr/share/factory/etc` by systemd-tmpfiles. Diskless nodes run from tmpfs. Installed nodes get a persistent xfs root via systemd gpt-auto discovery. Sources: [bluefin-server-usr.bst](../../elements/oci/bluefin-server-usr.bst), [bluefin-server-boot.bst](../../elements/oci/bluefin-server-boot.bst), [50-root.conf](../../files/os/repart.d/50-root.conf). |
+| **State model** | `/usr` is a read-only erofs filesystem verified by dm-verity, pinned by `usrhash=` on the locked UKI command line. `/etc` is populated from `/usr/share/factory/etc` by systemd-tmpfiles: empty on every boot on a diskless (tmpfs) node, persistent across A/B updates on an installed node. Diskless nodes run from tmpfs. Installed nodes get a persistent xfs root via systemd gpt-auto discovery. Sources: [bluefin-server-usr.bst](../../elements/oci/bluefin-server-usr.bst), [bluefin-server-boot.bst](../../elements/oci/bluefin-server-boot.bst), [50-root.conf](../../files/os/repart.d/50-root.conf). |
 | **Updates** | Installed nodes: `systemd-sysupdate` fills the inactive usr / usr-verity slot (`files/os/sysupdate.d/10-usr.transfer`, `11-usr-verity.transfer`) and installs the new disk UKI with boot counting (`20-uki.transfer`), so a failed update rolls back automatically. Assets are published to GitHub Releases and as an OCI artifact; the combined `SHA256SUMS` manifest covering the whole set is signed inside the image build (`oci/bluefin-server-image.bst`) and `Verify=yes` is the default. `systemd-sysupdate.timer` is enabled by preset, and `systemd-boot-check-no-failures.service` gates `boot-complete.target`, so an update is blessed only when no unit failed; `bluefin-boot-deadline.timer` reboots a counted boot that is not blessed in 15 minutes so systemd-boot falls back, and `bluefin-update-pending` keeps a rolled-back node off the failed version. Diskless nodes update by rebooting into a newer image (sysupdate is disabled when booted diskless); `bluefin-diskless-update-check` flags `/run/reboot-required` when the boot server offers a newer signed release that the next boot would pull (not for a node pinned to a versioned image). Sources: [ddi-installer.md](ddi-installer.md), [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md), [10-usr.transfer](../../files/os/sysupdate.d/10-usr.transfer), [20-uki.transfer](../../files/os/sysupdate.d/20-uki.transfer), [80-bluefin-updates.preset](../../files/os/systemd/system-preset/80-bluefin-updates.preset), [10-diskless.conf](../../files/os/systemd/system/systemd-sysupdate.service.d/10-diskless.conf), also `systemd-sysupdate(8)`. |
 | **Provisioning** | Stock `systemd-sysinstall` copies `/usr` onto a target disk, started either from the offline USB installer (`bluefin-server-installer_<ver>.raw`) or on a diskless-booted node (see [ddi-installer.md](ddi-installer.md)). Per-node configuration is opt-in via Ignition, delivered as `ignition.config` / `ignition.config.url` system credentials (the cmdline is locked inside the signed UKI); Ignition runs on every boot, so configs must be idempotent. First-boot systemd credentials also cover root password, `tmpfiles.extra`, `network.*`, and `firstboot.*`. Sources: [bluefin-server-image.bst](../../elements/oci/bluefin-server-image.bst), [initrd-ignition.bst](../../elements/bluefin-server/initrd/initrd-ignition.bst), [os-creds-prov.bst](../../elements/bluefin-server/os-creds-prov.bst), [tpm2-credential-sealing.md](tpm2-credential-sealing.md). |
 | **Customization** | Adds software through opt-in `systemd-sysext` images (overlay `/usr`): k0s (Kubernetes) and OpenZFS are built in-tree. The base OS `os-release` identifies as `ID=bluefin-server`; the ZFS sysext pins `VERSION_ID` to the image version because its kernel modules are built against the exact FSDK kernel. Sources: [systemd-sysext-extensions.md](systemd-sysext-extensions.md), [k0s-sysext.md](k0s-sysext.md), [os-release.bst](../../elements/bluefin-server/os-release.bst), [systemd-sysext(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html). |
@@ -147,31 +147,18 @@ These gaps drive the priorities in [architecture-roadmap.md](architecture-roadma
 
 ### Upstream distribution documentation
 
+Specific claims carry inline links in section 2. Documentation roots:
+
 - Ubuntu Server / autoinstall / cloud-init
   - <https://documentation.ubuntu.com/server/>
-  - <https://raw.githubusercontent.com/canonical/ubuntu-server-documentation/main/docs/how-to/software/automatic-updates.md>
-  - <https://raw.githubusercontent.com/canonical/ubuntu-server-documentation/main/docs/how-to/software/upgrade-your-release.md>
-  - <https://raw.githubusercontent.com/canonical/ubuntu-server-documentation/main/docs/how-to/software/package-management.md>
   - <https://canonical-subiquity.readthedocs-hosted.com/en/latest/intro-to-autoinstall.html>
   - <https://cloudinit.readthedocs.io/>
-- Talos Linux
-  - <https://docs.siderolabs.com/talos/v1.13/overview/what-is-talos.md>
-  - <https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/lifecycle-management/upgrading-talos.md>
-  - <https://docs.siderolabs.com/talos/v1.13/build-and-extend-talos/custom-images-and-development/system-extensions.md>
-  - <https://docs.siderolabs.com/talos/v1.13/reference/configuration/overview.md>
-- Flatcar Container Linux
-  - <https://raw.githubusercontent.com/flatcar/flatcar-docs/main/docs/setup/releases/update-strategies.md>
-  - <https://raw.githubusercontent.com/flatcar/flatcar-docs/main/docs/provisioning/ignition/_index.md>
-  - <https://raw.githubusercontent.com/flatcar/flatcar-docs/main/docs/provisioning/sysext/_index.md>
+- Talos Linux — <https://docs.siderolabs.com/talos/v1.13/>
+- Flatcar Container Linux — <https://www.flatcar.org/docs/latest/>
 - Fedora CoreOS / rpm-ostree / Zincati
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/index.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/auto-updates.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/producing-ign.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/running-containers.adoc>
-  - <https://raw.githubusercontent.com/coreos/fedora-coreos-docs/main/modules/ROOT/pages/faq.adoc>
-  - <https://raw.githubusercontent.com/coreos/rpm-ostree/main/README.md>
+  - <https://docs.fedoraproject.org/en-US/fedora-coreos/>
+  - <https://coreos.github.io/rpm-ostree/>
   - <https://coreos.github.io/zincati/>
-  - <https://coreos.github.io/zincati/development/fleetlock/>
 
 ### systemd reference
 

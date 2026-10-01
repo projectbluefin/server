@@ -4,7 +4,8 @@ description: |
   sha256 (published alongside the release asset): kubelet, kubeadm and
   kubectl from dl.k8s.io, crictl (cri-tools), the containerd static build
   (containerd, containerd-shim-runc-v2, ctr), the runc static build, and
-  the full CNI reference plugin set. Versions come from include/kubeadm.yml.
+  the full CNI reference plugin set. Versions come from include/kubeadm.yml;
+  the amd64 or arm64 asset is picked by the build architecture.
 
   Layout: binaries in /usr/bin, CNI plugins in /usr/libexec/cni. Nothing
   goes under /opt: /opt/cni/bin stays a writable host directory that the
@@ -14,6 +15,7 @@ description: |
   private location and ships exactly these files.
 
 (@):
+- include/arch.yml
 - include/kubeadm.yml
 
 build-depends:
@@ -57,20 +59,51 @@ sources:
   base-dir: ''
   directory: cni
 
+(?):
+- arch == "aarch64":
+    sources:
+    - kind: remote
+      url: k8s_dl:release/v%{kubernetes-version}/bin/linux/arm64/kubelet
+      ref: 765b740e3ad9c590852652a2623424ec60e2dddce2c6280d7f042f56c8c98619
+      directory: k8s
+    - kind: remote
+      url: k8s_dl:release/v%{kubernetes-version}/bin/linux/arm64/kubeadm
+      ref: 697cf3aa54f1a5740b883a3b18a5d051b4032fd68ba89af626781a43ec9bccc3
+      directory: k8s
+    - kind: remote
+      url: k8s_dl:release/v%{kubernetes-version}/bin/linux/arm64/kubectl
+      ref: 46913a7aa0327f6cc2e1cc2775d53c4a2af5e52f7fd8dacbfbfd098e757f19e9
+      directory: k8s
+    - kind: tar
+      url: github:kubernetes-sigs/cri-tools/releases/download/v%{crictl-version}/crictl-v%{crictl-version}-linux-arm64.tar.gz
+      ref: c31d252e203df5f4cf37f314bd3092eb79087e791631c1e607087c74b6d0423f
+      base-dir: ''
+      directory: crictl
+    - kind: tar
+      url: github:containerd/containerd/releases/download/v%{containerd-version}/containerd-static-%{containerd-version}-linux-arm64.tar.gz
+      ref: d1a1e64c4334e17d6f9f40093d5ff9f810b95ac34c7dcba55e7d2226d2a8ab79
+      base-dir: bin
+      directory: containerd
+    - kind: remote
+      url: github:opencontainers/runc/releases/download/v%{runc-version}/runc.arm64
+      ref: 3c9a8e9e6dafd00db61f4611692447ebab4a56388bae4f82192aed67b66df712
+      directory: runc
+    - kind: tar
+      url: github:containernetworking/plugins/releases/download/v%{cni-plugins-version}/cni-plugins-linux-arm64-v%{cni-plugins-version}.tgz
+      ref: 16484966a46b4692028ba32d16afd994e079dc2cc63fbc2191d7bfaf5e11f3dd
+      base-dir: ''
+      directory: cni
+
 config:
   install-commands:
   - |
     set -eu
-    if [ "%{arch}" != "x86_64" ]; then
-      echo "ERROR: elements/kubeadm/kubeadm-bin.bst pins amd64 release binaries only (arch=%{arch})" >&2
-      exit 1
-    fi
     bin="%{install-root}%{bindir}"
     install -d "${bin}"
     for b in kubelet kubeadm kubectl; do install -m 0755 "k8s/${b}" "${bin}/"; done
     install -m 0755 crictl/crictl "${bin}/"
     for b in containerd containerd-shim-runc-v2 ctr; do install -m 0755 "containerd/${b}" "${bin}/"; done
-    install -m 0755 runc/runc.amd64 "${bin}/runc"
+    install -m 0755 "runc/runc.%{go-arch}" "${bin}/runc"
     install -d "%{install-root}%{libexecdir}/cni"
     find cni -maxdepth 1 -type f -perm -u+x -exec install -m 0755 -t "%{install-root}%{libexecdir}/cni" {} +
     for p in loopback bridge host-local portmap; do

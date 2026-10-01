@@ -29,9 +29,21 @@ Bluefin Server is currently in **Alpha**:
 - **Optional disk install with A/B rollback** — a running diskless node *is* the installer: see [ddi-installer.md](docs/skills/ddi-installer.md) (`systemd-sysinstall` copies `/usr` into slot A). The first disk boot creates slot B and a persistent xfs root. `systemd-sysupdate` fills the inactive slot on a timer and reboots into it nightly (Kubernetes nodes leave the reboot to kured), and UKI boot counting rolls back an update that does not boot cleanly: a boot-counted boot that has not reached `boot-complete.target` (any failed unit counts) within 15 minutes reboots, or on Kubernetes nodes is flagged for kured, until systemd-boot falls back to the previous image, which then stays put until a newer release. `/run/reboot-lock` or `/etc/reboot-lock` holds these reboots.
 - **Secure Boot on** — signed systemd-boot, signed UKIs, signed kernel modules, `lockdown=integrity`. UEFI HTTP boot is supported; [Booty](https://github.com/jeefy/booty) serves the UKI, the OS DDI, the signed manifest, and a per-node `bluefin-node.ign`.
 - **Opt-in per-node state via Ignition** — pass an `ignition.config` / `ignition.config.url` system credential (or, on UEFI HTTP boot, a `bluefin-node.ign` next to the UKI) and Ignition runs in the initrd on every boot; configs must be idempotent.
-- **Opt-in sysexts** — k0s (Kubernetes), KubeStellar, and OpenZFS ship as separate `systemd-sysext` images, never in the base `/usr`. ZFS and KubeStellar are version-locked to the image and follow OS updates through optional sysupdate features.
+- **Opt-in sysexts** — k0s (Kubernetes), KubeStellar, kubeadm, OpenZFS, the NVIDIA driver (open kernel modules) and the NVIDIA Container Toolkit ship as separate `systemd-sysext` images, never in the base `/usr`. The image-locked ones (ZFS, KubeStellar, kubeadm, NVIDIA driver) follow OS updates through optional sysupdate features.
 
 > **Remote diagnostics:** OpenSSH is installed for on-demand diagnostics, but is disabled by default via systemd presets. It can be started manually with `systemctl start sshd` when remote access is needed. See [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md).
+
+## Download a release
+
+Each push to `main` publishes an immutable [GitHub Release](https://github.com/projectbluefin/server/releases) tagged `v<YY.MM.run>` and the same file set as an OCI artifact at `ghcr.io/projectbluefin/bluefin-server` (tags `<ver>` and `latest`). Which file you want:
+
+| File | Use it for |
+|---|---|
+| `bluefin-server-netboot_<ver>.esp.raw` | Written to a USB stick, boots a node diskless (pulls the OS into RAM over HTTP). |
+| `bluefin-server-installer_<ver>.raw` | Written to a USB stick, boots into `systemd-sysinstall` for an offline install to disk. |
+| everything else | [Booty](https://github.com/jeefy/booty) syncs the whole release and serves it for network boot at scale. |
+
+Verify the download against the GPG-signed `SHA256SUMS` before use; the release public keyring is [`files/os/sysupdate-keys/import-pubring.gpg`](files/os/sysupdate-keys/import-pubring.gpg), and the verification and attestation steps are in [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md).
 
 ## Quick start
 
@@ -59,6 +71,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist, Conventi
 - **Signed boot chain**: Secure Boot keys enroll from the ESP on first boot (`secure-boot-enroll if-safe` in VMs, or manually via systemd-boot menu in firmware Setup Mode on bare metal); local builds use throwaway keys from `just gen-dev-keys`.
 - **Signed manifests**: the build signs one combined `SHA256SUMS` over the whole image set (OS images, UKIs, sysexts) inside `oci/bluefin-server-image.bst`; a release publishes `dist/diskless/` as-is to GitHub Releases and as an OCI artifact.
 - **Sysupdate verification**: installed nodes verify updates against the signed manifest (`Verify=yes`), and the diskless pull checks the same signature in the initrd; see [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) for details.
+- **Provenance and SBOM**: releases carry SLSA provenance and SPDX SBOM attestations; see [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) for verification.
 - **Vulnerability disclosure**: See [`SECURITY.md`](SECURITY.md) for policy details and how to report security issues.
 
 ## License

@@ -1,0 +1,145 @@
+name: Track upstream binaries
+
+# Proposes patch releases of the upstream binaries pinned by version and
+# sha256 (the kubeadm sysext payload, k0s, ORAS): one pull request per
+# component, on its own auto/track-binaries/<component> branch. What is
+# tracked, how each sha256 is verified, and why this is not a Renovate rule:
+# .github/scripts/track-binaries.py.
+#
+# Same shape as track-junctions.yml: schedule and manual dispatch only, never
+# pull_request, and pull requests opened with the mergeraptor app token so
+# that they get CI.
+on:
+  schedule:
+    # After track-junctions (08:00 UTC).
+    - cron: '30 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: track-binaries
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      updates: ${{ steps.check.outputs.updates }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Find newer patch releases
+        id: check
+        env:
+          # Read-only; only raises the API rate limit for the release listings.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A component whose upstream cannot be read fails this job, but only
+          # after the other components' updates are recorded: one outage must
+          # neither pass as "nothing to track" nor hold back the rest.
+          status=0
+          python3 .github/scripts/track-binaries.py check --json > "$RUNNER_TEMP/updates.json" || status=$?
+          echo "updates=$(cat "$RUNNER_TEMP/updates.json")" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+  propose:
+    needs: check
+    if: ${{ !cancelled() && needs.check.outputs.updates != '' && needs.check.outputs.updates != '[]' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.check.outputs.updates) }}
+    steps:
+      # GITHUB_TOKEN stays read-only. The push and the pull request use the
+      # mergeraptor app token (pushes made with GITHUB_TOKEN never trigger CI),
+      # narrowed to what this job does.
+      - name: Get mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          # The ORAS pins live in .github/workflows/build.yml, and pushing a
+          # change to a workflow file needs the Workflows permission. An empty
+          # value requests nothing.
+          permission-workflows: ${{ matrix.component == 'oras' && 'write' || '' }}
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Apply the release and verify its checksums
+        env:
+          COMPONENT: ${{ matrix.component }}
+          VERSION: ${{ matrix.latest }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/track-binaries.py apply "$COMPONENT" --version "$VERSION" \
+            --summary "$RUNNER_TEMP/pr-body.md" > "$RUNNER_TEMP/files.txt"
+
+      - name: Create or update the pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          COMPONENT: ${{ matrix.component }}
+          FROM: ${{ matrix.current }}
+          TO: ${{ matrix.latest }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          branch="auto/track-binaries/${COMPONENT}"
+          title="chore(deps): update ${COMPONENT} ${FROM} -> ${TO}"
+          if [ ! -s "$RUNNER_TEMP/files.txt" ]; then
+            echo "${COMPONENT} needs no change."
+            exit 0
+          fi
+
+          # One pull request per component. An open one with this exact title
+          # already proposes this release, so leave it and its CI run alone. A
+          # closed one with this title was turned down (or reverted); do not
+          # reopen it every day, the next release brings a new title. No
+          # pipes into grep and no `|| true`: a failed query must stop here,
+          # not pass for "no pull request".
+          open=$(gh pr list --head "$branch" --base main --state open --json number,title --jq '.[0] | select(.) | "\(.number)\t\(.title)"')
+          number="${open%%$'\t'*}"
+          if [ -n "$open" ] && [ "${open#*$'\t'}" = "$title" ]; then
+            echo "#${number} already proposes ${COMPONENT} ${TO}."
+            exit 0
+          fi
+          closed=$(gh pr list --head "$branch" --base main --state closed --json title --jq '.[].title')
+          if [ -z "$open" ] && grep -Fxq -- "$title" <<< "$closed"; then
+            echo "A closed pull request already proposed '${title}'; not reopening it."
+            exit 0
+          fi
+
+          # No attribution trailers, as in track-junctions.yml: this commit is
+          # the deterministic output of track-binaries.py.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          mapfile -t files < "$RUNNER_TEMP/files.txt"
+          git add -- "${files[@]}"
+          git commit -m "$title"
+          git push --force-with-lease origin "$branch"
+
+          printf '\n---\n*Generated by [Track upstream binaries](%s)*\n' "$RUN_URL" >> "$RUNNER_TEMP/pr-body.md"
+          if [ -n "$open" ]; then
+            gh pr edit "$number" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"
+            echo "Updated PR: $(gh pr view "$number" --json url --jq '.url')"
+          else
+            echo "Created PR: $(gh pr create --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md")"
+          fi

@@ -13,8 +13,9 @@ These tests assert the drift-prone contracts:
 * every source ``MatchPattern`` corresponds to an artifact name that some
   element under ``elements/`` actually emits (``bluefin-server-ddi-<v>.raw.zst``,
   ``bluefin-server-<v>.efi``, ``k0s-<v>.raw.zst``)
-* the k0s sysext transfer lands in ``/var/lib/extensions`` under a name that
-  ``files/k0s/sysext/extension-release.k0s`` (``NAME=k0s``) can merge
+* each component sysext on its own version axis (k0s, the NVIDIA Container
+  Toolkit) is staged outside ``/var/lib/extensions`` behind a stable
+  ``CurrentSymlink`` whose name its ``extension-release`` (``ID=_any``) merges
 """
 
 import configparser
@@ -26,16 +27,38 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.d"
 K0S_SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.k0s.d"
-K0S_TRANSFER = K0S_SYSUPDATE_DIR / "70-k0s.transfer"
+CTK_SYSUPDATE_DIR = REPO_ROOT / "files" / "os" / "sysupdate.nvidia-container-toolkit.d"
 ELEMENTS_DIR = REPO_ROOT / "elements"
-EXTENSION_RELEASE = REPO_ROOT / "files" / "k0s" / "sysext" / "extension-release.k0s"
+
+# Sysexts on their own version axis: one sysupdate component each, staged in
+# a state directory and merged through a stable symlink by an opt-in unit.
+COMPONENTS = {
+    "k0s": {
+        "transfer": K0S_SYSUPDATE_DIR / "70-k0s.transfer",
+        "state": "/var/lib/k0s",
+        "release": REPO_ROOT / "files" / "k0s" / "sysext" / "extension-release.k0s",
+    },
+    "nvidia-container-toolkit": {
+        "transfer": CTK_SYSUPDATE_DIR / "71-nvidia-container-toolkit.transfer",
+        "state": "/var/lib/nvidia-container-toolkit",
+        "release": REPO_ROOT
+        / "files"
+        / "nvidia-container-toolkit"
+        / "sysext"
+        / "extension-release.nvidia-container-toolkit",
+    },
+}
 
 RELEASE_FEED = "https://github.com/projectbluefin/server/releases/latest/download/"
 
 
 def transfer_paths() -> list[Path]:
     return sorted(
-        (*SYSUPDATE_DIR.glob("*.transfer"), *K0S_SYSUPDATE_DIR.glob("*.transfer"))
+        (
+            *SYSUPDATE_DIR.glob("*.transfer"),
+            *K0S_SYSUPDATE_DIR.glob("*.transfer"),
+            *CTK_SYSUPDATE_DIR.glob("*.transfer"),
+        )
     )
 
 
@@ -48,10 +71,16 @@ def load_transfer(path: Path) -> configparser.ConfigParser:
 
 
 def element_texts() -> str:
-    """Every element definition concatenated, for artifact-name lookups."""
-    return "\n".join(
+    """Every element definition concatenated, for artifact-name lookups.
+
+    Sysext elements name their image in ``sysext-image:`` and
+    ``include/sysext.yml`` writes ``%{sysext-image}.raw``; spell that out.
+    """
+    text = "\n".join(
         p.read_text() for p in sorted(ELEMENTS_DIR.rglob("*.bst"))
     )
+    images = re.findall(r'^\s*sysext-image:\s*"([^"]+)"', text, re.MULTILINE)
+    return "\n".join([text, *(f"{image}.raw" for image in images)])
 
 
 def split_match_pattern(pattern: str) -> tuple[str, str]:
@@ -71,8 +100,11 @@ def test_sysupdate_directories_are_populated():
         "30-zfs.transfer",
         "31-kubestellar.transfer",
         "32-kubeadm.transfer",
+        "33-nvidia-open-595.transfer",
     ]
     assert k0s == ["70-k0s.transfer"]
+    ctk = sorted(p.name for p in CTK_SYSUPDATE_DIR.glob("*.transfer"))
+    assert ctk == ["71-nvidia-container-toolkit.transfer"]
 
 
 @pytest.mark.parametrize("path", transfer_paths(), ids=lambda p: p.name)
@@ -179,27 +211,31 @@ def test_usr_transfers_carry_the_verity_partition_uuid(name: str):
     )
 
 
-def test_k0s_sysext_transfer_lands_in_the_system_extension_directory():
-    target = load_transfer(K0S_TRANSFER)["Target"]
+@pytest.mark.parametrize("name", sorted(COMPONENTS))
+def test_component_sysext_transfer_stages_outside_the_extension_directories(name: str):
+    component = COMPONENTS[name]
+    target = load_transfer(component["transfer"])["Target"]
     assert target.get("Type") == "regular-file", (
-        "the k0s sysext is delivered as a decompressed regular file"
+        f"the {name} sysext is delivered as a decompressed regular file"
     )
-    assert target.get("Path") == "/var/lib/k0s", (
-        f"k0s sysext target path is {target.get('Path')!r}; the persistent "
-        "staging path must remain outside systemd-sysext's early scan"
+    assert target.get("Path") == component["state"], (
+        f"{name} sysext target path is {target.get('Path')!r}; the persistent "
+        "staging path must remain outside systemd-sysext's early scan, where "
+        "two versions of an ID=_any image would both merge"
     )
     assert target.get("Mode") == "0644", (
-        f"k0s sysext mode is {target.get('Mode')!r}; the image must be readable "
+        f"{name} sysext mode is {target.get('Mode')!r}; the image must be readable "
         "by systemd-sysext at merge time"
     )
 
 
-def test_k0s_sysext_transfer_maintains_a_stable_current_symlink():
-    target = load_transfer(K0S_TRANSFER)["Target"]
+@pytest.mark.parametrize("name", sorted(COMPONENTS))
+def test_component_sysext_transfer_maintains_a_stable_current_symlink(name: str):
+    target = load_transfer(COMPONENTS[name]["transfer"])["Target"]
     symlink = target.get("CurrentSymlink")
-    assert symlink == "k0s.raw", (
+    assert symlink == f"{name}.raw", (
         f"CurrentSymlink is {symlink!r}; the boot activation unit requires a "
-        "stable filename, so a version bump otherwise stops merging k0s"
+        f"stable filename, so a version bump otherwise stops merging {name}"
     )
     prefix, suffix = split_match_pattern(target["MatchPattern"])
     assert symlink == f"{prefix.rstrip('-')}{suffix}", (
@@ -208,37 +244,37 @@ def test_k0s_sysext_transfer_maintains_a_stable_current_symlink():
     )
 
 
-def test_k0s_sysext_transfer_decompresses_the_release_asset():
-    parser = load_transfer(K0S_TRANSFER)
+@pytest.mark.parametrize("name", sorted(COMPONENTS))
+def test_component_sysext_transfer_decompresses_the_release_asset(name: str):
+    parser = load_transfer(COMPONENTS[name]["transfer"])
     source = parser["Source"]["MatchPattern"]
     target = parser["Target"]["MatchPattern"]
-    assert source.endswith(".raw.zst"), f"k0s release asset {source!r} is not zstd"
+    assert source.endswith(".raw.zst"), f"{name} release asset {source!r} is not zstd"
     assert target == source.removesuffix(".zst"), (
-        f"k0s sysext installs as {target!r} but downloads {source!r}; a still "
+        f"{name} sysext installs as {target!r} but downloads {source!r}; a still "
         "compressed image cannot be mounted by systemd-sysext"
     )
 
 
-def test_k0s_sysext_image_name_matches_its_extension_release_name():
+@pytest.mark.parametrize("name", sorted(COMPONENTS))
+def test_component_sysext_image_name_matches_its_extension_release_name(name: str):
     """systemd-sysext requires ``extension-release.<image-name>`` to agree.
 
-    The image installed by ``70-k0s.transfer`` is merged through the stable
-    ``k0s.raw`` symlink, so ``NAME=`` in ``files/k0s/sysext/extension-release.k0s``
-    must be ``k0s`` or the merge is rejected at boot.
+    The image a component transfer installs is merged through its stable
+    ``CurrentSymlink`` name, so ``NAME=`` in its ``extension-release`` must be
+    that name or the merge is rejected at boot.
     """
-    assert EXTENSION_RELEASE.is_file(), f"{EXTENSION_RELEASE} missing"
+    release = COMPONENTS[name]["release"]
+    assert release.is_file(), f"{release} missing"
     fields = dict(
         line.split("=", 1)
-        for line in EXTENSION_RELEASE.read_text().splitlines()
+        for line in release.read_text().splitlines()
         if "=" in line and not line.startswith("#")
     )
-    symlink = load_transfer(K0S_TRANSFER)["Target"][
-        "CurrentSymlink"
-    ]
+    symlink = load_transfer(COMPONENTS[name]["transfer"])["Target"]["CurrentSymlink"]
     image_name = symlink.removesuffix(".raw")
-    assert EXTENSION_RELEASE.name == f"extension-release.{image_name}", (
-        f"{EXTENSION_RELEASE.name} does not match the installed image name "
-        f"{image_name!r}"
+    assert release.name == f"extension-release.{image_name}", (
+        f"{release.name} does not match the installed image name {image_name!r}"
     )
     assert fields.get("NAME") == image_name, (
         f"extension-release NAME={fields.get('NAME')!r} but the sysext is merged "
@@ -248,6 +284,14 @@ def test_k0s_sysext_image_name_matches_its_extension_release_name():
         "ID must be _any: the sysext ships independently of the host os-release "
         "version and would otherwise be rejected after an OS update"
     )
+
+
+@pytest.mark.parametrize("name", sorted(COMPONENTS))
+def test_component_transfer_carries_no_feature_or_version_protection(name: str):
+    """Components are opted into by enabling their activation unit, not by a
+    feature, and are not tied to the booted image version."""
+    transfer = load_transfer(COMPONENTS[name]["transfer"])["Transfer"]
+    assert "Features" not in transfer and "ProtectVersion" not in transfer
 
 
 IMAGE_ELEMENT = ELEMENTS_DIR / "oci" / "bluefin-server-image.bst"
@@ -261,7 +305,9 @@ def test_every_source_artifact_is_in_the_signed_image_set(path: Path):
     image = IMAGE_ELEMENT.read_text()
     assert prefix in image, f"{path.name}: {prefix!r} assets are not in {IMAGE_ELEMENT.name}"
     build_yml = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
-    assert "find dist/diskless -maxdepth 1 -type f" in build_yml
+    assert "scripts/publish-release.sh release dist/diskless" in build_yml
+    publish = (REPO_ROOT / "scripts" / "publish-release.sh").read_text()
+    assert "-maxdepth 1 -type f" in publish
     assert "gpg --batch --yes --pinentry-mode loopback" in image
     assert "gpgv --keyring /boot-keys/import-pubring.pgp SHA256SUMS.gpg SHA256SUMS" in image
 
@@ -270,3 +316,13 @@ def test_k0s_release_staging_does_not_use_legacy_k3s_name() -> None:
     image = IMAGE_ELEMENT.read_text()
     assert "/sysext/k0s/k0s-*.raw.zst" in image
     assert "k3s-" not in image
+
+
+def test_component_sysexts_are_staged_into_the_signed_image_set() -> None:
+    image = IMAGE_ELEMENT.read_text()
+    publish = (REPO_ROOT / "scripts" / "publish-release.sh").read_text()
+    for name in COMPONENTS:
+        assert f"filename: oci/{name}-sysext.bst" in image
+        assert f"/sysext/{name}/{name}-*.raw.zst" in image
+        # Own version axis: publish-release.sh accepts any version of it.
+        assert f'"{name}-[0-9][0-9A-Za-z.+-]*\\\\.raw\\\\.zst"' in publish

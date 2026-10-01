@@ -11,6 +11,7 @@ description: |
 
 (@):
   - include/image.yml
+  - include/sysext.yml
 
 build-depends:
   - base/base-stack.bst
@@ -33,23 +34,24 @@ sources:
 
 variables:
   strip-binaries: ""
+  sysext-name: "kubestellar"
+  sysext-image: "kubestellar_%{image-version}"
+  sysext-release: "kubestellar_%{image-version}"
+  sysext-version: "%{image-version}"
+  # Manifests, kiosk assets and shell scripts only.
+  sysext-architecture: ""
 
 config:
   install-commands:
     - |
       set -euo pipefail
-      OUT="%{install-root}"
-      FNAME="kubestellar_%{image-version}.raw"
       root=sysext/usr
       mkdir -p "${root}/lib/systemd/system/k0scontroller.service.wants" \
-        "${root}/lib/extension-release.d" "${root}/lib/tmpfiles.d" "${root}/lib/issue.d" \
-        "${root}/share/k0s/manifests" "${root}/share/k0s/kiosk" "${root}/share/k0s/kubeflex" "${OUT}"
+        "${root}/lib/tmpfiles.d" "${root}/lib/issue.d" \
+        "${root}/share/k0s/manifests" "${root}/share/k0s/kiosk" "${root}/share/k0s/kubeflex"
       cp -a sysext-src/kubestellar-seed.service "${root}/lib/systemd/system/"
       ln -s ../kubestellar-seed.service "${root}/lib/systemd/system/k0scontroller.service.wants/kubestellar-seed.service"
       cp -a sysext-src/k0s-manifests.conf "${root}/lib/tmpfiles.d/"
-      rel="${root}/lib/extension-release.d/extension-release.kubestellar_%{image-version}"
-      cp -a sysext-src/extension-release.kubestellar "${rel}"
-      echo "VERSION_ID=%{image-version}" >> "${rel}"
       cp -a sysext-src/40-kubestellar.issue "${root}/lib/issue.d/"
       cp -a manifests-src/* "${root}/share/k0s/manifests/"
       cp -a kiosk-src/. "${root}/share/k0s/kiosk/"
@@ -58,6 +60,4 @@ config:
       if find sysext -name '*.pem' | grep -q .; then
         echo "ERROR: key material in a public sysext" >&2; exit 1
       fi
-      mkfs.erofs -d0 "${OUT}/${FNAME}" sysext
-      zstd -T0 -19 -q "${OUT}/${FNAME}" -o "${OUT}/${FNAME}.zst"
-      (cd "${OUT}" && sha256sum --binary "${FNAME}.zst" > SHA256SUMS)
+    - "%{sysext-pack}"

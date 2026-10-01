@@ -23,7 +23,7 @@ repos:
         entry: python .github/scripts/check-renovate-series.py
         language: system
         pass_filenames: false
-        files: ^(renovate\.json|elements/(freedesktop-sdk|gnome-build-meta)\.bst|\.github/scripts/check-renovate-series\.py)$
+        files: ^(renovate\.json|elements/freedesktop-sdk\.bst|\.github/scripts/check-renovate-series\.py)$
       - id: check-k0s-version
         name: k0s version derived from include/k0s.yml, not restated
         entry: python .github/scripts/check-k0s-version.py

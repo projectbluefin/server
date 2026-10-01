@@ -63,6 +63,16 @@ Design choices:
   `systemctl enable --now k0s-first-boot.service`. The unit copies the image to
   `/run/extensions/k0s.raw`, runs `systemd-sysext refresh`, and enables the
   controller or worker.
+- **Why the activation units stay in the base image.** A sysext cannot
+  activate itself: nothing in it runs until something merges it, and the k0s
+  image lives in `/var/lib/k0s`, outside the extension directories
+  `systemd-sysext` scans. `k0s-first-boot.service` (and its fetcher) is that
+  something, so it ships in `/usr` (`bluefin-server/os-k0s-first-boot.bst`).
+  A provisioner such as [Booty](https://github.com/jeefy/booty) or an
+  Ignition config writes `/var/lib/k0s/k0s.raw` and enables the unit. It is
+  inert otherwise: FSDK has no catch-all `disable *` preset, so
+  `80-bluefin-opt-in.preset` disables both units explicitly, and no preset in
+  the image or in any sysext enables them.
 - **OTA delivery.** A k0s component `systemd-sysupdate` transfer file
   (`70-k0s.transfer`) is installed in the base OS so hosts can pull new k0s
   sysext releases from GitHub Releases without updating the root or UKI.

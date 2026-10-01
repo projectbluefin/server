@@ -37,7 +37,6 @@ def run_against(tmp_path, renovate, junctions):
 
 
 FSDK = "https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git"
-GBM = "https://gitlab.gnome.org/GNOME/gnome-build-meta.git"
 
 
 def rule(dep, extract):
@@ -53,9 +52,8 @@ def junction(track):
     return f"kind: junction\n\nsources:\n- kind: git_repo\n  track: {track}\n  ref: x\n"
 
 
-BOTH_JUNCTIONS = {
+JUNCTIONS = {
     "freedesktop-sdk.bst": junction("freedesktop-sdk-26.08*"),
-    "gnome-build-meta.bst": junction("gnome-50"),
 }
 
 
@@ -65,13 +63,12 @@ def test_passes_when_series_agree(tmp_path):
         {
             "packageRules": [
                 rule(FSDK, r"^freedesktop-sdk-(?<version>26\.08\.[0-9]+)$"),
-                rule(GBM, r"^(?<version>50\.[0-9]+)$"),
             ]
         },
-        BOTH_JUNCTIONS,
+        JUNCTIONS,
     )
     assert result.returncode == 0, result.stderr
-    assert "OK: 2" in result.stdout
+    assert "OK: 1" in result.stdout
 
 
 def test_fails_on_the_real_regression(tmp_path):
@@ -81,10 +78,9 @@ def test_fails_on_the_real_regression(tmp_path):
         {
             "packageRules": [
                 rule(FSDK, r"^freedesktop-sdk-(?<version>25\.08\.[0-9]+)$"),
-                rule(GBM, r"^(?<version>50\.[0-9]+)$"),
             ]
         },
-        BOTH_JUNCTIONS,
+        JUNCTIONS,
     )
     assert result.returncode == 1
     assert "matches no tag" in result.stderr
@@ -94,8 +90,8 @@ def test_fails_on_the_real_regression(tmp_path):
 def test_fails_when_a_junction_has_no_rule(tmp_path):
     result = run_against(
         tmp_path,
-        {"packageRules": [rule(GBM, r"^(?<version>50\.[0-9]+)$")]},
-        BOTH_JUNCTIONS,
+        {"packageRules": []},
+        JUNCTIONS,
     )
     assert result.returncode == 1
     assert "no packageRule" in result.stderr
@@ -107,12 +103,10 @@ def test_fails_when_the_junction_declares_no_track(tmp_path):
         {
             "packageRules": [
                 rule(FSDK, r"^freedesktop-sdk-(?<version>26\.08\.[0-9]+)$"),
-                rule(GBM, r"^(?<version>50\.[0-9]+)$"),
             ]
         },
         {
             "freedesktop-sdk.bst": "kind: junction\n\nsources:\n- kind: git_repo\n  ref: x\n",
-            "gnome-build-meta.bst": junction("gnome-50"),
         },
     )
     assert result.returncode == 1
@@ -121,7 +115,7 @@ def test_fails_when_the_junction_declares_no_track(tmp_path):
 
 def test_series_helpers_ignore_the_renovate_placeholder():
     assert check_renovate_series.series_of("freedesktop-sdk-26.08*") == "freedesktop-sdk-26.08"
-    assert check_renovate_series.series_of("gnome-50") == "gnome-50"
+    assert check_renovate_series.series_of("stable") == "stable"
     assert check_renovate_series.digits(r"^freedesktop-sdk-(?<version>26\.08\.[0-9]+)$") == ["26", "08"]
     assert check_renovate_series.digits("freedesktop-sdk-26.08") == ["26", "08"]
 

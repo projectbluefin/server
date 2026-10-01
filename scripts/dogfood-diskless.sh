@@ -9,8 +9,14 @@
 # is handed over as the import.pull system credential via SMBIOS.
 #
 # Usage: dogfood-diskless.sh <dir with .raw/.efi/.esp.raw> [--check]
-#   --check  headless: boot, run a probe, exit 0 if no unit failed
+#   --check  headless: boot, run a probe, exit 0 if Secure Boot was enforced and no
+#            unit failed. With DOGFOOD_TAMPER set, exit 0 only if the initrd
+#            refuses the image.
 # Environment:
+#   DOGFOOD_PORT=<port>        HTTP port for the built-in server (default 8765)
+#   DOGFOOD_MEM=<MiB>          guest memory (default 4096)
+#   DOGFOOD_TIMEOUT=<seconds>  --check deadline (default 600)
+#   DOGFOOD_EXPECT=<ERE>       --check also requires the probe output to match
 #   DOGFOOD_IGNITION=<file>    pass an Ignition config as the ignition.config credential
 #   DOGFOOD_CREDS=<dir>        pass every file in <dir> as a system credential named after it
 #   DOGFOOD_STATE_DISK=<file>  attach a persistent second disk (/dev/vdb), created if missing
@@ -20,9 +26,14 @@
 #   DOGFOOD_BOOT=http          UEFI HTTP boot the netboot UKI (the initrd derives the
 #                              /usr image URL from the boot URL); enrolls keys first
 #   DOGFOOD_BOOT_URL=<url>     HTTP boot from another server (e.g. Booty) instead
-#   DOGFOOD_NODE_IGN=<file>    serve it as bluefin-node.ign next to the UKI (HTTP boot)
+#   DOGFOOD_NODE_IGN=<file>    serve it, unsigned, as bluefin-node.ign next to the UKI
+#                              (HTTP boot); the netboot UKI's transitional
+#                              bluefin.ignition.allow-unsigned default accepts it
 #   DOGFOOD_SERVE_EXTRA=<dir>  also serve the files in <dir>
-#   DOGFOOD_TAMPER=raw|sums    serve a corrupted image or a re-hashed, unsigned manifest
+#   DOGFOOD_TAMPER=raw|sums    serve a corrupted image (raw), or a corrupted image with
+#                              SHA256SUMS re-hashed to match it but no longer matching
+#                              SHA256SUMS.gpg (sums); --check then passes only if the
+#                              initrd's pull refuses it for that reason
 set -euo pipefail
 
 dir="$(realpath "${1:?usage: $0 <artifact dir> [--check]}")"
@@ -49,7 +60,14 @@ vars_tmpl="${OVMF_VARS:-$(first_existing \
     /usr/share/edk2/x64/OVMF_VARS.4m.fd)}" || { echo "ERROR: no blank OVMF_VARS found (set OVMF_VARS)" >&2; exit 1; }
 
 work="$(mktemp -d /tmp/bluefin-dogfood.XXXXXX)"
-trap 'kill "${http_pid:-0}" 2>/dev/null || true; rm -rf "${work}"' EXIT
+# Never leave a guest behind: an orphaned QEMU keeps its port and the caller's
+# locks. Only kill PIDs that are set; `kill 0` signals the whole process group.
+cleanup() {
+    local pid
+    for pid in ${qemu_pid:-} ${enroll_pid:-} ${http_pid:-}; do kill "${pid}" 2>/dev/null || true; done
+    rm -rf "${work}"
+}
+trap cleanup EXIT
 vars="${DOGFOOD_VARS:-${work}/vars.fd}"
 [ -f "${vars}" ] || cp "${vars_tmpl}" "${vars}"
 cp "${esp}" "${work}/esp.raw"
@@ -61,18 +79,41 @@ mkdir -p "${srv}"
 for f in "${dir}"/*; do ln -s "${f}" "${srv}/"; done
 [ -n "${DOGFOOD_NODE_IGN:-}" ] && cp "${DOGFOOD_NODE_IGN}" "${srv}/bluefin-node.ign"
 if [ -n "${DOGFOOD_SERVE_EXTRA:-}" ]; then for f in "${DOGFOOD_SERVE_EXTRA}"/*; do ln -sf "$(realpath "${f}")" "${srv}/"; done; fi
+image_re="${image//./\\.}"
 case "${DOGFOOD_TAMPER:-}" in
-    raw)
+    raw|sums)
         rm "${srv}/${image}"; cp "${dir}/${image}" "${srv}/${image}"
-        printf 'X' | dd of="${srv}/${image}" bs=1 seek=4096 conv=notrunc status=none ;;
+        printf 'X' | dd of="${srv}/${image}" bs=1 seek=4096 conv=notrunc status=none ;;&
+    raw)
+        refusal_re="DOWNLOAD INVALID: Checksum of ${image_re} file did not check out" ;;
     sums)
+        # What an attacker without the signing key can do: make the manifest
+        # match the modified image. Only the signature check can catch it.
         rm "${srv}/SHA256SUMS"
-        sed 's/^[0-9a-f]\{8\}/deadbeef/' "${dir}/SHA256SUMS" > "${srv}/SHA256SUMS" ;;
+        sum="$(sha256sum "${srv}/${image}" | cut -d' ' -f1)"
+        sed -E "s/^[0-9a-f]{64}( [ *]${image_re})$/${sum}\1/" "${dir}/SHA256SUMS" > "${srv}/SHA256SUMS"
+        grep -q "^${sum} " "${srv}/SHA256SUMS" || { echo "ERROR: ${image} not in SHA256SUMS" >&2; exit 1; }
+        refusal_re="DOWNLOAD INVALID: Signature verification failed" ;;
+    '') ;;
+    *) echo "ERROR: DOGFOOD_TAMPER must be raw or sums" >&2; exit 1 ;;
 esac
 (cd "${srv}" && exec python3 -m http.server --bind 127.0.0.1 "${port}" >"${work}/http.log" 2>&1) &
 http_pid=$!
 
 cred() { printf 'type=11,value=io.systemd.credential.binary:%s=%s' "$1" "$(base64 -w0 < "$2")"; }
+
+# wait_for <seconds> <pid> <command...>: poll the command once a second until
+# it succeeds (0), or the process exits or the time runs out (1).
+wait_for() {
+    local deadline=$(( $(date +%s) + $1 )) pid="$2"
+    shift 2
+    while [ "$(date +%s)" -lt "${deadline}" ]; do
+        "$@" && return 0
+        kill -0 "${pid}" 2>/dev/null || { "$@"; return; }
+        sleep 1
+    done
+    return 1
+}
 
 printf 'raw,machine,verify=signature,blockdev:rootdisk:http://10.0.2.2:%s/%s\n' "${port}" "${image}" > "${work}/import.pull"
 qemu=(qemu-system-x86_64
@@ -90,14 +131,15 @@ if [ "${boot}" = http ] && [ ! -s "${vars}.enrolled" ]; then
         -display none -monitor none \
         -serial "file:${work}/enroll.log" </dev/null >/dev/null 2>&1 &
     enroll_pid=$!
-    for _ in $(seq 1 60); do
-        grep -aq 'successfully enrolled' "${work}/enroll.log" 2>/dev/null && break
-        sleep 1
-    done
-    sleep 2
+    # systemd-boot resets the machine after enrolling; the firmware loading a
+    # boot option again proves the variable store has the keys.
+    enrolled_and_reset() { sed -n '/successfully enrolled/,$p' "${work}/enroll.log" 2>/dev/null | grep -aq 'BdsDxe: loading'; }
+    rc=0
+    wait_for 90 "${enroll_pid}" enrolled_and_reset || rc=$?
     kill "${enroll_pid}" 2>/dev/null || true
     wait "${enroll_pid}" 2>/dev/null || true
-    grep -aq 'successfully enrolled' "${work}/enroll.log" || { echo "ERROR: key enrollment failed" >&2; exit 1; }
+    cp "${work}/enroll.log" "${dir}/dogfood-enroll.log" 2>/dev/null || true
+    [ "${rc}" = 0 ] || { echo "ERROR: key enrollment failed (log: ${dir}/dogfood-enroll.log)" >&2; exit 1; }
     echo enrolled > "${vars}.enrolled"
 fi
 if [ "${boot}" = http ]; then
@@ -120,6 +162,17 @@ fi
 if [ -n "${DOGFOOD_IGNITION:-}" ]; then
     qemu+=(-smbios "$(cred ignition.config "${DOGFOOD_IGNITION}")")
 fi
+tamper="${DOGFOOD_TAMPER:-}"
+if [ -n "${tamper}" ]; then
+    # The initrd's console shows only that the download unit failed; copy the
+    # pull's own messages (from the unit and from systemd-importd, which runs
+    # the transfer) there so the log names why the image was refused. systemd
+    # tools log natively to the journal when they can, bypassing the stream
+    # journald forwards, so make them write to stderr.
+    printf '[Service]\nEnvironment=SYSTEMD_LOG_TARGET=console\nStandardOutput=journal+console\nStandardError=journal+console\n' > "${work}/import-console.conf"
+    qemu+=(-smbios "$(cred systemd.unit-dropin.systemd-import@.service "${work}/import-console.conf")"
+           -smbios "$(cred systemd.unit-dropin.systemd-importd.service "${work}/import-console.conf")")
+fi
 if [ -n "${DOGFOOD_CREDS:-}" ]; then
     for f in "${DOGFOOD_CREDS}"/*; do
         if [ -f "${f}" ]; then qemu+=(-smbios "$(cred "${f##*/}" "${f}")"); fi
@@ -141,6 +194,12 @@ echo "PROBE verity=$(veritysetup status usr | sed -n 's/^ *status: *//p')"
 echo "PROBE os=$(. /usr/lib/os-release; echo "${IMAGE_ID} ${IMAGE_VERSION}")"
 echo "PROBE var=$(findmnt -no SOURCE,FSTYPE /var)"
 echo "PROBE root-passwd=$(passwd -S root 2>&1 | cut -d' ' -f2)"
+etc_writable=$(shopt -s globstar dotglob nullglob; for p in /etc /etc/**; do
+    [ -L "${p}" ] && continue
+    case "$(stat -c %A "${p}")" in [d-]????w????|[d-]???????w?) ;; *) continue ;; esac
+    [ -k "${p}" ] || echo "${p}"
+done)
+echo "PROBE etc-writable=$(printf '%s' "${etc_writable}" | grep -c .) $(printf '%s' "${etc_writable}" | head -n 5 | tr '\n' ' ')"
 boots=$(( $(cat /var/lib/dogfood-boots 2>/dev/null || echo 0) + 1 ))
 echo "${boots}" > /var/lib/dogfood-boots
 echo "PROBE boots=${boots}"
@@ -178,23 +237,68 @@ UNIT
     -smbios "$(cred systemd.extra-unit.dogfood-probe.service "${work}/probe.service")" \
     </dev/null >/dev/null 2>&1 &
 qemu_pid=$!
-deadline=$(( $(date +%s) + timeout_s ))
+probe_done() { grep -aq 'PROBE failed=' "${work}/probe.log" 2>/dev/null; }
+# Console output interleaves CSI, OSC and DCS escape sequences, sometimes in the
+# middle of a line (the initrd's failure summary writes to the console while
+# systemd-importd logs), so strip all three before matching.
+clean_log() { sed -E 's/\x1b\][^\x07\x1b]*(\x07|\x1b\\)//g; s/\x1bP[^\x1b]*\x1b\\//g; s/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr -d '\r'; }
+refused() { clean_log < "${work}/serial.log" 2>/dev/null | grep -aqE "${refusal_re}"; }
 status=1
-while kill -0 "${qemu_pid}" 2>/dev/null && [ "$(date +%s)" -lt "${deadline}" ]; do
-    if grep -aq 'PROBE failed=' "${work}/probe.log" 2>/dev/null; then
-        status=0
-        break
-    fi
-    sleep 2
-done
+if [ -n "${tamper}" ]; then
+    stop() { probe_done || refused; }
+else
+    stop() { probe_done; }
+fi
+wait_for "${timeout_s}" "${qemu_pid}" stop && status=0
 kill "${qemu_pid}" 2>/dev/null || true
 wait "${qemu_pid}" 2>/dev/null || true
 cat "${work}/serial.log" "${work}/probe.log" 2>/dev/null \
-    | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1bP[^\x1b]*\x1b\\//g' | tr -d '\r' > "${dir}/dogfood-serial.log"
+    | clean_log > "${dir}/dogfood-serial.log"
 grep -a 'GET ' "${work}/http.log" > "${dir}/dogfood-http.log" || true
 grep -aoE 'PROBE[ -].*' "${dir}/dogfood-serial.log" || true
+
+if [ -n "${tamper}" ]; then
+    served() { grep -aq "\"GET /$1 HTTP/1.1\" 200" "${dir}/dogfood-http.log"; }
+    if probe_done; then
+        echo "FAIL: tamper=${tamper}: the tampered image booted (serial log: ${dir}/dogfood-serial.log)" >&2
+        status=1
+    elif ! refused; then
+        echo "FAIL: tamper=${tamper}: no refusal within ${timeout_s}s (serial log: ${dir}/dogfood-serial.log)" >&2
+        tail -n 40 "${dir}/dogfood-serial.log" >&2
+        status=1
+    elif ! served "${image}" || ! served SHA256SUMS || ! served SHA256SUMS.gpg; then
+        # Refused before it had the image and the signed manifest: that is a
+        # transport failure, not a verification failure.
+        echo "FAIL: tamper=${tamper}: the pull failed before fetching ${image}, SHA256SUMS and SHA256SUMS.gpg" >&2
+        status=1
+    elif ! grep -aq 'Secure boot enabled' "${dir}/dogfood-serial.log"; then
+        echo "FAIL: tamper=${tamper}: refused, but the kernel did not run with Secure Boot enabled" >&2
+        status=1
+    else
+        grep -aE "${refusal_re}|Failed to start Download of " "${dir}/dogfood-serial.log" | sed 's/^/REFUSED /' | head -n 5
+        echo "PASS: tamper=${tamper}: ${image} refused after fetching the signed manifest (serial log: ${dir}/dogfood-serial.log)"
+        status=0
+    fi
+    if [ "${status}" = 0 ] && [ -n "${DOGFOOD_EXPECT:-}" ] && ! grep -aqE -- "${DOGFOOD_EXPECT}" "${dir}/dogfood-serial.log"; then
+        echo "FAIL: tamper=${tamper}: serial log does not match DOGFOOD_EXPECT=${DOGFOOD_EXPECT}" >&2
+        status=1
+    fi
+    exit "${status}"
+fi
+
 failed="$(grep -a '\[FAILED\]' "${dir}/dogfood-serial.log" || true)"
-if [ "${status}" = 0 ] && [ -z "${failed}" ] && grep -aq 'PROBE failed=0' "${dir}/dogfood-serial.log"; then
+if [ "${status}" = 0 ] && [ -n "${DOGFOOD_EXPECT:-}" ] && ! grep -aqE -- "${DOGFOOD_EXPECT}" "${dir}/dogfood-serial.log"; then
+    echo "FAIL: booted, but the probe output does not match DOGFOOD_EXPECT=${DOGFOOD_EXPECT}" >&2
+    status=1
+elif [ "${status}" = 0 ] && ! grep -aq 'PROBE etc-writable=0' "${dir}/dogfood-serial.log"; then
+    echo "FAIL: group- or world-writable paths under /etc: $(grep -aoE 'PROBE etc-writable=.*' "${dir}/dogfood-serial.log" | head -n1)" >&2
+    status=1
+elif [ "${status}" = 0 ] && ! grep -aq 'PROBE secureboot=enabled' "${dir}/dogfood-serial.log"; then
+    # Firmware that refuses the enrollment payloads boots on in setup mode,
+    # where nothing is verified; that is not a Secure Boot boot.
+    echo "FAIL: booted without Secure Boot ($(grep -aoE 'PROBE secureboot=.*' "${dir}/dogfood-serial.log" | head -n1)); see the enrollment messages in the serial log" >&2
+    status=1
+elif [ "${status}" = 0 ] && [ -z "${failed}" ] && grep -aq 'PROBE failed=0' "${dir}/dogfood-serial.log"; then
     echo "PASS: ${boot} boot with no failed units (serial log: ${dir}/dogfood-serial.log)"
 elif [ "${status}" = 0 ]; then
     echo "FAIL: booted, but units failed:" >&2

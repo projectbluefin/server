@@ -27,6 +27,9 @@ depends:
   # k0s component system update configuration
   - bluefin-server/os-k0s-sysupdate.bst
 
+  # NVIDIA Container Toolkit component system update configuration
+  - bluefin-server/os-nvidia-container-toolkit-sysupdate.bst
+
 
 
   # Wired DHCP configuration for the installed OS
@@ -35,7 +38,8 @@ depends:
   # /etc/resolv.conf symlink to systemd-resolved (tmpfiles.d)
   - bluefin-server/os-resolv-conf.bst
 
-  # k0s sysext activation units (opt-in) and SSH host key generation
+  # k0s and NVIDIA Container Toolkit sysext activation units (opt-in) and
+  # SSH host key generation
   - bluefin-server/os-k0s-first-boot.bst
 
   # Public keyring for verifying SHA256SUMS manifests from GitHub Releases
@@ -50,5 +54,5 @@ depends:
   # system-container helper (machinectl wrapper)
   - bluefin-server/os-system-container.bst
 
-  # Console issue banner with KubeStellar dashboard URL
+  # Console issue banner (the KubeStellar sysext adds its dashboard URL)
   - bluefin-server/os-issue.bst

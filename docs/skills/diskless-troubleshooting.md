@@ -4,7 +4,7 @@ description: Use when a diskless (netboot UKI) node fails to boot, reboot-loops,
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-09-30"
   context7-sources:
     - /systemd/systemd
 ---
@@ -138,6 +138,14 @@ Stages wired into the initrd (`files/initrd-ignition/`), in order:
 `mount`, `files`, and `umount` (`ExecStop` of `ignition-mount.service`). The
 `kargs` stage is not wired, so `kernelArguments` is silently not applied: the
 command line is sealed in the signed UKI.
+
+When the failure summary of a network-booted node lists
+`bluefin-ignition-credentials.service`, the node most likely refused the
+`bluefin-node.ign` next to its UKI (the rules are in "Per-node configuration"
+in [booty-integration.md](booty-integration.md)). The unit's journal lines
+under it say why: `gpgv`'s own reason when the signature does not verify, the
+HTTP status or curl error when the signature could not be fetched, a keyring
+that cannot be read, or an unsigned config without the opt-out.
 
 | Config section | Supported |
 |---|---|

@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -135,14 +136,17 @@ config:
 
 
 class Upstream:
-    """Serves registered URLs; everything else is a 404."""
+    """Serves registered URLs; `status` forces an HTTP error, anything else is a 404."""
 
     def __init__(self):
         self.files: dict[str, bytes] = {}
+        self.status: dict[str, int] = {}
         self.requests: list[urllib.request.Request] = []
 
     def urlopen(self, request, timeout=None):
         self.requests.append(request)
+        if request.full_url in self.status:
+            raise urllib.error.HTTPError(request.full_url, self.status[request.full_url], "Error", Message(), None)
         if request.full_url not in self.files:
             raise urllib.error.HTTPError(request.full_url, 404, "Not Found", Message(), None)
         return io.BytesIO(self.files[request.full_url])
@@ -189,8 +193,9 @@ def repo(tmp_path):
     return tmp_path
 
 
-def snapshot(root: Path) -> dict[str, str]:
-    return {path: (root / path).read_text(encoding="utf-8") for path in FILES}
+def snapshot(root: Path, extra=()) -> dict[str, str]:
+    paths = list(FILES) + list(extra)
+    return {path: (root / path).read_text(encoding="utf-8") for path in paths}
 
 
 def changed_lines(before: dict[str, str], root: Path) -> dict[str, list[tuple[str, str]]]:
@@ -423,6 +428,134 @@ def test_github_token_is_sent_to_the_api_and_never_to_downloads(repo, upstream, 
     }
 
 
+ARM64_OLD = {name: sha(f"{name} arm64".encode()) for name in ("runc", "k0s")}
+
+
+def add_arm64(repo: Path) -> None:
+    """Give the fixture the real layout's `(?): arch == "aarch64"` sources."""
+    bst = repo / "elements/kubeadm/kubeadm-bin.bst"
+    bst.write_text(bst.read_text().replace("\nconfig:", f"""
+(?):
+- arch == "aarch64":
+    sources:
+    - kind: remote
+      url: github:opencontainers/runc/releases/download/v%{{runc-version}}/runc.arm64
+      ref: {ARM64_OLD['runc']}
+      directory: runc
+
+config:""", 1))
+    k0s = repo / "elements/k0s/k0s-bin.bst"
+    k0s.write_text(k0s.read_text().replace("\nconfig:", f"""
+(?):
+  - arch == "aarch64":
+      sources:
+        - kind: remote
+          url: github:k0sproject/k0s/releases/download/%{{k0s-upstream-tag}}/k0s-%{{k0s-upstream-tag}}-arm64
+          ref: {ARM64_OLD['k0s']}
+
+config:""", 1))
+
+
+RUNC = "https://github.com/opencontainers/runc/releases/download/v1.3.6/"
+
+
+def runc_release(upstream: Upstream, *arches: str) -> dict[str, str]:
+    new = {}
+    for arch in arches:
+        upstream.files[RUNC + f"runc.{arch}"] = f"runc {arch} 1.3.6".encode()
+        new[arch] = sha(f"runc {arch} 1.3.6".encode())
+    upstream.files[RUNC + "runc.sha256sum"] = "".join(f"{d}  runc.{a}\n" for a, d in new.items()).encode()
+    upstream.releases("opencontainers/runc", [
+        release("v1.3.6", *(f"runc.{a}" for a in arches), "runc.sha256sum"),
+        release("v1.3.3", "runc.amd64", "runc.arm64", "runc.sha256sum"),
+    ])
+    return new
+
+
+def test_bump_refreshes_every_architecture_together(repo, upstream):
+    add_arm64(repo)
+    new = runc_release(upstream, "amd64", "arm64")
+    before = snapshot(repo)
+
+    assert track.main(["apply", "runc"], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        "include/kubeadm.yml": [('  runc-version: "1.3.3"', '  runc-version: "1.3.6"')],
+        "elements/kubeadm/kubeadm-bin.bst": [
+            (f"  ref: {OLD['runc']}", f"  ref: {new['amd64']}"),
+            (f"      ref: {ARM64_OLD['runc']}", f"      ref: {new['arm64']}"),
+        ],
+    }
+    fetched = [r.full_url for r in upstream.requests]
+    assert RUNC + "runc.amd64" in fetched and RUNC + "runc.arm64" in fetched
+
+
+def test_k0s_bump_refreshes_the_arm64_binary_too(repo, upstream):
+    add_arm64(repo)
+    base = "https://github.com/k0sproject/k0s/releases/download/v1.36.4%2Bk0s.1/"
+    new = {a: upstream.asset(base + f"k0s-v1.36.4%2Bk0s.1-{a}") for a in ("amd64", "arm64")}
+    upstream.files[base + "sha256sums.txt"] = "".join(
+        f"{d} *k0s-v1.36.4+k0s.1-{a}\n" for a, d in new.items()).encode()
+    before = snapshot(repo)
+
+    assert track.main(["apply", "k0s", "--version", "1.36.4+k0s.1"], root=repo) == 0
+
+    assert changed_lines(before, repo)["elements/k0s/k0s-bin.bst"] == [
+        (f"    ref: {OLD['k0s']}", f"    ref: {new['amd64']}"),
+        (f"          ref: {ARM64_OLD['k0s']}", f"          ref: {new['arm64']}"),
+    ]
+
+
+def test_release_without_its_arm64_asset_is_not_proposed(repo, upstream):
+    add_arm64(repo)
+    runc_release(upstream, "amd64")
+    assert newest("runc", repo) == "1.3.3"
+
+
+def test_missing_arm64_checksum_fails_the_component_and_writes_nothing(repo, upstream, capsys):
+    add_arm64(repo)
+    runc_release(upstream, "amd64")
+    upstream.asset(RUNC + "runc.arm64")  # asset exists, but the sums file omits it
+    before = snapshot(repo)
+
+    assert track.main(["apply", "runc", "--version", "1.3.6"], root=repo) == 1
+
+    assert snapshot(repo) == before
+    assert "lists 0 sha256 for runc.arm64" in capsys.readouterr().err
+
+
+def test_missing_arm64_asset_fails_the_component_and_writes_nothing(repo, upstream, capsys):
+    add_arm64(repo)
+    new = runc_release(upstream, "amd64", "arm64")
+    del upstream.files[RUNC + "runc.arm64"]
+    before = snapshot(repo)
+
+    assert track.main(["apply", "runc", "--version", "1.3.6"], root=repo) == 1
+
+    assert snapshot(repo) == before
+    assert new["arm64"] not in (repo / "elements/kubeadm/kubeadm-bin.bst").read_text()
+    assert f"GET {RUNC}runc.arm64: HTTP 404" in capsys.readouterr().err
+
+
+def test_no_op_run_leaves_multi_arch_files_byte_identical(repo, upstream, capsys):
+    add_arm64(repo)
+    upstream.releases("opencontainers/runc", [release("v1.3.3", "runc.amd64", "runc.arm64", "runc.sha256sum")])
+    before = {p: (repo / p).read_bytes() for p in FILES}
+
+    assert track.main(["apply", "runc"], root=repo) == 0
+
+    assert {p: (repo / p).read_bytes() for p in FILES} == before
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("name", [n for n, c in track.COMPONENTS.items() if isinstance(c, track.BstComponent) and c.multi_arch])
+def test_real_elements_pin_amd64_and_arm64_alike(name):
+    pins = track.COMPONENTS[name].pins(track.Tree(ROOT))
+    by_arch = {arch: sorted(p.url.replace(arch, "ARCH") for p in pins if arch in p.url) for arch in ("amd64", "arm64")}
+    assert by_arch["amd64"] and by_arch["amd64"] == by_arch["arm64"]
+    assert len(pins) == len(by_arch["amd64"]) * 2
+
+
 @pytest.mark.parametrize("name", list(track.COMPONENTS))
 def test_real_pins_are_readable(name):
     tree = track.Tree(ROOT)
@@ -432,6 +565,8 @@ def test_real_pins_are_readable(name):
     assert pins
     for pin in pins:
         assert pin.url.startswith("https://") and "%{" not in pin.url
+        # Nothing is written unless it verifies against a checksum upstream publishes.
+        assert pin.sums.startswith("https://") and pin.sums != pin.url, pin
         assert track.SUMS_LINE_RE.match(track.read_pin(tree, pin)), pin
 
 
@@ -444,3 +579,143 @@ def test_every_pinned_source_belongs_to_exactly_one_component():
             if match:
                 owners = [c.name for c in track.COMPONENTS.values() if getattr(c, "marker", None) and c.marker in match["url"]]
                 assert len(owners) == 1, f"{element}: {match['url']} is tracked by {owners}"
+
+
+NVIDIA_INDEX = "https://download.nvidia.com/XFree86/Linux-x86_64/"
+NVIDIA_PIN = "e421c202e4c79f58c3c7f3161bbe71454ebb3d88936f88205a0e327cd04c59ca"
+NVIDIA_FILES = {
+    "include/aliases.yml": FILES["include/aliases.yml"] + "  nvidia_download: https://download.nvidia.com/\n",
+    "include/nvidia.yml": f"""variables:
+  # nvidia-open-595: production branch 595
+  nvidia-open-595-version: "595.104.02"
+  nvidia-open-595-sha256: "{NVIDIA_PIN}"
+""",
+    "elements/nvidia/nvidia-open-595.bst": """kind: manual
+
+(@):
+- include/nvidia.yml
+
+sources:
+- kind: remote
+  url: nvidia_download:XFree86/Linux-x86_64/%{nvidia-version}/NVIDIA-Linux-x86_64-%{nvidia-version}.run
+  ref: "%{nvidia-open-595-sha256}"
+
+variables:
+  nvidia-version: "%{nvidia-open-595-version}"
+""",
+}
+
+
+@pytest.fixture
+def nvidia(repo, upstream, monkeypatch):
+    for path, text in NVIDIA_FILES.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(track, "COMPONENTS", {"nvidia-open-595": track.COMPONENTS["nvidia-open-595"]})
+    return upstream
+
+
+def nvidia_index(*versions: str) -> bytes:
+    """download.nvidia.com's listing: version directories among other entries."""
+    entries = ["..", "../../style/directory_listing.css", "1.0-4499/", *(f"{v}/" for v in versions), "latest.txt"]
+    links = "\n".join(f"<li><span class='dir'><a href='{e}'>{e}</a></span></li>" for e in entries)
+    return f"<!doctype html><ul class='directorycontents'>\n{links}\n</ul>".encode()
+
+
+def nvidia_release(upstream: Upstream, version: str, run: bool = True, sums: bool = True) -> str:
+    run_url = f"{NVIDIA_INDEX}{version}/NVIDIA-Linux-x86_64-{version}.run"
+    data = f"payload of {run_url}".encode()
+    if run:
+        upstream.files[run_url] = data
+    if sums:
+        upstream.files[run_url + ".sha256sum"] = f"{sha(data)}  NVIDIA-Linux-x86_64-{version}.run\n".encode()
+    return sha(data)
+
+
+def test_nvidia_driver_proposes_the_newest_uploaded_release_of_its_branch(repo, nvidia):
+    nvidia.files[NVIDIA_INDEX] = nvidia_index(
+        "595.99.02", "595.104.02", "595.105.00", "595.110.03", "595.115.00", "595.120.01", "610.43.02")
+    nvidia_release(nvidia, "595.105.00")
+    nvidia_release(nvidia, "595.110.03")
+    nvidia_release(nvidia, "595.115.00", sums=False)
+    nvidia_release(nvidia, "595.120.01", run=False)
+    nvidia_release(nvidia, "610.43.02")
+
+    assert newest("nvidia-open-595", repo) == "595.110.03"
+
+    probes = [(r.get_method(), r.full_url.removeprefix(NVIDIA_INDEX)) for r in nvidia.requests if r.full_url != NVIDIA_INDEX]
+    assert {method for method, _ in probes} == {"HEAD"}, "check never downloads a .run"
+    assert {url.split("/")[0] for _, url in probes} == {"595.105.00", "595.110.03", "595.115.00", "595.120.01"}
+
+
+def test_nvidia_driver_outage_is_an_error_not_up_to_date(repo, nvidia):
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", "595.105.00")
+    nvidia_release(nvidia, "595.105.00")
+    nvidia.status[f"{NVIDIA_INDEX}595.105.00/NVIDIA-Linux-x86_64-595.105.00.run"] = 503
+    with pytest.raises(track.TrackError, match="HEAD .*595.105.00.run: HTTP 503"):
+        newest("nvidia-open-595", repo)
+
+
+def test_check_reports_an_index_that_no_longer_lists_the_pin(repo, nvidia, capsys):
+    nvidia.files[NVIDIA_INDEX] = b"<ul><li><a href=\"595.105.00\">595.105.00</a></li></ul>"
+    assert track.main(["check"], root=repo) == 1
+    assert f"ERROR: nvidia-open-595: {NVIDIA_INDEX} does not list the pinned 595.104.02" in capsys.readouterr().err
+
+
+def test_check_reports_the_driver_branch_as_the_series(repo, nvidia, capsys):
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", "595.105.00")
+    nvidia_release(nvidia, "595.105.00")
+    assert track.main(["check", "--json"], root=repo) == 0
+    out, err = capsys.readouterr()
+    assert json.loads(out) == [{"component": "nvidia-open-595", "series": "595", "current": "595.104.02", "latest": "595.105.00"}]
+    assert "nvidia-open-595 595    595.104.02     595.105.00     update" in err
+
+
+def test_nvidia_driver_bump_writes_the_include_sha256_atom(repo, nvidia, tmp_path):
+    new = "595.105.00"
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", new)
+    new_pin = nvidia_release(nvidia, new)
+    body = tmp_path / "body.md"
+    before = snapshot(repo, NVIDIA_FILES)
+
+    assert track.main(["apply", "nvidia-open-595", "--summary", str(body)], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        "include/nvidia.yml": [
+            ('  nvidia-open-595-version: "595.104.02"', f'  nvidia-open-595-version: "{new}"'),
+            (f'  nvidia-open-595-sha256: "{NVIDIA_PIN}"', f'  nvidia-open-595-sha256: "{new_pin}"'),
+        ],
+    }
+    text = body.read_text()
+    assert f"Patch release of **nvidia-open-595** in the pinned `595` series: `595.104.02` → `{new}`." in text
+    assert f"Release notes: {NVIDIA_INDEX}{new}/" in text
+    assert f"- {NVIDIA_INDEX}{new}/NVIDIA-Linux-x86_64-{new}.run.sha256sum" in text
+    assert "a new driver branch is a new flavour (docs/skills/nvidia-sysext.md)." in text
+    assert "apply nvidia-open-595 --version" not in text
+
+
+def test_nvidia_driver_refuses_to_write_a_tampered_run(repo, nvidia, capsys):
+    new = "595.105.00"
+    nvidia.files[NVIDIA_INDEX] = nvidia_index("595.104.02", new)
+    nvidia_release(nvidia, new)
+    nvidia.files[f"{NVIDIA_INDEX}{new}/NVIDIA-Linux-x86_64-{new}.run"] = b"tampered"
+    before = snapshot(repo, NVIDIA_FILES)
+
+    assert track.main(["apply", "nvidia-open-595"], root=repo) == 1
+
+    assert snapshot(repo, NVIDIA_FILES) == before
+    assert f"{NVIDIA_INDEX}{new}/NVIDIA-Linux-x86_64-{new}.run hashes to {sha(b'tampered')}" in capsys.readouterr().err
+
+
+def test_nvidia_driver_never_leaves_its_branch(repo, nvidia):
+    before = snapshot(repo, NVIDIA_FILES)
+    with pytest.raises(track.TrackError, match="`610.43.02` does not match"):
+        track.apply(repo, "nvidia-open-595", "610.43.02")
+    assert nvidia.requests == []
+    assert snapshot(repo, NVIDIA_FILES) == before
+
+
+def test_every_nvidia_flavour_is_tracked():
+    flavours = re.findall(r"^\s+(nvidia-open-\d+)-version:", (ROOT / "include/nvidia.yml").read_text(encoding="utf-8"), re.M)
+    tracked = [n for n, c in track.COMPONENTS.items() if isinstance(c, track.NvidiaDriverComponent)]
+    assert flavours and sorted(flavours) == sorted(tracked)

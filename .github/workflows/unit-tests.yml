@@ -1,0 +1,71 @@
+name: Unit tests
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/unit-tests.yml'
+      - '.pre-commit-config.yaml'
+      - 'elements/**'
+      - 'files/**'
+      - 'include/**'
+      - 'project.conf'
+      - 'scripts/**'
+      - 'tests/unit/**'
+      - 'Justfile'
+      - 'renovate.json'
+      - 'elements/*.bst'
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/unit-tests.yml'
+      - '.pre-commit-config.yaml'
+      - 'elements/**'
+      - 'files/**'
+      - 'include/**'
+      - 'project.conf'
+      - 'scripts/**'
+      - 'tests/unit/**'
+      - 'Justfile'
+      - 'renovate.json'
+      - 'elements/*.bst'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y bats nodejs shellcheck
+          pip install pytest pyyaml
+
+      # Ubuntu's AppArmor policy blocks unprivileged user namespaces; the
+      # os-justfile bats tests run the k8s recipe inside one.
+      - name: Allow unprivileged user namespaces
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: Set up just
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        with:
+          tool: just@1.58.0
+
+      - name: Run unit tests
+        run: just test-unit

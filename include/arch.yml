@@ -7,16 +7,21 @@
 #
 #   %{arch}           BuildStream / uname -m      x86_64      aarch64
 #   %{systemd-arch}   systemd `ARCHITECTURE=`     x86-64      arm64
+#   %{go-arch}        Go / Kubernetes downloads   amd64       arm64
 #
 # `options.arch.values` in project.conf constrains the axis to the two
 # architectures mapped below, so an unmapped architecture cannot be selected.
 #
 # Included by:
-#   elements/oci/k0s-sysext.bst              -> %{systemd-arch}
+#   elements/oci/*-sysext.bst                -> %{systemd-arch}
 #   elements/bluefin-server/os-release.bst   -> %{systemd-arch}
+#   elements/k0s/k0s-bin.bst                 -> %{go-arch}
+#   elements/kubeadm/kubeadm-bin.bst         -> %{go-arch}
 variables:
   (?):
     - arch == "x86_64":
         systemd-arch: "x86-64"
+        go-arch: "amd64"
     - arch == "aarch64":
         systemd-arch: "arm64"
+        go-arch: "arm64"
