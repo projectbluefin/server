@@ -63,6 +63,13 @@ Native lifecycle unit tests use SHA-pinned `actions/setup-go` with
 stdlib-only module has no dependency cache. `just test-unit` uses
 `GOTOOLCHAIN=local`; test execution must not silently download another Go
 toolchain or depend on the runner's apt Go version.
+CI explicitly installs `bubblewrap` and enables unprivileged user namespaces for
+the real isolated launcher regressions. The native Go suite runs with `-v` so
+individual PASS/SKIP results remain visible; a missing sandbox is not proof of
+payload verification.
+Vendor-keyring fixtures mount a private `/usr/lib/systemd` before binding the
+keyring; never assume the runner already has that file. Rejection tests require
+`gpgv` evidence and reject sandbox setup errors, not merely any nonzero exit.
 
 ### Workflow permissions
 

@@ -97,6 +97,12 @@ and shift both product selections. The compiled PE profile smoke checks actual
 profile IDs, retained verity/lockdown inputs and edition-specific prompt intent;
 native installation/boot proof remains separate.
 
+The native boot smoke asserts that Complete retains its support-image link,
+`systemd-sysext status --json=short` reports `server` merged into `/usr`, and the
+bootstrap listener is active. Core must have neither that link nor merge.
+Use Bash file checks and the systemd status interface: `find` is not in the base
+image, so suppressing its error and counting output falsely reports zero images.
+
 ## Using the installer
 
 This is stock `systemd-sysinstall` (systemd-sysinstall(8)); Bluefin adds no

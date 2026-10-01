@@ -218,7 +218,14 @@ echo "PROBE server-profile=$(cat /boot/bluefin/server-profile 2>/dev/null || ech
 echo "PROBE root-prompt=$(systemctl show -P ConditionResult bluefin-root-password-prompt.service)"
 echo "PROBE root-locked=$(getent shadow root | cut -d: -f2 | cut -c1)"
 echo "PROBE server-runtime=$(systemctl is-active bluefin-server-bootstrap.service 2>/dev/null || true)"
-echo "PROBE server-extensions=$(find /var/lib/extensions -maxdepth 1 -name 'server*' -print 2>/dev/null | wc -l)"
+echo "PROBE server-extensions=$([[ -f /var/lib/extensions/server.raw ]] && echo 1 || echo 0)"
+sysext_status=$(systemd-sysext status --json=short)
+echo "PROBE sysext-status=${sysext_status}"
+if printf '%s\n' "$sysext_status" | grep -Eq '"hierarchy":"/usr","extensions":\[[^]]*"server"'; then
+    echo 'PROBE server-merged=yes'
+else
+    echo 'PROBE server-merged=no'
+fi
 echo "PROBE failed=$(systemctl --failed --no-legend | wc -l) $(systemctl --failed --no-legend --plain | cut -d' ' -f1 | tr '\n' ' ')"
 PROBE
 } > "${state}/probe.sh"
@@ -267,8 +274,12 @@ check_disk_boot() {
     if [ "${profile}" = complete ]; then
         grep -aq 'PROBE root-prompt=no' "${log}" || fail "$1: Complete entered the root-password prompt"
         grep -aq 'PROBE root-locked=!' "${log}" || fail "$1: Complete unlocked the OS root account"
+        grep -aq '^PROBE server-extensions=1$' "${log}" || fail "$1: Complete support extension link missing"
+        grep -aq '^PROBE server-merged=yes$' "${log}" || fail "$1: Complete support extension is not merged into /usr"
+        grep -aq '^PROBE server-runtime=active$' "${log}" || fail "$1: Complete bootstrap listener is inactive"
     else
         grep -aq 'PROBE server-extensions=0' "${log}" || fail "$1: Core activated Server extensions"
+        grep -aq '^PROBE server-merged=no$' "${log}" || fail "$1: Core merged the Server support extension"
         ! grep -aq 'PROBE server-runtime=active' "${log}" || fail "$1: Core initialized the Server runtime"
         if [ "$2" = 1 ]; then
             grep -aq 'PROBE root-prompt=yes' "${log}" || fail "$1: Core native root-password path was not selected"

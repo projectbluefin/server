@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -121,12 +122,15 @@ func TestCompleteStagesSignedPayloadWithVendorKeyring(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			args := []string{"--unshare-user", "--uid", "0", "--gid", "0", "--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64", "--bind", etc, "/etc", "--bind", variable, "/var", "--ro-bind", keyring, "/usr/lib/systemd/import-pubring.pgp", "--ro-bind", source, "/launcher", "--tmpfs", "/run", "--proc", "/proc", "--dev", "/dev", "--dir", "/boot", "--dir", "/efi", "/usr/bin/bash", "/launcher", "--stage=1"}
+			args := []string{"--unshare-user", "--uid", "0", "--gid", "0", "--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64", "--bind", etc, "/etc", "--bind", variable, "/var", "--tmpfs", "/usr/lib/systemd", "--ro-bind", keyring, "/usr/lib/systemd/import-pubring.pgp", "--ro-bind", source, "/launcher", "--tmpfs", "/run", "--proc", "/proc", "--dev", "/dev", "--dir", "/boot", "--dir", "/efi", "/usr/bin/bash", "/launcher", "--stage=1"}
 			output, err := exec.Command(bwrap, args...).CombinedOutput()
 			staged := filepath.Join(variable, "lib/bluefin/server/payloads/1/server_1.raw")
 			if override != "absent" {
 				if err == nil {
 					t.Fatal("invalid operator override fell back to the vendor keyring")
+				}
+				if !strings.Contains(string(output), "gpgv:") || strings.Contains(string(output), "bwrap:") {
+					t.Fatalf("operator override was not rejected by signature verification: %v %s", err, output)
 				}
 				if _, err := os.Stat(staged); !os.IsNotExist(err) {
 					t.Fatal("untrusted payload was staged")
