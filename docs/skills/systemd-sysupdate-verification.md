@@ -4,7 +4,7 @@ description: Configure and operate GPG signature verification for Bluefin Server
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-01"
   context7-sources:
     - /systemd/systemd
 ---
@@ -108,7 +108,10 @@ active/previous/in-flight values in `protect.conf`, and a real vacuum that
 preserves every protected instance. A main-file-only fixture is insufficient.
 Source: [pinned transfer parser](https://github.com/systemd/systemd/blob/4925d9f07fc697efccd98a93046ff535b8832445/src/sysupdate/sysupdate-transfer.c).
 
-A root-authorized native lifecycle request selects a signed image-version transition. The
+A root-authorized native lifecycle request selects a signed image-version transition.
+It is `POST /v1/upgrade` with `expected_revision` and `image_version` on the
+node's root control socket, documented in
+[server-profile.md](server-profile.md#root-lifecycle-control-socket). The
 root helper checks supported actual worker skew, snapshots etcd before a
 controller version transition, performs native kubeadm migration, restarts
 containerd before kubelet and checks actual readiness plus a fresh pod sandbox.

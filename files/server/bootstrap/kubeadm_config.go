@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"strings"
 )
@@ -23,6 +24,57 @@ func kubeadmInitConfiguration(address, name, version string) ([]byte, error) {
 	}
 	return []byte(strings.Join(encoded, "\n---\n") + "\n"), nil
 }
+
+// The cluster's API address is the persisted control-plane advertise address,
+// never a fresh interface scan: by the time the platform is reconciled the host
+// also carries cilium_host and other virtual addresses, and any of them could
+// otherwise be published to the CNI as the API server host.
+func apiAdvertiseAddress(path string) (string, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	for _, document := range strings.Split(string(body), "\n---\n") {
+		address, ok := initAdvertiseAddress(document)
+		if !ok {
+			continue
+		}
+		ip := net.ParseIP(address)
+		if ip == nil || ip.To4() == nil || !ip.IsPrivate() {
+			return "", errors.New("invalid_api_advertise_address")
+		}
+		return ip.String(), nil
+	}
+	return "", errors.New("init_configuration_missing")
+}
+
+func initAdvertiseAddress(document string) (string, bool) {
+	var object struct {
+		Kind             string `json:"kind"`
+		LocalAPIEndpoint struct {
+			AdvertiseAddress string `json:"advertiseAddress"`
+		} `json:"localAPIEndpoint"`
+	}
+	if err := json.Unmarshal([]byte(document), &object); err == nil {
+		if object.Kind != "InitConfiguration" {
+			return "", false
+		}
+		return object.LocalAPIEndpoint.AdvertiseAddress, true
+	}
+	// Read only the previously generated v1beta4 YAML shape; this is not a
+	// generic YAML endpoint.
+	if !strings.HasPrefix(document, "apiVersion: kubeadm.k8s.io/v1beta4\nkind: InitConfiguration\n") {
+		return "", false
+	}
+	for _, line := range strings.Split(document, "\n") {
+		field := strings.TrimSpace(line)
+		if strings.HasPrefix(field, "advertiseAddress:") {
+			return strings.Trim(strings.TrimSpace(strings.TrimPrefix(field, "advertiseAddress:")), `"'`), true
+		}
+	}
+	return "", true
+}
+
 func ensureProxyDisabled(path string) error {
 	body, err := os.ReadFile(path)
 	if err != nil {

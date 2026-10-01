@@ -4,7 +4,7 @@ description: The offline USB installer bluefin-server-installer_<ver>.raw. Load 
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-01"
   context7-sources:
     - /systemd/systemd
 ---
@@ -83,7 +83,11 @@ Core and installations with no intent do not activate Server state/runtime;
 an OS update is not permission to opt in or change profile. Complete requires
 persistent `/etc` and `/var`. Fresh explicitly Complete initializes once or
 joins from validated private provisioning; invalid join data never creates a
-controller. Stock authentication and missing browser-pairing/account-recovery
+controller. Private provisioning is not carried on the media: the join document
+is posted to the node's root control socket after installation, and its exact
+schema is in
+[server-profile.md](server-profile.md#root-lifecycle-control-socket).
+Stock authentication and missing browser-pairing/account-recovery
 features are documented in [server-profile.md](server-profile.md).
 
 The launcher verifies signed payloads with `/etc/systemd/import-pubring.pgp`

@@ -75,7 +75,9 @@ Initial asset acquisition, version compatibility, update signing, and Kubernetes
 - Explicit Complete initializes once, or joins a worker from valid private
   provisioning. Invalid join data never falls back to controller creation.
   Core/no-profile and existing cluster identity remain protected. Native
-  installer intent is documented in [usb-installer.md](usb-installer.md).
+  installer intent is documented in [usb-installer.md](usb-installer.md); the
+  request and credential schema that enroll a worker or drive a runtime
+  transition are in [Root lifecycle control socket](#root-lifecycle-control-socket).
 - Stock Console requires private `bluefin-console-oauth` keys `client-id`,
   `client-secret`, `frontend-url`, `allowed-logins` and `admin-logins`.
   Without them, Complete finishes with Console at zero replicas and native
@@ -105,6 +107,66 @@ Initial asset acquisition, version compatibility, update signing, and Kubernetes
 - Runtime migration and manual per-node worker update semantics are canonical
   in [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
   No automated browser enrollment or remote worker updater is claimed.
+
+## Root lifecycle control socket
+
+Worker enrollment and runtime migration are operator actions on the node
+itself; there is no LAN UI for them. The bootstrap daemon serves JSON over the
+Unix socket `/run/bluefin-server/bootstrap.sock` (mode `0600`, and every
+request whose `SO_PEERCRED` uid is not 0 is rejected with `peer_forbidden`).
+The physical tty1 interface deliberately exposes only `status` and `resume`.
+
+`GET /v1/status` returns the durable state: `schema`, `profile`, `role`,
+`phase`, `ready`, `revision`, `cluster_id`, `runtime`, and when present
+`error`, `upgrade_stage`, `upgrade_image_version`,
+`pending_worker_upgrade_image_version`, `worker_upgrade_error` and
+`console_status`.
+
+Every mutating request is a `POST` carrying `expected_revision`, the
+`revision` just read from `/v1/status`. A stale revision, a busy engine or a
+state that does not allow the action answers `409`; nothing is retried
+blindly. Each accepted request answers `202` and runs asynchronously, so poll
+`/v1/status` for the outcome.
+
+- `POST /v1/initialize` — `{"expected_revision": N}`. Resumes a **failed
+  controller** only. It never initializes a fresh host: an unassigned host
+  commits its role before the socket is served.
+- `POST /v1/join` — `{"expected_revision": N, "join": {...}}`. Enrolls an
+  unassigned host as a worker, or renews the credentials of a failed worker in
+  the same cluster that has no kubelet identity yet. The accepted join object
+  is persisted as `/var/lib/bluefin/server/private-join.json` and consumed by
+  the join phase.
+- `POST /v1/upgrade` — `{"expected_revision": N, "image_version": "..."}`.
+  Starts, replaces or resumes a signed runtime transition. Semantics are
+  canonical in
+  [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
+
+The join object (equally the on-disk `private-join.json`) has exactly these
+fields, all required and all validated before any state is written:
+
+| Field | Meaning | Accepted values |
+| --- | --- | --- |
+| `api_endpoint` | Controller API address | `host:6443`; host must be a private IP literal |
+| `token` | kubeadm bootstrap token | `^[a-z0-9]{6}\.[a-z0-9]{16}$` |
+| `ca_hash` | Cluster CA pin | `sha256:` plus 64 lowercase hex characters |
+| `expires_at` | Credential expiry | RFC 3339 instant in the future, at most 15 minutes ahead |
+| `cluster_id` | `kube-system` namespace UID of the controller | must equal the joining node's recorded cluster identity on renewal |
+
+Unknown fields are rejected, so the request body carries no extra data. These
+are short-lived private provisioning credentials: mint them on the controller
+immediately before enrollment, deliver them over a private channel, and never
+place them on installer media or in Git. The worker deletes
+`private-join.json` once its kubelet identity exists.
+
+Example, against a controller-minted join document:
+
+```sh
+revision=$(curl -sS --unix-socket /run/bluefin-server/bootstrap.sock \
+  http://localhost/v1/status | jq .revision)
+jq --argjson r "$revision" '{expected_revision: $r, join: .}' join.json |
+  curl -sS --unix-socket /run/bluefin-server/bootstrap.sock \
+    -H 'Content-Type: application/json' --data @- http://localhost/v1/join
+```
 
 ## Existing-cluster compatibility checks
 

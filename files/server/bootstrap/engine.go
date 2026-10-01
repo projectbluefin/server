@@ -195,6 +195,9 @@ func (e *Engine) prepareRuntime(r Runtime) error {
 	if err := e.verifyRuntime(r); err != nil {
 		return err
 	}
+	if e.runtimeSettled(r) {
+		return nil
+	}
 	if err := e.selectRuntime(r); err != nil {
 		return err
 	}
@@ -231,21 +234,61 @@ func (e *Engine) prepareRuntime(r Runtime) error {
 	if err := run("systemctl", "restart", "containerd.service"); err != nil {
 		return err
 	}
+	if err := criRuntimeReady(); err != nil {
+		return err
+	}
+	return run("systemctl", "restart", "kubelet.service")
+}
+
+func criRuntimeReady() error {
 	out, err := command(nil, "ctr", "plugins", "ls")
 	if err != nil {
 		return err
 	}
-	ready := false
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) >= 4 && fields[0] == "io.containerd.cri.v1" && fields[1] == "runtime" && fields[len(fields)-1] == "ok" {
-			ready = true
+			return nil
 		}
 	}
-	if !ready {
-		return errors.New("cri_runtime_not_ready")
+	return errors.New("cri_runtime_not_ready")
+}
+
+// A daemon restart or physical resume re-runs the lifecycle on a node that is
+// already running the selected generation. Cycling containerd and kubelet there
+// would disrupt a healthy cluster, so only verify. An in-flight runtime
+// transaction never takes this path: its selector can be ahead of the merged
+// extension, which only a refresh and restart reconcile.
+func (e *Engine) runtimeSettled(r Runtime) bool {
+	if e.State.Upgrade != nil {
+		return false
 	}
-	return run("systemctl", "restart", "kubelet.service")
+	base := e.path("/var/lib/bluefin/server")
+	link, err := os.Readlink(filepath.Join(base, "active-runtime"))
+	if err != nil || filepath.Base(link) != r.ImageVersion {
+		return false
+	}
+	for _, name := range []string{"kubernetes", "containerd"} {
+		extension := e.path("/var/lib/extensions/" + name + ".raw")
+		target, err := os.Readlink(extension)
+		if err != nil || target != filepath.Join(base, "active-runtime", name+".raw") {
+			return false
+		}
+		if _, err = os.Stat(extension); err != nil {
+			return false
+		}
+	}
+	for _, p := range []string{"containerd/config.toml", "crictl.yaml"} {
+		if _, err = os.Stat(e.path("/etc/" + p)); err != nil {
+			return false
+		}
+	}
+	for _, unit := range []string{"containerd.service", "kubelet.service"} {
+		if run("systemctl", "is-active", unit) != nil {
+			return false
+		}
+	}
+	return criRuntimeReady() == nil
 }
 func persistent(path string) error {
 	var s syscall.Statfs_t
@@ -261,6 +304,10 @@ func persistent(path string) error {
 	}
 	return nil
 }
+
+// The initial control-plane advertise address must be a routable private
+// address: an APIPA (169.254/16) lease is a transient absence of DHCP, not an
+// address the cluster or its CNI can be pinned to.
 func nodeAddress() (string, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
@@ -273,7 +320,7 @@ func nodeAddress() (string, error) {
 		a, _ := in.Addrs()
 		for _, v := range a {
 			ip, _, _ := net.ParseCIDR(v.String())
-			if ip.To4() != nil && privateIP(ip) {
+			if ip.To4() != nil && ip.IsPrivate() {
 				return ip.String(), nil
 			}
 		}

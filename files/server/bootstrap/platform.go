@@ -27,7 +27,7 @@ func (e *Engine) platform() error {
 			return err
 		}
 	}
-	ip, err := nodeAddress()
+	ip, err := apiAdvertiseAddress(e.path("/etc/bluefin/server/kubeadm-init.yaml"))
 	if err != nil {
 		return err
 	}
