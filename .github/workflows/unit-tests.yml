@@ -49,9 +49,15 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Set up native lifecycle Go toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: files/server/bootstrap/go.mod
+          cache: false
+
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y bats golang-go nodejs shellcheck
+          sudo apt-get update && sudo apt-get install -y bats nodejs shellcheck
           pip install pytest pyyaml
 
       # Ubuntu's AppArmor policy blocks unprivileged user namespaces; the

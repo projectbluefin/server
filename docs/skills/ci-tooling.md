@@ -8,6 +8,7 @@ metadata:
   context7-sources:
     - /websites/github_en_actions
     - /websites/cli_github_manual
+    - /actions/setup-go
 ---
 # CI Tooling
 
@@ -56,6 +57,12 @@ a binary chosen by an upstream release rather than by a commit in this repo.
 The version is repeated at each call site — currently `build.yml`,
 `unit-tests.yml`, and `track-junctions.yml`. Bumping `just` means changing all
 of them in one commit, so CI never runs two versions at once.
+
+Native lifecycle unit tests use SHA-pinned `actions/setup-go` with
+`go-version-file: files/server/bootstrap/go.mod` and `cache: false`. The
+stdlib-only module has no dependency cache. `just test-unit` uses
+`GOTOOLCHAIN=local`; test execution must not silently download another Go
+toolchain or depend on the runner's apt Go version.
 
 ### Workflow permissions
 

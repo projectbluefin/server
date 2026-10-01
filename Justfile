@@ -77,7 +77,7 @@ test-unit:
     #!/usr/bin/env bash
     set -euo pipefail
     python3 -m pytest tests/unit files/server/manifests/tests -q
-    (cd files/server/bootstrap && GOTOOLCHAIN=go1.26.6 go test ./...)
+    (cd files/server/bootstrap && GOTOOLCHAIN=local go test ./...)
     if command -v bats >/dev/null 2>&1; then
         exec bats tests/unit
     fi

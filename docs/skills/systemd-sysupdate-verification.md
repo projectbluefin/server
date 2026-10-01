@@ -102,6 +102,10 @@ inside a single value are not a version list. Five transfer slots include the
 booted OS and next candidate.
 The pinned systemd `261.2` parser appends each value with `strv_extend`; vacuum
 tests every retained value with `strv_contains`, not just the last line.
+Its transfer loader merges `34-server-bundle.transfer.d/*.conf` drop-ins.
+Retention validation must exercise that layout: `%A` in the main transfer,
+active/previous/in-flight values in `protect.conf`, and a real vacuum that
+preserves every protected instance. A main-file-only fixture is insufficient.
 Source: [pinned transfer parser](https://github.com/systemd/systemd/blob/4925d9f07fc697efccd98a93046ff535b8832445/src/sysupdate/sysupdate-transfer.c).
 
 A root-authorized native lifecycle request selects a signed image-version transition. The
