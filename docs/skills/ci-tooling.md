@@ -70,6 +70,9 @@ payload verification.
 Vendor-keyring fixtures mount a private `/usr/lib/systemd` before binding the
 keyring; never assume the runner already has that file. Rejection tests require
 `gpgv` evidence and reject sandbox setup errors, not merely any nonzero exit.
+The unit step sets `TMPDIR: ${{ runner.temp }}` so Complete launcher fixtures
+back `/etc` and `/var` with runner work storage rather than a nonpersistent
+system temporary filesystem. Keep the launcher's production filesystem guard.
 
 ### Workflow permissions
 
