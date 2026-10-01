@@ -56,10 +56,13 @@ never offers it there.
 
 ## Complete and Core profiles
 
-One signed multi-profile installer UKI supplies Complete as default profile
-`@0` and Core for builders as `@1`. The native boot menu selects the profile;
-there is no custom sysinstall screen or worker-role flag. Both profiles install
-the same OS partitions and retain the existing verity/signing inputs.
+One signed multi-profile installer UKI supplies Complete as the base profile
+(`ID=complete`, index 0) and Core for builders as `ID=core` (index 1). The native
+boot menu selects the profile; there is no custom sysinstall screen or worker-role
+flag. Both install the same OS partitions and retain the existing verity/signing inputs.
+For `loader.conf` selection, use the bare `bluefin-server-installer_<ver>.efi`
+entry for Complete and `bluefin-server-installer_<ver>.efi@core` for Core.
+An `@1` suffix does not match the named Core profile and silently boots the default.
 
 Complete selects `bluefin/repart.d/complete`, copies the coherent signed payload
 set and public profile marker onto the installed ESP, and leaves the OS root
@@ -67,6 +70,13 @@ account locked without a root-password prompt. Core selects
 `bluefin/repart.d/core`, omits the homelab payloads, and enables the builder
 root-password prompt on first disk boot. Neither profile puts join, account,
 TLS or session secrets on public media.
+
+Copy the selected profile **directory** to `/bluefin` in the ESP definition,
+not the individual marker file. Exercise the pinned online sysinstall/repart
+path and inspect `/bluefin/server-profile` on the installed ESP: successful
+sysinstall and copied payloads do not prove that the marker landed. This public
+intent must survive without relying on null-key credentials being accepted on
+Secure Boot hardware with a TPM.
 
 The base launcher persists profile intent in `/etc/bluefin/server/profile`.
 Core and installations with no intent do not activate Server state/runtime;
@@ -76,8 +86,13 @@ joins from validated private provisioning; invalid join data never creates a
 controller. Stock authentication and missing browser-pairing/account-recovery
 features are documented in [server-profile.md](server-profile.md).
 
+The launcher verifies signed payloads with `/etc/systemd/import-pubring.pgp`
+when an operator override exists, otherwise `/usr/lib/systemd/import-pubring.pgp`
+from the image. An invalid or dangling override fails verification; it must not
+silently fall back to vendor trust.
+
 The boot producer explicitly names Complete as ukify's base profile and joins
-only Core. Omitting the base profile would insert an extra `ID=main` at `@0`
+only Core. Omitting the base profile would insert an extra `ID=main` at index 0
 and shift both product selections. The compiled PE profile smoke checks actual
 profile IDs, retained verity/lockdown inputs and edition-specific prompt intent;
 native installation/boot proof remains separate.

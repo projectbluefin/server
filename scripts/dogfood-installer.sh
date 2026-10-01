@@ -43,7 +43,7 @@ state="$(realpath -m "${DOGFOOD_STATE:-dist/dogfood-installer}")"
 mem="${DOGFOOD_MEM:-4096}"
 timeout_s="${DOGFOOD_TIMEOUT:-600}"
 profile="${DOGFOOD_PROFILE:-complete}"
-case "${profile}" in complete) profile_index=0 ;; core) profile_index=1 ;; *) echo 'ERROR: DOGFOOD_PROFILE must be complete or core' >&2; exit 1 ;; esac
+case "${profile}" in complete) profile_suffix= ;; core) profile_suffix=@core ;; *) echo 'ERROR: DOGFOOD_PROFILE must be complete or core' >&2; exit 1 ;; esac
 target_serial=bluefin-target
 target_dev="${DOGFOOD_TARGET_DEV:-/dev/disk/by-id/virtio-${target_serial}}"
 install_args="${DOGFOOD_SYSINSTALL_ARGS:---confirm=no}"
@@ -75,13 +75,13 @@ target="${DOGFOOD_TARGET_DISK:-${state}/target.raw}"
 truncate -s "${DOGFOOD_DISK_SIZE:-32G}" "${target}"
 vars="${state}/vars.fd"
 cp "${vars_tmpl}" "${vars}"
-# Changing loader selection on an owned copy selects the signed @0/@1 UKI
-# profile; no made-up SMBIOS profile or password masks the native path.
+# Changing loader selection on an owned copy selects the signed Complete/Core
+# entry by ID; no made-up SMBIOS profile or password masks the native path.
 cp --reflink=auto --sparse=always "${installer}" "${state}/installer.raw"
 installer="${state}/installer.raw"
 esp_offset="$(sfdisk --json "${installer}" | jq -er '.partitiontable as $t | $t.partitions[] | select((.type | ascii_downcase) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b") | .start * $t.sectorsize')"
 mcopy -i "${installer}@@${esp_offset}" ::/loader/loader.conf "${state}/loader.conf"
-printf '\ndefault bluefin-server-installer_%s.efi@%s\ntimeout 0\n' "${ver}" "${profile_index}" >> "${state}/loader.conf"
+printf '\ndefault bluefin-server-installer_%s.efi%s\ntimeout 0\n' "${ver}" "${profile_suffix}" >> "${state}/loader.conf"
 mcopy -o -i "${installer}@@${esp_offset}" "${state}/loader.conf" ::/loader/loader.conf
 
 fail() {

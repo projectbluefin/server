@@ -211,7 +211,7 @@ config:
       mkdir -p "${definitions}" "${marker}"
       install -m0644 /boot-out/repart.d/*.conf "${definitions}/"
       printf '%s\n' "${edition}" > "${marker}/server-profile"
-      printf 'CopyFiles=/run/bluefin/installer/bluefin/profiles/%s/server-profile:/bluefin/server-profile\n' \
+      printf 'CopyFiles=/run/bluefin/installer/bluefin/profiles/%s:/bluefin\n' \
         "${edition}" >> "${definitions}/10-esp.conf"
       if [ "${edition}" = complete ]; then
         printf 'CopyFiles=/run/bluefin/installer/bluefin/payloads:/bluefin/payloads\nSizeMinBytes=%s\nSizeMaxBytes=%s\n' \

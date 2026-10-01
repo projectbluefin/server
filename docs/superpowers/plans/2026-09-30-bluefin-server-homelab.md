@@ -67,7 +67,7 @@ Initial candidate versions: Kubernetes 1.36.5, containerd 2.4.1, Cilium 1.20.2, 
 
 **Files:** existing image/boot elements, sysinstall drop-in, repart definitions, `scripts/dogfood-installer.sh`.
 
-- [ ] One signed multi-profile installer UKI: Complete is default profile `@0`; Core-for-builders is `@1`. Derive both from the existing command line, retain signing/verity inputs, and forward the selection through native credentials. No custom sysinstall screen or role flag.
+- [ ] One signed multi-profile installer UKI: Complete (`ID=complete`) is the default base profile at index 0; Core-for-builders (`ID=core`) is at index 1. Select the named Core boot entry with `@core`, not `@1`. Derive both from the existing command line, retain signing/verity inputs, and forward the selection through native credentials. No custom sysinstall screen or role flag.
 - [ ] Bundle host modules, bootstrap resources, and signed inventory. Suppress the inherited root-password prompt for Complete; Core may retain its builder login path. Provide product account recovery without a default root password or passwordless rescue shell.
 - [ ] Keep private worker enrollment in the same product flow. Do not expose join tokens on generic media. Use the same profile/module lock for Booty and authenticated network provisioning.
 - [ ] State acquisition honestly: OS/host installation can be offline; container pulls need registries unless cached. After acquisition, local use and recovery must not depend on WAN identity services.

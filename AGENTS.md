@@ -2,7 +2,7 @@
 
 Bluefin Server is an image-based Linux server OS composed from freedesktop-sdk (FSDK) 26.08 components with BuildStream 2. One build of `oci/bluefin-server-image.bst` produces the full release set for one image version:
 - the /usr image (`oci/bluefin-server-usr.bst`): an erofs partition plus its dm-verity hash partition, with the root hash recorded in a `usrhash` file
-- three signed UKIs (`oci/bluefin-server-boot.bst`): a netboot UKI, a disk UKI, and one native installer UKI with Complete `@0` and Core-for-builders `@1` profiles
+- three signed UKIs (`oci/bluefin-server-boot.bst`): a netboot UKI, a disk UKI, and one native installer UKI with Complete as the base profile (`ID=complete`) and Core-for-builders as `ID=core`
 - the OS DDI `bluefin-server_<ver>.raw` (usr + usr-verity + ESP), which doubles as the installer payload for diskless installs
 - a netboot ESP image with signed systemd-boot and Secure Boot key enrollment payloads
 - the normal USB installer `bluefin-server-installer_<ver>.raw` (same usr/verity as Core, native sysinstall/repart, signed Complete payload inventory on its ESP; Core omits homelab payloads on the target)

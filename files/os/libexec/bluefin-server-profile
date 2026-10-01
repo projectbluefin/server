@@ -83,7 +83,9 @@ if [[ -z "$source" && "$stage_only" == false ]]; then
   if [[ -f "$candidate/SHA256SUMS" && -f "$candidate/SHA256SUMS.gpg" ]]; then source=$candidate; fi
 fi
 [[ -n "$source" ]] || { echo 'signed Server payload inventory unavailable' >&2; exit 1; }
-gpgv --keyring /etc/systemd/import-pubring.pgp "$source/SHA256SUMS.gpg" "$source/SHA256SUMS"
+keyring=/etc/systemd/import-pubring.pgp
+[[ -e "$keyring" || -L "$keyring" ]] || keyring=/usr/lib/systemd/import-pubring.pgp
+gpgv --keyring "$keyring" "$source/SHA256SUMS.gpg" "$source/SHA256SUMS"
 mkdir -p "$store"
 seen_server=false
 seen_kubernetes=false
