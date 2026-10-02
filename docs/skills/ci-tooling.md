@@ -244,10 +244,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `components/linux.bst` and `components/go.bst` into an empty BuildStream
   cache and pushes that cache as a zstd tarball (split into 1.9 GB layers) to
   `ghcr.io/<owner>/bluefin-server-bst-cache:kernel-<hash of both cache keys>`,
-  unless the tag exists. `build` then runs `kernel-cache.sh restore` into its
-  cache before building, and gets the kernel as `cached`; restore reads the
-  whole stream (zstd checksums, every tar header) before extracting, so a
-  corrupt download leaves the cache untouched instead of half-populated.
+  unless the tag exists with an attestation. `build` then runs
+  `kernel-cache.sh restore` into its cache before building, and gets the
+  kernel as `cached`; restore reads the whole stream (zstd checksums, every
+  tar header) before extracting, so a corrupt download leaves the cache
+  untouched instead of half-populated.
   Release builds
   normalize `BOOT_KEYS_TARBALL`'s module certificate to the committed bytes
   after checking it is the same certificate (and stop if not), so the keys
@@ -261,6 +262,20 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   reports the element `cached` where an empty one reports `fetch needed`.
   Only a kernel or Go change (FSDK bump, patch `0006`, module certificate)
   reseeds.
+- **The kernel cache is trusted only with provenance.** What `restore`
+  extracts is the kernel inside the release's Secure Boot-signed UKI, and
+  the ghcr.io tag is mutable: anyone with write access to the package could
+  replace it without touching `main`. So `seed` prints the pushed manifest
+  digest (`name`/`digest` step outputs) for an `actions/attest` step in the
+  `kernel-cache` job (`id-token: write`, `attestations: write`,
+  `push-to-registry: true`, as `release` does for the OCI artifact), and
+  `restore` resolves the tag to its digest, requires
+  `gh attestation verify oci://<repository>@<digest> --repo <this repo>
+  --signer-workflow <this repo>/.github/workflows/build.yml --source-ref
+  refs/heads/main` to pass, and pulls that digest, never the tag. A tag
+  without that attestation builds the kernel from source (a warning, not a
+  failure), and `seed` rebuilds and replaces it rather than attesting bytes
+  it did not produce.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
