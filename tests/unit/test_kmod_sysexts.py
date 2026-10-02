@@ -88,8 +88,17 @@ def test_load_units_go_through_the_helper() -> None:
     # First ExecStart loads through the helper with `|| true` so a card
     # nouveau already holds (Pascal in a Pascal+Turing box) does not fail
     # the unit; the second verifies /proc/driver/nvidia/gpus/ came up.
+    # systemd does not interpret shell metacharacters inside ExecStart=, so
+    # the helper call has to be wrapped in /bin/sh -c — without the wrapper,
+    # systemd forwards `||` and `true` as argv tokens and the helper fails
+    # to load even when nvidia would bind every card.
     commands = nvidia.commands()
-    assert commands[0] == [HELPER_PATH, "nvidia", "nvidia-uvm", "nvidia-modeset", "nvidia-drm", "||", "true"]
+    assert commands[0][0] == "/usr/bin/sh" and commands[0][1] == "-c"
+    body = commands[0][2]
+    assert HELPER_PATH in body
+    for module in ("nvidia", "nvidia-uvm", "nvidia-modeset", "nvidia-drm"):
+        assert module in body
+    assert "||" in body and "true" in body
     assert "systemd-sysext.service" in nvidia.words("Unit", "After")
 
 

@@ -21,6 +21,11 @@ ExecCondition=/usr/bin/sh -c 'for d in /sys/bus/pci/devices/*; do [ "$$(cat "$$d
 # device, so nvidia still binds the supported ones; /proc/driver/nvidia/gpus/
 # lists the cards it did take. Treat the load as a success when at least one
 # GPU came up; log the rest as a warning so the boot does not stall on the
-# CDI refresh that follows.
-ExecStart=/usr/libexec/bluefin-sysext-modules nvidia nvidia-uvm nvidia-modeset nvidia-drm || true
+# CDI refresh that follows. systemd does not interpret `||` / `&&` / `|`
+# inside ExecStart= (systemd.service(5) "Command lines"), so the `|| true`
+# must be inside a shell wrapper — `ExecStart=` passes its value to the
+# binary verbatim, which would forward `||` and `true` as argv tokens to
+# `bluefin-sysext-modules` and fail the load for every host, not just the
+# mixed one.
+ExecStart=/usr/bin/sh -c '/usr/libexec/bluefin-sysext-modules nvidia nvidia-uvm nvidia-modeset nvidia-drm || true'
 ExecStart=/usr/bin/sh -c 'gpus=$$(ls /proc/driver/nvidia/gpus 2>/dev/null); if [ -z "$$gpus" ]; then echo "nvidia-load: no NVIDIA GPU came up; the helper exited non-zero and /proc/driver/nvidia/gpus is empty" >&2; exit 1; fi; for g in $$gpus; do info=$$(cat /proc/driver/nvidia/gpus/$$g/information 2>/dev/null); echo "nvidia-load: bound GPU $$g:$${info:+ $$info}"; done'

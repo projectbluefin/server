@@ -191,17 +191,17 @@ def test_units_skip_themselves_without_an_nvidia_gpu() -> None:
     # already holds (a Pascal GPU on a mixed Pascal+Turing host). Second
     # ExecStart: verify /proc/driver/nvidia/gpus/ came up non-empty and log
     # the bound cards; the unit fails only when nothing came up at all.
+    # The first ExecStart must wrap the helper call in a shell so the `||
+    # true` is interpreted by /bin/sh, not forwarded to the helper as argv
+    # tokens (`systemd.service(5)` "Command lines" lists `||` as unsupported
+    # in ExecStart=).
     commands = load_unit.commands()
-    assert commands[0] == [
-        "/usr/libexec/bluefin-sysext-modules",
-        "nvidia",
-        "nvidia-uvm",
-        "nvidia-modeset",
-        "nvidia-drm",
-        "||",
-        "true",
-    ]
     assert len(commands) == 2
+    assert commands[0][0] == "/usr/bin/sh" and commands[0][1] == "-c"
+    assert "bluefin-sysext-modules" in commands[0][2]
+    for module in ("nvidia", "nvidia-uvm", "nvidia-modeset", "nvidia-drm"):
+        assert module in commands[0][2]
+    assert "||" in commands[0][2] and "true" in commands[0][2]
     assert commands[1][0] == "/usr/bin/sh" and commands[1][1] == "-c"
     assert "/proc/driver/nvidia/gpus" in commands[1][2]
     assert commands[1][2].startswith("gpus=")

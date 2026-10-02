@@ -4,7 +4,7 @@ description: Build and ship the NVIDIA driver (open kernel modules) and NVIDIA C
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-02"
 ---
 # NVIDIA sysexts
 
@@ -188,14 +188,18 @@ hits a known load-order problem: `nouveau` is already bound to the
 unsupported GPU by the time `nvidia-load.service` runs, so
 `modprobe nvidia` returns non-zero once the driver refuses that card. The
 unit still succeeds when at least one GPU came up: the first `ExecStart`
-runs the sysext helper with `|| true`, the second checks
-`/proc/driver/nvidia/gpus/` and exits 0 (logging the bound cards) when
-non-empty, 1 when empty. `nvidia-device-nodes.service` then iterates the
-bound cards only, and `nvidia-cdi-refresh.service` writes a CDI spec
-covering the supported ones. The `blacklist nouveau` + `options nouveau
-modeset=0` lines in `modprobe-nvidia.conf` (shipped at
-`/usr/lib/modprobe.d/nvidia.conf`) keep nouveau from binding supported
-GPUs on a normal boot.
+runs the sysext helper inside a `/bin/sh -c` wrapper so the trailing
+`|| true` is interpreted by the shell (systemd.service(5) "Command lines"
+lists `||` as unsupported in `ExecStart=`, so the wrapper is required —
+without it systemd forwards `||` and `true` as argv tokens to
+`bluefin-sysext-modules` and the unit fails even on a host whose only
+GPU is the supported one), the second checks `/proc/driver/nvidia/gpus/`
+and exits 0 (logging the bound cards) when non-empty, 1 when empty.
+`nvidia-device-nodes.service` then iterates the bound cards only, and
+`nvidia-cdi-refresh.service` writes a CDI spec covering the supported
+ones. The `blacklist nouveau` + `options nouveau modeset=0` lines in
+`modprobe-nvidia.conf` (shipped at `/usr/lib/modprobe.d/nvidia.conf`)
+keep nouveau from binding supported GPUs on a normal boot.
 
 ### Containers (CDI)
 
