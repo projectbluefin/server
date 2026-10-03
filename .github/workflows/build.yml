@@ -130,9 +130,10 @@ jobs:
 
   # FSDK's kernel is ~70 of the ~85 build minutes, and no upstream cache holds
   # it (our module certificate and patch 0006 change its key). This job builds
-  # it (and Go) with the committed release module certificate and no secrets,
-  # and pushes the key-free BuildStream cache to ghcr.io once per kernel cache
-  # key; release builds restore it (scripts/kernel-cache.sh).
+  # it (and Go) with the committed release module certificate and no signing
+  # secrets, and pushes the key-free artifacts to the project CAS unless a
+  # remote already holds them; every build pulls them through project.conf
+  # (scripts/kernel-cache.sh).
   kernel-cache:
     needs: changes
     if: needs.changes.outputs.release == 'true'
@@ -140,7 +141,6 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: read
-      packages: write # pushes ghcr.io/<owner>/bluefin-server-bst-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -174,22 +174,14 @@ jobs:
           mkdir -p files/boot-keys/modules
           cp files/release-keys/linux-module-cert.crt files/boot-keys/modules/
 
-      - name: Set up oras
-        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
-        with:
-          url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
-          checksum: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
-
       # The cache only saves time: a failure here must not hold back the
       # release, which also counts this job through `build`.
       - name: Build and push the kernel cache unless it exists
         continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          echo "${GITHUB_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          bash scripts/kernel-cache.sh seed "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bluefin-server-bst-cache"
+          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
+          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
+        run: bash scripts/kernel-cache.sh seed
 
   build:
     needs: [changes, kernel-cache]
@@ -200,7 +192,6 @@ jobs:
     timeout-minutes: 300
     permissions:
       contents: read
-      packages: read # pulls the kernel cache
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -295,23 +286,6 @@ jobs:
 
       - name: Validate Element Graph
         run: just validate
-
-      - name: Set up oras
-        if: needs.changes.outputs.release == 'true'
-        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
-        with:
-          url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
-          checksum: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
-
-      - name: Restore the kernel cache
-        if: needs.changes.outputs.release == 'true'
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          echo "${GITHUB_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          bash scripts/kernel-cache.sh restore "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bluefin-server-bst-cache"
 
       - name: Build and export the image set
         run: just export-image

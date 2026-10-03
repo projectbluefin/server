@@ -13,3 +13,5 @@ dist/
 .pytest_cache/
 # Local Secure Boot / module signing keys (just gen-dev-keys)
 files/boot-keys/
+# CAS client credentials, while scripts/kernel-cache.sh seeds the cache
+.casd.*/

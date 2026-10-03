@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Key-free BuildStream cache of FSDK's kernel (and Go), stored in ghcr.io.
+# Key-free BuildStream cache of FSDK's kernel (and Go), in the project CAS.
 #
-#   kernel-cache.sh key                    print the cache tag for this checkout
-#   kernel-cache.sh seed    <repository>   build and push the tag unless it exists
-#   kernel-cache.sh restore <repository>   pull the tag into ~/.cache/buildstream;
-#                                          a missing tag or failed pull is not an error
+#   CASD_CLIENT_CERT=<pem> CASD_CLIENT_KEY=<pem> kernel-cache.sh seed
 #
 # The kernel is about 70 of the ~85 build minutes and no upstream cache holds
 # it: its cache key depends on the module certificate it trusts (the
@@ -13,87 +10,91 @@
 # certificate files/release-keys/linux-module-cert.crt as
 # files/boot-keys/modules/linux-module-cert.crt, so the keys match.
 #
-# The pushed tarball is public. It is key-free by construction: the seed job
-# holds no signing secrets, and `seed` refuses to build if
-# bluefin-server/keys/boot-keys.bst (the only element that stages private
-# keys) is anywhere in the graph of ELEMENTS.
+# `seed` builds ELEMENTS with a BuildStream config that pushes artifacts and
+# sources to the CAS's mTLS endpoint; every build reads them back through the
+# anonymous remote in project.conf. It builds nothing when a remote already
+# holds every element (`available`; an element only cached locally still goes
+# through `bst build`, which pushes it).
+#
+# The CAS is publicly readable. What `seed` pushes is key-free by
+# construction: the seed job holds no signing secrets, and `seed` refuses to
+# build if bluefin-server/keys/boot-keys.bst (the only element that stages
+# private keys) is anywhere in the graph of ELEMENTS.
 set -euo pipefail
 
 ELEMENTS=(freedesktop-sdk.bst:components/linux.bst freedesktop-sdk.bst:components/go.bst)
 KEYS_ELEMENT=bluefin-server/keys/boot-keys.bst
-ARTIFACT_TYPE=application/vnd.projectbluefin.server.bst-cache.v1
-PART_SIZE=1900M
-cache_dir="${HOME}/.cache/buildstream"
+PUSH_URL=https://cache.projectbluefin.io:11002
 
 cd "$(dirname "$0")/.."
 
+# Output and log lines of a `just bst` command, without colours.
 bst_show() {
-    just bst show "$@" | sed 's/\x1b\[[0-9;]*m//g'
+    just bst "$@" 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
 }
 
-key() {
-    local keys
-    keys="$(bst_show --deps none --format "'%{full-key}'" "${ELEMENTS[@]}" | grep -xE '[0-9a-f]{64}' || true)"
-    if [ "$(grep -c . <<< "${keys}")" -ne "${#ELEMENTS[@]}" ]; then
-        echo "kernel-cache: could not read the cache keys of ${ELEMENTS[*]}" >&2
-        exit 1
-    fi
-    printf 'kernel-%s\n' "$(sha256sum <<< "${keys}" | cut -c1-32)"
+# A BuildStream user config adding the CAS as a push remote for artifacts
+# and sources, authenticated by the client certificate in $1 (a directory
+# inside the checkout, which `just bst` mounts at /src).
+write_config() {
+    local auth="$1" kind
+    for kind in artifacts source-caches; do
+        cat <<EOF
+${kind}:
+  servers:
+  - url: ${PUSH_URL}
+    push: true
+    connection-config:
+      keepalive-time: 180
+      retry-limit: 5
+      retry-delay: 1000
+      request-timeout: 180
+    auth:
+      client-cert: /src/${auth}/client.crt
+      client-key: /src/${auth}/client.key
+EOF
+    done
 }
+
+# The credentials directory; global, as the EXIT trap removes it after seed
+# returns.
+auth=""
 
 seed() {
-    local repo="$1" tag work
-    tag="$(key)"
-    if oras manifest fetch "${repo}:${tag}" > /dev/null 2>&1; then
-        echo "kernel-cache: ${repo}:${tag} already exists"
-        return 0
-    fi
-    if bst_show --deps all --format "'%{name}'" "${ELEMENTS[@]}" | grep -qxF "${KEYS_ELEMENT}"; then
+    local states available
+    : "${CASD_CLIENT_CERT:?kernel-cache: CASD_CLIENT_CERT is not set}"
+    : "${CASD_CLIENT_KEY:?kernel-cache: CASD_CLIENT_KEY is not set}"
+    if bst_show show --deps all --format "'%{name}'" "${ELEMENTS[@]}" | grep -qxF "${KEYS_ELEMENT}"; then
         echo "kernel-cache: ${KEYS_ELEMENT} is in the graph of ${ELEMENTS[*]}; refusing to publish" >&2
         exit 1
     fi
-    just bst build "${ELEMENTS[@]}"
-    # Inside the cache directory, on the same (large) disk, and left out of
-    # the tarball with logs, build trees and temporary files.
-    work="$(mktemp -d "${cache_dir}/kernel-cache.XXXXXX")"
-    # The trailing slash descends into a symlinked cache (CI links it to /mnt).
-    mapfile -t dirs < <(find "${cache_dir}/" -mindepth 1 -maxdepth 1 ! -name logs ! -name tmp ! -name build ! -name 'kernel-cache.*' -printf '%f\n')
-    if [ "${#dirs[@]}" -eq 0 ] || [ ! -d "${cache_dir}/cas" ]; then
-        echo "kernel-cache: nothing to pack in ${cache_dir}" >&2
+    auth="$(umask 077 && mktemp -d .casd.XXXXXX)"
+    trap 'rm -rf "${auth}"' EXIT
+    (
+        umask 077
+        printf '%s\n' "${CASD_CLIENT_CERT}" > "${auth}/client.crt"
+        printf '%s\n' "${CASD_CLIENT_KEY}" > "${auth}/client.key"
+    )
+    write_config "${auth}" > "${auth}/buildstream.conf"
+    export BST_FLAGS="${BST_FLAGS:-} --config /src/${auth}/buildstream.conf"
+    # BuildStream only warns about a remote it cannot reach (a rejected client
+    # certificate included) and would build without pushing anything.
+    states="$(bst_show artifact show --deps none "${ELEMENTS[@]}")"
+    if grep -qF "Failed to initialize remote ${PUSH_URL}" <<< "${states}"; then
+        grep -F "Failed to initialize remote ${PUSH_URL}" <<< "${states}" >&2
+        echo "kernel-cache: cannot reach ${PUSH_URL}; refusing to build without pushing" >&2
         exit 1
     fi
-    tar -C "${cache_dir}" -cf - "${dirs[@]}" | zstd -T0 -3 -q | split -b "${PART_SIZE}" - "${work}/cache.tar.zst."
-    (cd "${work}" && oras push --artifact-type "${ARTIFACT_TYPE}" "${repo}:${tag}" cache.tar.zst.*)
-    echo "kernel-cache: pushed ${repo}:${tag} ($(du -ch "${work}"/cache.tar.zst.* | tail -n1 | cut -f1))"
-    rm -rf "${work}"
-}
-
-restore() {
-    local repo="$1" tag work
-    tag="$(key)"
-    mkdir -p "${cache_dir}"
-    work="$(mktemp -d "${cache_dir}/kernel-cache.XXXXXX")"
-    if ! oras pull -o "${work}" "${repo}:${tag}" > /dev/null; then
-        rm -rf "${work}"
-        echo "::warning title=No kernel cache::${repo}:${tag} is not available; the kernel builds from source."
+    available="$(grep -cE '^ *available ' <<< "${states}" || true)"
+    if [ "${available}" -eq "${#ELEMENTS[@]}" ]; then
+        echo "kernel-cache: ${ELEMENTS[*]} already on a remote"
         return 0
     fi
-    # Read the whole stream (zstd checksums, every tar header) before writing
-    # anything: a half-extracted cache has artifact refs without their CAS
-    # objects, which BuildStream takes as cached and fails on much later.
-    if ! cat "${work}"/cache.tar.zst.* | zstd -dcq | tar -t > /dev/null; then
-        rm -rf "${work}"
-        echo "::warning title=Corrupt kernel cache::${repo}:${tag} did not verify; the kernel builds from source."
-        return 0
-    fi
-    cat "${work}"/cache.tar.zst.* | zstd -dcq | tar -x -C "${cache_dir}/"
-    rm -rf "${work}"
-    echo "kernel-cache: restored ${repo}:${tag}"
+    just bst build "${ELEMENTS[@]}"
+    echo "kernel-cache: pushed ${ELEMENTS[*]} to ${PUSH_URL}"
 }
 
 case "${1:-}" in
-    key) key ;;
-    seed) seed "${2:?repository}" ;;
-    restore) restore "${2:?repository}" ;;
-    *) echo "usage: $0 key | seed <repository> | restore <repository>" >&2; exit 2 ;;
+    seed) seed ;;
+    *) echo "usage: $0 seed" >&2; exit 2 ;;
 esac

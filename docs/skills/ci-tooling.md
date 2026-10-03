@@ -236,31 +236,31 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip. No
   status check is required on `main` today; a skipped job reports as passing,
   so they can be made required without `paths-ignore` leaving them pending.
-- **Kernel cache in ghcr.io, key-free by construction.** The `kernel-cache`
-  job (releases only) runs `scripts/kernel-cache.sh seed`: with no signing
-  secrets and the committed release module certificate
+- **Kernel cache in the project CAS, key-free by construction.** The
+  `kernel-cache` job (releases only) runs `scripts/kernel-cache.sh seed`: with
+  no signing secrets and the committed release module certificate
   (`files/release-keys/linux-module-cert.crt`) staged as
   `files/boot-keys/modules/linux-module-cert.crt`, it builds FSDK's
-  `components/linux.bst` and `components/go.bst` into an empty BuildStream
-  cache and pushes that cache as a zstd tarball (split into 1.9 GB layers) to
-  `ghcr.io/<owner>/bluefin-server-bst-cache:kernel-<hash of both cache keys>`,
-  unless the tag exists. `build` then runs `kernel-cache.sh restore` into its
-  cache before building, and gets the kernel as `cached`; restore reads the
-  whole stream (zstd checksums, every tar header) before extracting, so a
-  corrupt download leaves the cache untouched instead of half-populated.
-  Release builds
+  `components/linux.bst` and `components/go.bst` with a BuildStream config
+  that pushes artifacts and sources to `cache.projectbluefin.io:11002`,
+  unless `bst artifact show` reports both `available` on a remote. The push
+  endpoint takes mTLS: the client certificate is the repository variable
+  `CASD_CLIENT_CERT` and its key the secret `CASD_CLIENT_KEY`, given to that
+  step only and written to a gitignored `.casd.*/` directory that the script
+  removes on exit. The CAS trusts that certificate in its list of client
+  certificates; rotating it means replacing it there and in both settings.
+  Every build then pulls the kernel anonymously through the
+  `cache.projectbluefin.io:11001` remote in `project.conf`. Release builds
   normalize `BOOT_KEYS_TARBALL`'s module certificate to the committed bytes
   after checking it is the same certificate (and stop if not), so the keys
-  match. The tarball is public: `seed` refuses if
-  `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds, and
-  the job holds no secret but `GITHUB_TOKEN`. A content grep is no guard
-  here: FSDK sources (Go's TLS test data and others) carry 307 PEM private
-  keys. Both cache steps are `continue-on-error`, so a failed seed or restore
-  only costs time. Measured in the lab: the seed build takes 44 min on 16+
-  CPUs, fills 15 GB, and packs to 5.0 GB in under a minute; a restored cache
-  reports the element `cached` where an empty one reports `fetch needed`.
-  Only a kernel or Go change (FSDK bump, patch `0006`, module certificate)
-  reseeds.
+  match. The CAS is publicly readable: `seed` refuses if
+  `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds,
+  and the job holds no signing secret. A content grep is no guard here: FSDK
+  sources (Go's TLS test data and others) carry 307 PEM private keys. The
+  seed step is `continue-on-error`, so a failed seed only costs time.
+  Measured in the lab: the seed build takes 44 min on 16+ CPUs and fills
+  15 GB. Only a kernel or Go change (FSDK bump, patch `0006`, module
+  certificate) reseeds.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
@@ -278,8 +278,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   the kernel: `just gen-dev-keys` makes a new module certificate on every
   run, so the PR kernel's cache key never matches anything cached.
 - **No `actions/cache`.** A full build's cache holds `boot-keys.bst`, and
-  pull requests can restore caches saved on `main`; the key-free kernel cache
-  is 5 GB, half the 10 GB repository quota, so it lives in ghcr.io instead.
+  pull requests can restore caches saved on `main`; the key-free kernel
+  cache lives in the project CAS instead.
 
 ## Common Rationalizations
 
