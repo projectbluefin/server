@@ -14,7 +14,7 @@ It is [DDI first](https://0pointer.net/blog/fitting-everything-together.html) an
 
 > The only thing worse than a nightmare is a factory of nightmares that makes other nightmares
 
-![armargasaurus](https://en.wikipedia.org/wiki/Amargasaurus#/media/File:Dicraeosauridae_Scale.svg)
+![armargasaurus](https://upload.wikimedia.org/wikipedia/commons/d/d8/Dicraeosauridae_Scale.svg)
 
 ## Release status: Alpha
 
@@ -73,6 +73,12 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor checklist, Conventi
 - **Sysupdate verification**: installed nodes verify updates against the signed manifest (`Verify=yes`), and the diskless pull checks the same signature in the initrd; see [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) for details.
 - **Provenance and SBOM**: releases carry SLSA provenance and SPDX SBOM attestations; see [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) for verification.
 - **Vulnerability disclosure**: See [`SECURITY.md`](SECURITY.md) for policy details and how to report security issues.
+
+## Further reading
+
+- [Track progress and file issues](https://github.com/projectbluefin/server/issues)
+- [Systemd Discoverable Disk Images Specification](https://uapi-group.org/specifications/specs/discoverable_disk_image/)
+- Bare-metal Flatcar deployments: [Knuckle](https://github.com/projectbluefin/knuckle) and the [Bluespeed](https://github.com/projectbluefin/bluespeed) homelab factory.
 
 ## License
 
