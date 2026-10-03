@@ -1,0 +1,37 @@
+#!/usr/bin/bash
+# Apply Ignition's unit selections without depending on PID 1's first-boot
+# preset-all. Only touch the units Ignition names, preserving unrelated local
+# enablement. systemctl handles preset precedence and template instance lists.
+set -euo pipefail
+
+root="${1:?usage: bluefin-ignition-presets ROOT}"
+preset="${root}/etc/systemd/system-preset/20-ignition.preset"
+[[ -f "${preset}" ]] || exit 0
+
+units=()
+while read -r action unit _instances; do
+    case "${action}" in
+        enable|disable)
+            [[ -n "${unit}" ]] && units+=("${unit}")
+            ;;
+    esac
+done < "${preset}"
+
+((${#units[@]})) || exit 0
+# Like PID 1's preset-all, consider only installed units and leave masks and
+# aliases alone. A unit provided by an unmerged sysext may not exist yet.
+available=$(systemctl --root="${root}" list-unit-files --no-legend --no-pager -- "${units[@]}") || {
+    status=$?
+    # list-unit-files returns 1 when no units match.
+    ((status == 1)) && [[ -z "${available}" ]] || exit "${status}"
+}
+units=()
+while read -r unit state _preset; do
+    [[ -n "${unit}" ]] || continue
+    case "${state}" in masked|masked-runtime|alias) continue ;; esac
+    units+=("${unit}")
+done <<< "${available}"
+
+if ((${#units[@]})); then
+    systemctl --root="${root}" preset -- "${units[@]}"
+fi

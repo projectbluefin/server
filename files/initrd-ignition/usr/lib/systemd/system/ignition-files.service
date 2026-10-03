@@ -1,8 +1,8 @@
 # Adapted from coreos/ignition v2.27.0 dracut/30ignition/ignition-files.service.
 # Writes users/groups (useradd/usermod --root=/sysroot), SSH keys, files,
 # links and systemd units into /sysroot/etc and enables units through
-# /sysroot/etc/systemd/system-preset/20-ignition.preset, which the real
-# root's PID 1 applies on its first boot (every boot: /etc is populated fresh).
+# /sysroot/etc/systemd/system-preset/20-ignition.preset. Apply its unit
+# selections before switch-root, including on nodes with an existing machine ID.
 [Unit]
 Description=Ignition (files)
 Documentation=https://coreos.github.io/ignition/
@@ -34,4 +34,8 @@ Before=initrd.target initrd-cleanup.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# Ignition appends its rules. Drop the previous boot's generated selections so
+# a changed config cannot be overridden by an older first-matching rule.
+ExecStartPre=/usr/bin/rm -f /sysroot/etc/systemd/system-preset/20-ignition.preset
 ExecStart=/usr/bin/ignition --root=/sysroot --platform=metal --stage=files
+ExecStartPost=/usr/libexec/bluefin-ignition-presets /sysroot

@@ -4,7 +4,7 @@ description: Use when a diskless (netboot UKI) node fails to boot, reboot-loops,
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-03"
   context7-sources:
     - /systemd/systemd
 ---
@@ -114,9 +114,11 @@ root), so nothing survives a reboot by default.
   `journalctl -D /var/log/journal --list-boots` and
   `journalctl -D /var/log/journal -b -1`. Do not pin
   the ID by writing `/etc/machine-id` with Ignition: a set machine ID ends the
-  first-boot state that applies the presets on every diskless boot, and
-  preset-enabled units stop starting. The `system.machine_id` credential (a
-  32-hex ID, or `firmware` for the SMBIOS UUID) pins it without that effect.
+  first-boot state that applies the vendor presets on every diskless boot, and
+  units enabled only by vendor presets stop starting. Explicit Ignition unit
+  selections are applied independently of first-boot state. The
+  `system.machine_id` credential (a 32-hex ID, or `firmware` for the SMBIOS UUID)
+  pins it without that effect.
 - **Remote logs**: the image ships `systemd-journal-upload`; an Ignition config
   can write `/etc/systemd/journal-upload.conf` (`[Upload]` / `URL=`) and enable
   `systemd-journal-upload.service` to stream the journal of the running system
@@ -155,9 +157,16 @@ that cannot be read, or an unsigned config without the opt-out.
 | `storage.luks` | Key files only; no `clevis` (TPM2 / Tang) |
 | `storage.raid` | No (`mdadm` absent) |
 | `storage.files`, `directories`, `links` | Yes |
-| `systemd.units` (contents, dropins, `enabled`) | Yes; enabled units go through a preset applied by the real root |
+| `systemd.units` (contents, dropins, `enabled`) | Yes; the files stage applies Ignition's unit presets before switch-root, even with an existing machine ID |
 | `passwd.users`, `passwd.groups` | Yes |
 | `kernelArguments` | No |
+
+After writing files and units, `ignition-files.service` applies the preset
+selections in `20-ignition.preset` to `/sysroot` before switch-root. This works
+on installed nodes with an existing machine ID as well as on a fresh diskless
+root. Only units named by Ignition are preset; unrelated local enablement and
+unit masks are preserved. The generated preset file is cleared before each
+files stage so an older rule cannot override a changed config.
 
 There is no first-boot marker: every diskless boot runs every stage against a
 fresh `/etc`, so a config must be idempotent or the node fails the same stage
