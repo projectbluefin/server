@@ -356,7 +356,7 @@ console_issue() {
     console=$(ls "${APPLIED}"/*-10-kubestellar-console.yaml)
     grep -q 'homelab.bluefin.dev/console-sign-in: "password"' "${console}"
     grep -A1 'name: AUTH_ALLOWED_GITHUB_LOGINS' "${console}" | grep -q 'value: ""'
-    grep -q 'value: "http://kubestellar.home.arpa"' "${console}"
+    grep -q 'value: "https://kubestellar.home.arpa"' "${console}"
     ! grep -q 'HOMELAB_' "${console}"
     grep -q '"kubestellar.home.arpa"' "${APPLIED}"/*-11-login-gate.yaml
     ! grep -q 'create secret generic kubestellar-console-github-oauth' "${LOG}"
@@ -373,7 +373,7 @@ console_issue() {
     done
     # The login on the local consoles (like the join passphrase), not the journal.
     [ "$(stat -c %a "$(console_issue)")" = 600 ]
-    grep -qx 'KubeStellar Console: http://kubestellar.home.arpa (user admin, password 0123456789abcdef0123456789abcdef)' "$(console_issue)"
+    grep -qx 'KubeStellar Console: https://kubestellar.home.arpa (user admin, password 0123456789abcdef0123456789abcdef)' "$(console_issue)"
     grep -q "get secret kubestellar-console-login -o jsonpath='{.data.password}' | base64 -d" "$(console_issue)"
     [[ "$output" != *0123456789abcdef0123456789abcdef* ]]
     [[ "$output" != *"without HOMELAB_KUBESTELLAR_CONSOLE_ALLOWED_LOGINS"* ]]

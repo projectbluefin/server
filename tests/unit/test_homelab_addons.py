@@ -268,7 +268,7 @@ def test_console_is_deployed_by_default_without_github_oauth() -> None:
     assert env["IGNORE_PERSISTED_OAUTH_CREDENTIALS"]["value"] == "true"
     assert env["AUTH_ALLOWED_GITHUB_LOGINS"]["value"] == "${HOMELAB_KUBESTELLAR_CONSOLE_ALLOWED_LOGINS}"
     assert env["AUTH_ADMIN_GITHUB_LOGINS"]["value"] == "${HOMELAB_KUBESTELLAR_CONSOLE_ADMIN_LOGINS}"
-    assert env["FRONTEND_URL"]["value"] == "http://kubestellar.${HOMELAB_DOMAIN}"
+    assert env["FRONTEND_URL"]["value"] == "https://kubestellar.${HOMELAB_DOMAIN}"
     assert not {"DEV_MODE", "ALLOW_DEV_MODE_IN_CLUSTER", "SKIP_ONBOARDING"} & set(env)
     deployment = find(CONSOLE, "Deployment", "kubestellar-console")
     assert deployment["spec"]["template"]["metadata"]["annotations"] == {

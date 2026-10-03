@@ -400,7 +400,7 @@ spec:
         - name: AI_TOKEN_CRITICAL_THRESHOLD
           value: '95'
         - name: FRONTEND_URL
-          value: "http://kubestellar.${HOMELAB_DOMAIN}"
+          value: "https://kubestellar.${HOMELAB_DOMAIN}"
         - name: GITHUB_CLIENT_ID
           valueFrom:
             secretKeyRef:

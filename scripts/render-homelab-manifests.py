@@ -383,7 +383,7 @@ ADDON_COMPONENTS = [
             "selfUpgrade": {"enabled": False},
             "rbac": {"resourceQuotasReadOnly": True},
             "extraEnv": [
-                {"name": "FRONTEND_URL", "value": "http://kubestellar.${HOMELAB_DOMAIN}"},
+                {"name": "FRONTEND_URL", "value": "https://kubestellar.${HOMELAB_DOMAIN}"},
                 *({"name": f"GITHUB_CLIENT_{key.upper()}", "valueFrom": {"secretKeyRef": {
                     "name": "kubestellar-console-github-oauth", "key": f"github-client-{key}", "optional": True}}}
                   for key in ("id", "secret")),

@@ -1,4 +1,4 @@
-# The MCP endpoint (Streamable HTTP, http://mcp.<HOMELAB_DOMAIN>/mcp) on the
+# The MCP endpoint (Streamable HTTP, https://mcp.<HOMELAB_DOMAIN>/mcp) on the
 # homelab Gateway. Requests without a bearer token get 401.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

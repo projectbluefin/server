@@ -261,13 +261,28 @@ def test_default_gateway_and_issuers() -> None:
     gw = {d["kind"]: d for d in docs(MANIFESTS / "40-envoy-gateway" / "20-gateway.yaml")}
     assert gw["GatewayClass"]["spec"]["controllerName"] == "gateway.envoyproxy.io/gatewayclass-controller"
     assert gw["Gateway"]["spec"]["listeners"] == [
-        {"name": "http", "protocol": "HTTP", "port": 80, "allowedRoutes": {"namespaces": {"from": "All"}}}
+        {"name": "http", "protocol": "HTTP", "port": 80,
+         "allowedRoutes": {"namespaces": {"from": "All"}}},
+        {"name": "https", "protocol": "HTTPS", "port": 443,
+         "tls": {"mode": "Terminate",
+                  "certificateRefs": [{"name": "homelab-tls", "kind": "Secret"}]},
+         "allowedRoutes": {"namespaces": {"from": "All"}}},
     ]
     crds = {d["spec"]["names"]["kind"] for d in docs(MANIFESTS / "40-envoy-gateway" / "00-crds.yaml")}
     assert {"Gateway", "GatewayClass", "HTTPRoute", "EnvoyProxy"} <= crds
     assert docs(MANIFESTS / "45-cert-manager" / "20-selfsigned-issuer.yaml")[0]["spec"] == {"selfSigned": {}}
     acme = docs(MANIFESTS / "45-cert-manager" / "21-acme-issuer.yaml")[0]["spec"]["acme"]
     assert acme["email"] == "${HOMELAB_ACME_EMAIL}", "only applied when an email is configured"
+
+
+def test_gateway_certificate_covers_wildcard_domain() -> None:
+    cert = docs(MANIFESTS / "45-cert-manager" / "22-gateway-cert.yaml")[0]
+    assert cert["kind"] == "Certificate"
+    assert cert["metadata"]["name"] == "homelab-tls"
+    assert cert["metadata"]["namespace"] == "envoy-gateway-system"
+    assert cert["spec"]["secretName"] == "homelab-tls"
+    assert cert["spec"]["dnsNames"] == ["*.${HOMELAB_DOMAIN}", "${HOMELAB_DOMAIN}"]
+    assert cert["spec"]["issuerRef"] == {"name": "${HOMELAB_ACME_ISSUER}", "kind": "ClusterIssuer"}
 
 
 def test_monitoring_stack_defaults() -> None:
@@ -334,6 +349,7 @@ def test_generated_files_carry_the_header_and_hand_written_ones_are_known() -> N
         "40-envoy-gateway/20-gateway.yaml",
         "45-cert-manager/20-selfsigned-issuer.yaml",
         "45-cert-manager/21-acme-issuer.yaml",
+        "45-cert-manager/22-gateway-cert.yaml",
         "50-argocd/20-root-app.yaml",
     }
 

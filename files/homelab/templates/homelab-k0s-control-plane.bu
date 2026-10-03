@@ -127,7 +127,12 @@ storage:
           #HOMELAB_METALLB_ADDRESSES=192.0.2.240-192.0.2.250
 
           # cert-manager: an ACME (Let's Encrypt) ClusterIssuer "acme" is added when an
-          # email is set; the "selfsigned" ClusterIssuer is always there.
+          # email is set; the "selfsigned" ClusterIssuer is always there. With an
+          # ACME email, the homelab Gateway's HTTPS listener gets a Let's Encrypt
+          # wildcard cert for *.<HOMELAB_DOMAIN> (HTTP-01 through the same Gateway,
+          # so the names must resolve to it from the ACME server); without one, the
+          # same listener terminates with a self-signed cert LAN devices have to
+          # trust out of band.
           #HOMELAB_ACME_EMAIL=you@example.com
           #HOMELAB_ACME_SERVER=https://acme-staging-v02.api.letsencrypt.org/directory
 
@@ -161,9 +166,14 @@ storage:
           #HOMELAB_LOKI=yes
           #HOMELAB_ALLOY=yes
 
-          # Add-ons are exposed on the homelab Gateway (port 80 of its LoadBalancer
-          # address) by host name: argo.<domain>, mcp.<domain>, kubestellar.<domain>.
-          # Point those names (or a wildcard) at the Gateway's address.
+          # Add-ons are exposed on the homelab Gateway by host name:
+          # argo.<domain>, mcp.<domain>, kubestellar.<domain>. The Gateway listens on
+          # HTTP port 80 (kept for cert-manager HTTP-01) and HTTPS port 443 terminated
+          # with a wildcard cert for *.<HOMELAB_DOMAIN> issued by cert-manager
+          # (selfsigned when no ACME email is set, Let's Encrypt when
+          # HOMELAB_ACME_EMAIL is and the names resolve to the Gateway's MetalLB
+          # address from the ACME server). Point those names (or a wildcard) at the
+          # Gateway's address.
           #HOMELAB_DOMAIN=home.arpa
 
           # Argo Workflows (argo sysext): the server takes a Kubernetes token
@@ -176,13 +186,13 @@ storage:
           # mcp-client gets the "edit" ClusterRole.
           #HOMELAB_MCP_READ_WRITE=yes
 
-          # KubeStellar Console (kubestellar sysext) at http://kubestellar.<domain>:
+          # KubeStellar Console (kubestellar sysext) at https://kubestellar.<domain>:
           # its sign-in asks for the login password (user admin; shown on the
           # console, or `kubectl -n kubestellar-console get secret
           # kubestellar-console-login -o jsonpath='{.data.password}' | base64 -d`),
           # then signs in as the Console's built-in admin. GitHub sign-in instead (the
           # password prompt stays in front of it): a GitHub OAuth app (callback
-          # http://kubestellar.<domain>/auth/github/callback) with its client id and
+          # https://kubestellar.<domain>/auth/github/callback) with its client id and
           # secret, each without a trailing newline, in
           # /etc/bluefin/homelab.d/kubestellar-console/github-client-id and
           # /etc/bluefin/homelab.d/kubestellar-console/github-client-secret (mode
@@ -192,3 +202,4 @@ storage:
           #HOMELAB_KUBESTELLAR_CONSOLE_ADMIN_LOGINS=you
           # Full KubeStellar (KubeFlex, Postgres, the KubeStellar controllers):
           #HOMELAB_KUBESTELLAR_FULL=yes
+

@@ -1,5 +1,5 @@
 # The Argo Workflows UI and API on the homelab Gateway at
-# argo.<HOMELAB_DOMAIN>. The server runs with --auth-mode=client: every
+# https://argo.<HOMELAB_DOMAIN>. The server runs with --auth-mode=client: every
 # request needs a Kubernetes bearer token (kubectl create token).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

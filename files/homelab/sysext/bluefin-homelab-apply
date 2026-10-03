@@ -56,6 +56,7 @@ declare -A PATTERN=(
 	[KURED_END_TIME]='^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$'
 	[KURED_REBOOT_DAYS]='^[a-z]{2}(,[a-z]{2})*$'
 	[DOMAIN]='^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$'
+	[ACME_ISSUER]='^(acme|selfsigned)$'
 	[MCP_READ_ONLY]='^(true|false)$'
 	[MCP_READ_WRITE]='^yes$'
 	[KUBESTELLAR_CONSOLE_SIGN_IN]='^(github|password)$'
@@ -195,6 +196,13 @@ input() {
 	KUBESTELLAR_CONSOLE_ALLOWED_LOGINS | KUBESTELLAR_CONSOLE_ADMIN_LOGINS)
 		[ -n "${!var:-}" ] || return 0
 		;;
+	# acme when an ACME email is set (HTTP-01 through the homelab Gateway),
+	# else selfsigned: a node without ACME still terminates https with a
+	# cert the LAN devices will need to trust out-of-band.
+	ACME_ISSUER)
+		if [ -n "${HOMELAB_ACME_EMAIL:-}" ]; then echo acme; else echo selfsigned; fi
+		return 0
+		;;
 	esac
 	value=${!var:-${DEFAULT[$1]:-}}
 	[ -n "${value}" ] || return 1
@@ -252,7 +260,7 @@ console_ready() {
 		warn "kubestellar-console: GitHub sign-in without HOMELAB_KUBESTELLAR_CONSOLE_ALLOWED_LOGINS: any GitHub account past the login password can sign in"
 	fi
 	password=$(k -n kubestellar-console get secret kubestellar-console-login -o 'jsonpath={.data.password}' 2>/dev/null | base64 -d 2>/dev/null) || password=
-	if ! mkdir -p "${issue%/*}" || ! (umask 077 && printf 'KubeStellar Console: http://kubestellar.%s (user admin, password %s)\nThe password: %s\n\n' \
+	if ! mkdir -p "${issue%/*}" || ! (umask 077 && printf 'KubeStellar Console: https://kubestellar.%s (user admin, password %s)\nThe password: %s\n\n' \
 		"$(input DOMAIN)" "${password:-unknown}" "${read}" >"${issue}" && chmod 0600 "${issue}"); then
 		warn "kubestellar-console: could not show the login on the console"
 	fi

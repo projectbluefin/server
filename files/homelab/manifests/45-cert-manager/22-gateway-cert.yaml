@@ -1,0 +1,20 @@
+# A wildcard cert for *.HOMELAB_DOMAIN (plus the bare domain) into the
+# Secret homelab-tls in this namespace, referenced by the homelab
+# Gateway's https listener. The issuer is acme when HOMELAB_ACME_EMAIL is
+# set (HTTP-01 through the Gateway, so the names must resolve to its
+# MetalLB address from the ACME server), else selfsigned: a node without
+# ACME still has a working https listener for the LAN add-ons, just with
+# an untrusted certificate.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: homelab-tls
+  namespace: envoy-gateway-system
+spec:
+  secretName: homelab-tls
+  dnsNames:
+  - "*.${HOMELAB_DOMAIN}"
+  - "${HOMELAB_DOMAIN}"
+  issuerRef:
+    name: ${HOMELAB_ACME_ISSUER}
+    kind: ClusterIssuer
