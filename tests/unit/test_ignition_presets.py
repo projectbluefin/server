@@ -56,18 +56,21 @@ def next_boot(root, contents):
     service = SystemdFile(PAYLOAD / "lib/systemd/system/ignition-files.service")
     for command in service.commands("ExecStartPre"):
         subprocess.run([arg.replace("/sysroot", str(root)) for arg in command], check=True)
-    for line in contents.splitlines():
-        action, _, name = line.partition(" ")
-        # Ignition's DisableUnit removes an enabled unit's links before
-        # appending the preset line.
+    lines = []
+    for line in contents.splitlines(keepends=True):
+        action, _, name = line.strip().partition(" ")
+        # Ignition v2.27's DisableUnit: only an enabled unit is disabled and
+        # gets a preset line.
         if action == "disable":
             enabled = subprocess.run(
                 ["systemctl", f"--root={root}", "is-enabled", name], capture_output=True,
             )
-            if enabled.returncode == 0:
-                systemctl(root, "disable", name)
+            if enabled.returncode != 0:
+                continue
+            systemctl(root, "disable", name)
+        lines.append(line)
     with (root / "etc/systemd/system-preset/20-ignition.preset").open("a") as stream:
-        stream.write(contents)
+        stream.write("".join(lines))
     return apply(root)
 
 
@@ -78,15 +81,24 @@ def test_applies_enable_and_disable_on_repeated_boots(sysroot):
         ["systemctl", f"--root={sysroot}", "enable", "disabled.service", "local.service"],
         check=True, capture_output=True,
     )
-    preset(sysroot, "enable bluefin-sysext-fetch.service\ndisable disabled.service\n")
     for _ in range(2):
-        result = apply(sysroot)
+        result = next_boot(sysroot, "enable bluefin-sysext-fetch.service\ndisable disabled.service\n")
         assert result.returncode == 0, result.stderr
         assert enabled_link(sysroot, "bluefin-sysext-fetch.service").is_symlink()
         assert not enabled_link(sysroot, "disabled.service").is_symlink()
         # A global preset-all would incorrectly disable this local choice.
         assert enabled_link(sysroot, "local.service").is_symlink()
         assert not enabled_link(sysroot, "untouched.service").is_symlink()
+
+
+def test_a_preset_sorting_first_cannot_undo_ignitions_disable(sysroot):
+    # Like 03-bluefin-countme.preset: a base preset before 20-ignition.preset.
+    unit(sysroot, "early.service")
+    (sysroot / "usr/lib/systemd/system-preset/03-early.preset").write_text("enable early.service\n")
+    systemctl(sysroot, "enable", "early.service")
+    result = next_boot(sysroot, "disable early.service\n")
+    assert result.returncode == 0, result.stderr
+    assert not enabled_link(sysroot, "early.service").is_symlink()
 
 
 def test_template_instances_and_preset_precedence(sysroot):

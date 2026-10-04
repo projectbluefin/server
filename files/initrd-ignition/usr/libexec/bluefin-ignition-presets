@@ -6,9 +6,11 @@
 # Ignition runs on every boot, and an installed node keeps /etc: a selection
 # is applied when it is new or changed since it was last applied to this
 # /etc, so a unit an operator disabled since stays disabled until the config
-# changes its selection. Ignition itself removes the links of every unit the
-# config disables on each files stage, before this helper runs, so an
-# operator's enable of such a unit is reverted every boot.
+# changes its selection. Only enable selections are applied: for a disable,
+# Ignition itself has already run `systemctl disable` on an enabled unit
+# (and writes the line only then), and presetting it again could only
+# re-enable it through a preset file that sorts before 20-ignition.preset.
+# That also reverts an operator's enable of such a unit every boot.
 set -euo pipefail
 
 root="${1:?usage: bluefin-ignition-presets ROOT}"
@@ -33,7 +35,7 @@ units=()
 while IFS= read -r line || [[ -n "${line}" ]]; do
     read -r action unit _instances <<< "${line}"
     case "${action}" in
-        enable|disable) [[ -n "${unit}" ]] || continue ;;
+        enable) [[ -n "${unit}" ]] || continue ;;
         *) continue ;;
     esac
     if [[ -n "${applied["x${line}"]:-}" ]]; then

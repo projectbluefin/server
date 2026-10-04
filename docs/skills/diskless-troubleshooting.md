@@ -161,7 +161,7 @@ that cannot be read, or an unsigned config without the opt-out.
 | `passwd.users`, `passwd.groups` | Yes |
 | `kernelArguments` | No |
 
-After writing files and units, `ignition-files.service` applies the preset
+After writing files and units, `ignition-files.service` applies the enable
 selections in `20-ignition.preset` to `/sysroot` before switch-root. This works
 on installed nodes with an existing machine ID as well as on a fresh diskless
 root. Only units named by Ignition are preset; unrelated local enablement and
@@ -170,11 +170,14 @@ files stage so an older rule cannot override a changed config. A selection is
 applied when it is new or changed since it was last applied to this `/etc`
 (recorded in `20-ignition.preset.applied`, which systemd does not read): on
 an installed node, which runs Ignition on every boot, a unit an operator
-disabled since stays disabled until the config changes its selection. The
-reverse does not hold: Ignition itself runs `systemctl disable` on every unit
-the config disables on each files stage, so an operator's
-`systemctl enable` of such a unit lasts only until the next boot. A diskless node's fresh `/etc` gets every selection on every boot;
-a unit that is missing or masked is retried on the next boot.
+disabled since stays disabled until the config changes its selection.
+Disabling is Ignition's own: its files stage runs `systemctl disable` on
+every enabled unit the config disables, on each boot, so an operator's
+`systemctl enable` of such a unit lasts only until the next boot, and a
+preset sorting before `20-ignition.preset` (such as
+`03-bluefin-countme.preset`) cannot re-enable it. A diskless node's fresh
+`/etc` gets every selection on every boot; a unit that is missing or masked
+is retried on the next boot.
 
 There is no first-boot marker: every diskless boot runs every stage against a
 fresh `/etc`, so a config must be idempotent or the node fails the same stage
