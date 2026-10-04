@@ -178,6 +178,18 @@ def container(directory: str, kind: str, name: str) -> dict:
     return find(directory, kind, name)["spec"]["template"]["spec"]["containers"][0]
 
 
+# Kubernetes binary memory suffixes, smallest first.
+_MEM_UNITS = {"Ki": 1024, "Mi": 1024 ** 2, "Gi": 1024 ** 3, "Ti": 1024 ** 4}
+
+
+def parse_memory_limit(value: str) -> int:
+    """Bytes for a Kubernetes memory quantity such as '2Gi' or '256Mi'."""
+    for suffix, mult in _MEM_UNITS.items():
+        if value.endswith(suffix):
+            return int(float(value[:-2]) * mult)
+    raise AssertionError(f"unexpected memory quantity: {value}")
+
+
 def test_argo_workflows_server_takes_client_tokens_over_plain_http() -> None:
     server = container("10-argo-workflows", "Deployment", "argo-server")
     assert server["args"] == ["server", "--namespaced", "--auth-mode=client", "--secure=false"]
@@ -281,6 +293,14 @@ def test_console_is_deployed_by_default_without_github_oauth() -> None:
     assert not pod.get("hostNetwork") and not [p for p in console["ports"] if "hostPort" in p]
     text = "".join(p.read_text() for p in ADDONS.glob("3*/*.yaml"))
     assert "kiosk" not in text
+
+
+def test_console_memory_limit_is_high_enough_to_avoid_oom() -> None:
+    # Issue #376: the chart caps the console at 1 GiB, which OOM-kills it.
+    # The render script raises the limit; assert the rendered manifest does.
+    console = container(CONSOLE, "Deployment", "kubestellar-console")
+    limit = console["resources"]["limits"]["memory"]
+    assert parse_memory_limit(limit) >= parse_memory_limit("2Gi"), limit
 
 
 def test_console_cluster_role_reads_no_secrets() -> None:

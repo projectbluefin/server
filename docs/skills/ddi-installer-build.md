@@ -110,6 +110,8 @@ just dogfood-install             # diskless boot, systemd-sysinstall to a blank
 just dogfood-install NEXT=<dir>  # ...then sysupdate A->B to NEXT and boot it
 just dogfood-installer           # offline USB installer: unattended install to a blank disk, boot it with and without the stick
 just dogfood-installer NEXT=<dir> # ...then failed checks on the banner, sysupdate to NEXT and boot it
+DOGFOOD_TARGET=prior-install just dogfood-installer  # ...then install again over that install and boot it
+DOGFOOD_TARGET=foreign-gpt just dogfood-installer    # install over another OS's GPT disk (also: ext4, xfs on the whole disk)
 ```
 
 `scripts/dogfood-diskless.sh <dir> [--check]` boots the way a PXE/HTTP-booted

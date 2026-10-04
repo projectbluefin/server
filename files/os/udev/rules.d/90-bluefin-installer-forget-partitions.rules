@@ -1,0 +1,29 @@
+# USB installer only (the installer UKI boots systemd.unit=system-install.target):
+# forget the kernel partition devices of every disk but the stick, before
+# systemd-sysinstall starts. Nothing on any disk changes; the next boot sees
+# every partition again. Erasing the chosen disk is still sysinstall's job,
+# after its "yes".
+#
+# Why (#359): systemd-repart v261 erases the chosen disk (--erase=yes asks for
+# empty=force) but keeps the kernel's partition devices of what it held. The
+# ESP's new partition device (BLKPG) and the reread of the new partition table
+# collide with them, and the install fails with "Device or resource busy"
+# after the disk was wiped. Drop this file once FSDK's systemd-repart removes
+# stale partition devices itself (DOGFOOD_TARGET=foreign-gpt and
+# prior-install in scripts/dogfood-installer.sh then pass without it).
+#
+# The stick's own partitions (bluefin-installer*) stay. Partitions added once
+# sysinstall runs (/run/bluefin-sysinstall/started exists, touched after
+# udevadm settle in 10-bluefin-installer.conf) are the new install's and stay
+# too.
+
+ACTION!="add", GOTO="bluefin_installer_end"
+SUBSYSTEM!="block", GOTO="bluefin_installer_end"
+ENV{DEVTYPE}!="partition", GOTO="bluefin_installer_end"
+IMPORT{cmdline}="systemd.unit"
+ENV{systemd.unit}!="system-install.target", GOTO="bluefin_installer_end"
+ENV{ID_PART_ENTRY_NAME}=="bluefin-installer*", GOTO="bluefin_installer_end"
+TEST=="/run/bluefin-sysinstall/started", GOTO="bluefin_installer_end"
+RUN+="/usr/bin/partx --delete $devnode"
+
+LABEL="bluefin_installer_end"

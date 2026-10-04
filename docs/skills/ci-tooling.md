@@ -194,6 +194,9 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
       `systemd-sysupdate.service` and show on the login banner, the update
       must stage, boot and be blessed (see "Update health on the node" in
       [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)).
+      Two more runs install onto disks that are not empty (#359): again over
+      a Bluefin install (`DOGFOOD_TARGET=prior-install`) and over another
+      OS's GPT disk (`DOGFOOD_TARGET=foreign-gpt`).
  5. **Version Derivation:** The release version is set per build with
     `just set-version`: `YY.MM.<run>` for releases, `0.<run>` for every other
     build so it can never sort above a release.

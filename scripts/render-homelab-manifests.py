@@ -368,6 +368,10 @@ ADDON_COMPONENTS = [
         release="kubestellar-console",
         values={
             "image": {"tag": "v0.3.42"},
+            # The Console is a Next.js app the chart caps at 1 GiB, which
+            # OOM-kills it (issue #376). Raise the limit; the request stays.
+            "resources": {"limits": {"cpu": "500m", "memory": "2Gi"},
+                          "requests": {"cpu": "100m", "memory": "256Mi"}},
             # Secrets are generated on the node or read from the operator's
             # files (see the "secrets" file); no Secret in the chart. Without
             # a GitHub OAuth app (the optional Secret below) the Console's

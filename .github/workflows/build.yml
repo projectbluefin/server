@@ -118,7 +118,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2
         with:
           tool: just@1.58.0
 
@@ -148,7 +148,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2
         with:
           tool: just@1.58.0
 
@@ -204,7 +204,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Set up just
-        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2
         with:
           tool: just@1.58.0
 
@@ -372,7 +372,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 libarchive-tools
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 libarchive-tools \
+            fdisk dosfstools e2fsprogs
           sudo chmod 666 /dev/kvm
           curl -fsSL --retry 3 -o "${RUNNER_TEMP}/edk2-ovmf.rpm" "${OVMF_RPM_URL}"
           echo "${OVMF_RPM_SHA256}  ${RUNNER_TEMP}/edk2-ovmf.rpm" | sha256sum -c -
@@ -435,6 +436,21 @@ jobs:
         if: needs.changes.outputs.release != 'true'
         run: bash scripts/dogfood-installer.sh dist/diskless dist/diskless-next
 
+      # Disks that are not empty (#359): a reinstall over the install above's
+      # layout, and another OS's GPT disk (ESP, ext4, swap). About a minute
+      # each; fdisk, dosfstools and e2fsprogs build the foreign disk.
+      - name: Install from the offline USB installer, boot it, reinstall over it
+        env:
+          DOGFOOD_TARGET: prior-install
+          DOGFOOD_STATE: dist/dogfood-installer-prior-install
+        run: bash scripts/dogfood-installer.sh dist/diskless
+
+      - name: Install from the offline USB installer over another OS's disk
+        env:
+          DOGFOOD_TARGET: foreign-gpt
+          DOGFOOD_STATE: dist/dogfood-installer-foreign-gpt
+        run: bash scripts/dogfood-installer.sh dist/diskless
+
       - name: Upload boot logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -444,6 +460,7 @@ jobs:
             dist/*/dogfood-*.log
             dist/dogfood-install/*.log
             dist/dogfood-installer/*.log
+            dist/dogfood-installer-*/*.log
           if-no-files-found: ignore
           retention-days: 7
 
