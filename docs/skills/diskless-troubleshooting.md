@@ -170,8 +170,10 @@ files stage so an older rule cannot override a changed config. A selection is
 applied when it is new or changed since it was last applied to this `/etc`
 (recorded in `20-ignition.preset.applied`, which systemd does not read): on
 an installed node, which runs Ignition on every boot, a unit an operator
-enabled or disabled since keeps that state until the config changes its
-selection. A diskless node's fresh `/etc` gets every selection on every boot;
+disabled since stays disabled until the config changes its selection. The
+reverse does not hold: Ignition itself runs `systemctl disable` on every unit
+the config disables on each files stage, so an operator's
+`systemctl enable` of such a unit lasts only until the next boot. A diskless node's fresh `/etc` gets every selection on every boot;
 a unit that is missing or masked is retried on the next boot.
 
 There is no first-boot marker: every diskless boot runs every stage against a

@@ -5,8 +5,10 @@
 #
 # Ignition runs on every boot, and an installed node keeps /etc: a selection
 # is applied when it is new or changed since it was last applied to this
-# /etc, so a unit an operator enabled or disabled since keeps that state
-# until the config changes its selection.
+# /etc, so a unit an operator disabled since stays disabled until the config
+# changes its selection. Ignition itself removes the links of every unit the
+# config disables on each files stage, before this helper runs, so an
+# operator's enable of such a unit is reverted every boot.
 set -euo pipefail
 
 root="${1:?usage: bluefin-ignition-presets ROOT}"

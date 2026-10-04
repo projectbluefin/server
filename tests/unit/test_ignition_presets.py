@@ -52,10 +52,20 @@ def systemctl(root, *args):
 
 
 def next_boot(root, contents):
-    """The unit's own ExecStartPre, Ignition's append-only writer, the helper."""
+    """The unit's own ExecStartPre, Ignition's writer, the helper."""
     service = SystemdFile(PAYLOAD / "lib/systemd/system/ignition-files.service")
     for command in service.commands("ExecStartPre"):
         subprocess.run([arg.replace("/sysroot", str(root)) for arg in command], check=True)
+    for line in contents.splitlines():
+        action, _, name = line.partition(" ")
+        # Ignition's DisableUnit removes an enabled unit's links before
+        # appending the preset line.
+        if action == "disable":
+            enabled = subprocess.run(
+                ["systemctl", f"--root={root}", "is-enabled", name], capture_output=True,
+            )
+            if enabled.returncode == 0:
+                systemctl(root, "disable", name)
     with (root / "etc/systemd/system-preset/20-ignition.preset").open("a") as stream:
         stream.write(contents)
     return apply(root)
@@ -132,16 +142,25 @@ def test_a_changed_config_replaces_previous_rules(sysroot):
     assert not enabled_link(sysroot, "changed.service").is_symlink()
 
 
-@pytest.mark.parametrize("selected, operator", [("enable", "disable"), ("disable", "enable")])
-def test_an_operator_choice_outlasts_an_unchanged_config(sysroot, selected, operator):
+def test_an_operator_disable_outlasts_an_unchanged_config(sysroot):
     unit(sysroot, "chosen.service")
-    preset(sysroot, f"{selected} chosen.service\n")
+    preset(sysroot, "enable chosen.service\n")
     assert apply(sysroot).returncode == 0
-    systemctl(sysroot, operator, "chosen.service")
+    systemctl(sysroot, "disable", "chosen.service")
     for _ in range(2):
-        result = next_boot(sysroot, f"{selected} chosen.service\n")
+        result = next_boot(sysroot, "enable chosen.service\n")
         assert result.returncode == 0, result.stderr
-        assert enabled_link(sysroot, "chosen.service").is_symlink() == (operator == "enable")
+        assert not enabled_link(sysroot, "chosen.service").is_symlink()
+
+
+def test_ignition_reverts_an_operator_enable_of_a_disabled_unit(sysroot):
+    unit(sysroot, "chosen.service")
+    preset(sysroot, "disable chosen.service\n")
+    assert apply(sysroot).returncode == 0
+    systemctl(sysroot, "enable", "chosen.service")
+    result = next_boot(sysroot, "disable chosen.service\n")
+    assert result.returncode == 0, result.stderr
+    assert not enabled_link(sysroot, "chosen.service").is_symlink()
 
 
 def test_a_selection_dropped_and_restored_applies_again(sysroot):

@@ -155,9 +155,10 @@ reaches the GPU Operator on the boot that activates the toolkit sysext.
 workloads. Opt-in: nothing enables it, and a worker never sees its config.
 
 - **Enable it** by linking it into `multi-user.target.wants`. Its unit exists
-  only once `systemd-sysext.service` has merged the image, after PID 1
-  applied the boot's presets, so Ignition's `enabled: true` (a preset line)
-  does not reach it. Ignition writes `/etc/extensions/kubeadm_<ver>.raw`
+  only once `systemd-sysext.service` has merged the image after
+  switch-root. Ignition's `enabled: true` (a preset line) is applied in the
+  initrd's files stage, where the image is not merged, so the unit is absent
+  and the selection is skipped on every boot. Ignition writes `/etc/extensions/kubeadm_<ver>.raw`
   (with a sha256 `verification`) and the link
   `/etc/systemd/system/multi-user.target.wants/kubeadm-init.service ->
   /usr/lib/systemd/system/kubeadm-init.service`; after the merge,
