@@ -14,14 +14,14 @@ previous 0001 CAS-limits patch (project.conf now sets
 retry-limit/retry-delay/request-timeout itself), so this patch's
 context now uses the upstream values.
 ---
- project.conf | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
+ project.conf | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
 
 diff --git a/project.conf b/project.conf
 index b3fd0f8..982bddf 100644
 --- a/project.conf
 +++ b/project.conf
-@@ -149,6 +149,12 @@ artifacts:
+@@ -149,6 +149,18 @@ artifacts:
      retry-limit: 4
      retry-delay: 500
      request-timeout: 300
@@ -31,14 +31,26 @@ index b3fd0f8..982bddf 100644
 +    retry-limit: 4
 +    retry-delay: 500
 +    request-timeout: 300
++- url: https://cache.projectbluefin.io:11001
++  connection-config:
++    keepalive-time: 60
++    retry-limit: 4
++    retry-delay: 500
++    request-timeout: 300
  
  source-caches:
  - url: https://cache.freedesktop-sdk.io:11001
-@@ -157,6 +163,12 @@ source-caches:
+@@ -157,6 +169,18 @@ source-caches:
      retry-limit: 4
      retry-delay: 500
      request-timeout: 300
 +- url: https://gbm.gnome.org:11003
++  connection-config:
++    keepalive-time: 60
++    retry-limit: 4
++    retry-delay: 500
++    request-timeout: 300
++- url: https://cache.projectbluefin.io:11001
 +  connection-config:
 +    keepalive-time: 60
 +    retry-limit: 4
