@@ -296,15 +296,20 @@ finish node-3-disk "${node_pid}" 'PROBE failed=' 3000 || rc=1
 finish cp-3-disk "${cp_pid}" 'PROBE failed=' 4200 || rc=1
 
 check() { grep -aqE "$2" "${state}/$1.ttyS1.log" || { echo "FAIL: $1: no match for: $2" >&2; rc=1; }; }
+v="${ver//./\\.}"
+# The stick seeds the kubeadm and homelab sysexts and the homelab add-ons;
+# the control plane's template enables the add-ons, a node's only the two.
 for role in cp node; do
     check "${role}-2-install" "PROBE sysinstall=success 0 homelab-install=success"
-    check "${role}-2-install" "PROBE esp-seed=SHA256SUMS homelab_${ver//./\\.}\.raw\.zst kubeadm_${ver//./\\.}\.raw\.zst "
-    check "${role}-3-disk" "PROBE os=bluefin-server ${ver//./\\.} secureboot=enabled"
+    check "${role}-2-install" "PROBE esp-seed=SHA256SUMS argo-workflows_${v}\.raw\.zst homelab_${v}\.raw\.zst kubeadm_${v}\.raw\.zst kubestellar_${v}\.raw\.zst mcp_${v}\.raw\.zst "
+    check "${role}-3-disk" "PROBE os=bluefin-server ${v} secureboot=enabled"
     check "${role}-3-disk" 'PROBE root=xfs ignition=applied'
-    check "${role}-3-disk" 'PROBE fetch=success homelab-kubeadm-via-seed seed-left=0'
-    check "${role}-3-disk" "PROBE merged=homelab_${ver//./\\.} kubeadm_${ver//./\\.} "
     check "${role}-3-disk" 'PROBE failed=0'
 done
+check cp-3-disk 'PROBE fetch=success argo-workflows-homelab-kubeadm-kubestellar-mcp-via-seed seed-left=0'
+check cp-3-disk "PROBE merged=argo-workflows_${v} homelab_${v} kubeadm_${v} kubestellar_${v} mcp_${v} "
+check node-3-disk 'PROBE fetch=success homelab-kubeadm-via-seed seed-left=0'
+check node-3-disk "PROBE merged=homelab_${v} kubeadm_${v} "
 check cp-2-install 'PROBE esp-creds=.*ignition\.config\.cred'
 check node-2-install 'PROBE esp-creds=.*bluefin-cluster\.passphrase\.cred.*ignition\.config\.cred'
 check cp-3-disk 'PROBE os=.* tpm=tpm0'
