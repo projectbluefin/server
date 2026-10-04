@@ -166,7 +166,13 @@ selections in `20-ignition.preset` to `/sysroot` before switch-root. This works
 on installed nodes with an existing machine ID as well as on a fresh diskless
 root. Only units named by Ignition are preset; unrelated local enablement and
 unit masks are preserved. The generated preset file is cleared before each
-files stage so an older rule cannot override a changed config.
+files stage so an older rule cannot override a changed config. A selection is
+applied when it is new or changed since it was last applied to this `/etc`
+(recorded in `20-ignition.preset.applied`, which systemd does not read): on
+an installed node, which runs Ignition on every boot, a unit an operator
+enabled or disabled since keeps that state until the config changes its
+selection. A diskless node's fresh `/etc` gets every selection on every boot;
+a unit that is missing or masked is retried on the next boot.
 
 There is no first-boot marker: every diskless boot runs every stage against a
 fresh `/etc`, so a config must be idempotent or the node fails the same stage

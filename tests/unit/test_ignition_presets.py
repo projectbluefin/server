@@ -47,6 +47,20 @@ def apply(root):
     return subprocess.run([str(SCRIPT), str(root)], capture_output=True, text=True)
 
 
+def systemctl(root, *args):
+    subprocess.run(["systemctl", f"--root={root}", *args], check=True, capture_output=True)
+
+
+def next_boot(root, contents):
+    """The unit's own ExecStartPre, Ignition's append-only writer, the helper."""
+    service = SystemdFile(PAYLOAD / "lib/systemd/system/ignition-files.service")
+    for command in service.commands("ExecStartPre"):
+        subprocess.run([arg.replace("/sysroot", str(root)) for arg in command], check=True)
+    with (root / "etc/systemd/system-preset/20-ignition.preset").open("a") as stream:
+        stream.write(contents)
+    return apply(root)
+
+
 def test_applies_enable_and_disable_on_repeated_boots(sysroot):
     for name in ("bluefin-sysext-fetch.service", "disabled.service", "local.service", "untouched.service"):
         unit(sysroot, name)
@@ -113,16 +127,68 @@ def test_a_changed_config_replaces_previous_rules(sysroot):
     unit(sysroot, "changed.service")
     preset(sysroot, "enable changed.service\n")
     assert apply(sysroot).returncode == 0
-    service = SystemdFile(PAYLOAD / "lib/systemd/system/ignition-files.service")
-    # Run the actual pre-files cleanup against the test root, then emulate
-    # Ignition's append-only writer with the next boot's new selection.
-    for command in service.commands("ExecStartPre"):
-        subprocess.run([arg.replace("/sysroot", str(sysroot)) for arg in command], check=True)
-    with (sysroot / "etc/systemd/system-preset/20-ignition.preset").open("a") as stream:
-        stream.write("disable changed.service\n")
-    result = apply(sysroot)
+    result = next_boot(sysroot, "disable changed.service\n")
     assert result.returncode == 0, result.stderr
     assert not enabled_link(sysroot, "changed.service").is_symlink()
+
+
+@pytest.mark.parametrize("selected, operator", [("enable", "disable"), ("disable", "enable")])
+def test_an_operator_choice_outlasts_an_unchanged_config(sysroot, selected, operator):
+    unit(sysroot, "chosen.service")
+    preset(sysroot, f"{selected} chosen.service\n")
+    assert apply(sysroot).returncode == 0
+    systemctl(sysroot, operator, "chosen.service")
+    for _ in range(2):
+        result = next_boot(sysroot, f"{selected} chosen.service\n")
+        assert result.returncode == 0, result.stderr
+        assert enabled_link(sysroot, "chosen.service").is_symlink() == (operator == "enable")
+
+
+def test_a_selection_dropped_and_restored_applies_again(sysroot):
+    unit(sysroot, "again.service")
+    preset(sysroot, "enable again.service\n")
+    assert apply(sysroot).returncode == 0
+    systemctl(sysroot, "disable", "again.service")
+    assert next_boot(sysroot, "").returncode == 0
+    assert not enabled_link(sysroot, "again.service").is_symlink()
+    result = next_boot(sysroot, "enable again.service\n")
+    assert result.returncode == 0, result.stderr
+    assert enabled_link(sysroot, "again.service").is_symlink()
+
+
+def test_a_unit_missing_at_first_is_enabled_once_it_exists(sysroot):
+    preset(sysroot, "enable later.service\n")
+    assert apply(sysroot).returncode == 0
+    unit(sysroot, "later.service")
+    result = next_boot(sysroot, "enable later.service\n")
+    assert result.returncode == 0, result.stderr
+    assert enabled_link(sysroot, "later.service").is_symlink()
+
+
+def test_a_fresh_etc_applies_every_selection_again(sysroot):
+    unit(sysroot, "fresh.service")
+    preset(sysroot, "enable fresh.service\n")
+    assert apply(sysroot).returncode == 0
+    # A diskless boot: /etc (links and record alike) starts from the factory.
+    systemctl(sysroot, "disable", "fresh.service")
+    for name in os.listdir(sysroot / "etc/systemd/system-preset"):
+        (sysroot / "etc/systemd/system-preset" / name).unlink()
+    result = next_boot(sysroot, "enable fresh.service\n")
+    assert result.returncode == 0, result.stderr
+    assert enabled_link(sysroot, "fresh.service").is_symlink()
+
+
+def test_vendor_presets_reach_no_unit_ignition_does_not_name(sysroot):
+    # The Server profile's opt-in contract: a base preset never enables a
+    # unit on a node just because Ignition ran.
+    for name in ("named.service", "vendor.service"):
+        unit(sysroot, name)
+    (sysroot / "usr/lib/systemd/system-preset/10-vendor.preset").write_text("enable vendor.service\n")
+    preset(sysroot, "enable named.service\n")
+    result = apply(sysroot)
+    assert result.returncode == 0, result.stderr
+    assert enabled_link(sysroot, "named.service").is_symlink()
+    assert not enabled_link(sysroot, "vendor.service").is_symlink()
 
 
 def test_masked_units_stay_masked(sysroot):
@@ -140,3 +206,8 @@ def test_presets_run_after_files_and_before_switch_root():
     assert service.value("Service", "ExecStartPost") == "/usr/libexec/bluefin-ignition-presets /sysroot"
     assert "initrd-cleanup.service" in service.words("Unit", "Before")
     assert service.value("Unit", "OnFailure") == "emergency.target"
+
+
+def test_the_script_is_shellcheck_clean(shellcheck):
+    assert os.access(SCRIPT, os.X_OK)
+    subprocess.run([shellcheck, str(SCRIPT)], check=True)

@@ -2,36 +2,73 @@
 # Apply Ignition's unit selections without depending on PID 1's first-boot
 # preset-all. Only touch the units Ignition names, preserving unrelated local
 # enablement. systemctl handles preset precedence and template instance lists.
+#
+# Ignition runs on every boot, and an installed node keeps /etc: a selection
+# is applied when it is new or changed since it was last applied to this
+# /etc, so a unit an operator enabled or disabled since keeps that state
+# until the config changes its selection.
 set -euo pipefail
 
 root="${1:?usage: bluefin-ignition-presets ROOT}"
 preset="${root}/etc/systemd/system-preset/20-ignition.preset"
-[[ -f "${preset}" ]] || exit 0
+# The selections applied to this /etc; not a *.preset file, so systemd never
+# reads it.
+record="${preset}.applied"
+if [[ ! -f "${preset}" ]]; then
+    rm -f "${record}"
+    exit 0
+fi
 
+declare -A applied=() selection=()
+if [[ -f "${record}" ]]; then
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        applied["x${line}"]=1
+    done < "${record}"
+fi
+
+kept=()
 units=()
-while read -r action unit _instances; do
+while IFS= read -r line || [[ -n "${line}" ]]; do
+    read -r action unit _instances <<< "${line}"
     case "${action}" in
-        enable|disable)
-            [[ -n "${unit}" ]] && units+=("${unit}")
-            ;;
+        enable|disable) [[ -n "${unit}" ]] || continue ;;
+        *) continue ;;
     esac
+    if [[ -n "${applied["x${line}"]:-}" ]]; then
+        kept+=("${line}")
+    else
+        selection["${unit}"]="${line}"
+        units+=("${unit}")
+    fi
 done < "${preset}"
 
-((${#units[@]})) || exit 0
-# Like PID 1's preset-all, consider only installed units and leave masks and
-# aliases alone. A unit provided by an unmerged sysext may not exist yet.
-available=$(systemctl --root="${root}" list-unit-files --no-legend --no-pager -- "${units[@]}") || {
-    status=$?
-    # list-unit-files returns 1 when no units match.
-    ((status == 1)) && [[ -z "${available}" ]] || exit "${status}"
-}
-units=()
-while read -r unit state _preset; do
-    [[ -n "${unit}" ]] || continue
-    case "${state}" in masked|masked-runtime|alias) continue ;; esac
-    units+=("${unit}")
-done <<< "${available}"
+if ((${#units[@]})); then
+    # Like PID 1's preset-all, consider only installed units and leave masks and
+    # aliases alone. A unit provided by an unmerged sysext may not exist yet.
+    available=$(systemctl --root="${root}" list-unit-files --no-legend --no-pager -- "${units[@]}") || {
+        status=$?
+        # list-unit-files returns 1 when no units match.
+        ((status == 1)) && [[ -z "${available}" ]] || exit "${status}"
+    }
+    units=()
+    while read -r unit state _preset; do
+        [[ -n "${unit}" && -n "${selection["${unit}"]:-}" ]] || continue
+        case "${state}" in masked|masked-runtime|alias) continue ;; esac
+        units+=("${unit}")
+    done <<< "${available}"
+fi
 
 if ((${#units[@]})); then
     systemctl --root="${root}" preset -- "${units[@]}"
 fi
+
+# A selection for a unit that is missing or masked now is retried next boot.
+for unit in "${units[@]}"; do
+    kept+=("${selection["${unit}"]}")
+done
+if ((${#kept[@]})); then
+    printf '%s\n' "${kept[@]}" > "${record}.tmp"
+else
+    : > "${record}.tmp"
+fi
+mv -f "${record}.tmp" "${record}"

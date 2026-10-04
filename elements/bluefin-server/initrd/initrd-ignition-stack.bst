@@ -9,7 +9,8 @@ description: |
             mkswap; cryptsetup for LUKS (clevis, mdadm, mkfs.btrfs absent)
     mount   mount, umount
     files   useradd, usermod, userdel, groupadd, groupmod, groupdel
-            (--root=/sysroot), systemctl --root (unit disable)
+            (--root=/sysroot), systemctl --root (unit disable; list-unit-files
+            and preset in bluefin-ignition-presets)
     all     modprobe (platform providers), bash (credential helper)
 
 depends:
