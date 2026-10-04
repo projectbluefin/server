@@ -149,6 +149,16 @@ func (l *Limiter) Failures() int {
 	return len(l.failed)
 }
 
+// inUse reports whether source currently holds a connection slot. It is a
+// test seam: a replay opened from the same source right after an honest
+// exchange must wait for the slot to be released instead of being rejected
+// as busy while the previous handler is still running. See issue #391.
+func (l *Limiter) inUse(source string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.active[source]
+}
+
 func (l *Limiter) save() {
 	if l.path == "" {
 		return

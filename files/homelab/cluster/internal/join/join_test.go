@@ -248,11 +248,31 @@ func rawSession(t *testing.T, addr netip.AddrPort, frames ...any) []serverReply 
 	return replies
 }
 
+// waitSlotFree blocks until the server has released the per-source slot held
+// by a previous connection from src. Two tests replay a captured exchange from
+// the same source immediately after an honest exchange; on a loaded runner the
+// server goroutine may not have returned yet, so the replay's Begin reports
+// busy and the replay never runs. Poll the slot with a deadline so the test
+// stays deterministic instead of sleeping. See issue #391.
+func waitSlotFree(l *Limiter, src string) {
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !l.inUse(src) {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestForgedConfirmationIsDenied(t *testing.T) {
 	ts := startServer(t, goodPass, DefaultServerLimits)
 	if _, err := client(goodPass).Join(context.Background(), ts.addr); err != nil {
 		t.Fatal(err)
 	}
+	// The honest exchange above charged the source's slot; wait for the server
+	// goroutine to release it before replaying from the same source, or Begin
+	// reports busy and the replay is rejected before it runs. See issue #391.
+	waitSlotFree(ts.limiter, "127.0.0.1")
 	// A forged confirmation after a well-formed hello.
 	msgA, _, err := cpace.Start(goodPass, cpace.NewContextInfo(nodeIdentity, cpIdentity, nil))
 	if err != nil {
@@ -291,6 +311,10 @@ func TestReplayOfACapturedExchangeAcrossConnections(t *testing.T) {
 		t.Fatalf("honest exchange failed: %v %+v", err, sealed)
 	}
 	conn.Close()
+	// Wait for the honest exchange's slot to be released before replaying from
+	// the same source. On a loaded runner the server goroutine may not have
+	// returned yet, which would make the replay's Begin report busy. See #391.
+	waitSlotFree(ts.limiter, "127.0.0.1")
 
 	before := ts.minter.calls.Load()
 	replies := rawSession(t, ts.addr, captured.h, captured.c)
@@ -298,6 +322,61 @@ func TestReplayOfACapturedExchangeAcrossConnections(t *testing.T) {
 		t.Fatalf("replay across connections: want denied, got %+v", replies)
 	}
 	if ts.minter.calls.Load() != before {
+		t.Fatal("replay minted a token")
+	}
+}
+
+// TestReplayFromSameSourceUnderHeldSlot reproduces issue #391 deterministically.
+// A replay opened from the same source while the honest exchange's slot is still
+// held is rejected as busy — the flake the two replay tests guard against — and
+// the same replay is served (denied) once the slot has been released.
+func TestReplayFromSameSourceUnderHeldSlot(t *testing.T) {
+	ts := startServer(t, goodPass, DefaultServerLimits)
+
+	// Half-finish an honest exchange: send the hello, read the server's PAKE
+	// reply, but never send the confirmation. The server charges the source,
+	// runs PAKE, and blocks reading the confirmation, so the slot is held.
+	conn, err := tls.Dial("tcp", ts.addr.String(), &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS13})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	msgA, _, err := cpace.Start(goodPass, cpace.NewContextInfo(nodeIdentity, cpIdentity, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := hello{V: Version, Node: "node-1", Runtime: ops.RuntimeKubeadm, PAKE: msgA}
+	if err := writeFrame(conn, h); err != nil {
+		t.Fatal(err)
+	}
+	var reply serverReply
+	if err := readFrame(conn, &reply); err != nil {
+		t.Fatalf("read PAKE reply: %v", err)
+	}
+	if reply.Error != "" || len(reply.PAKE) != msgBLen {
+		t.Fatalf("expected a PAKE reply, got %+v", reply)
+	}
+	if !ts.limiter.inUse("127.0.0.1") {
+		t.Fatal("a half-finished honest exchange must hold the source slot")
+	}
+
+	// While the slot is still held, a replay from the same source is rejected as
+	// busy. This is the flake the two replay tests avoid by waiting first.
+	busy := rawSession(t, ts.addr, h, clientConfirm{Confirm: bytes.Repeat([]byte{2}, tagLen)})
+	if len(busy) != 1 || busy[0].Error != ErrCodeBusy {
+		t.Fatalf("replay under held slot: want busy, got %+v", busy)
+	}
+
+	// Release the slot the way the server does: closing the connection ends the
+	// handler, which runs Done. Wait until the slot is actually free, then the
+	// same replay is served and denied instead of rejected as busy.
+	conn.Close()
+	waitSlotFree(ts.limiter, "127.0.0.1")
+	replies := rawSession(t, ts.addr, h, clientConfirm{Confirm: bytes.Repeat([]byte{2}, tagLen)})
+	if len(replies) != 2 || replies[1].Error != ErrCodeDenied || replies[1].Sealed != nil {
+		t.Fatalf("replay after release: want denied, got %+v", replies)
+	}
+	if ts.minter.calls.Load() != 0 {
 		t.Fatal("replay minted a token")
 	}
 }
