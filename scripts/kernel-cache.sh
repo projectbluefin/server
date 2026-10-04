@@ -13,7 +13,9 @@
 #
 # `seed` builds ELEMENTS with a BuildStream config that pushes artifacts and
 # sources to the CAS's mTLS endpoint; every build reads them back through the
-# anonymous remote in project.conf. It builds nothing when a remote already
+# anonymous remote that patches/freedesktop-sdk/0001 adds to the junction's
+# project.conf (the top-level project.conf remote does not reach junction
+# elements such as the kernel). It builds nothing when a remote already
 # holds every element (`available`; an element only cached locally still goes
 # through `bst build`, which pushes it).
 #
