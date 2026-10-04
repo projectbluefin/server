@@ -48,7 +48,7 @@ type testServer struct {
 	cert    tls.Certificate
 }
 
-func startServer(t *testing.T, pass string, limits Limits) *testServer {
+func startServer(t *testing.T, pass string, limits Limits, opts ...func(*Server)) *testServer {
 	t.Helper()
 	dir := t.TempDir()
 	cert, err := LoadOrCreateCert(dir)
@@ -74,6 +74,9 @@ func startServer(t *testing.T, pass string, limits Limits) *testServer {
 		Minter:     ts.minter,
 		Limiter:    ts.limiter,
 		Log:        slog.New(slog.NewTextHandler(lockedWriter{&mu, ts.logs}, nil)),
+	}
+	for _, o := range opts {
+		o(srv)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
