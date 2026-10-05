@@ -29,7 +29,7 @@ jobs:
     env:
       # Everything oci/bluefin-server-image.bst stages into the release set,
       # and every oci/* target `just validate` resolves;
-      # tests/unit/test_ci_workflows.py fails when a shipped element is missing.
+      # tests/unit/test_reproducibility_workflow.py fails when a shipped element is missing.
       FINAL_ASSEMBLY: >-
         oci/bluefin-server-image.bst
         oci/bluefin-server-boot.bst

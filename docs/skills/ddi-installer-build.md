@@ -92,7 +92,7 @@ it builds, deletes the final-assembly artifacts, rebuilds them without remote
 caches, and compares every file except `*.gpg`. The final assembly
 (`FINAL_ASSEMBLY`) is everything `oci/bluefin-server-image.bst` stages into
 the release set plus every `oci/*` target `just validate` resolves;
-`tests/unit/test_ci_workflows.py` fails when a shipped element is missing.
+`tests/unit/test_reproducibility_workflow.py` fails when a shipped element is missing.
 
 ## Dogfood: boot it in QEMU
 

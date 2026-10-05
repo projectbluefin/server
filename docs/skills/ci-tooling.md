@@ -56,8 +56,7 @@ a binary chosen by an upstream release rather than by a commit in this repo.
 The version is repeated at each call site — currently six steps in four
 workflows: `build.yml` (three jobs), `reproducibility.yml`, `unit-tests.yml`
 and `track-junctions.yml`. Bumping `just` means changing all of them in one
-commit, so CI never runs two versions at once;
-`tests/unit/test_ci_workflows.py` fails if they differ.
+commit, so CI never runs two versions at once.
 
 ### Workflow permissions
 
