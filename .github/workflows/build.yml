@@ -383,9 +383,11 @@ jobs:
           bsdtar -xf "${RUNNER_TEMP}/edk2-ovmf.rpm" -C "${RUNNER_TEMP}/ovmf" \
             ./usr/share/edk2/ovmf/OVMF_CODE.secboot.fd ./usr/share/edk2/ovmf/OVMF_VARS.fd \
             ./usr/share/edk2/ovmf/OVMF_CODE.fd
-          echo "OVMF_CODE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd" >> "$GITHUB_ENV"
-          echo "OVMF_CODE_INSECURE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.fd" >> "$GITHUB_ENV"
-          echo "OVMF_VARS=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_VARS.fd" >> "$GITHUB_ENV"
+          {
+            echo "OVMF_CODE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd"
+            echo "OVMF_CODE_INSECURE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.fd"
+            echo "OVMF_VARS=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_VARS.fd"
+          } >> "$GITHUB_ENV"
 
       - name: Diskless boot
         env:
@@ -640,3 +642,4 @@ jobs:
 
       - name: Push the OCI artifact to a local registry and pull it back
         run: bash scripts/publish-release.sh oci dist/diskless "${VERSION}" localhost:5000/bluefin-server --plain-http --pull-back
+

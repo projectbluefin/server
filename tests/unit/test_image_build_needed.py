@@ -76,6 +76,9 @@ def test_changes_job_runs_the_base_revision_classifier():
         "tests/unit/os-justfile_test.bats",
         ".github/scripts/docs-checks.py",
         ".github/workflows/unit-tests.yml",
+        ".github/workflows/lint-actions.yml",
+        ".github/actionlint.yaml",
+        ".github/requirements-ci.txt",
     ],
 )
 def test_docs_and_unit_test_changes_skip(path):

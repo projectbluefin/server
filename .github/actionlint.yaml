@@ -1,0 +1,5 @@
+# actionlint's built-in list of GitHub-hosted runner labels lags GitHub's;
+# declare the hosted labels the workflows use that it does not know yet.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
