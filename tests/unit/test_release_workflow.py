@@ -52,6 +52,41 @@ def test_build_boot_test_and_dry_run_check_out_the_triggering_commit() -> None:
         assert checkout["repository"] == "${{ github.event.pull_request.head.repo.full_name || github.repository }}", name
 
 
+def test_signing_secrets_only_reach_main_only_environments() -> None:
+    # `release` and `bst-cache` accept only main; any other run asking for
+    # them is refused before its first step. Non-release builds get no
+    # environment at all, and the secrets stay gated inside the job too.
+    build = JOBS["build"]
+    assert build["environment"] == "${{ needs.changes.outputs.release == 'true' && 'release' || '' }}"
+    install = next(s for s in build["steps"] if s.get("name") == "Install signing keys")
+    for secret in ("BOOT_KEYS_TARBALL", "SYSUPDATE_SIGNING_KEY"):
+        assert install["env"][secret] == f"${{{{ needs.changes.outputs.release == 'true' && secrets.{secret} || '' }}}}"
+    assert JOBS["kernel-cache"]["environment"] == "bst-cache"
+    assert JOBS["kernel-cache"]["if"] == "needs.changes.outputs.release == 'true'"
+    for name, job in JOBS.items():
+        if name not in ("build", "kernel-cache"):
+            assert "secrets." not in json.dumps(job), name
+            assert "environment" not in job, name
+
+
+def test_tracker_app_key_only_reaches_the_trackers_environment() -> None:
+    for workflow, job_name in (("track-junctions.yml", "track-junctions"), ("track-binaries.yml", "propose")):
+        jobs = yaml.safe_load((ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8"))["jobs"]
+        for name, job in jobs.items():
+            if name == job_name:
+                assert job["environment"] == "trackers", workflow
+                assert "permissions" not in job, f"{workflow}: GITHUB_TOKEN stays read-only"
+                mint = steps(job, "actions/create-github-app-token@")
+                assert len(mint) == 1, workflow
+                assert mint[0]["with"]["permission-contents"] == "write"
+                assert mint[0]["with"]["permission-pull-requests"] == "write"
+                # Minted after every step that runs repository code.
+                names = [s.get("name") for s in job["steps"]]
+                assert names.index(mint[0]["name"]) == len(names) - 2, workflow
+            else:
+                assert "secrets." not in json.dumps(job), f"{workflow}:{name}"
+
+
 def test_dry_run_is_read_only_and_secret_free() -> None:
     assert "github.event_name == 'pull_request'" in DRY_RUN["if"]
     assert DRY_RUN["permissions"] == {"contents": "read"}
@@ -108,6 +143,10 @@ def test_a_failed_kernel_cache_seed_is_reported() -> None:
     assert seed["continue-on-error"] is True
     report = next(s for s in JOBS["kernel-cache"]["steps"] if s.get("if") == "steps.seed.outcome == 'failure'")
     assert "::warning" in report["run"] and "GITHUB_STEP_SUMMARY" in report["run"]
+
+
+def test_release_uses_the_job_token_only() -> None:
+    assert "secrets." not in json.dumps(RELEASE)
 
 
 def test_jobs_after_build_run_when_kernel_cache_is_skipped() -> None:

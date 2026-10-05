@@ -137,6 +137,8 @@ jobs:
   kernel-cache:
     needs: changes
     if: needs.changes.outputs.release == 'true'
+    # CASD_CLIENT_KEY lives in this environment, which only main may use.
+    environment: bst-cache
     runs-on: ubuntu-26.04
     timeout-minutes: 240
     permissions:
@@ -198,6 +200,10 @@ jobs:
     # Runs when kernel-cache is skipped (non-release builds) or failed: the
     # cache only saves time.
     if: ${{ !cancelled() && needs.changes.outputs.image == 'true' }}
+    # The signing secrets live in the `release` environment, which only main
+    # may use. Every other build runs with no environment (an empty name):
+    # a pull request asking for `release` would be refused before any step.
+    environment: ${{ needs.changes.outputs.release == 'true' && 'release' || '' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 300
     permissions:
@@ -563,7 +569,7 @@ jobs:
       - name: Create GitHub Release
         if: steps.taggable.outputs.publish == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: bash scripts/publish-release.sh release dist/diskless "${VERSION}"
 
@@ -580,7 +586,7 @@ jobs:
         if: steps.taggable.outputs.publish == 'true'
         id: oci
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           echo "${GITHUB_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
