@@ -1,15 +1,11 @@
 name: Docs checks
 
+# No `paths:` filter, so the check reports on every pull request and can be
+# required (see unit-tests.yml).
 on:
   pull_request:
-    paths:
-      - '**.md'
-      - '.github/workflows/docs-checks.yml'
   push:
     branches: [main]
-    paths:
-      - '**.md'
-      - '.github/workflows/docs-checks.yml'
 
 permissions:
   contents: read
@@ -17,6 +13,7 @@ permissions:
 jobs:
   docs:
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
