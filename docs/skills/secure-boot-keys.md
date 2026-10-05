@@ -87,8 +87,10 @@ dev module pair); they never see the real secrets.
 
 ## Key rotation
 
-1. Generate new keys (`just gen-dev-keys --force` locally, or the equivalent
-   in a secure environment for production).
+1. Generate new keys (`just gen-dev-keys --force --private-module-key`
+   locally, or the equivalent in a secure environment for production). Plain
+   `--force` installs the public INSECURE dev module key, which
+   `scripts/check-release-keys.sh` rejects for release builds.
 2. Update the CI secrets (`BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY`), and
    commit the new public module certificate as
    `files/release-keys/linux-module-cert.crt` in the same change.
