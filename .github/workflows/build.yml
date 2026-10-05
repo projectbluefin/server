@@ -643,3 +643,36 @@ jobs:
       - name: Push the OCI artifact to a local registry and pull it back
         run: bash scripts/publish-release.sh oci dist/diskless "${VERSION}" localhost:5000/bluefin-server --plain-http --pull-back
 
+  # Nightly failures block nothing, so nobody sees them unless this says so:
+  # one open "Nightly build failing" issue gets a comment per failed nightly
+  # run and is closed by the next one that passes. Schedule events only; the
+  # job holds nothing but issues: write and runs no repository code.
+  nightly-status:
+    needs: [changes, build, boot-test]
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Nightly build failing"
+          issue="$(gh issue list --state open --limit 500 --json number,title \
+            --jq "[.[] | select(.title == \"${title}\")][0].number // empty")"
+          if [ "${FAILED}" = true ]; then
+            if [ -n "${issue}" ]; then
+              gh issue comment "${issue}" --body "Failed again: ${RUN_URL}"
+            else
+              gh issue create --title "${title}" \
+                --body "The nightly build of main failed: ${RUN_URL}"$'\n\n'"This issue closes when a later nightly build passes."
+            fi
+          elif [ -n "${issue}" ]; then
+            gh issue close "${issue}" --comment "The nightly build passes again: ${RUN_URL}"
+          fi
