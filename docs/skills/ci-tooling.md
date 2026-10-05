@@ -98,8 +98,8 @@ permissions:
 
 The workflow checks out and executes PR-controlled code (the `Justfile` and
 build scripts come from the PR head), so no job that runs on `pull_request`
-may hold a write token. In `build.yml`, write tokens are granted to exactly
-one job:
+may hold a write token. In `build.yml`, write tokens to the repository's
+contents and packages are granted to exactly one job:
 
 - `release` — creates the GitHub Release and pushes the OCI artifact; gated to
   `refs/heads/main`. It holds `contents: write` (release),
@@ -140,31 +140,78 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 
 - Personal Access Tokens (PATs) are banned.
 - `repository_dispatch` is not used for build handoff.
-- `secrets.GITHUB_TOKEN` is used for release uploads inside `build.yml`.
+- `github.token` (the job's `GITHUB_TOKEN`) is used for release uploads
+  inside `build.yml`.
 - Automation that pushes a branch and opens a PR uses the org-wide
   `mergeraptor` GitHub App (`secrets.MERGERAPTOR_APP_ID` /
   `secrets.MERGERAPTOR_PRIVATE_KEY`) via `actions/create-github-app-token`, as
   `projectbluefin/dakota` does. This is not cosmetic: pushes made with
   `secrets.GITHUB_TOKEN` do not dispatch workflow runs, so a PR built that way
-  sits at `action_required` with zero jobs and never gets checks.
+  sits at `action_required` with zero jobs and never gets checks. The jobs
+  mint that token only right before the push and PR step, after every step
+  that runs repository or upstream code, narrowed with
+  `permission-contents: write` and `permission-pull-requests: write`, and
+  push with a one-off `http.<server>/.extraheader`; the checkout keeps no
+  credentials.
+- Every `actions/checkout` sets `persist-credentials: false`; no job pushes
+  with the checkout's token.
+
+### Environments and secrets
+
+A `pull_request` from a branch of this repository, or a push to any branch,
+runs that branch's copy of the workflow, and repository and organization
+secrets reach it. So every secret beyond `GITHUB_TOKEN` lives in an
+environment whose deployment branch policy allows only `main` (no required
+reviewers, so releases are not held up). A job from any other ref that names
+one of these environments is refused before its first step.
+
+| Environment | Secrets | Jobs |
+|---|---|---|
+| `release` | `BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY` | `build`, only when `changes` says `release=true` |
+| `bst-cache` | `CASD_CLIENT_KEY` (`CASD_CLIENT_CERT` is a repository variable) | `kernel-cache` (releases only) |
+| `trackers` | `MERGERAPTOR_APP_ID`, `MERGERAPTOR_PRIVATE_KEY` | `track-junctions`, `track-binaries`' `propose` |
+
+`build` serves releases and every other build, so it names the environment
+with `${{ needs.changes.outputs.release == 'true' && 'release' || '' }}`: an
+empty name means no environment, which is how pull requests, the nightly
+build and branch dispatches run. Inside the job, the `&& secrets.X || ''`
+gates stay as a second layer. `release` publishes with `github.token` alone
+and names no environment. `tests/unit/test_release_workflow.py` fails if a
+job outside this table reads a secret or a listed job loses its environment.
+
+Moving a value is an admin step (no workflow change). Environment secrets
+override repository and organization secrets of the same name, so set the
+environment copy first, then remove the old one:
+
+```bash
+gh secret set BOOT_KEYS_TARBALL --repo projectbluefin/server --env release < boot-keys.tar.gz.b64
+gh secret set SYSUPDATE_SIGNING_KEY --repo projectbluefin/server --env release < sysupdate-signing.asc
+gh secret set CASD_CLIENT_KEY --repo projectbluefin/server --env bst-cache < client.key
+gh secret set MERGERAPTOR_APP_ID --repo projectbluefin/server --env trackers --body "<app id>"
+gh secret set MERGERAPTOR_PRIVATE_KEY --repo projectbluefin/server --env trackers < mergeraptor.pem
+gh secret delete BOOT_KEYS_TARBALL --repo projectbluefin/server   # and the other repository copies
+```
+
+The mergeraptor secrets are organization secrets that other repositories
+use: remove only this repository from their repository access.
 
 ## Workflow Structure
 
 | Job | Workflow | Trigger | Purpose |
 |-----|----------|---------|---------|
-| `track-junctions` | `track-junctions.yml` | `schedule` (08:00 UTC), `workflow_dispatch` | Resolves the `freedesktop-sdk.bst` junction ref, syncs `project.conf`'s `installer-version`, and opens/updates its own PR on `auto/track-junctions`. `contents: write` + `pull-requests: write`, never on `pull_request`. |
-| `changes` | `build.yml` | `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`), `push/main`, `schedule` (05:30 UTC), `workflow_dispatch` | Decides what the run builds. `release=true` only for a push or dispatch on `main`; it is the one switch that hands out the signing secrets, picks the release version and publishes. `image=true` (full `build` + `boot-test`) for releases, the nightly schedule and dispatches; on a pull request only with the `full-build` label or when it changes `elements/freedesktop-sdk.bst` or `patches/`, and never when `.github/scripts/image-build-needed.py`, checked out from the PR's base revision, finds no changed path that can reach the image set or the boot test (see [Build time and caches](#build-time-and-caches)). `validate=true` for every pull request event except adding an unrelated label. `contents: read` + `pull-requests: read`. |
+| `track-junctions` | `track-junctions.yml` | `schedule` (08:00 UTC), `workflow_dispatch` | Resolves the `freedesktop-sdk.bst` junction ref, syncs `project.conf`'s `installer-version`, and opens/updates its own PR on `auto/track-junctions`. Read-only `GITHUB_TOKEN`; the push and the PR use the mergeraptor app token (`trackers` environment), minted after `just bst source track` and narrowed to `contents` + `pull-requests`. Never on `pull_request`. |
+| `changes` | `build.yml` | `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`), `push/main`, `schedule` (05:30 UTC), `workflow_dispatch` | Decides what the run builds. `release=true` only for a push or dispatch on `main`; it is the one switch that hands out the signing secrets, picks the release version and publishes. `image=true` (full `build` + `boot-test`) for releases, the nightly schedule and dispatches; on a pull request only with the `full-build` label or when it changes `elements/freedesktop-sdk.bst` or `patches/`, and never when `.github/scripts/image-build-needed.py`, checked out from the PR's base revision (the job itself comes from the PR head; see [Build time and caches](#build-time-and-caches)), finds no changed path that can reach the image set or the boot test (see [Build time and caches](#build-time-and-caches)). `validate=true` for every pull request event except adding an unrelated label. `contents: read` + `pull-requests: read`. |
 | `validate` | `build.yml` | `pull_request` | `just validate` with throwaway keys: resolves every shipped element graph and runs the version-invariant checks, in minutes. Read-only token. |
-| `build` | `build.yml` | when `changes` says `image=true` | Resolves the element graph, sets `image-version`, and runs the full BuildStream compile of the image set (OS DDI, signed UKIs, netboot ESP, k0s/KubeStellar/kubeadm/OpenZFS/NVIDIA sysext assets), which also writes and signs the combined `SHA256SUMS` inside `oci/bluefin-server-image.bst`. For releases it installs the `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets; both are required there. Every other build uses throwaway keys and also exports two higher-versioned sets (`1.<run>.1`, `1.<run>.2`) for the update test. Read-only token. |
-| `boot-test` | `build.yml` | after `build` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4). Read-only token. |
-| `release` | `build.yml` | `release=true` | Publishes `dist/diskless/` as-is through `scripts/publish-release.sh`: an immutable GitHub Release tagged `v<image-version>` plus an ORAS OCI artifact at `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per file, artifact type `application/vnd.projectbluefin.server.release.v1`), with provenance and SBOM attestations for both (`if: ${{ !failure() && !cancelled() && needs.changes.outputs.release == 'true' }}`). Write permissions listed above. Main runs queue, so a merge that edits `build.yml` can land before an earlier run publishes; GitHub then refuses `GITHUB_TOKEN` a tag at that run's commit (it would need the `workflows` permission). `publish-release.sh taggable` detects this before anything is published and skips that version with a warning; the newer run releases its content. |
+| `build` | `build.yml` | when `changes` says `image=true` | Resolves the element graph, sets `image-version`, and runs the full BuildStream compile of the image set (OS DDI, signed UKIs, netboot ESP, k0s/KubeStellar/kubeadm/OpenZFS/NVIDIA sysext assets), which also writes and signs the combined `SHA256SUMS` inside `oci/bluefin-server-image.bst`. For releases it runs in the `release` environment and installs its `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets; both are required there. Other builds use no environment. Every other build uses throwaway keys and also exports two higher-versioned sets (`1.<run>.1`, `1.<run>.2`) for the update test. Read-only token. |
+| `boot-test` | `build.yml` | after `build` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4), with the harness checked out at the commit `build` built. Read-only token. |
+| `release` | `build.yml` | `release=true` | Publishes `dist/diskless/` as-is through `scripts/publish-release.sh`: an immutable GitHub Release tagged `v<image-version>` plus an ORAS OCI artifact at `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per file, artifact type `application/vnd.projectbluefin.server.release.v1`), with provenance and SBOM attestations for both. It runs only when `build` and `boot-test` succeeded (`!cancelled()` plus each job's result, so a failed `kernel-cache` does not hold it back), and marks the set latest (GitHub "Latest", ghcr `latest`) only when no newer version is published (see "Publishing" in `systemd-sysupdate-verification.md`). Write permissions listed above. Main runs queue, so a merge that edits `build.yml` can land before an earlier run publishes; GitHub then refuses `GITHUB_TOKEN` a tag at that run's commit (it would need the `workflows` permission). `publish-release.sh taggable` detects this before anything is published and skips that version with a warning; the newer run releases its content. |
 | `release-dry-run` | `build.yml` | `pull_request` that builds | Runs the same `scripts/publish-release.sh` commands against the PR's image set: verify, render `gh release create`, and a real `oras push` to a `registry` service container (pinned by digest) that it pulls back. Read-only token, no secrets. |
 | `nightly-status` | `build.yml` | `schedule`, after `boot-test` | Opens the "Nightly build failing" issue (or comments on the open one) with the run URL when `changes`, `build` or `boot-test` failed, and closes it when a later nightly passes. `issues: write` only. |
 | `docs` | `docs-checks.yml` | every `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. No `paths:` filter, so it can be a required check. Read-only token. |
 | `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the final-assembly artifacts, rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). Throwaway keys, nothing published. Read-only token. |
 | `unit`, `go` | `unit-tests.yml` | every `pull_request`, `push/main` | `unit` runs the pytest and BATS suites; `go` runs `gofmt -l`, `go vet` and `go test -race` for each Go module in the repository (a matrix; `tests/unit/test_ci_workflows.py` fails if a `go.mod` is missing from it). No `paths:` filter, so both can be required checks. Read-only token. |
 | `actionlint`, `zizmor` | `lint-actions.yml` | every `pull_request`, `push/main` | Lint the workflows (see [Workflow linting](#workflow-linting)). Read-only token; zizmor uses it for its online audits. |
-| `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
+| `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token (`trackers` environment, `propose` only), minted after the apply step and narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
 GitHub Actions runs the **complete BuildStream compilation pipeline** using `/mnt`
 SSD storage on the runner for podman and BuildStream caches. Release assets are
@@ -270,9 +317,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 
 - **Docs-only pull requests skip the build.** The `changes` job feeds the PR's
   changed paths (renames under both names) to
-  `.github/scripts/image-build-needed.py` from the base revision, so a PR
-  cannot edit the classifier to skip its own build; a change to the
-  classifier or `build.yml` always builds. It answers `false` only when every
+  `.github/scripts/image-build-needed.py` from the base revision, so editing
+  the classifier does not skip the PR's own build; a change to the
+  classifier or `build.yml` always builds. The `changes` job itself runs
+  from the PR head's `build.yml`, which a PR can edit to skip anything: the
+  control for that is reviewing workflow changes. It answers `false` only when every
   path is docs, Markdown outside the build inputs, `tests/unit/`,
   `tests/e2e/`, or a workflow or script that does not build the image;
   `tests/unit/test_image_build_needed.py` fails if any tracked build input
@@ -291,8 +340,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   that pushes artifacts and sources to `cache.projectbluefin.io:11002`,
   unless `bst artifact show` reports both `available` on a remote. The push
   endpoint takes mTLS: the client certificate is the repository variable
-  `CASD_CLIENT_CERT` and its key the secret `CASD_CLIENT_KEY`, given to that
-  step only and written to a gitignored `.casd.*/` directory that the script
+  `CASD_CLIENT_CERT` and its key the `bst-cache` environment secret
+  `CASD_CLIENT_KEY`, given to that step only and written to a gitignored `.casd.*/` directory that the script
   removes on exit. The CAS trusts that certificate in its list of client
   certificates; rotating it means replacing it there and in both settings.
   Every build then pulls the kernel anonymously through the
@@ -305,7 +354,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds,
   and the job holds no signing secret. A content grep is no guard here: FSDK
   sources (Go's TLS test data and others) carry 307 PEM private keys. The
-  seed step is `continue-on-error`, so a failed seed only costs time.
+  seed step is `continue-on-error`, so a failed seed only costs time; the
+  next step then posts a warning and a step summary line.
   Measured in the lab: the seed build takes 44 min on 16+ CPUs and fills
   15 GB. Only a kernel or Go change (FSDK bump, a kernel config patch such as
   `0006` or `0007`, module certificate) reseeds.
@@ -369,6 +419,9 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 - [ ] The signing secret names (`BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY`)
       match the ones documented in
       `docs/skills/systemd-sysupdate-verification.md`.
+- [ ] A job that reads a secret names its main-only environment
+      ([Environments and secrets](#environments-and-secrets)).
+- [ ] Every `actions/checkout` sets `persist-credentials: false`.
 
 ## See also
 

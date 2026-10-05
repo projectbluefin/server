@@ -46,6 +46,44 @@ check_version() {
     [[ "$1" =~ ^[0-9][0-9A-Za-z.]{0,16}$ ]] || die "invalid version: $1"
 }
 
+# `latest` never moves backwards: a re-run of an older release must not
+# repoint it. True when VERSION sorts at or above CURRENT (or there is no
+# CURRENT yet). sort -V orders YY.MM.<run> versions as strverscmp() does.
+is_newest() {
+    local ver="$1" current="$2"
+    [ -z "${current}" ] || [ "$(printf '%s\n' "${current}" "${ver}" | sort -V | tail -n1)" = "${ver}" ]
+}
+
+# The highest version published as a GitHub Release of REPO, or nothing.
+newest_github_release() {
+    local tags
+    tags="$(gh release list --repo "$1" --exclude-drafts --exclude-pre-releases \
+        --limit 1000 --json tagName --jq '.[].tagName')" \
+        || die "cannot list the releases of $1"
+    sed -n 's/^v\([0-9]\)/\1/p' <<<"${tags}" | sort -V | tail -n1
+}
+
+# The version REF:latest carries (its org.opencontainers.image.version
+# annotation), or nothing when there is no latest yet. Other errors abort.
+oci_latest_version() {
+    local ref="$1" manifest err version
+    shift
+    err="$(mktemp)"
+    if ! manifest="$(oras manifest fetch "$@" "${ref}:latest" 2>"${err}")"; then
+        if grep -q ': not found' "${err}"; then
+            rm -f "${err}"
+            return 0
+        fi
+        cat "${err}" >&2
+        rm -f "${err}"
+        die "cannot read ${ref}:latest"
+    fi
+    rm -f "${err}"
+    version="$(jq -r '.annotations["org.opencontainers.image.version"] // empty' <<<"${manifest}")"
+    [ -n "${version}" ] || die "${ref}:latest has no org.opencontainers.image.version annotation"
+    echo "${version}"
+}
+
 # The file names one image version ships (see the description of
 # elements/oci/bluefin-server-image.bst). Each must appear exactly once;
 # k0s and the NVIDIA Container Toolkit carry their own version axis.
@@ -259,10 +297,21 @@ See the [boot and install guide](${docs}/ddi-installer.md),
 EOF
 )"
 
+    # GitHub's own choice of "Latest" goes by creation date, and
+    # releases/latest/download/ must never step back to an older version.
+    local newest latest=--latest=false
+    newest="$(newest_github_release "${repo}")"
+    if is_newest "${ver}" "${newest}"; then
+        latest=--latest
+    else
+        echo "::notice title=Not the latest release::v${ver} is older than v${newest}, which stays Latest"
+    fi
+
     # A version is published exactly once: gh refuses an existing tag, so
     # assets nodes may already trust are never overwritten.
     local cmd=(gh release create "v${ver}" --target "${sha}"
         --title "Bluefin Server ${ver}"
+        "${latest}"
         --notes "${notes}"
         "${files[@]}")
     if [ "${dry}" = 1 ]; then
@@ -291,17 +340,28 @@ cmd_oci() {
     local files=()
     mapfile -t files < <(published_files "${dir}")
 
+    local current tags="${ver}" newest=false
+    current="$(oci_latest_version "${ref}" "${flags[@]}")"
+    if is_newest "${ver}" "${current}"; then
+        tags="${ver},latest"
+        newest=true
+    else
+        echo "::notice title=latest not moved::${ref}:latest stays at ${current}, newer than ${ver}"
+    fi
+
     (cd "${dir}" && oras push "${flags[@]}" \
         --artifact-type "${ARTIFACT_TYPE}" \
         --annotation "org.opencontainers.image.version=${ver}" \
         --annotation "org.opencontainers.image.source=${source}" \
         --annotation "org.opencontainers.image.revision=${GITHUB_SHA:-$(git rev-parse HEAD)}" \
-        "${ref}:${ver},latest" "${files[@]}")
+        "${ref}:${tags}" "${files[@]}")
 
     local digest latest
     digest="$(oras resolve "${flags[@]}" "${ref}:${ver}")"
-    latest="$(oras resolve "${flags[@]}" "${ref}:latest")"
-    [ "${digest}" = "${latest}" ] || die "${ref}:latest is ${latest}, not ${digest}"
+    if [ "${newest}" = true ]; then
+        latest="$(oras resolve "${flags[@]}" "${ref}:latest")"
+        [ "${digest}" = "${latest}" ] || die "${ref}:latest is ${latest}, not ${digest}"
+    fi
 
     # The registry holds exactly the published files, byte for byte.
     diff -u <(published_digests "${dir}") \
@@ -327,6 +387,7 @@ cmd_oci() {
 
     output name "${ref}"
     output digest "${digest}"
+    output latest "${newest}"
 }
 
 sub="${1:-}"
