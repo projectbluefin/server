@@ -7,6 +7,9 @@
 #
 #   check-release-keys.sh [KEY_DIR]    (default: files/boot-keys)
 #
+# A relative KEY_DIR is resolved against the repository root, not the
+# caller's working directory.
+#
 # Compares public keys, so a certificate re-issued for the dev key is caught
 # too. The module key is checked when KEY_DIR has one (release builds); the
 # kernel cache seed stages only the certificate.

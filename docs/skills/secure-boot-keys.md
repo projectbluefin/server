@@ -50,6 +50,10 @@ builds) pulls the kernel that `scripts/kernel-cache.sh seed dev` pushed on
 the last release instead of compiling it (see "Build time and caches" in
 [ci-tooling.md](ci-tooling.md)).
 
+A key set generated before the dev key existed keeps its own module
+certificate, so the kernel still compiles; `just gen-dev-keys` says so, and
+`just gen-dev-keys --force` switches it to the dev key.
+
 - **Public on purpose.** Anyone can sign a module that a dev kernel loads
   under lockdown. Dev images are also signed with throwaway Secure Boot keys
   and never published. For an image you boot on hardware you care about,
@@ -83,8 +87,10 @@ dev module pair); they never see the real secrets.
 
 ## Key rotation
 
-1. Generate new keys (`just gen-dev-keys --force` locally, or the equivalent
-   in a secure environment for production).
+1. Generate new keys (`just gen-dev-keys --force --private-module-key`
+   locally, or the equivalent in a secure environment for production). Plain
+   `--force` installs the public INSECURE dev module key, which
+   `scripts/check-release-keys.sh` rejects for release builds.
 2. Update the CI secrets (`BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY`), and
    commit the new public module certificate as
    `files/release-keys/linux-module-cert.crt` in the same change.
