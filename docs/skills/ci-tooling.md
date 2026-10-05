@@ -258,7 +258,9 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   removes on exit. The CAS trusts that certificate in its list of client
   certificates; rotating it means replacing it there and in both settings.
   Every build then pulls the kernel anonymously through the
-  `cache.projectbluefin.io:11001` remote in `project.conf`. Release builds
+  `cache.projectbluefin.io:11001` remote configured in `project.conf` and
+  injected into the junction's `project.conf` via
+  `patches/freedesktop-sdk/0001-project.conf-Add-GNOME-CAS-servers.patch`. Release builds
   normalize `BOOT_KEYS_TARBALL`'s module certificate to the committed bytes
   after checking it is the same certificate (and stop if not), so the keys
   match. The CAS is publicly readable: `seed` refuses if

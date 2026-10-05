@@ -136,3 +136,9 @@ def test_seed_pushes_with_the_client_certificate(checkout: Path, env: dict[str, 
     assert (log / "client.key").read_text() == env["CASD_CLIENT_KEY"] + "\n"
     assert (log / "auth-dir").read_text().startswith("drwx------")
     assert not leftovers(checkout)
+
+
+def test_fsdk_junction_patch_includes_bluefin_cas() -> None:
+    patch = (ROOT / "patches" / "freedesktop-sdk" / "0001-project.conf-Add-GNOME-CAS-servers.patch").read_text()
+    assert "+- url: https://cache.projectbluefin.io:11001" in patch
+    assert patch.count("https://cache.projectbluefin.io:11001") == 2
