@@ -406,6 +406,8 @@ jobs:
       # "Security violation", so the guests kept booting in setup mode with
       # nothing verified. Use Fedora's edk2 build, pinned by checksum, which
       # enrolls the keys; dogfood-diskless.sh now fails if Secure Boot is off.
+      # Bumped by hand: Renovate cannot move the URL and its checksum together
+      # (see ci-tooling.md).
       - name: Install QEMU and OVMF
         env:
           OVMF_RPM_URL: https://kojipkgs.fedoraproject.org/packages/edk2/20260508/6.fc44/noarch/edk2-ovmf-20260508-6.fc44.noarch.rpm
@@ -422,9 +424,11 @@ jobs:
           bsdtar -xf "${RUNNER_TEMP}/edk2-ovmf.rpm" -C "${RUNNER_TEMP}/ovmf" \
             ./usr/share/edk2/ovmf/OVMF_CODE.secboot.fd ./usr/share/edk2/ovmf/OVMF_VARS.fd \
             ./usr/share/edk2/ovmf/OVMF_CODE.fd
-          echo "OVMF_CODE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd" >> "$GITHUB_ENV"
-          echo "OVMF_CODE_INSECURE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.fd" >> "$GITHUB_ENV"
-          echo "OVMF_VARS=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_VARS.fd" >> "$GITHUB_ENV"
+          {
+            echo "OVMF_CODE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd"
+            echo "OVMF_CODE_INSECURE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.fd"
+            echo "OVMF_VARS=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_VARS.fd"
+          } >> "$GITHUB_ENV"
 
       - name: Diskless boot
         env:
@@ -687,3 +691,37 @@ jobs:
 
       - name: Push the OCI artifact to a local registry and pull it back
         run: bash scripts/publish-release.sh oci dist/diskless "${VERSION}" localhost:5000/bluefin-server --plain-http --pull-back
+
+  # Nightly failures block nothing, so nobody sees them unless this says so:
+  # one open "Nightly build failing" issue gets a comment per failed nightly
+  # run and is closed by the next one that passes. Schedule events only; the
+  # job holds nothing but issues: write and runs no repository code.
+  nightly-status:
+    needs: [changes, build, boot-test]
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Nightly build failing"
+          issue="$(gh issue list --state open --limit 500 --json number,title \
+            --jq "[.[] | select(.title == \"${title}\")][0].number // empty")"
+          if [ "${FAILED}" = true ]; then
+            if [ -n "${issue}" ]; then
+              gh issue comment "${issue}" --body "Failed again: ${RUN_URL}"
+            else
+              gh issue create --title "${title}" \
+                --body "The nightly build of main failed: ${RUN_URL}"$'\n\n'"This issue closes when a later nightly build passes."
+            fi
+          elif [ -n "${issue}" ]; then
+            gh issue close "${issue}" --comment "The nightly build passes again: ${RUN_URL}"
+          fi

@@ -1,37 +1,11 @@
 name: Unit tests
 
+# No `paths:` filter: a path-filtered workflow never reports on pull requests
+# it skips, so it cannot be a required check. Both jobs take minutes.
 on:
   pull_request:
-    paths:
-      - '.github/scripts/**'
-      - '.github/workflows/build.yml'
-      - '.github/workflows/unit-tests.yml'
-      - '.pre-commit-config.yaml'
-      - 'elements/**'
-      - 'files/**'
-      - 'include/**'
-      - 'project.conf'
-      - 'scripts/**'
-      - 'tests/unit/**'
-      - 'Justfile'
-      - 'renovate.json'
-      - 'elements/*.bst'
   push:
     branches: [main]
-    paths:
-      - '.github/scripts/**'
-      - '.github/workflows/build.yml'
-      - '.github/workflows/unit-tests.yml'
-      - '.pre-commit-config.yaml'
-      - 'elements/**'
-      - 'files/**'
-      - 'include/**'
-      - 'project.conf'
-      - 'scripts/**'
-      - 'tests/unit/**'
-      - 'Justfile'
-      - 'renovate.json'
-      - 'elements/*.bst'
 
 permissions:
   contents: read
@@ -54,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y bats nodejs shellcheck
-          pip install pytest pyyaml
+          pip install -r .github/requirements-ci.txt
 
       # Ubuntu's AppArmor policy blocks unprivileged user namespaces; the
       # os-justfile bats tests run the k8s recipe inside one.
@@ -71,3 +45,52 @@ jobs:
 
       - name: Run unit tests
         run: just test-unit
+
+  # The Go modules the image builds. Their element runs `go vet` and
+  # `go test` inside the image build, so a failing or flaky test would
+  # otherwise surface only on main, as a failed release. -race is extra here:
+  # the race detector needs cgo, which the element disables.
+  # tests/unit/test_ci_workflows.py fails when a go.mod is missing here.
+  go:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - files/homelab/cluster
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    # As in the image build: offline, vendored dependencies.
+    env:
+      GOFLAGS: -mod=vendor
+      GOPROXY: "off"
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Dependencies are vendored, so there is no module cache to restore.
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache: false
+
+      - name: gofmt
+        run: |
+          set -euo pipefail
+          unformatted="$(go list -f '{{.Dir}}' ./... | xargs gofmt -l)"
+          if [ -n "${unformatted}" ]; then
+            printf '::error::gofmt -l reports unformatted files:\n%s\n' "${unformatted}"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test -race
+        run: go test -race ./...
