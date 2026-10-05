@@ -19,15 +19,17 @@ There is no application version for these images. Two version axes exist:
 - `installer-version` in `project.conf` tracks the pinned FSDK point release
   (the `ref:` line in `elements/freedesktop-sdk.bst`, e.g.
   `freedesktop-sdk-26.08.0-...`). `.github/scripts/check-release-version.py`
-  fails closed on drift between the two.
+  fails closed on drift between the two, and is the one parser of that point
+  release: `--print-fsdk` prints it (the Justfile's `fsdk_version`), `--fix`
+  syncs `installer-version` to it before checking.
 - `image-version` in `include/image.yml` is the per-build OS version shared by
   the usr DDI, the UKIs, and sysupdate transfers. CI sets it with
   `just set-version` (`YY.MM.<run>` on main, `0.<run>` on PRs);
   `systemd-sysupdate` orders it with `strverscmp()`, so keep it monotonic and
   at most 17 characters.
 
-`just version` / `just tags` parse the FSDK-derived point release and tag set
-(`latest`, minor line, point release) from the junction ref.
+`just version` / `just tags` print the FSDK-derived point release and tag set
+(`latest`, minor line, point release), from `check-release-version.py --print-fsdk`.
 
 ## Procedure
 
@@ -92,7 +94,7 @@ Before merging a bump:
 
 Point releases are delivered by the scheduled `track-junctions.yml` workflow.
 - **Trigger:** `track-junctions.yml` runs daily and resolves the junction's own `track: freedesktop-sdk-26.08*` glob; it does not wait on a Renovate PR.
-- **Mechanism:** `track-junctions.yml` runs `just bst source track freedesktop-sdk.bst`, syncs `project.conf`'s `installer-version` to the tracked point release, and opens its own PR on `auto/track-junctions`. It never runs on `pull_request`, so a junction bump can never be injected into an unrelated dependency PR.
+- **Mechanism:** `track-junctions.yml` runs `just bst source track freedesktop-sdk.bst`, syncs `project.conf`'s `installer-version` to the tracked point release (`check-release-version.py --fix`), and opens or updates its own PR on `auto/track-junctions` through `.github/scripts/propose-pr.sh`, which leaves an open PR alone when it already proposes the same refs. It never runs on `pull_request`, so a junction bump can never be injected into an unrelated dependency PR.
 - **Build Loop:** When the PR is merged to `main`, GitHub Actions compiles the image set (OS DDI, UKIs, netboot ESP) and sysexts, and publishes them to a new GitHub Release tagged `v<image-version>`.
 
 ## See also

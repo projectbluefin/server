@@ -27,10 +27,14 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 300
     env:
+      # Everything oci/bluefin-server-image.bst stages into the release set,
+      # and every oci/* target `just validate` resolves;
+      # tests/unit/test_reproducibility_workflow.py fails when a shipped element is missing.
       FINAL_ASSEMBLY: >-
         oci/bluefin-server-image.bst
         oci/bluefin-server-boot.bst
         oci/bluefin-server-usr.bst
+        oci/bluefin-server-sbom.bst
         oci/k0s-sysext.bst
         oci/kubestellar-sysext.bst
         oci/kubeadm-sysext.bst
@@ -38,7 +42,10 @@ jobs:
         oci/argo-workflows-sysext.bst
         oci/mcp-sysext.bst
         oci/zfs-sysext.bst
+        oci/nvidia-open-595-sysext.bst
+        oci/nvidia-container-toolkit-sysext.bst
         bluefin-server/os-sd-boot-signed.bst
+        homelab/homelab-templates.bst
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,19 +58,7 @@ jobs:
           tool: just@1.58.0
 
       - name: Set up runner disk space
-        run: |
-          set -euo pipefail
-          sudo mkdir -p /mnt/podman /mnt/buildstream
-          sudo chown -R "$USER:$USER" /mnt/podman /mnt/buildstream
-          mkdir -p ~/.config/containers
-          cat > ~/.config/containers/storage.conf <<EOF
-          [storage]
-          driver = "overlay"
-          runroot = "/run/user/1001"
-          graphroot = "/mnt/podman"
-          EOF
-          mkdir -p ~/.cache
-          ln -sf /mnt/buildstream ~/.cache/buildstream
+        run: bash scripts/ci-runner-disk.sh
 
       # Throwaway keys and a 0.* version: nothing from this job is published.
       - name: Generate keys and set the image version

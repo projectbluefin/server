@@ -3,7 +3,7 @@
 default:
     @just --list
 
-# Same bst2 container image FSDK/dakota CI uses -- pinned by SHA.
+# Same bst2 container image FSDK/dakota CI uses -- pinned by commit-named tag.
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4")
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:64eb0b4930d57a92710822898fb73af6cc1ae35d")
 # bats for `just test-unit` when none is installed -- pinned by digest.
@@ -14,9 +14,9 @@ export butane_image := env("BUTANE_IMAGE", "quay.io/coreos/butane:release@sha256
 # Prefix for podman calls: empty when rootless podman works, "sudo" otherwise.
 sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } else { "sudo" }
 
-# FSDK release parsed from the pinned junction ref — the single source of truth
-# for image versioning. e.g. "25.08.13".
-export fsdk_version := `grep -oE 'freedesktop-sdk-[0-9]+\.[0-9]+\.[0-9]+' elements/freedesktop-sdk.bst | head -1 | sed 's/freedesktop-sdk-//'`
+# FSDK point release of the pinned junction ref, e.g. "26.08.0".
+# check-release-version.py is its one parser.
+export fsdk_version := `python3 .github/scripts/check-release-version.py --print-fsdk`
 # Exact junction commit ref (full ref: value), for provenance.
 export fsdk_ref := `grep -E '^\s*ref:' elements/freedesktop-sdk.bst | head -1 | sed -E 's/^\s*ref:\s*//'`
 

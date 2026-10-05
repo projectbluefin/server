@@ -198,6 +198,61 @@ def test_main_installer_drift_is_detected_across_minor_lines(checker):
     assert "installer-version drift" in str(excinfo.value)
 
 
+# --- --print-fsdk / --fix ---------------------------------------------------
+
+
+def test_print_fsdk_prints_only_the_pinned_point_release(checker, capsys):
+    _write(checker, installer_declared="25.08.0", fsdk_pinned="26.08.3")
+    checker.main(["--print-fsdk"])
+    assert capsys.readouterr().out == "26.08.3\n"
+
+
+def test_print_fsdk_fails_without_a_point_release(checker):
+    checker.FSDK_JUNCTION.write_text("junction:\n  track: freedesktop-sdk-26.08*\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        checker.main(["--print-fsdk"])
+    assert "no 'freedesktop-sdk-X.Y.Z' point release" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("declared", ['"26.08.0"', "26.08.0", "'25.08.9'", '"garbage"', ""])
+def test_fix_syncs_installer_version_and_keeps_the_rest(checker, capsys, declared):
+    checker.PROJECT_CONF.write_text(
+        f"# installer-version: 1.2.3\nvariables:\n  installer-version: {declared}\n  other: x\n",
+        encoding="utf-8",
+    )
+    checker.FSDK_JUNCTION.write_text("  ref: freedesktop-sdk-26.08.1-0-gdb97cce\n", encoding="utf-8")
+    checker.main(["--fix"])
+    assert checker.PROJECT_CONF.read_text(encoding="utf-8") == (
+        '# installer-version: 1.2.3\nvariables:\n  installer-version: "26.08.1"\n  other: x\n'
+    )
+    assert "OK: installer-version 26.08.1" in capsys.readouterr().out
+
+
+def test_fix_still_fails_when_installer_version_is_not_declared(checker):
+    checker.PROJECT_CONF.write_text("variables:\n  other: 1\n", encoding="utf-8")
+    checker.FSDK_JUNCTION.write_text("ref: freedesktop-sdk-26.08.0\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        checker.main(["--fix"])
+    assert "does not declare an 'installer-version" in str(excinfo.value)
+
+
+def test_fix_and_print_fsdk_are_exclusive(checker):
+    _write(checker)
+    with pytest.raises(SystemExit):
+        checker.main(["--fix", "--print-fsdk"])
+
+
+def test_callers_use_the_script_instead_of_parsing_the_junction():
+    """One parser of the FSDK point release: the Justfile and track-junctions call it."""
+    justfile = (REPO_ROOT / "Justfile").read_text(encoding="utf-8")
+    fsdk_version = next(line for line in justfile.splitlines() if line.startswith("export fsdk_version"))
+    assert "check-release-version.py --print-fsdk" in fsdk_version
+    tracker = (REPO_ROOT / ".github" / "workflows" / "track-junctions.yml").read_text(encoding="utf-8")
+    assert "check-release-version.py --fix" in tracker
+    for text in (justfile, tracker):
+        assert "freedesktop-sdk-[0-9]" not in text
+
+
 # --- live repository invariant -------------------------------------------
 
 
