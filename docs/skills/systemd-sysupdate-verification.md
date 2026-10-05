@@ -214,7 +214,12 @@ tell a human or a policy engine which commit and workflow run produced it.
   listed, every file name carries the release version, and the SBOM is valid
   SPDX 2.3. `release` creates the GitHub Release at the built commit. `oci`
   pushes the ORAS artifact, then checks the registry manifest layer by layer
-  against the local files. On main the `release` job verifies against the
+  against the local files. Neither moves `latest` backwards: `release`
+  passes `--latest` only when no published release sorts above the version
+  (`sort -V`, which orders `YY.MM.<run>` as `strverscmp()` does) and
+  `--latest=false` otherwise, and `oci` tags `latest` only when the version
+  in the current `latest`'s `org.opencontainers.image.version` annotation
+  is not newer. Re-running an older release leaves both where they are. On main the `release` job verifies against the
   committed `files/os/sysupdate-keys/import-pubring.gpg`. On pull requests
   `release-dry-run` verifies against the throwaway keyring the build
   exported in `sysupdate-keys/`, prints the `gh release create` command, and

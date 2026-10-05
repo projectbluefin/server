@@ -485,7 +485,8 @@ jobs:
           retention-days: 7
 
   # Publishes the signed image set as a new, immutable GitHub Release and as
-  # an ORAS OCI artifact (one layer per file, tags <version> and latest), each
+  # an ORAS OCI artifact (one layer per file, tags <version> and, unless a
+  # newer version is already published, latest), each
   # with SLSA build provenance and SBOM attestations. Only runs for releases
   # (pushes/dispatches to main, where the code is already reviewed), and is
   # the only job in this workflow that holds write tokens. Every publish
@@ -625,7 +626,11 @@ jobs:
       - name: Verify the release set
         run: bash scripts/publish-release.sh verify dist/diskless "${VERSION}" dist/diskless/sysupdate-keys/import-pubring.pgp
 
+      # Reads the published releases to decide --latest, like `release`.
       - name: Render the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bash scripts/publish-release.sh release dist/diskless "${VERSION}" --dry-run
 
       # setup-oras v2.0.1's built-in release table stops at ORAS 1.3.3, so pin

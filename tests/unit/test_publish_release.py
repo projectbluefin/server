@@ -213,7 +213,33 @@ def test_unsigned_top_level_file_is_refused(release: Path, signers) -> None:
     assert "not covered by SHA256SUMS: dogfood-serial.log" in result.stderr
 
 
-def test_dry_run_renders_gh_release_for_top_level_files_only(release: Path) -> None:
+FAKE_GH_RELEASES = """#!/usr/bin/env python3
+import json, os, sys
+with open(os.environ["GH_CALLS"], "a") as calls:
+    calls.write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1:3] == ["release", "list"]:
+    if os.environ.get("GH_LIST_FAILS"):
+        sys.exit(1)
+    print("\\n".join(os.environ["GH_TAGS"].split()))
+"""
+
+
+@pytest.fixture
+def fake_gh(tmp_path: Path, monkeypatch) -> Path:
+    """A gh that lists the releases in $GH_TAGS and records every call."""
+    bin_dir = tmp_path / "gh-bin"
+    bin_dir.mkdir()
+    (bin_dir / "gh").write_text(FAKE_GH_RELEASES)
+    (bin_dir / "gh").chmod(0o755)
+    calls = tmp_path / "gh-calls"
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    monkeypatch.setenv("GH_CALLS", str(calls))
+    monkeypatch.setenv("GH_TAGS", "")
+    monkeypatch.delenv("GH_LIST_FAILS", raising=False)
+    return calls
+
+
+def test_dry_run_renders_gh_release_for_top_level_files_only(release: Path, fake_gh: Path) -> None:
     result = run("release", str(release), VERSION, "--dry-run")
     assert result.returncode == 0, result.stderr
     command = result.stdout.splitlines()[-1]
@@ -256,6 +282,141 @@ def test_release_notes_use_the_release_version_and_source(release: Path, tmp_pat
         str(release / name)
         for name in sorted([*release_files(VERSION), "SHA256SUMS", "SHA256SUMS.gpg"])
     ]
+
+
+@pytest.mark.parametrize(
+    ("published", "flag"),
+    [
+        ("", "--latest"),
+        ("v26.09.6 v26.08.30 v0.9 not-a-version", "--latest"),
+        ("v26.09.7", "--latest"),
+        # 26.09.12 is newer than 26.09.7 under sort -V (and strverscmp), not as text.
+        ("v26.09.12 v26.09.6", "--latest=false"),
+        ("v26.10.1", "--latest=false"),
+    ],
+    ids=["first", "newest", "same", "older-by-run", "older-by-month"],
+)
+def test_release_is_marked_latest_only_when_newest(release: Path, fake_gh: Path, monkeypatch, published: str, flag: str) -> None:
+    monkeypatch.setenv("GH_TAGS", published)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/server")
+    result = run("release", str(release), VERSION)
+    assert result.returncode == 0, result.stderr
+    calls = [json.loads(line) for line in fake_gh.read_text().splitlines()]
+    assert calls[0][:7] == ["release", "list", "--repo", "example/server", "--exclude-drafts", "--exclude-pre-releases", "--limit"]
+    create = calls[-1]
+    assert create[:8] == ["release", "create", f"v{VERSION}", "--target", "0" * 40, "--title", f"Bluefin Server {VERSION}", flag]
+    assert create[8] == "--notes"
+    assert ("::notice title=Not the latest release::" in result.stdout) == (flag == "--latest=false")
+
+
+def test_release_stops_when_the_releases_cannot_be_listed(release: Path, fake_gh: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GH_LIST_FAILS", "1")
+    result = run("release", str(release), VERSION)
+    assert result.returncode != 0
+    assert "cannot list the releases of" in result.stderr
+    assert [json.loads(line)[:2] for line in fake_gh.read_text().splitlines()] == [["release", "list"]]
+
+
+# An in-memory OCI registry: enough of `oras push`, `resolve` and
+# `manifest fetch` for publish-release.sh oci.
+FAKE_ORAS = r'''#!/usr/bin/env python3
+import hashlib, json, os, sys
+with open(os.environ["ORAS_CALLS"], "a") as calls:
+    calls.write(" ".join(sys.argv[1:]) + "\n")
+with open(os.environ["ORAS_STATE"]) as f:
+    state = json.load(f)
+args = [a for a in sys.argv[1:] if a != "--plain-http"]
+
+def lookup(ref):
+    if os.environ.get("ORAS_BROKEN"):
+        sys.exit("Error: dial tcp: connection refused")
+    digest = ref.split("@", 1)[1] if "@" in ref else state["tags"].get(ref.rsplit(":", 1)[1])
+    if digest not in state["manifests"]:
+        sys.exit(f'Error response from registry: failed to fetch the content of "{ref}": {ref}: not found')
+    return digest
+
+if args[0] == "push":
+    i, annotations = 1, {}
+    while args[i].startswith("--"):
+        if args[i] == "--annotation":
+            key, value = args[i + 1].split("=", 1)
+            annotations[key] = value
+        i += 2
+    ref, files = args[i], args[i + 1:]
+    layers = []
+    for name in files:
+        with open(name, "rb") as f:
+            layers.append({"digest": "sha256:" + hashlib.sha256(f.read()).hexdigest(),
+                           "annotations": {"org.opencontainers.image.title": name}})
+    manifest = {"annotations": annotations, "layers": layers}
+    digest = "sha256:" + hashlib.sha256(json.dumps(manifest).encode()).hexdigest()
+    state["manifests"][digest] = manifest
+    for tag in ref.rsplit(":", 1)[1].split(","):
+        state["tags"][tag] = digest
+    with open(os.environ["ORAS_STATE"], "w") as f:
+        json.dump(state, f)
+elif args[0] == "resolve":
+    print(lookup(args[1]))
+elif args[:2] == ["manifest", "fetch"]:
+    print(json.dumps(state["manifests"][lookup(args[2])]))
+else:
+    sys.exit(f"fake oras: unsupported {args}")
+'''
+
+OCI_REF = "localhost:5000/bluefin-server"
+
+
+def oci(release: Path, tmp_path: Path, latest: str | None, broken: bool = False) -> tuple[subprocess.CompletedProcess[str], dict, str]:
+    bin_dir = tmp_path / "oras-bin"
+    bin_dir.mkdir()
+    (bin_dir / "oras").write_text(FAKE_ORAS)
+    (bin_dir / "oras").chmod(0o755)
+    state = {"tags": {}, "manifests": {}}
+    if latest is not None:
+        old = {"annotations": {"org.opencontainers.image.version": latest}, "layers": []}
+        state = {"tags": {latest: "sha256:old", "latest": "sha256:old"}, "manifests": {"sha256:old": old}}
+    files = {"state": tmp_path / "oras-state.json", "calls": tmp_path / "oras-calls"}
+    files["state"].write_text(json.dumps(state))
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "ORAS_STATE": str(files["state"]),
+        "ORAS_CALLS": str(files["calls"]),
+        "GITHUB_SHA": "0" * 40,
+    }
+    env.pop("GITHUB_OUTPUT", None)
+    if broken:
+        env["ORAS_BROKEN"] = "1"
+    result = subprocess.run(["bash", str(SCRIPT), "oci", str(release), VERSION, OCI_REF, "--plain-http"], env=env, capture_output=True, text=True)
+    calls = files["calls"].read_text() if files["calls"].exists() else ""
+    return result, json.loads(files["state"].read_text()), calls
+
+
+@pytest.mark.parametrize("latest", [None, "26.09.6", "26.09.7", "26.08.30"], ids=["first", "older-by-run", "same", "older-by-month"])
+def test_oci_moves_latest_to_a_newer_version(release: Path, tmp_path: Path, latest: str | None) -> None:
+    result, state, _ = oci(release, tmp_path, latest)
+    assert result.returncode == 0, result.stderr
+    assert state["tags"]["latest"] == state["tags"][VERSION] != "sha256:old"
+    assert "latest=true" in result.stdout.splitlines()
+
+
+@pytest.mark.parametrize("latest", ["26.09.12", "26.10.1"], ids=["newer-by-run", "newer-by-month"])
+def test_oci_never_moves_latest_backwards(release: Path, tmp_path: Path, latest: str) -> None:
+    result, state, calls = oci(release, tmp_path, latest)
+    assert result.returncode == 0, result.stderr
+    assert state["tags"]["latest"] == "sha256:old"
+    assert state["tags"][VERSION] not in ("sha256:old", None)
+    assert f" {OCI_REF}:{VERSION} " in calls and f"{OCI_REF}:{VERSION},latest" not in calls
+    assert f"::notice title=latest not moved::{OCI_REF}:latest stays at {latest}" in result.stdout
+    assert "latest=false" in result.stdout.splitlines()
+
+
+def test_oci_pushes_nothing_when_latest_cannot_be_read(release: Path, tmp_path: Path) -> None:
+    result, state, calls = oci(release, tmp_path, "26.09.6", broken=True)
+    assert result.returncode != 0
+    assert f"cannot read {OCI_REF}:latest" in result.stderr
+    assert "push" not in calls
+    assert state["tags"]["latest"] == "sha256:old"
 
 
 WORKFLOW_REF = "projectbluefin/server/.github/workflows/build.yml@refs/heads/main"
