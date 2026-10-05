@@ -52,7 +52,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y bats nodejs shellcheck
-          pip install pytest pyyaml
+          pip install -r .github/requirements-ci.txt
 
       # Ubuntu's AppArmor policy blocks unprivileged user namespaces; the
       # os-justfile bats tests run the k8s recipe inside one.

@@ -26,7 +26,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install dependencies
-        run: pip install pyyaml
+        run: pip install -r .github/requirements-ci.txt
 
       - name: Run docs checks
         run: python .github/scripts/docs-checks.py
