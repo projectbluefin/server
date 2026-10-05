@@ -394,10 +394,14 @@ func TestReplayFromSameSourceUnderHeldSlot(t *testing.T) {
 func TestRateLimitPerSource(t *testing.T) {
 	ts := startServer(t, goodPass, Limits{PerSource: 3, PerSourceWindow: time.Hour, Global: 100, GlobalWindow: time.Hour})
 	for i := 0; i < 3; i++ {
+		// The server frees the source's slot after the client has its answer;
+		// without the wait the next attempt can be refused as busy.
+		waitSlotFree(ts.limiter, "127.0.0.1")
 		if _, err := client(badPass).Join(context.Background(), ts.addr); !errors.Is(err, ErrNotProven) {
 			t.Fatalf("attempt %d: %v", i, err)
 		}
 	}
+	waitSlotFree(ts.limiter, "127.0.0.1")
 	_, err := client(goodPass).Join(context.Background(), ts.addr)
 	var se *ServerError
 	if !errors.As(err, &se) || se.Code != ErrCodeRateLimited || se.RetryAfter <= 0 {
