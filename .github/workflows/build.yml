@@ -36,9 +36,12 @@ jobs:
   #    .github/scripts/image-build-needed.py). Other pull requests run
   #    `validate` in minutes instead of the ~1.5 h build.
   # A skipped job reports as passing, so `build` and `boot-test` can be
-  # required checks without blocking those PRs. The classifier runs from the
-  # base revision, never the PR head, so a PR cannot edit it to skip its own
-  # build; changes to it or to this workflow always count as image changes.
+  # required checks without blocking those PRs. The classifier script is
+  # checked out from the base revision, so editing it does not skip the PR's
+  # own build, and changes to it or to this workflow always count as image
+  # changes. This job itself still comes from the PR head's copy of this
+  # file, though: a PR can edit it to skip anything. The control there is
+  # review of workflow changes, not this job.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 10

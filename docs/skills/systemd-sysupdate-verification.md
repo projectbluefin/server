@@ -300,8 +300,9 @@ Use `--type spdxjson` to get the SBOM attestation instead.
    have booted it and any legacy `/etc` factory copies have been migrated as
    described above before proceeding. Nodes that skip the bridge need their
    trust provisioned through a trusted administrative channel.
-3. Update the GitHub Actions repository secret `SYSUPDATE_SIGNING_KEY` with the
-   new ASCII-armored private key.
+3. Update the `release` environment secret `SYSUPDATE_SIGNING_KEY` with the
+   new ASCII-armored private key (see "Environments and secrets" in
+   [ci-tooling.md](ci-tooling.md)).
 4. Rebuild and publish a release under a new `image-version` (a key rotation
    is never a rebuild of an existing version; see
    "Keys" in [ddi-installer-build.md](ddi-installer-build.md)). Existing hosts only
