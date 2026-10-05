@@ -93,6 +93,10 @@ fi
 
 if [ "${boot_state}" = all ] && [ "${force}" = 0 ]; then
     echo "Keys already exist in ${dir}; pass --force to regenerate."
+    if ! cmp -s "${dir}/modules/linux-module-cert.crt" "${dev_keys}/INSECURE-dev-module-key.crt"; then
+        echo "  The module certificate is not the INSECURE dev one, so the kernel builds locally;"
+        echo "  pass --force to switch to the dev key and pull the cached dev kernel."
+    fi
     exit 0
 fi
 
