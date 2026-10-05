@@ -50,12 +50,42 @@ a binary chosen by an upstream release rather than by a commit in this repo.
 ```yaml
 - uses: taiki-e/install-action@<full-commit-sha> # v2 — see build.yml for the current pin
   with:
-    tool: just@1.58.0
+    tool: just@<version> # the version every other call site uses
 ```
 
 The version is repeated at each call site — currently `build.yml`,
-`unit-tests.yml`, and `track-junctions.yml`. Bumping `just` means changing all
-of them in one commit, so CI never runs two versions at once.
+`unit-tests.yml`, `reproducibility.yml` and `track-junctions.yml`. A Renovate
+regex manager (`renovate.json`) matches every `tool: just@` in the workflows
+and bumps them in one PR, so CI never runs two versions at once;
+`tests/unit/test_ci_workflows.py` fails if a call site falls outside it.
+
+### Python packages and other pins
+
+Workflows install Python packages with
+`pip install -r .github/requirements-ci.txt` only, never a bare
+`pip install <name>`. The file pins the whole resolved set with `==`, and
+Renovate's `pip_requirements` manager proposes the bumps.
+
+The Justfile's `bst2_image` is tagged with the freedesktop-sdk-docker-images
+commit it was built from. The docker datasource cannot order those tags, so a
+Renovate `git-refs` manager follows that repository's default branch (every
+merge there publishes a tag for its commit) and moves the tag; it stays a tag,
+not a digest pin.
+
+### Workflow linting
+
+`lint-actions.yml` runs actionlint and zizmor on every pull request and push
+to `main`, each from a container image pinned by digest (`docker://` steps
+that Renovate's github-actions manager bumps). `.github/actionlint.yaml`
+declares hosted runner labels newer than actionlint's built-in list
+(`ubuntu-26.04`). Fix zizmor findings rather than silencing them; when one is
+accepted, ignore that rule for that location in `.github/zizmor.yml` with the
+reason next to it, never a whole audit. Locally:
+
+```bash
+podman run --rm -v "$PWD":/repo:Z -w /repo docker.io/rhysd/actionlint:latest -no-color -oneline
+podman run --rm -v "$PWD":/repo:Z -w /repo ghcr.io/zizmorcore/zizmor:latest --offline .
+```
 
 ### Workflow permissions
 
@@ -78,7 +108,8 @@ one job:
   for the provenance and SBOM attestations.
 
 Its pull-request rehearsal, `release-dry-run`, keeps the read-only default
-and uses no secrets.
+and uses no secrets. `nightly-status` holds `issues: write` and nothing else;
+it runs only for the `schedule` event and executes no repository code.
 
 Junction ref tracking must never run on `pull_request`. It used to, as a
 `track-refs` job gated on `startsWith(github.head_ref, 'renovate/')`, and a
@@ -128,9 +159,11 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | `boot-test` | `build.yml` | after `build` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4). Read-only token. |
 | `release` | `build.yml` | `release=true` | Publishes `dist/diskless/` as-is through `scripts/publish-release.sh`: an immutable GitHub Release tagged `v<image-version>` plus an ORAS OCI artifact at `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per file, artifact type `application/vnd.projectbluefin.server.release.v1`), with provenance and SBOM attestations for both (`if: ${{ !failure() && !cancelled() && needs.changes.outputs.release == 'true' }}`). Write permissions listed above. Main runs queue, so a merge that edits `build.yml` can land before an earlier run publishes; GitHub then refuses `GITHUB_TOKEN` a tag at that run's commit (it would need the `workflows` permission). `publish-release.sh taggable` detects this before anything is published and skips that version with a warning; the newer run releases its content. |
 | `release-dry-run` | `build.yml` | `pull_request` that builds | Runs the same `scripts/publish-release.sh` commands against the PR's image set: verify, render `gh release create`, and a real `oras push` to a `registry` service container (pinned by digest) that it pulls back. Read-only token, no secrets. |
-| `docs` | `docs-checks.yml` | `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. Read-only token. |
+| `nightly-status` | `build.yml` | `schedule`, after `boot-test` | Opens the "Nightly build failing" issue (or comments on the open one) with the run URL when `changes`, `build` or `boot-test` failed, and closes it when a later nightly passes. `issues: write` only. |
+| `docs` | `docs-checks.yml` | every `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. No `paths:` filter, so it can be a required check. Read-only token. |
 | `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the final-assembly artifacts, rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). Throwaway keys, nothing published. Read-only token. |
-| `unit` | `unit-tests.yml` | `pull_request`, `push/main` | Runs pytest and BATS unit test suites. Read-only token. |
+| `unit`, `go` | `unit-tests.yml` | every `pull_request`, `push/main` | `unit` runs the pytest and BATS suites; `go` runs `gofmt -l`, `go vet` and `go test -race` for each Go module in the repository (a matrix; `tests/unit/test_ci_workflows.py` fails if a `go.mod` is missing from it). No `paths:` filter, so both can be required checks. Read-only token. |
+| `actionlint`, `zizmor` | `lint-actions.yml` | every `pull_request`, `push/main` | Lint the workflows (see [Workflow linting](#workflow-linting)). Read-only token; zizmor uses it for its online audits. |
 | `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
 GitHub Actions runs the **complete BuildStream compilation pipeline** using `/mnt`
@@ -161,7 +194,10 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
     until this was caught every CI boot ran in setup mode with Secure Boot
     off. `--check` now fails unless the probe reports
     `secureboot=enabled` (or, for tamper runs, the kernel logs
-    `Secure boot enabled`). Bump the pin by hand; Renovate does not track it.
+    `Secure boot enabled`). Bump the pin by hand; Renovate does not track it:
+    a regex manager can move the Koji URL but not its SHA-256, so every
+    Renovate PR would fail the checksum, and a new firmware build has to pass
+    the full boot test anyway.
     - diskless netboot, no failed units; `tests/fixtures/nfs/netdb.probe`
       must see `tcp` and `sunrpc` resolve, the local portmapper answer
       `rpcinfo`, and an NFSv3 mount get past the protocol lookup
@@ -244,6 +280,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip. No
   status check is required on `main` today; a skipped job reports as passing,
   so they can be made required without `paths-ignore` leaving them pending.
+  The unit, docs and lint workflows have no `paths:` filter for the same
+  reason.
 - **Kernel cache in the project CAS, key-free by construction.** The
   `kernel-cache` job (releases only) runs `scripts/kernel-cache.sh seed`: with
   no signing secrets and the committed release module certificate
@@ -304,6 +342,10 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 - Any `uses:` line with a mutable ref (`@v2`, `@main`, `@latest`).
 - An `install-action` step whose `tool:` has no `@<version>` — the pin is half
   done, since the action is fixed but the binary it installs is not.
+- A `paths:` filter on a workflow meant to be a required check: it never
+  reports on the pull requests it skips, so they stay pending.
+- `pip install <package>` in a workflow instead of the pinned requirements
+  file.
 - `sudo podman` in one step and plain `podman` in another step doing the same
   operation.
 - A new action not present in any sibling repo — check upstream first.
@@ -311,7 +353,9 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 ## Verification
 
 - [ ] Every `uses:` line has a full 40-character SHA and a `# vX` comment.
-- [ ] Every `install-action` `tool:` names an explicit version (`just@1.58.0`).
+- [ ] Every `install-action` `tool:` names an explicit version (`just@<version>`).
+- [ ] actionlint and zizmor (see [Workflow linting](#workflow-linting)) report
+      nothing.
 - [ ] `just validate` passes after workflow changes.
 - [ ] A new directory the build or boot test reads is listed in
       `BUILD_PREFIXES` in `.github/scripts/image-build-needed.py`.
