@@ -4,7 +4,8 @@
 Reads the PR's changed paths (one per line, renames listed under both names)
 on stdin and prints ``true`` or ``false`` for the build workflow's `changes`
 job, which runs this script from the PR's base revision. Only changes that
-cannot reach the image set or the boot test skip the ~2 h build: docs,
+cannot reach the image set or the boot test skip the full build (figures in
+docs/skills/ci-tooling.md, "Build time and caches"): docs,
 Markdown outside the build inputs, unit/e2e tests and the workflows that run
 them. Anything else, and anything under a build input root, builds; so does
 any change to this classifier or to the build workflow, and an empty or

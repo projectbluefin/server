@@ -53,9 +53,11 @@ a binary chosen by an upstream release rather than by a commit in this repo.
     tool: just@1.58.0
 ```
 
-The version is repeated at each call site — currently `build.yml`,
-`unit-tests.yml`, and `track-junctions.yml`. Bumping `just` means changing all
-of them in one commit, so CI never runs two versions at once.
+The version is repeated at each call site — currently six steps in four
+workflows: `build.yml` (three jobs), `reproducibility.yml`, `unit-tests.yml`
+and `track-junctions.yml`. Bumping `just` means changing all of them in one
+commit, so CI never runs two versions at once;
+`tests/unit/test_ci_workflows.py` fails if they differ.
 
 ### Workflow permissions
 
@@ -84,7 +86,7 @@ Junction ref tracking must never run on `pull_request`. It used to, as a
 `track-refs` job gated on `startsWith(github.head_ref, 'renovate/')`, and a
 branch name is not an identity. It also pushed its result onto whatever PR
 branch happened to be open, so unrelated dependency PRs silently carried
-freedesktop-sdk and gnome-build-meta bumps. It now lives in
+freedesktop-sdk junction bumps. It now lives in
 `track-junctions.yml` on a schedule, opening its own PR on its own branch.
 
 The `build` job (validation, compile, signing) runs with the read-only default
@@ -133,8 +135,16 @@ sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } e
 | `unit` | `unit-tests.yml` | `pull_request`, `push/main` | Runs pytest and BATS unit test suites. Read-only token. |
 | `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
+Both trackers commit, push and open or update their pull request through
+`.github/scripts/propose-pr.sh`. It pushes nothing when the paths already
+match `main`, or when an open PR's branch already holds the same content, so
+a daily run neither force-pushes an identical commit nor restarts that PR's
+build; `track-binaries` also passes `--skip-closed-title`, so a release
+whose PR was closed is not proposed again.
+
 GitHub Actions runs the **complete BuildStream compilation pipeline** using `/mnt`
-SSD storage on the runner for podman and BuildStream caches. Release assets are
+SSD storage on the runner for podman and BuildStream caches
+(`scripts/ci-runner-disk.sh`, called by every job that builds). Release assets are
 uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
 
 ## Core Process
@@ -142,81 +152,90 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
 1. **Renovate tracking:** `renovate.json` is configured with a custom regex
    manager to scan the BuildStream junction (`freedesktop-sdk.bst`) using the
    `git-refs` datasource.
- 2. **Auto-resolution:** The scheduled `track-junctions` workflow executes
-    `just bst source track` to resolve raw tags to full `git-describe` refs,
-    syncs `installer-version` to the tracked FSDK point release, and proposes the
-    result as its own pull request against `main`.
- 3. **Full Compilation:** Builds the OS DDI, signed UKIs, netboot ESP, and the
-    k0s, KubeStellar, kubeadm, OpenZFS and NVIDIA systemd-sysext assets for every push to
-    `main`, every night, and on pull requests that carry `full-build` or change
-    the FSDK junction or its patches, and signs the combined `SHA256SUMS`
-    inside `oci/bluefin-server-image.bst` (gpg sign plus a `gpgv` proof
-    against the shipped keyring). Other pull requests run `validate`.
- 4. **Boot test:** Downloads the exported image sets and runs, in QEMU with
-    Secure Boot OVMF, each as one `scripts/dogfood-diskless.sh --check` or
-    `scripts/dogfood-install.sh` or `scripts/dogfood-installer.sh` call. The firmware is Fedora's
-    `edk2-ovmf` (Koji URL + SHA-256 in `build.yml`), not Ubuntu's `ovmf`:
-    Ubuntu 26.04's OVMF 2025.11 rejects systemd-boot's PK enrollment
-    (`Failed to write PK secure boot variable: Security violation`), and
-    until this was caught every CI boot ran in setup mode with Secure Boot
-    off. `--check` now fails unless the probe reports
-    `secureboot=enabled` (or, for tamper runs, the kernel logs
-    `Secure boot enabled`). Bump the pin by hand; Renovate does not track it.
-    - diskless netboot, no failed units; `tests/fixtures/nfs/netdb.probe`
-      must see `tcp` and `sunrpc` resolve, the local portmapper answer
-      `rpcinfo`, and an NFSv3 mount get past the protocol lookup
-      (`DOGFOOD_EXPECT`);
-    - `DOGFOOD_TAMPER=raw`: a corrupted DDI must be refused by the manifest
-      check (`DOWNLOAD INVALID: Checksum of ... did not check out`);
-      `DOGFOOD_TAMPER=sums`: the same DDI with `SHA256SUMS` re-hashed to match
-      it must be refused by the signature check (`DOWNLOAD INVALID: Signature
-      verification failed`). Both only after the image, `SHA256SUMS` and
-      `SHA256SUMS.gpg` were served, and nothing may boot;
-    - Ignition from the `ignition.config` credential, and UEFI HTTP boot with
-      `bluefin-node.ign` served next to the UKI, both with
-      `tests/fixtures/ignition/apply-marker.ign`: the probe must see the
-      written file and the Ignition-enabled unit active (`DOGFOOD_EXPECT`);
-    - releases: diskless boot, `systemd-sysinstall` to disk, boot the disk;
-    - every other build (the nightly build of `main`, `full-build` and FSDK
-      pull requests, dispatches): the same, then `systemd-sysupdate` A->B to
-      `1.<run>.1` and a boot-counted rollback from a corrupted `1.<run>.2`,
-      with the ZFS and NVIDIA sysexts merged together
-      (`DOGFOOD_SYSEXT=zfs,nvidia`; see
-      [ddi-installer-build.md](ddi-installer-build.md), also for why not
-      `0.<run>.N`). Releases skip this because their extra sets would be
-      release-signed versions nobody publishes; the nightly dev-key build of
-      `main` runs it instead.
-    - `scripts/dogfood-installer.sh`: the offline USB installer installs
-      unattended onto a blank disk, which then boots with and without the
-      installer attached. Outside releases it then gets `1.<run>.1`
-      (`dist/diskless-next`) the way a PC installed from the stick does:
-      an unreachable and a foreign-signed source must fail
-      `systemd-sysupdate.service` and show on the login banner, the update
-      must stage, boot and be blessed (see "Update health on the node" in
-      [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)).
-      Two more runs install onto disks that are not empty (#359): again over
-      a Bluefin install (`DOGFOOD_TARGET=prior-install`) and over another
-      OS's GPT disk (`DOGFOOD_TARGET=foreign-gpt`).
- 5. **Version Derivation:** The release version is set per build with
-    `just set-version`: `YY.MM.<run>` for releases, `0.<run>` for every other
-    build so it can never sort above a release.
- 6. **Automated Publishing:** For pushes to `main` (including Renovate PR
-    merges), GitHub Actions publishes `dist/diskless/` as-is: an immutable
-    GitHub Release `v<image-version>` and an ORAS OCI artifact
-    `ghcr.io/<owner>/bluefin-server:<ver>,latest`. Nodes verify updates
-    against the `SHA256SUMS` / `SHA256SUMS.gpg` already in that set. Every
-    pull request that builds rehearses this path in `release-dry-run`, so the
-    publish code is exercised before it first runs on main. Attestations, the SBOM
-    and the verify commands are in
-    [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md).
+2. **Auto-resolution:** The scheduled `track-junctions` workflow executes
+   `just bst source track` to resolve raw tags to full `git-describe` refs,
+   syncs `installer-version` to the tracked FSDK point release, and proposes the
+   result as its own pull request against `main`.
+3. **Full Compilation:** Builds the OS DDI, signed UKIs, netboot ESP, and the
+   k0s, KubeStellar, kubeadm, OpenZFS and NVIDIA systemd-sysext assets for every push to
+   `main`, every night, and on pull requests that carry `full-build` or change
+   the FSDK junction or its patches, and signs the combined `SHA256SUMS`
+   inside `oci/bluefin-server-image.bst` (gpg sign plus a `gpgv` proof
+   against the shipped keyring). Other pull requests run `validate`.
+4. **Boot test:** Downloads the exported image sets and runs, in QEMU with
+   Secure Boot OVMF, each as one `scripts/dogfood-diskless.sh --check` or
+   `scripts/dogfood-install.sh` or `scripts/dogfood-installer.sh` call. The firmware is Fedora's
+   `edk2-ovmf` (Koji URL + SHA-256 in `build.yml`), not Ubuntu's `ovmf`:
+   Ubuntu 26.04's OVMF 2025.11 rejects systemd-boot's PK enrollment
+   (`Failed to write PK secure boot variable: Security violation`), and
+   until this was caught every CI boot ran in setup mode with Secure Boot
+   off. `--check` now fails unless the probe reports
+   `secureboot=enabled` (or, for tamper runs, the kernel logs
+   `Secure boot enabled`). Bump the pin by hand; Renovate does not track it.
+   - diskless netboot, no failed units; `tests/fixtures/nfs/netdb.probe`
+     must see `tcp` and `sunrpc` resolve, the local portmapper answer
+     `rpcinfo`, and an NFSv3 mount get past the protocol lookup
+     (`DOGFOOD_EXPECT`);
+   - `DOGFOOD_TAMPER=raw`: a corrupted DDI must be refused by the manifest
+     check (`DOWNLOAD INVALID: Checksum of ... did not check out`);
+     `DOGFOOD_TAMPER=sums`: the same DDI with `SHA256SUMS` re-hashed to match
+     it must be refused by the signature check (`DOWNLOAD INVALID: Signature
+     verification failed`). Both only after the image, `SHA256SUMS` and
+     `SHA256SUMS.gpg` were served, and nothing may boot;
+   - Ignition from the `ignition.config` credential, and UEFI HTTP boot with
+     `bluefin-node.ign` served next to the UKI, both with
+     `tests/fixtures/ignition/apply-marker.ign`: the probe must see the
+     written file and the Ignition-enabled unit active (`DOGFOOD_EXPECT`);
+   - releases: diskless boot, `systemd-sysinstall` to disk, boot the disk;
+   - every other build (the nightly build of `main`, `full-build` and FSDK
+     pull requests, dispatches): the same, then `systemd-sysupdate` A->B to
+     `1.<run>.1` and a boot-counted rollback from a corrupted `1.<run>.2`,
+     with the ZFS and NVIDIA sysexts merged together
+     (`DOGFOOD_SYSEXT=zfs,nvidia`; see
+     [ddi-installer-build.md](ddi-installer-build.md), also for why not
+     `0.<run>.N`). Releases skip this because their extra sets would be
+     release-signed versions nobody publishes; the nightly dev-key build of
+     `main` runs it instead.
+   - `scripts/dogfood-installer.sh`: the offline USB installer installs
+     unattended onto a blank disk, which then boots with and without the
+     installer attached. Outside releases it then gets `1.<run>.1`
+     (`dist/diskless-next`) the way a PC installed from the stick does:
+     an unreachable and a foreign-signed source must fail
+     `systemd-sysupdate.service` and show on the login banner, the update
+     must stage, boot and be blessed (see "Update health on the node" in
+     [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)).
+     Two more runs install onto disks that are not empty (#359): again over
+     a Bluefin install (`DOGFOOD_TARGET=prior-install`) and over another
+     OS's GPT disk (`DOGFOOD_TARGET=foreign-gpt`).
+5. **Version Derivation:** The release version is set per build with
+   `just set-version`: `YY.MM.<run>` for releases, `0.<run>` for every other
+   build so it can never sort above a release.
+6. **Automated Publishing:** For pushes to `main` (including Renovate PR
+   merges), GitHub Actions publishes `dist/diskless/` as-is: an immutable
+   GitHub Release `v<image-version>` and an ORAS OCI artifact
+   `ghcr.io/<owner>/bluefin-server:<ver>,latest`. Nodes verify updates
+   against the `SHA256SUMS` / `SHA256SUMS.gpg` already in that set. Every
+   pull request that builds rehearses this path in `release-dry-run`, so the
+   publish code is exercised before it first runs on main. Attestations, the SBOM
+   and the verify commands are in
+   [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md).
 
 ## Build time and caches
 
-Measured on run 36499270842 (pull request, cold runner): `Build and export the
-image set` took 2 h. BuildStream pulled 239 artifacts and built 85 (about 3.9 h
-of build time over 4 cores). The critical path is FSDK's
-`components/linux.bst`: 6 min to fetch its source (not in any source cache)
-and 1 h 43 min to build. FSDK's caches never hold it for us, because the
+The canonical build-time figures; other files link here instead of
+restating them:
+
+- **Full image build:** the `build` job on `main` takes a median of about
+  50 min and a 90th percentile of about 2 h (56 successful runs,
+  2026-09-24 to 2026-10-04). The slow runs are the ones that compile the
+  kernel.
+- **FSDK's kernel when no cache holds it:** 1 h 43 min to build, plus 6 min
+  to fetch its source; it is the critical path of a cold build.
+
+Where a cold build's time goes (run 36499270842, pull request, cold runner):
+BuildStream pulled 239 artifacts and built 85 (about 3.9 h of build time over
+4 cores), with FSDK's `components/linux.bst` on the critical path. FSDK's
+caches never hold it for us, because the
 `components/linux-module-cert.bst` junction override (our module certificate)
 and `patches/freedesktop-sdk/0006-linux-*.patch` change its cache key. The
 other ~70 min of parallel build time on that run came from about 40 FSDK
@@ -278,8 +297,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `nvidia-open-*-signed.bst` elements
   build-depend on it, so a release build's own cache must never be saved or
   pushed anywhere a pull request can read.
-- **Most pull requests do not build the image.** The full build costs about
-  1.5 h, most of it FSDK's kernel, so a pull request builds only with the
+- **Most pull requests do not build the image.** The full build costs up to
+  2 h (figures above), most of it FSDK's kernel, so a pull request builds only with the
   `full-build` label or when it changes `elements/freedesktop-sdk.bst` or
   `patches/` (an untested FSDK bump would otherwise merge unbuilt); the rest
   run `validate`. A regression outside those paths shows up in the next
