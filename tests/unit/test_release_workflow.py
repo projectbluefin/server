@@ -52,6 +52,14 @@ def test_build_boot_test_and_dry_run_check_out_the_triggering_commit() -> None:
         assert checkout["repository"] == "${{ github.event.pull_request.head.repo.full_name || github.repository }}", name
 
 
+def test_no_checkout_persists_credentials() -> None:
+    for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        jobs = yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"]
+        for name, job in jobs.items():
+            for step in steps(job, "actions/checkout@"):
+                assert step.get("with", {}).get("persist-credentials") is False, f"{path.name}:{name}"
+
+
 def test_signing_secrets_only_reach_main_only_environments() -> None:
     # `release` and `bst-cache` accept only main; any other run asking for
     # them is refused before its first step. Non-release builds get no
