@@ -135,10 +135,17 @@ jobs:
   # FSDK's kernel is most of a cold build
   # (docs/skills/ci-tooling.md#build-time-and-caches), and no upstream cache
   # holds it (our module certificate and kernel config patches change its
-  # key). This job builds it (and Go) with the committed release module certificate and no
-  # signing secrets, and pushes the key-free artifacts to the project CAS unless
-  # a remote already holds them; every build pulls them through project.conf
-  # (scripts/kernel-cache.sh).
+  # key). These jobs build it (and Go) with no signing secrets, each against
+  # one committed module certificate, and push the key-free artifacts to the
+  # project CAS unless a remote already holds them; every build pulls them
+  # through project.conf (scripts/kernel-cache.sh):
+  #  - kernel-cache: the release certificate, for release builds;
+  #  - kernel-cache-dev: the public INSECURE dev certificate that
+  #    `just gen-dev-keys` uses (files/dev-keys/), for pull requests, the
+  #    nightly build and local builds. No job needs it, so it never delays
+  #    a release.
+  # The cache only saves time: a failed seed must not hold back the release,
+  # which checks build's and boot-test's own results.
   kernel-cache:
     needs: changes
     if: needs.changes.outputs.release == 'true'
@@ -162,20 +169,13 @@ jobs:
       - name: Set up runner disk space
         run: bash scripts/ci-runner-disk.sh
 
-      - name: Stage the release module certificate
-        run: |
-          mkdir -p files/boot-keys/modules
-          cp files/release-keys/linux-module-cert.crt files/boot-keys/modules/
-
-      # The cache only saves time: a failure here must not hold back the
-      # release, which checks build's and boot-test's own results.
       - name: Build and push the kernel cache unless it exists
         id: seed
         continue-on-error: true
         env:
           CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
           CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
-        run: bash scripts/kernel-cache.sh seed
+        run: bash scripts/kernel-cache.sh seed release
 
       # continue-on-error turns the job green; say so, or a cache that never
       # seeds goes unnoticed while every build compiles the kernel.
@@ -183,6 +183,46 @@ jobs:
         if: steps.seed.outcome == 'failure'
         run: |
           msg="The kernel cache seed failed; this release builds the kernel itself. See the step above."
+          echo "::warning title=Kernel cache not seeded::${msg}"
+          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
+
+  kernel-cache-dev:
+    needs: changes
+    if: needs.changes.outputs.release == 'true'
+    # CASD_CLIENT_KEY lives in this environment, which only main may use.
+    environment: bst-cache
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2
+        with:
+          tool: just@1.58.0
+
+      - name: Set up runner disk space
+        run: bash scripts/ci-runner-disk.sh
+
+      - name: Build and push the dev kernel cache unless it exists
+        id: seed
+        continue-on-error: true
+        env:
+          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
+          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
+        run: bash scripts/kernel-cache.sh seed dev
+
+      # continue-on-error turns the job green; say so, or a cache that never
+      # seeds goes unnoticed while every build compiles the kernel.
+      - name: Report a failed seed
+        if: steps.seed.outcome == 'failure'
+        run: |
+          msg="The dev kernel cache seed failed; pull requests and the nightly build compile the kernel until a release seeds it. See the step above."
           echo "::warning title=Kernel cache not seeded::${msg}"
           echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
 
@@ -255,6 +295,8 @@ jobs:
               exit 1
             fi
             cp files/release-keys/linux-module-cert.crt files/boot-keys/modules/linux-module-cert.crt
+            # Never the public INSECURE dev module pair (files/dev-keys/).
+            bash scripts/check-release-keys.sh
             printf '%s\n' "${SYSUPDATE_SIGNING_KEY}" > files/boot-keys/sysupdate-signing.asc
             cp files/os/sysupdate-keys/import-pubring.gpg files/boot-keys/import-pubring.pgp
           else

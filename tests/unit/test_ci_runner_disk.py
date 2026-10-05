@@ -21,7 +21,7 @@ def test_runner_disk_setup_is_not_inlined(workflow: str) -> None:
 
 
 def test_every_build_job_sets_up_the_runner_disk() -> None:
-    for workflow, job in (("build.yml", "kernel-cache"), ("build.yml", "build"),
+    for workflow, job in (("build.yml", "kernel-cache"), ("build.yml", "kernel-cache-dev"), ("build.yml", "build"),
                           ("reproducibility.yml", "reproducibility")):
         steps = yaml.safe_load((WORKFLOWS / workflow).read_text())["jobs"][job]["steps"]
         assert any(s.get("run") == "bash scripts/ci-runner-disk.sh" for s in steps), f"{workflow}:{job}"

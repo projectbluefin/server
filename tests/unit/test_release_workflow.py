@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,10 +70,11 @@ def test_signing_secrets_only_reach_main_only_environments() -> None:
     install = next(s for s in build["steps"] if s.get("name") == "Install signing keys")
     for secret in ("BOOT_KEYS_TARBALL", "SYSUPDATE_SIGNING_KEY"):
         assert install["env"][secret] == f"${{{{ needs.changes.outputs.release == 'true' && secrets.{secret} || '' }}}}"
-    assert JOBS["kernel-cache"]["environment"] == "bst-cache"
-    assert JOBS["kernel-cache"]["if"] == "needs.changes.outputs.release == 'true'"
+    for seeder in ("kernel-cache", "kernel-cache-dev"):
+        assert JOBS[seeder]["environment"] == "bst-cache"
+        assert JOBS[seeder]["if"] == "needs.changes.outputs.release == 'true'"
     for name, job in JOBS.items():
-        if name not in ("build", "kernel-cache"):
+        if name not in ("build", "kernel-cache", "kernel-cache-dev"):
             assert "secrets." not in json.dumps(job), name
             assert "environment" not in job, name
 
@@ -146,10 +148,11 @@ def test_release_publishes_only_a_built_and_boot_tested_set() -> None:
     assert RELEASE["needs"] == ["changes", "build", "boot-test"]
 
 
-def test_a_failed_kernel_cache_seed_is_reported() -> None:
-    seed = next(s for s in JOBS["kernel-cache"]["steps"] if s.get("id") == "seed")
+@pytest.mark.parametrize("seeder", ["kernel-cache", "kernel-cache-dev"])
+def test_a_failed_kernel_cache_seed_is_reported(seeder: str) -> None:
+    seed = next(s for s in JOBS[seeder]["steps"] if s.get("id") == "seed")
     assert seed["continue-on-error"] is True
-    report = next(s for s in JOBS["kernel-cache"]["steps"] if s.get("if") == "steps.seed.outcome == 'failure'")
+    report = next(s for s in JOBS[seeder]["steps"] if s.get("if") == "steps.seed.outcome == 'failure'")
     assert "::warning" in report["run"] and "GITHUB_STEP_SUMMARY" in report["run"]
 
 
