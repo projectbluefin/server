@@ -4,7 +4,7 @@ description: Secure Boot and image signing key management for Bluefin Server. Lo
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-10-04"
 ---
 # Secure Boot Key Management
 
@@ -32,11 +32,40 @@ built against it, and release builds stop if it differs from the one in
 
 ```bash
 just gen-dev-keys          # throwaway keys in files/boot-keys/ (gitignored)
-just gen-dev-keys --force  # rotate (rebuilds the kernel)
+just gen-dev-keys --force  # rotate the Secure Boot and image signing keys
+just gen-dev-keys --force --private-module-key  # also a fresh module key
 ```
 
 `just validate` and `just build-image` depend on `gen-dev-keys`, so a fresh
 clone builds out of the box.
+
+### The INSECURE dev module key
+
+The module signing pair of a `gen-dev-keys` key set is not generated: it is
+the committed, public pair in `files/dev-keys/`
+(`INSECURE-dev-module-key.{pem,crt}`; see its `README.md`). The module
+certificate is part of the kernel's cache key, so with one fixed dev
+certificate every non-release build (pull requests, the nightly build, local
+builds) pulls the kernel that `scripts/kernel-cache.sh seed dev` pushed on
+the last release instead of compiling it (see "Build time and caches" in
+[ci-tooling.md](ci-tooling.md)).
+
+- **Public on purpose.** Anyone can sign a module that a dev kernel loads
+  under lockdown. Dev images are also signed with throwaway Secure Boot keys
+  and never published. For an image you boot on hardware you care about,
+  use `--private-module-key` (the kernel then builds locally).
+- **Never in a release.** Release builds install `BOOT_KEYS_TARBALL` and run
+  `scripts/check-release-keys.sh`, which fails when the module certificate or
+  key is the dev pair (compared by public key); `kernel-cache.sh seed
+  release` runs it too. The release kernel trusts only
+  `files/release-keys/linux-module-cert.crt`, so dev-signed modules do not
+  load on it.
+- **Never in an artifact.** FSDK's kernel reads only
+  `/keys/linux-module-cert.crt` (`SYSTEM_TRUSTED_KEYS`, `MODULE_SIG_KEY ""`,
+  no `MODULE_SIG_ALL`): the private key is used only by
+  `bluefin-server/kernel-modules.bst` and the other signing elements through
+  `bluefin-server/keys/boot-keys.bst`, which is never pushed. No element
+  stages `files/dev-keys/` (`tests/unit/test_dev_module_key.py`).
 
 ## CI secrets
 
@@ -49,8 +78,8 @@ which only `main` may use (see "Environments and secrets" in
 - `SYSUPDATE_SIGNING_KEY` — the ASCII-armored secret key written to
   `files/boot-keys/sysupdate-signing.asc`.
 
-Pull requests get throwaway keys from `just gen-dev-keys`; they never see the
-real secrets.
+Pull requests get throwaway keys from `just gen-dev-keys` (with the public
+dev module pair); they never see the real secrets.
 
 ## Key rotation
 
@@ -72,7 +101,9 @@ new kernel build is mandatory. Plan kernel rebuilds into the rotation window.
 - [ ] `just validate` passes after key generation.
 - [ ] `sbverify --cert files/boot-keys/DB.crt <uki>` passes on built UKIs.
 - [ ] `gpgv --keyring files/boot-keys/import-pubring.pgp SHA256SUMS.gpg SHA256SUMS` passes.
-- [ ] No private keys are committed outside the gitignored `files/boot-keys/`.
+- [ ] No private keys are committed outside the gitignored `files/boot-keys/`,
+      except the public INSECURE dev module key in `files/dev-keys/`.
+- [ ] `bash scripts/check-release-keys.sh` passes on a release key set.
 
 ## See also
 

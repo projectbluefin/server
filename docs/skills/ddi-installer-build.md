@@ -22,7 +22,7 @@ inside the FSDK `bst2` container (`just bst`); it is not installed locally.
 ```bash
 just validate          # version invariants + resolve the shipped element graphs
 just test-unit         # pytest + bats
-just gen-dev-keys      # throwaway Secure Boot + module keys in files/boot-keys/
+just gen-dev-keys      # throwaway Secure Boot keys + the public dev module key in files/boot-keys/
 just set-version V     # set image-version in include/image.yml (<=17 chars,
                        # increasing under strverscmp)
 just build-image       # build oci/bluefin-server-image.bst
@@ -59,7 +59,9 @@ Every image build signs: the UKIs and systemd-boot with DB, kernel modules
 with the module signing certificate, and the release `SHA256SUMS` with the
 image signing key. What each key is, where it lives, what `just gen-dev-keys`
 generates (throwaway keys in the gitignored `files/boot-keys/`, kept unless
-`--force`, a partial set is an error), and how CI supplies the real keys:
+`--force`, a partial set is an error, the module pair is the public
+INSECURE dev pair so the kernel comes from the cache), and how CI supplies
+the real keys:
 [secure-boot-keys.md](secure-boot-keys.md). The release-signing half
 (`sysupdate-signing.asc` / `import-pubring.pgp`, the committed
 `files/os/sysupdate-keys/import-pubring.gpg`, and rotation):
@@ -243,7 +245,8 @@ nodes may already trust.
   (the build fails the check in `bluefin-server-boot.bst`).
 - A new release asset that is not added to `SHA256SUMS` in
   `oci/bluefin-server-image.bst`.
-- Keys committed anywhere outside the gitignored `files/boot-keys/`.
+- Keys committed anywhere outside the gitignored `files/boot-keys/`, other
+  than the public INSECURE dev module pair in `files/dev-keys/`.
 
 ## Verification
 

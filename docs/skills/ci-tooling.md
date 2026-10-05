@@ -139,7 +139,7 @@ one of these environments is refused before its first step.
 | Environment | Secrets | Jobs |
 |---|---|---|
 | `release` | `BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY` | `build`, only when `changes` says `release=true` |
-| `bst-cache` | `CASD_CLIENT_KEY` (`CASD_CLIENT_CERT` is a repository variable) | `kernel-cache` (releases only) |
+| `bst-cache` | `CASD_CLIENT_KEY` (`CASD_CLIENT_CERT` is a repository variable) | `kernel-cache`, `kernel-cache-dev` (releases only) |
 | `trackers` | `MERGERAPTOR_APP_ID`, `MERGERAPTOR_PRIVATE_KEY` | `track-junctions`, `track-binaries`' `propose` |
 
 `build` serves releases and every other build, so it names the environment
@@ -312,11 +312,19 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip. No
   status check is required on `main` today; a skipped job reports as passing,
   so they can be made required without `paths-ignore` leaving them pending.
-- **Kernel cache in the project CAS, key-free by construction.** The
-  `kernel-cache` job (releases only) runs `scripts/kernel-cache.sh seed`: with
-  no signing secrets and the committed release module certificate
-  (`files/release-keys/linux-module-cert.crt`) staged as
-  `files/boot-keys/modules/linux-module-cert.crt`, it builds FSDK's
+- **Kernel cache in the project CAS, key-free by construction.** Two jobs,
+  on releases only, run `scripts/kernel-cache.sh seed`, one per module
+  certificate the kernel can trust (it is part of the kernel's cache key):
+  - `kernel-cache` runs `seed release` with the committed release certificate
+    (`files/release-keys/linux-module-cert.crt`); `build` waits for it.
+  - `kernel-cache-dev` runs `seed dev` with the public INSECURE dev
+    certificate (`files/dev-keys/INSECURE-dev-module-key.crt`) that
+    `just gen-dev-keys` uses for every non-release build. No job waits for
+    it, so it never delays a release.
+
+  With no signing secrets and that one certificate staged as the only file of
+  `files/boot-keys/modules/` (`seed` refuses anything else there: that
+  directory's import is pushed with the kernel), each builds FSDK's
   `components/linux.bst` and `components/go.bst` with a BuildStream config
   that pushes artifacts and sources to `cache.projectbluefin.io:11002`,
   unless `bst artifact show` reports both `available` on a remote. The push
@@ -331,7 +339,9 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `patches/freedesktop-sdk/0001-project.conf-Add-GNOME-CAS-servers.patch`. Release builds
   normalize `BOOT_KEYS_TARBALL`'s module certificate to the committed bytes
   after checking it is the same certificate (and stop if not), so the keys
-  match. The CAS is publicly readable: `seed` refuses if
+  match, and run `scripts/check-release-keys.sh`, which fails the build if
+  the module certificate or key is the dev pair; `seed release` runs it too.
+  The CAS is publicly readable: `seed` refuses if
   `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds,
   and the job holds no signing secret. A content grep is no guard here: FSDK
   sources (Go's TLS test data and others) carry 307 PEM private keys. The
@@ -353,9 +363,12 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `patches/` (an untested FSDK bump would otherwise merge unbuilt); the rest
   run `validate`. A regression outside those paths shows up in the next
   `main` build or the nightly build, both of which block nothing but the
-  release that contains it. When a pull request does build, it still builds
-  the kernel: `just gen-dev-keys` makes a new module certificate on every
-  run, so the PR kernel's cache key never matches anything cached.
+  release that contains it. When a pull request or the nightly build does
+  build, it pulls the kernel that `kernel-cache-dev` seeded: `just
+  gen-dev-keys` always stages the same public dev module certificate, so
+  the dev kernel's cache key is the same on every run. It compiles the
+  kernel (1 h 43 min) only until the next release after a kernel change
+  seeds it.
 - **No `actions/cache`.** A full build's cache holds `boot-keys.bst`, and
   pull requests can restore caches saved on `main`; the key-free kernel
   cache lives in the project CAS instead.
