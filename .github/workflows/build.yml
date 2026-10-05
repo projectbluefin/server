@@ -34,7 +34,8 @@ jobs:
   #    full-build label or when it changes the FSDK junction or its patches,
   #    and never when it cannot change the image set (docs, unit tests; see
   #    .github/scripts/image-build-needed.py). Other pull requests run
-  #    `validate` in minutes instead of the ~1.5 h build.
+  #    `validate` in minutes instead of the full build (build-time figures:
+  #    docs/skills/ci-tooling.md#build-time-and-caches).
   # A skipped job reports as passing, so `build` and `boot-test` can be
   # required checks without blocking those PRs. The classifier runs from the
   # base revision, never the PR head, so a PR cannot edit it to skip its own
@@ -128,9 +129,10 @@ jobs:
       - name: Validate Element Graph
         run: just validate
 
-  # FSDK's kernel is ~70 of the ~85 build minutes, and no upstream cache holds
-  # it (our module certificate and kernel config patches change its key). This
-  # job builds it (and Go) with the committed release module certificate and no
+  # FSDK's kernel is most of a cold build
+  # (docs/skills/ci-tooling.md#build-time-and-caches), and no upstream cache
+  # holds it (our module certificate and kernel config patches change its
+  # key). This job builds it (and Go) with the committed release module certificate and no
   # signing secrets, and pushes the key-free artifacts to the project CAS unless
   # a remote already holds them; every build pulls them through project.conf
   # (scripts/kernel-cache.sh).
@@ -152,22 +154,8 @@ jobs:
         with:
           tool: just@1.58.0
 
-      # BuildStream's cache on the runner's /mnt disk; the kernel build alone
-      # fills 15 GB.
       - name: Set up runner disk space
-        run: |
-          set -euo pipefail
-          sudo mkdir -p /mnt/podman /mnt/buildstream
-          sudo chown -R "$USER:$USER" /mnt/podman /mnt/buildstream
-          mkdir -p ~/.config/containers
-          cat > ~/.config/containers/storage.conf <<EOF
-          [storage]
-          driver = "overlay"
-          runroot = "/run/user/1001"
-          graphroot = "/mnt/podman"
-          EOF
-          mkdir -p ~/.cache
-          ln -sfn /mnt/buildstream ~/.cache/buildstream
+        run: bash scripts/ci-runner-disk.sh
 
       - name: Stage the release module certificate
         run: |
@@ -270,19 +258,7 @@ jobs:
           echo "version=${V}" >> "$GITHUB_OUTPUT"
 
       - name: Set up runner disk space
-        run: |
-          set -euo pipefail
-          sudo mkdir -p /mnt/podman /mnt/buildstream
-          sudo chown -R "$USER:$USER" /mnt/podman /mnt/buildstream
-          mkdir -p ~/.config/containers
-          cat > ~/.config/containers/storage.conf <<EOF
-          [storage]
-          driver = "overlay"
-          runroot = "/run/user/1001"
-          graphroot = "/mnt/podman"
-          EOF
-          mkdir -p ~/.cache
-          ln -sf /mnt/buildstream ~/.cache/buildstream
+        run: bash scripts/ci-runner-disk.sh
 
       - name: Validate Element Graph
         run: just validate
