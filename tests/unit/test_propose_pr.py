@@ -62,7 +62,8 @@ def env(tmp_path: Path) -> dict[str, str]:
     log = tmp_path / "log"
     log.mkdir()
     (tmp_path / "body.md").write_text("body\n")
-    return {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "LOG": str(log), "OPEN_PR": "",
+    inherited = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_AUTHOR_", "GIT_COMMITTER_"))}
+    return {**inherited, "PATH": f"{bin_dir}:{os.environ['PATH']}", "LOG": str(log), "OPEN_PR": "",
             "CLOSED_TITLES": "", "GH_FAIL": "", "BODY": str(tmp_path / "body.md")}
 
 
