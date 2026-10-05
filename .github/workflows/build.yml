@@ -365,6 +365,8 @@ jobs:
       # "Security violation", so the guests kept booting in setup mode with
       # nothing verified. Use Fedora's edk2 build, pinned by checksum, which
       # enrolls the keys; dogfood-diskless.sh now fails if Secure Boot is off.
+      # Bumped by hand: Renovate cannot move the URL and its checksum together
+      # (see ci-tooling.md).
       - name: Install QEMU and OVMF
         env:
           OVMF_RPM_URL: https://kojipkgs.fedoraproject.org/packages/edk2/20260508/6.fc44/noarch/edk2-ovmf-20260508-6.fc44.noarch.rpm
