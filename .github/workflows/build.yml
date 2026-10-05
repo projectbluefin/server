@@ -175,13 +175,23 @@ jobs:
           cp files/release-keys/linux-module-cert.crt files/boot-keys/modules/
 
       # The cache only saves time: a failure here must not hold back the
-      # release, which also counts this job through `build`.
+      # release, which checks build's and boot-test's own results.
       - name: Build and push the kernel cache unless it exists
+        id: seed
         continue-on-error: true
         env:
           CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
           CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
         run: bash scripts/kernel-cache.sh seed
+
+      # continue-on-error turns the job green; say so, or a cache that never
+      # seeds goes unnoticed while every build compiles the kernel.
+      - name: Report a failed seed
+        if: steps.seed.outcome == 'failure'
+        run: |
+          msg="The kernel cache seed failed; this release builds the kernel itself. See the step above."
+          echo "::warning title=Kernel cache not seeded::${msg}"
+          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: [changes, kernel-cache]
@@ -345,8 +355,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          # The commit `build` built, not the branch tip: the harness and
+          # fixtures must match the image set under test.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          persist-credentials: false
 
       - name: Download image artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -493,7 +506,10 @@ jobs:
   # command is scripts/publish-release.sh, which release-dry-run rehearses on
   # each pull request that builds.
   release:
-    if: ${{ !failure() && !cancelled() && needs.changes.outputs.release == 'true' }}
+    # Explicit results, not !failure(): a failed kernel-cache (only a cache)
+    # must not hold back a release, and nothing but a built and boot-tested
+    # set may publish.
+    if: ${{ !cancelled() && needs.changes.outputs.release == 'true' && needs.build.result == 'success' && needs.boot-test.result == 'success' }}
     needs: [changes, build, boot-test]
     runs-on: ubuntu-26.04
     timeout-minutes: 45

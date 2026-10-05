@@ -43,10 +43,13 @@ def test_oras_is_pinned_identically_in_both_jobs() -> None:
     assert "checksum" in json.loads(pins[0])["with"]
 
 
-def test_build_and_dry_run_check_out_the_triggering_commit() -> None:
-    for job in (JOBS["build"], DRY_RUN):
-        checkout = steps(job, "actions/checkout@")[0]["with"]
-        assert checkout["ref"] == "${{ github.event.pull_request.head.sha || github.sha }}"
+def test_build_boot_test_and_dry_run_check_out_the_triggering_commit() -> None:
+    # Not the branch tip: main runs queue, so a tip checkout could pair one
+    # commit's image set with a later commit's boot-test harness.
+    for name in ("build", "boot-test", "release-dry-run"):
+        checkout = steps(JOBS[name], "actions/checkout@")[0]["with"]
+        assert checkout["ref"] == "${{ github.event.pull_request.head.sha || github.sha }}", name
+        assert checkout["repository"] == "${{ github.event.pull_request.head.repo.full_name || github.repository }}", name
 
 
 def test_dry_run_is_read_only_and_secret_free() -> None:
@@ -83,6 +86,28 @@ def test_boot_test_uploads_every_harness_log_directory() -> None:
     paths = upload["with"]["path"].split()
     for d in ("dist/dogfood-install/", "dist/dogfood-installer/"):
         assert any(p.startswith(d) for p in paths), d
+
+
+def test_release_publishes_only_a_built_and_boot_tested_set() -> None:
+    # Explicit results instead of !failure(): a failed kernel-cache must not
+    # block the release, and a skipped or failed build or boot-test must.
+    cond = RELEASE["if"]
+    assert "!failure()" not in cond
+    for part in (
+        "!cancelled()",
+        "needs.changes.outputs.release == 'true'",
+        "needs.build.result == 'success'",
+        "needs.boot-test.result == 'success'",
+    ):
+        assert part in cond
+    assert RELEASE["needs"] == ["changes", "build", "boot-test"]
+
+
+def test_a_failed_kernel_cache_seed_is_reported() -> None:
+    seed = next(s for s in JOBS["kernel-cache"]["steps"] if s.get("id") == "seed")
+    assert seed["continue-on-error"] is True
+    report = next(s for s in JOBS["kernel-cache"]["steps"] if s.get("if") == "steps.seed.outcome == 'failure'")
+    assert "::warning" in report["run"] and "GITHUB_STEP_SUMMARY" in report["run"]
 
 
 def test_jobs_after_build_run_when_kernel_cache_is_skipped() -> None:
