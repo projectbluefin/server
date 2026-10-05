@@ -195,3 +195,13 @@ def test_both_trackers_propose_through_the_script() -> None:
         assert extra in text
         for inline in ("gh pr create", "gh pr edit", "git push", "git commit -"):
             assert inline not in text, f"{name} still inlines {inline}"
+
+
+def test_the_token_is_used_for_the_push_but_never_stored(repo: Path, env: dict[str, str]) -> None:
+    env["GH_TOKEN"] = "ghs_secret_value"
+    (repo / "pin.txt").write_text("1.1\n")
+    result = propose(repo, env)
+    assert result.returncode == 0, result.stderr
+    assert remote_branch(repo) != ""
+    assert "ghs_secret_value" not in (repo / ".git" / "config").read_text()
+    assert "ghs_secret_value" not in result.stdout + result.stderr

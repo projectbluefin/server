@@ -15,7 +15,9 @@
 #    title.
 # Otherwise it commits onto BRANCH (from the checked-out commit), force-pushes
 # with a lease on the branch state it saw, and creates or edits the pull
-# request. The caller sets up push credentials for REMOTE and GH_TOKEN.
+# request. GH_TOKEN authenticates `gh` and the push: checkouts do not persist
+# credentials, so the push passes it as a one-off header that never reaches
+# .git/config.
 #
 # No `|| true` on the queries: a failed `gh` or `git ls-remote` must stop the
 # run, not pass for "no pull request" or "no branch".
@@ -77,7 +79,12 @@ git checkout --quiet -B "${branch}"
 git -c user.name="github-actions[bot]" \
     -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
     commit --quiet -m "${title}"
-git push --quiet --force-with-lease="refs/heads/${branch}:${remote_head}" "${remote}" "HEAD:refs/heads/${branch}"
+push_auth=()
+if [ -n "${GH_TOKEN:-}" ]; then
+    push_auth=(-c "http.${GITHUB_SERVER_URL:-https://github.com}/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)")
+fi
+git "${push_auth[@]}" push --quiet --force-with-lease="refs/heads/${branch}:${remote_head}" \
+    "${remote}" "HEAD:refs/heads/${branch}"
 
 if [ -n "${open}" ]; then
     gh pr edit "${open}" --title "${title}" --body-file "${body}"
