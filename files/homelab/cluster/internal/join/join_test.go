@@ -44,7 +44,7 @@ type testServer struct {
 	addr    netip.AddrPort
 	minter  *fakeMinter
 	limiter *Limiter
-	logs    *bytes.Buffer
+	logs    *syncBuffer
 	cert    tls.Certificate
 }
 
@@ -62,10 +62,9 @@ func startServer(t *testing.T, pass string, limits Limits, opts ...func(*Server)
 	ts := &testServer{
 		minter:  &fakeMinter{},
 		limiter: NewLimiter(limits, filepath.Join(dir, "failures.json"), nil),
-		logs:    &bytes.Buffer{},
+		logs:    &syncBuffer{},
 		cert:    cert,
 	}
-	var mu sync.Mutex
 	srv := &Server{
 		Passphrase: pass,
 		Cluster:    "lab",
@@ -73,7 +72,7 @@ func startServer(t *testing.T, pass string, limits Limits, opts ...func(*Server)
 		Runtime:    func() string { return ops.RuntimeKubeadm },
 		Minter:     ts.minter,
 		Limiter:    ts.limiter,
-		Log:        slog.New(slog.NewTextHandler(lockedWriter{&mu, ts.logs}, nil)),
+		Log:        slog.New(slog.NewTextHandler(ts.logs, nil)),
 	}
 	for _, o := range opts {
 		o(srv)
@@ -86,15 +85,23 @@ func startServer(t *testing.T, pass string, limits Limits, opts ...func(*Server)
 	return ts
 }
 
-type lockedWriter struct {
-	mu *sync.Mutex
-	w  io.Writer
+// syncBuffer is the server's log sink. The server's handler goroutines
+// write to it while a test reads it, so reads take the same lock as writes.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
 }
 
-func (l lockedWriter) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.w.Write(p)
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
 
 func client(pass string) *Client {
