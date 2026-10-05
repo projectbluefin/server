@@ -4,6 +4,15 @@
 # systemd-boot with DB and kernel modules with linux-module-cert; the
 # firmware enrolls PK/KEK/DB from the ESP on first boot.
 #
+# The module signing pair is the committed, public INSECURE dev pair in
+# files/dev-keys/ (see its README.md): every non-release build then trusts
+# the same certificate, so the kernel's cache key is stable and builds pull
+# the kernel that `scripts/kernel-cache.sh seed dev` pushed instead of
+# compiling it. --private-module-key generates a fresh pair instead, for an
+# image you boot on hardware you care about (the kernel then builds locally).
+# Release builds never run this: CI installs the project keys, and
+# scripts/check-release-keys.sh refuses the dev pair.
+#
 # Layout (matches freedesktop-sdk's files/boot-keys convention):
 #   files/boot-keys/{PK,KEK,DB}.{key,crt}
 #   files/boot-keys/linux-module-cert.key         private, never staged into the kernel build
@@ -15,15 +24,24 @@
 # Existing keys are never overwritten without --force: every key is baked
 # into or signs the image, so replacing one needs a new image-version (see
 # "Keys" in docs/skills/ddi-installer-build.md), and changing
-# modules/linux-module-cert.crt also forces a kernel rebuild. A partial set
+# modules/linux-module-cert.crt changes the kernel's cache key. A partial set
 # (some files of a pair or of the boot set missing) is an error rather than
 # something to fill in, since filling it in would replace the files that do
 # exist.
 set -euo pipefail
 
-dir="$(cd "$(dirname "$0")/.." && pwd)/files/boot-keys"
+root="$(cd "$(dirname "$0")/.." && pwd)"
+dir="${root}/files/boot-keys"
+dev_keys="${root}/files/dev-keys"
 force=0
-[ "${1:-}" = "--force" ] && force=1
+private_module_key=0
+for arg in "$@"; do
+    case "${arg}" in
+        --force) force=1 ;;
+        --private-module-key) private_module_key=1 ;;
+        *) echo "usage: $0 [--force] [--private-module-key]" >&2; exit 2 ;;
+    esac
+done
 
 mkdir -p "${dir}/modules"
 chmod 0700 "${dir}"
@@ -74,7 +92,7 @@ if [ "${signing_state}" != all ] || [ "${force}" = 1 ]; then
 fi
 
 if [ "${boot_state}" = all ] && [ "${force}" = 0 ]; then
-    echo "Keys already exist in ${dir}; pass --force to regenerate (rebuilds the kernel)."
+    echo "Keys already exist in ${dir}; pass --force to regenerate."
     exit 0
 fi
 
@@ -84,11 +102,19 @@ for name in PK KEK DB; do
         -keyout "${dir}/${name}.key" -out "${dir}/${name}.crt" 2>/dev/null
 done
 
-openssl req -new -x509 -newkey rsa:4096 -nodes -sha512 -days 3650 \
-    -subj "/CN=Bluefin Server dev kernel modules (${owner})/" \
-    -addext "keyUsage=digitalSignature" \
-    -addext "extendedKeyUsage=codeSigning" \
-    -keyout "${dir}/linux-module-cert.key" -out "${dir}/modules/linux-module-cert.crt" 2>/dev/null
+if [ "${private_module_key}" = 1 ]; then
+    openssl req -new -x509 -newkey rsa:4096 -nodes -sha512 -days 3650 \
+        -subj "/CN=Bluefin Server dev kernel modules (${owner})/" \
+        -addext "keyUsage=digitalSignature" \
+        -addext "extendedKeyUsage=codeSigning" \
+        -keyout "${dir}/linux-module-cert.key" -out "${dir}/modules/linux-module-cert.crt" 2>/dev/null
+    echo "Generated a private module signing key (the kernel builds locally)"
+else
+    install -m 0600 "${dev_keys}/INSECURE-dev-module-key.pem" "${dir}/linux-module-cert.key"
+    install -m 0644 "${dev_keys}/INSECURE-dev-module-key.crt" "${dir}/modules/linux-module-cert.crt"
+    echo "Module signing key: the public INSECURE dev key (files/dev-keys/README.md);"
+    echo "  pass --force --private-module-key for an image you boot on real hardware."
+fi
 
 chmod 0644 "${dir}"/*.crt "${dir}/modules/linux-module-cert.crt"
 echo "Generated dev keys in ${dir}"
