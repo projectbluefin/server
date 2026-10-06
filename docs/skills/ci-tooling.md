@@ -4,7 +4,7 @@ description: CI workflow conventions for Bluefin Server. Use when writing or edi
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-04"
+  last_updated: "2026-10-05"
   context7-sources:
     - /websites/github_en_actions
     - /websites/cli_github_manual
@@ -73,6 +73,17 @@ commit it was built from. The docker datasource cannot order those tags, so a
 Renovate `git-refs` manager follows that repository's default branch (every
 merge there publishes a tag for its commit) and moves the tag; it stays a tag,
 not a digest pin.
+
+### Python lint
+
+`just lint-python`, which the `unit` job runs before the tests, runs ruff over
+every Python file (`ruff.toml`: the E, F, W, I, UP and B rules, each disabled
+rule with its reason) and mypy over `scripts/` and `.github/scripts/`
+(`mypy.ini`: every function there is annotated). ruff's `target-version` is
+the Python the workflows set up, 3.14; move both together. Locally, install
+the pinned tools into a virtualenv with
+`python3 -m pip install -r .github/requirements-ci.txt`, run
+`just lint-python`, and let `python3 -m ruff check --fix` apply the safe fixes.
 
 ### Workflow linting
 
@@ -211,7 +222,7 @@ use: remove only this repository from their repository access.
 | `nightly-status` | `build.yml` | `schedule`, after `boot-test` | Opens the "Nightly build failing" issue (or comments on the open one) with the run URL when `changes`, `build` or `boot-test` failed, and closes it when a later nightly passes. `issues: write` only. |
 | `docs` | `docs-checks.yml` | every `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. No `paths:` filter, so it can be a required check. Read-only token. |
 | `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the final-assembly artifacts, rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). Throwaway keys, nothing published. Read-only token. |
-| `unit`, `go` | `unit-tests.yml` | every `pull_request`, `push/main` | `unit` runs the pytest and BATS suites; `go` runs `gofmt -l`, `go vet` and `go test -race` for each Go module in the repository (a matrix; `tests/unit/test_ci_workflows.py` fails if a `go.mod` is missing from it). No `paths:` filter, so both can be required checks. Read-only token. |
+| `unit`, `go` | `unit-tests.yml` | every `pull_request`, `push/main` | `unit` runs `just lint-python` (see [Python lint](#python-lint)), then the pytest and BATS suites; `go` runs `gofmt -l`, `go vet` and `go test -race` for each Go module in the repository (a matrix; `tests/unit/test_ci_workflows.py` fails if a `go.mod` is missing from it). No `paths:` filter, so both can be required checks. Read-only token. |
 | `actionlint`, `zizmor` | `lint-actions.yml` | every `pull_request`, `push/main` | Lint the workflows (see [Workflow linting](#workflow-linting)). Read-only token; zizmor uses it for its online audits. |
 | `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token (`trackers` environment, `propose` only), minted after the apply step and narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
