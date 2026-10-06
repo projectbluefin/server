@@ -43,6 +43,9 @@ jobs:
         with:
           tool: just@1.58.0
 
+      - name: Lint Python
+        run: just lint-python
+
       - name: Run unit tests
         run: just test-unit
 

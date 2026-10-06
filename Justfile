@@ -85,6 +85,12 @@ test-unit:
     exec {{sudo_cmd}} podman run --rm --security-opt label=disable -e CI \
         -v "{{justfile_directory()}}:/code:ro" -w /code "${bats_image}" tests/unit
 
+# Lint the Python (ruff) and type-check the scripts (mypy), as the unit-tests workflow does.
+[group('dev')]
+lint-python:
+    python3 -m ruff check
+    python3 -m mypy
+
 # ── Build ─────────────────────────────────────────────────────────────
 # Build the k0s systemd-sysext image.
 [group('sysext')]
