@@ -1,5 +1,6 @@
 Bluefin Server \n (\l)
 \a
+mDNS: \n.local
 SSH, when enabled (keys only): ssh root@\4
 Console: log in as root once root is set, at the first boot after a USB install or by credential; until then root is locked.
 Node access: https://github.com/projectbluefin/server/blob/main/docs/skills/tpm2-credential-sealing.md#node-access
