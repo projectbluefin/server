@@ -20,6 +20,15 @@
 #   files/boot-keys/sysupdate-signing.asc         OpenPGP secret key that signs SHA256SUMS
 #   files/boot-keys/import-pubring.pgp            its public keyring, installed as
 #                                                 /usr/lib/systemd/import-pubring.pgp (importd, sysupdate)
+#   files/boot-keys/ignition-signing.asc          OpenPGP secret key that signs bluefin-node.ign
+#   files/boot-keys/ignition-pubring.pgp          its public keyring, installed in the initrd as
+#                                                 /usr/lib/bluefin/ignition-pubring.pgp
+#
+# The Ignition config key is a trust root of its own, never the image
+# signing key (docs/skills/booty-integration.md). Release builds stage only
+# the committed public keyring files/release-keys/ignition-pubring.pgp; its
+# secret key stays with whoever signs node configs. So an
+# ignition-pubring.pgp without ignition-signing.asc is a complete set.
 #
 # Existing keys are never overwritten without --force: every key is baked
 # into or signs the image, so replacing one needs a new image-version (see
@@ -60,6 +69,18 @@ gen_signing_key() {
     echo "Generated image signing key in ${dir}"
 }
 
+gen_ignition_key() {
+    local home
+    home="$(mktemp -d)"
+    GNUPGHOME="${home}" gpg --batch --quiet --passphrase '' \
+        --quick-gen-key "Bluefin Server dev Ignition config signing (${owner})" rsa3072 sign never
+    GNUPGHOME="${home}" gpg --batch --armor --export-secret-keys > "${dir}/ignition-signing.asc"
+    GNUPGHOME="${home}" gpg --batch --export > "${dir}/ignition-pubring.pgp"
+    chmod 0644 "${dir}/ignition-pubring.pgp"
+    rm -rf "${home}"
+    echo "Generated Ignition config signing key in ${dir}"
+}
+
 signing_keys=(sysupdate-signing.asc import-pubring.pgp)
 boot_keys=(PK.key PK.crt KEK.key KEK.crt DB.key DB.crt linux-module-cert.key modules/linux-module-cert.crt)
 
@@ -76,9 +97,12 @@ key_set_state() {
 }
 
 signing_state="$(key_set_state "${signing_keys[@]}")"
+ignition_state="$(key_set_state ignition-pubring.pgp ignition-signing.asc)"
+# A public keyring alone is a release set (see above).
+[ -s "${dir}/ignition-pubring.pgp" ] && ignition_state=all
 boot_state="$(key_set_state "${boot_keys[@]}")"
 if [ "${force}" = 0 ]; then
-    for state in "signing:${signing_state}" "boot:${boot_state}"; do
+    for state in "signing:${signing_state}" "Ignition config signing:${ignition_state}" "boot:${boot_state}"; do
         if [ "${state#*:}" = partial ]; then
             echo "ERROR: ${dir} holds a partial ${state%%:*} key set; refusing to overwrite the files that exist." >&2
             echo "       Restore the missing files, or pass --force to regenerate every key (then bump image-version)." >&2
@@ -95,6 +119,9 @@ fi
 
 if [ "${signing_state}" != all ] || [ "${force}" = 1 ]; then
     gen_signing_key
+fi
+if [ "${ignition_state}" != all ] || [ "${force}" = 1 ]; then
+    gen_ignition_key
 fi
 
 if [ "${boot_state}" = all ] && [ "${force}" = 0 ]; then

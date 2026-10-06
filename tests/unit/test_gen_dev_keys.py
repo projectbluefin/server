@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "gen-dev-keys.sh"
 DEV_KEYS = REPO_ROOT / "files" / "dev-keys"
 
-SIGNING = ["sysupdate-signing.asc", "import-pubring.pgp"]
+SIGNING = ["sysupdate-signing.asc", "import-pubring.pgp", "ignition-signing.asc", "ignition-pubring.pgp"]
 BOOT = [
     "PK.key",
     "PK.crt",
@@ -94,7 +94,14 @@ def test_complete_key_set_is_kept_without_force(tree: Path) -> None:
 
 @pytest.mark.parametrize(
     "missing",
-    ["DB.key", "PK.crt", "modules/linux-module-cert.crt", "sysupdate-signing.asc", "import-pubring.pgp"],
+    [
+        "DB.key",
+        "PK.crt",
+        "modules/linux-module-cert.crt",
+        "sysupdate-signing.asc",
+        "import-pubring.pgp",
+        "ignition-pubring.pgp",
+    ],
 )
 def test_partial_key_set_is_refused_without_force(tree: Path, missing: str) -> None:
     seed(tree, [name for name in SIGNING + BOOT if name != missing])
@@ -103,6 +110,26 @@ def test_partial_key_set_is_refused_without_force(tree: Path, missing: str) -> N
     assert result.returncode == 1
     assert "partial" in result.stderr
     assert "--force" in result.stderr
+    assert snapshot(tree) == before
+    assert stub_calls(tree) == ""
+
+
+def test_a_key_set_without_an_ignition_key_gains_only_that(tree: Path) -> None:
+    # Key sets from before the Ignition config key keep every other key.
+    seed(tree, SIGNING[:2] + BOOT)
+    before = snapshot(tree)
+    result = run(tree)
+    assert result.returncode != 0, "the failing gpg stub must have been reached"
+    assert stub_calls(tree).splitlines() == ["gpg"]
+    assert snapshot(tree) == before
+
+
+def test_an_ignition_public_keyring_alone_is_a_complete_set(tree: Path) -> None:
+    # Release builds stage the committed public keyring without its secret key.
+    seed(tree, [name for name in SIGNING + BOOT if name != "ignition-signing.asc"])
+    before = snapshot(tree)
+    result = run(tree)
+    assert result.returncode == 0, result.stderr
     assert snapshot(tree) == before
     assert stub_calls(tree) == ""
 
