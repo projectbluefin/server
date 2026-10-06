@@ -4,7 +4,7 @@ description: How Booty serves Bluefin Server releases to nodes. Load when workin
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-05"
 ---
 # Booty Integration
 
@@ -52,13 +52,16 @@ apply. If it is there, `bluefin-ignition-credentials` in the initrd applies it
 only if it is signed:
 
 - It fetches `bluefin-node.ign.gpg` from the same directory and verifies it
-  with `gpgv` against the import keyring (the `/etc/systemd/import-pubring.pgp`
-  override, else the image's `/usr/lib/systemd/import-pubring.pgp`: the same
-  root as the image pull), then stages the verified bytes inline at
+  with `gpgv` against the Ignition config keyring
+  `/usr/lib/bluefin/ignition-pubring.pgp`, which lives only in the initrd,
+  inside the signed UKI. That keyring is the only trust root for node configs:
+  the release keyring (`import-pubring.pgp`, which authenticates
+  `SHA256SUMS`) is never consulted, so a release signature does not verify as
+  a node config, and whoever signs node configs cannot sign releases. There is
+  no `/etc` override. The node then stages the verified bytes inline at
   `/run/ignition/user.ign`, so Ignition applies exactly what was signed. The
   signature is the gate, not the transport: plain `http://` works, as it does
-  for the `/usr` pull. A keyring that cannot be read (say, a dangling `/etc`
-  symlink) fails the boot; the other one is never tried instead.
+  for the `/usr` pull. A keyring that cannot be read fails the boot.
 - Only an HTTP 404 on the `.gpg` counts as "unsigned". An unsigned config is
   applied only with the system credential `bluefin.ignition.allow-unsigned`
   (any non-empty value), and is logged as `UNAUTHENTICATED`. Any other failure
@@ -71,25 +74,80 @@ only if it is signed:
   `storage.files[].contents.source` URLs without checking them against any
   signature, so each such source needs a `verification.hash`.
 
+### The Ignition config key
+
+| Build | `ignition-pubring.pgp` in the initrd | Secret key |
+|---|---|---|
+| Release | `files/release-keys/ignition-pubring.pgp` (committed; CI copies it in) | held by whoever signs node configs for the project's images; never in CI or a build |
+| Pull request, nightly, local | a dev key from `just gen-dev-keys` | `files/boot-keys/ignition-signing.asc` (gitignored) |
+
+`scripts/check-ignition-keys.sh` runs on every CI key set: the keyring must
+be there and share no key with `import-pubring.pgp`; on releases it must be
+the committed one, with no Ignition secret key in the build. A release build
+without `files/release-keys/ignition-pubring.pgp` fails.
+
+A site that signs its own node configs (Booty included) needs its public key
+in the image's keyring: there is no other way to deliver a trust root to a
+UEFI HTTP Boot node with Secure Boot. Either sign with the project's config
+key, or build the image with your key set (`files/boot-keys/` with your own
+`ignition-pubring.pgp`, the same way as the Secure Boot keys).
+
+**Signing.** Sign exactly the bytes served as `bluefin-node.ign`, after any
+templating, as a binary detached signature, and serve it as
+`bluefin-node.ign.gpg` in the same directory:
+
+```bash
+scripts/sign-node-config.sh ignition-signing.asc bluefin-node.ign   # writes bluefin-node.ign.gpg
+# equivalently, with the key in a keyring: gpg --local-user <fpr> --detach-sign bluefin-node.ign
+```
+
+Re-sign whenever the config changes; a stale `.gpg` over new bytes is a bad
+signature and stops the node. Mark a node provisioned only once it has booted
+past the initrd, not when it fetched the UKI: a refused config fails that boot.
+
+**Rotation.** `gpgv` accepts a signature from any key in the keyring, so
+rotate by overlap: add the new public key to `ignition-pubring.pgp` (export
+both keys into one keyring), ship an image, move the signer to the new key,
+and drop the old key from the keyring in a later image. Removing a key
+revokes it for every node that boots an image without it. Each change needs a
+new image version, as for the other keys
+([secure-boot-keys.md](secure-boot-keys.md)).
+
 ### Transitional: unsigned configs on netboot
 
 Booty does not sign `bluefin-node.ign` yet; it answers 404 for the `.gpg`. A
 UEFI HTTP Boot node with Secure Boot has no other way to receive the opt-out
 credential: the signed UKI's own command line wins, there is no ESP for
 `/loader/credentials`, and real firmware sets no SMBIOS type 11 strings. So
-the netboot UKI carries it on its command line,
-`systemd.set_credential=bluefin.ignition.allow-unsigned:1` (`netboot-cmdline`
-in `elements/oci/bluefin-server-boot.bst`); the disk and installer UKIs do
-not. Booty's iPXE chainload and BIOS paths boot with the UKI's own `.cmdline`,
-rewriting only the `rd.systemd.pull` URL, so they carry it too.
+while the build option `ignition_allow_unsigned` (`project.conf`, default
+`True`) is on, the netboot UKI carries
+`systemd.set_credential=bluefin.ignition.allow-unsigned:1` on its command line
+(`netboot-ignition-cmdline` in `elements/oci/bluefin-server-boot.bst`); the
+disk and installer UKIs never do. Booty's iPXE chainload and BIOS paths boot
+with the UKI's own `.cmdline`, rewriting only the `rd.systemd.pull` URL, so
+they carry it too.
 
 Booty-provisioned nodes keep applying their per-node config, and a bad
 signature or a `.gpg` failure other than 404 still fails closed. This is not
 yet protection against an on-path attacker, who can answer 404 for the `.gpg`
-to force the unsigned path. The default goes away once Booty signs each
-node's config with a dedicated config key, trusted in the initrd separately
-from the release key that signs `SHA256SUMS`
-([#327](https://github.com/projectbluefin/server/issues/327), following #284).
+to force the unsigned path.
+
+**Cut-over** ([#327](https://github.com/projectbluefin/server/issues/327)):
+set `default: False` on `ignition_allow_unsigned` once all of these hold:
+
+1. Booty signs every `bluefin-node.ign` it serves, byte for byte, with a key
+   in the release image's `ignition-pubring.pgp`, and serves the `.gpg` next
+   to it.
+2. A Booty release that does so is out, and deployments that serve configs
+   to project images run it (an older Booty's nodes stop at emergency mode).
+3. The `full-build` boot test's signed-config steps pass, and the plain
+   "UEFI HTTP boot with bluefin-node.ign" step serves a signed config instead
+   of an unsigned one.
+
+Then drop this section and the default's unit test. CI already builds the
+next update-test image set with the option off
+(`BST_FLAGS="-o ignition_allow_unsigned False"`) and proves its netboot UKI
+refuses an unsigned config; a local build can do the same.
 
 ## Install to disk
 

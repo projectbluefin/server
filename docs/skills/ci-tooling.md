@@ -269,6 +269,10 @@ uploaded to a GitHub Release tagged `v<image-version>` (`YY.MM.<run>` on main).
      `bluefin-node.ign` served next to the UKI, both with
      `tests/fixtures/ignition/apply-marker.ign`: the probe must see the
      written file and the Ignition-enabled unit active (`DOGFOOD_EXPECT`);
+     outside releases also signed with the Ignition config key (applied),
+     signed with the image signing key or over other bytes (refused), and
+     unsigned on the `1.<run>.1` set, built with `ignition_allow_unsigned`
+     off (refused; see booty-integration.md);
    - releases: diskless boot, `systemd-sysinstall` to disk, boot the disk;
    - every other build (the nightly build of `main`, `full-build` and FSDK
      pull requests, dispatches): the same, then `systemd-sysupdate` A->B to

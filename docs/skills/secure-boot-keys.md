@@ -20,6 +20,7 @@ This skill covers what each key signs, where it lives, and how CI gets it.
 | DB (Signature Database) | systemd-boot, UKIs | `files/boot-keys/DB.key` | `files/boot-keys/DB.crt` |
 | linux-module-cert | kernel modules | `files/boot-keys/linux-module-cert.key` | `files/boot-keys/modules/linux-module-cert.crt` |
 | sysupdate-signing | `SHA256SUMS` | `files/boot-keys/sysupdate-signing.asc` | `files/boot-keys/import-pubring.pgp` |
+| ignition-signing | `bluefin-node.ign` | dev: `files/boot-keys/ignition-signing.asc`; release: off CI | `files/boot-keys/ignition-pubring.pgp` (release: `files/release-keys/ignition-pubring.pgp`); see "The Ignition config key" in [booty-integration.md](booty-integration.md) |
 
 The module certificate is baked into the kernel's trusted keyring via
 `SYSTEM_TRUSTED_KEYS`; changing it forces a kernel rebuild. The release
