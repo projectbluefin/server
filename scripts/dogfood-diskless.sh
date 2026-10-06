@@ -28,9 +28,15 @@
 #   DOGFOOD_BOOT=http          UEFI HTTP boot the netboot UKI (the initrd derives the
 #                              /usr image URL from the boot URL); enrolls keys first
 #   DOGFOOD_BOOT_URL=<url>     HTTP boot from another server (e.g. Booty) instead
-#   DOGFOOD_NODE_IGN=<file>    serve it, unsigned, as bluefin-node.ign next to the UKI
-#                              (HTTP boot); the netboot UKI's transitional
-#                              bluefin.ignition.allow-unsigned default accepts it
+#   DOGFOOD_NODE_IGN=<file>    serve it as bluefin-node.ign next to the UKI (HTTP boot);
+#                              unsigned (the .gpg is a 404) unless DOGFOOD_NODE_IGN_SIG is
+#                              set, which only the netboot UKI's transitional
+#                              bluefin.ignition.allow-unsigned (ignition_allow_unsigned) accepts
+#   DOGFOOD_NODE_IGN_SIG=<file> serve it as bluefin-node.ign.gpg (scripts/sign-node-config.sh)
+#   DOGFOOD_REFUSAL=<ERE>      --check passes only if the boot is refused before the probe
+#                              runs, with a console line matching <ERE>; with
+#                              DOGFOOD_NODE_IGN, only after bluefin-node.ign and its .gpg
+#                              were requested
 #   DOGFOOD_SERVE_EXTRA=<dir>  also serve the files in <dir>
 #   DOGFOOD_NET="<qemu args>"  network devices instead of one user-net NIC (not with
 #                              DOGFOOD_BOOT=http); e.g. a hub joining user-net and
@@ -84,8 +90,10 @@ srv="${work}/srv"
 mkdir -p "${srv}"
 for f in "${dir}"/*; do ln -s "${f}" "${srv}/"; done
 [ -n "${DOGFOOD_NODE_IGN:-}" ] && cp "${DOGFOOD_NODE_IGN}" "${srv}/bluefin-node.ign"
+[ -n "${DOGFOOD_NODE_IGN_SIG:-}" ] && cp "${DOGFOOD_NODE_IGN_SIG}" "${srv}/bluefin-node.ign.gpg"
 if [ -n "${DOGFOOD_SERVE_EXTRA:-}" ]; then for f in "${DOGFOOD_SERVE_EXTRA}"/*; do ln -sf "$(realpath "${f}")" "${srv}/"; done; fi
 image_re="${image//./\\.}"
+refusal_re="${DOGFOOD_REFUSAL:-}"
 case "${DOGFOOD_TAMPER:-}" in
     raw|sums)
         rm "${srv}/${image}"; cp "${dir}/${image}" "${srv}/${image}"
@@ -172,6 +180,8 @@ if [ -n "${DOGFOOD_IGNITION:-}" ]; then
     qemu+=(-smbios "$(cred ignition.config "${DOGFOOD_IGNITION}")")
 fi
 tamper="${DOGFOOD_TAMPER:-}"
+refusal="${tamper:+tamper=${tamper}}"
+[ -n "${refusal_re}" ] && refusal="${refusal:-refusal}"
 if [ -n "${tamper}" ]; then
     # The initrd's console shows only that the download unit failed; copy the
     # pull's own messages (from the unit and from systemd-importd, which runs
@@ -253,7 +263,7 @@ probe_done() { grep -aq 'PROBE failed=' "${probe_log}" 2>/dev/null; }
 clean_log() { sed -E 's/\x1b\][^\x07\x1b]*(\x07|\x1b\\)//g; s/\x1bP[^\x1b]*\x1b\\//g; s/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr -d '\r'; }
 refused() { clean_log < "${work}/serial.log" 2>/dev/null | grep -aqE "${refusal_re}"; }
 status=1
-if [ -n "${tamper}" ]; then
+if [ -n "${refusal}" ]; then
     stop() { probe_done || refused; }
 else
     stop() { probe_done; }
@@ -266,30 +276,33 @@ cat "${work}/serial.log" "${probe_log}" 2>/dev/null \
 grep -a 'GET ' "${work}/http.log" > "${dir}/dogfood-http.log" || true
 grep -aoE 'PROBE[ -].*' "${dir}/dogfood-serial.log" || true
 
-if [ -n "${tamper}" ]; then
-    served() { grep -aq "\"GET /$1 HTTP/1.1\" 200" "${dir}/dogfood-http.log"; }
+if [ -n "${refusal}" ]; then
+    served() { grep -aqE "\"GET /$1 HTTP/1.1\" ${2:-200} " "${dir}/dogfood-http.log"; }
     if probe_done; then
-        echo "FAIL: tamper=${tamper}: the tampered image booted (serial log: ${dir}/dogfood-serial.log)" >&2
+        echo "FAIL: ${refusal}: the node booted instead (serial log: ${dir}/dogfood-serial.log)" >&2
         status=1
     elif ! refused; then
-        echo "FAIL: tamper=${tamper}: no refusal within ${timeout_s}s (serial log: ${dir}/dogfood-serial.log)" >&2
+        echo "FAIL: ${refusal}: no refusal within ${timeout_s}s (serial log: ${dir}/dogfood-serial.log)" >&2
         tail -n 40 "${dir}/dogfood-serial.log" >&2
         status=1
-    elif ! served "${image}" || ! served SHA256SUMS || ! served SHA256SUMS.gpg; then
+    elif [ -n "${tamper}" ] && { ! served "${image}" || ! served SHA256SUMS || ! served SHA256SUMS.gpg; }; then
         # Refused before it had the image and the signed manifest: that is a
         # transport failure, not a verification failure.
-        echo "FAIL: tamper=${tamper}: the pull failed before fetching ${image}, SHA256SUMS and SHA256SUMS.gpg" >&2
+        echo "FAIL: ${refusal}: the pull failed before fetching ${image}, SHA256SUMS and SHA256SUMS.gpg" >&2
+        status=1
+    elif [ -n "${DOGFOOD_NODE_IGN:-}" ] && { ! served bluefin-node.ign || ! served bluefin-node.ign.gpg '[0-9]+'; }; then
+        echo "FAIL: ${refusal}: refused before fetching bluefin-node.ign and requesting its .gpg" >&2
         status=1
     elif ! grep -aq 'Secure boot enabled' "${dir}/dogfood-serial.log"; then
-        echo "FAIL: tamper=${tamper}: refused, but the kernel did not run with Secure Boot enabled" >&2
+        echo "FAIL: ${refusal}: refused, but the kernel did not run with Secure Boot enabled" >&2
         status=1
     else
-        grep -aE "${refusal_re}|Failed to start Download of " "${dir}/dogfood-serial.log" | sed 's/^/REFUSED /' | head -n 5
-        echo "PASS: tamper=${tamper}: ${image} refused after fetching the signed manifest (serial log: ${dir}/dogfood-serial.log)"
+        grep -aE "${refusal_re}|Failed to start " "${dir}/dogfood-serial.log" | sed 's/^/REFUSED /' | head -n 5
+        echo "PASS: ${refusal}: refused as expected (serial log: ${dir}/dogfood-serial.log)"
         status=0
     fi
     if [ "${status}" = 0 ] && [ -n "${DOGFOOD_EXPECT:-}" ] && ! grep -aqE -- "${DOGFOOD_EXPECT}" "${dir}/dogfood-serial.log"; then
-        echo "FAIL: tamper=${tamper}: serial log does not match DOGFOOD_EXPECT=${DOGFOOD_EXPECT}" >&2
+        echo "FAIL: ${refusal}: serial log does not match DOGFOOD_EXPECT=${DOGFOOD_EXPECT}" >&2
         status=1
     fi
     exit "${status}"

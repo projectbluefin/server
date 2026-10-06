@@ -313,6 +313,19 @@ jobs:
             bash scripts/check-ignition-keys.sh
           fi
 
+      # Detached signatures over the boot test's node config: one with the
+      # Ignition config key (applied), one with the image signing key that
+      # signs SHA256SUMS (refused). Releases have no Ignition secret key.
+      - name: Sign the Ignition test config
+        if: needs.changes.outputs.release != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p dist/ignition-sigs
+          bash scripts/sign-node-config.sh files/boot-keys/ignition-signing.asc \
+            tests/fixtures/ignition/apply-marker.ign dist/ignition-sigs/apply-marker.ign.config.gpg
+          bash scripts/sign-node-config.sh files/boot-keys/sysupdate-signing.asc \
+            tests/fixtures/ignition/apply-marker.ign dist/ignition-sigs/apply-marker.ign.release.gpg
+
       # One version per build, increasing under strverscmp(). Non-release
       # builds use a 0.* version so they can never sort above a release.
       - name: Set image version
@@ -356,12 +369,16 @@ jobs:
       # installed 0.<run> carries `version 1.0.<run>`, and systemd-boot would
       # keep defaulting to it over a 0.<run>.N update. 1.<run>.N sorts above
       # both and still below every release (YY.MM.<run>).
+      # The next set is built as after the cut-over of #327
+      # (ignition_allow_unsigned off): the update tests boot only its disk
+      # UKI, and the boot test proves its netboot UKI refuses an unsigned
+      # bluefin-node.ign.
       - name: Build the next and broken image sets
         if: needs.changes.outputs.release != 'true'
         run: |
           set -euo pipefail
           just set-version "1.${GITHUB_RUN_NUMBER}.1"
-          just export-image dist/diskless-next
+          BST_FLAGS="-o ignition_allow_unsigned False" just export-image dist/diskless-next
           just set-version "1.${GITHUB_RUN_NUMBER}.2"
           just export-image dist/diskless-broken
 
@@ -373,6 +390,7 @@ jobs:
           path: |
             dist/diskless-next/
             dist/diskless-broken/
+            dist/ignition-sigs/
             !dist/*/bluefin-server-installer_*.raw
           if-no-files-found: error
           retention-days: 1
@@ -470,6 +488,46 @@ jobs:
           DOGFOOD_EXTRA_PROBE: tests/fixtures/ignition/apply-marker.probe
           DOGFOOD_EXPECT: "PROBE ignition marker=applied unit=active enabled=enabled ran=yes"
         run: bash scripts/dogfood-diskless.sh dist/diskless --check
+
+      # The Ignition config gate (#327): only the Ignition config key
+      # vouches for bluefin-node.ign; a refusal fails the boot closed.
+      - name: UEFI HTTP boot with a bluefin-node.ign signed with the Ignition config key
+        if: needs.changes.outputs.release != 'true'
+        env:
+          DOGFOOD_BOOT: http
+          DOGFOOD_NODE_IGN: tests/fixtures/ignition/apply-marker.ign
+          DOGFOOD_NODE_IGN_SIG: dist/ignition-sigs/apply-marker.ign.config.gpg
+          DOGFOOD_EXTRA_PROBE: tests/fixtures/ignition/apply-marker.probe
+          DOGFOOD_EXPECT: "PROBE ignition marker=applied unit=active enabled=enabled ran=yes"
+        run: bash scripts/dogfood-diskless.sh dist/diskless --check
+
+      - name: Refuse a bluefin-node.ign signed with the image signing key
+        if: needs.changes.outputs.release != 'true'
+        env:
+          DOGFOOD_BOOT: http
+          DOGFOOD_NODE_IGN: tests/fixtures/ignition/apply-marker.ign
+          DOGFOOD_NODE_IGN_SIG: dist/ignition-sigs/apply-marker.ign.release.gpg
+          DOGFOOD_REFUSAL: "bluefin-node.ign.gpg does not verify against /usr/lib/bluefin/ignition-pubring.pgp"
+          DOGFOOD_EXPECT: "gpgv: Can't check signature: No public key"
+        run: bash scripts/dogfood-diskless.sh dist/diskless --check
+
+      - name: Refuse a bluefin-node.ign with a bad signature
+        if: needs.changes.outputs.release != 'true'
+        env:
+          DOGFOOD_BOOT: http
+          DOGFOOD_NODE_IGN: tests/fixtures/ignition/var-on-disk.ign
+          DOGFOOD_NODE_IGN_SIG: dist/ignition-sigs/apply-marker.ign.config.gpg
+          DOGFOOD_REFUSAL: "bluefin-node.ign.gpg does not verify against /usr/lib/bluefin/ignition-pubring.pgp"
+          DOGFOOD_EXPECT: "gpgv: BAD signature"
+        run: bash scripts/dogfood-diskless.sh dist/diskless --check
+
+      - name: Refuse an unsigned bluefin-node.ign without allow-unsigned
+        if: needs.changes.outputs.release != 'true'
+        env:
+          DOGFOOD_BOOT: http
+          DOGFOOD_NODE_IGN: tests/fixtures/ignition/apply-marker.ign
+          DOGFOOD_REFUSAL: "bluefin-node.ign is not signed .* bluefin.ignition.allow-unsigned is not set"
+        run: bash scripts/dogfood-diskless.sh dist/diskless-next --check
 
       - name: Install to disk and boot it
         if: needs.changes.outputs.release == 'true'
