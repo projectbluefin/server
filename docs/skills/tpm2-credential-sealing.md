@@ -4,7 +4,7 @@ description: Securing provisioning credentials (such as hashed root passwords or
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-10-04"
+  last_updated: "2026-10-05"
   context7-sources:
     - /systemd/systemd
 ---
@@ -28,6 +28,7 @@ decrypts and routes at boot:
 | `network.network.*`, `network.netdev.*`, `network.link.*`, `network.conf.*` | `systemd-network-generator` | Static network, routes, virtual devices, and networkd config. |
 | `network.dns`, `network.search_domains` | `systemd-resolved` | DNS resolver defaults. |
 | `firstboot.locale`, `firstboot.locale-messages`, `firstboot.keymap`, `firstboot.timezone`, `firstboot.hostname` | `bluefin-firstboot-credentials.service` | Non-interactive locale, keymap, timezone, and hostname setup. |
+| `system.hostname` | PID 1 (transient), `bluefin-hostname.service` (static) | Hostname; see [Node name, mDNS and prompt](#node-name-mdns-and-prompt). |
 
 The stock DHCP network remains installed in `/usr/lib/systemd/network/20-wired.network`.
 Credential-generated network files are emitted under `/run/systemd/network/` and
@@ -95,6 +96,72 @@ console; the kernel command line is sealed in the signed UKI, so it cannot be
 added at boot either. For break-glass console access, provision a password
 credential and `sulogin` asks for it. The initrd never offers a shell; it
 prints the errors and reboots.
+
+## Node name, mDNS and prompt
+
+Every node has a unique static hostname, announces it on its wired links as
+`<hostname>.local` over multicast DNS, and gives interactive bash a
+`user@host:cwd$` prompt (`#` for root).
+
+**Hostname.** `bluefin-hostname.service` (`/usr/libexec/bluefin-hostname`)
+runs on first boot, before networkd's first DHCP request. A static hostname
+already set (`/etc/hostname` from Ignition, `systemd-firstboot` or the
+`firstboot.hostname` credential) is kept. A node whose static hostname is
+unset or `localhost` gets, in this order, the `firstboot.hostname`
+credential, the `system.hostname` credential (which PID 1 alone only applies
+as the transient hostname), or `bluefin-<first 8 hex digits of the machine
+ID>`, so appliances on one LAN do not collide. An invalid name (anything but
+dot-separated letters, digits and inner hyphens, 63 characters per label, 64
+in all), in `/etc/hostname` or a credential, fails
+`bluefin-firstboot-credentials.service` or `bluefin-hostname.service` and is
+not replaced by another name: `systemctl --failed` shows it and the hostname
+stays `localhost`. A DHCP-provided hostname does not override the static one.
+The homelab's `bluefin-cluster` runs the same helper before a node registers
+with Kubernetes.
+
+An installed node keeps `/etc/hostname` on its persistent root, so the name
+survives reboots and A/B updates (which replace only the usr, usr-verity and
+UKI slots). Rename it with `hostnamectl set-hostname <name>`; the unit runs
+on first boot only and never renames a named node. A node installed before
+this unit existed keeps its old name, `localhost` included, because a
+Kubernetes node may already be registered under it; rename it with
+`hostnamectl`. A diskless node rebuilds `/etc` on every boot: it is named
+from Ignition or a credential on each boot, else from its machine ID, which is
+random per boot unless the `system.machine_id` credential pins it (a 32-hex ID,
+or `firmware` for the SMBIOS UUID; see
+[diskless-troubleshooting.md](diskless-troubleshooting.md)), and a
+`hostnamectl` rename lasts until the next reboot.
+
+**mDNS.** `20-wired.network` sets `MulticastDNS=yes` and `LLMNR=no` on every
+wired (`e*`) link, and `/usr/lib/systemd/resolved.conf.d/50-bluefin-mdns.conf`
+turns multicast DNS on and LLMNR off in systemd-resolved; there is no avahi.
+resolved answers for the hostname's first label as `<label>.local` and
+resolves other `.local` names; DHCP-provided DNS servers serve everything
+else as before. Programs that resolve through NSS (`nss-resolve` in
+`/etc/nsswitch.conf`: `ssh`, `curl`, `getent`) and `resolvectl query` see
+`.local` names; programs that read `/etc/resolv.conf` themselves (statically
+linked Go such as `kubectl`, `dig`) do not, since it lists the uplink
+servers. A `network.network.*` credential replaces `20-wired.network` on the
+links it matches, so add `MulticastDNS=yes` to it to keep the name there. The
+image ships no host firewall; one added later must allow UDP 5353 to
+224.0.0.251 and ff02::fb. Two nodes with one name are an operator error:
+nothing renames a node. The resolved that detects the clash logs
+`Hostname conflict, changing published hostname` and announces a numbered
+variant (the system hostname stays as it is) until one node is renamed with
+`hostnamectl`. The console banner shows the name as
+`mDNS: <hostname>.local` (see "Console banner" in
+[usb-installer.md](usb-installer.md)).
+
+**Prompt.** `/usr/lib/bluefin/profile.d/90-bluefin-prompt.sh`, linked into
+`/etc/profile.d` by tmpfiles (`50-bluefin-prompt.conf`, so installed nodes
+get changes with updates), sets `\u@\h:\w\$ ` for interactive bash with
+only the `@` in blue (ANSI 34), and the same without colour when `NO_COLOR`
+is set or `TERM` is `dumb` or unset. Non-interactive shells and other shells
+are untouched. FSDK's `/etc/profile` sets its own prompt after reading
+`/etc/profile.d`, so the fragment applies from `PROMPT_COMMAND`, and only
+over the stock prompts: a `PS1` from `~/.bashrc` or the command line wins. To
+opt out node-wide, replace the `/etc/profile.d/90-bluefin-prompt.sh` link
+with an empty file.
 
 ## Verify TPM2 device availability
 

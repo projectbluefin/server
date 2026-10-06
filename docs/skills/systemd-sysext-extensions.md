@@ -4,7 +4,7 @@ description: Extensibility via systemd-sysext and systemd-confext for Bluefin Se
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-01"
+  last_updated: "2026-10-05"
   context7-sources:
     - /systemd/systemd
 ---
@@ -130,7 +130,7 @@ waiting for CRDs and rollouts in between, fills `${HOMELAB_*}` placeholders
 from `homelab.conf`, skips files whose inputs are unset, and never deletes.
 A failed run is retried by the unit. It also carries `bluefin-cluster` (a Go
 binary, so the image has `ARCHITECTURE=`) for multi-node homelabs
-(`HOMELAB_ROLE`), and a `20-wired.network` drop-in enabling mDNS; see
+(`HOMELAB_ROLE`), which find each other over the base OS's mDNS; see
 [`files/homelab/cluster/README.md`](../../files/homelab/cluster/README.md).
 The applier does nothing on `HOMELAB_ROLE=node`. After the base set it
 applies the homelab add-ons, the manifest-only `argo-workflows`, `mcp` and

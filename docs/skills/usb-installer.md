@@ -4,7 +4,7 @@ description: The offline USB installer bluefin-server-installer_<ver>.raw. Load 
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-04"
+  last_updated: "2026-10-05"
   context7-sources:
     - /systemd/systemd
 ---
@@ -177,12 +177,15 @@ agetty on tty1 and the serial console) uses agetty's escapes (util-linux
 ```text
 Bluefin Server node1 (tty1)
 enp1s0: 192.0.2.10 2001:db8::10
+mDNS: node1.local
 SSH, when enabled (keys only): ssh root@192.0.2.10
 Console: log in as root once root is set, at the first boot after a USB install or by credential; until then root is locked.
 Node access: https://github.com/projectbluefin/server/blob/main/docs/skills/tpm2-credential-sealing.md#node-access
 ```
 
-`\n` is the hostname, `\a` the usable addresses of every interface, `\4`
+`\n` is the hostname (announced as `\n.local`; see "Node name, mDNS and
+prompt" in [tpm2-credential-sealing.md](tpm2-credential-sealing.md)),
+`\a` the usable addresses of every interface, `\4`
 the best IPv4 address; agetty reprints the banner when an address changes,
 so a DHCP lease that arrives after the prompt still shows. The update lines
 follow ([systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)),
