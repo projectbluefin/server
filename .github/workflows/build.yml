@@ -299,8 +299,18 @@ jobs:
             bash scripts/check-release-keys.sh
             printf '%s\n' "${SYSUPDATE_SIGNING_KEY}" > files/boot-keys/sysupdate-signing.asc
             cp files/os/sysupdate-keys/import-pubring.gpg files/boot-keys/import-pubring.pgp
+            # The initrd trusts only the committed Ignition config keyring for
+            # bluefin-node.ign.gpg; its secret key never enters the build.
+            rm -f files/boot-keys/ignition-signing.asc
+            if [ ! -s files/release-keys/ignition-pubring.pgp ]; then
+              echo "files/release-keys/ignition-pubring.pgp is required to build releases" >&2
+              exit 1
+            fi
+            cp files/release-keys/ignition-pubring.pgp files/boot-keys/ignition-pubring.pgp
+            bash scripts/check-ignition-keys.sh --release
           else
             just gen-dev-keys
+            bash scripts/check-ignition-keys.sh
           fi
 
       # One version per build, increasing under strverscmp(). Non-release

@@ -49,6 +49,10 @@ HOST_TOOLING = {
     # (scripts/kernel-cache.sh), from where the kernel's
     # linux-module-cert override stages it.
     "files/release-keys/linux-module-cert.crt",
+    # Release Ignition config keyring; CI copies it to
+    # files/boot-keys/ignition-pubring.pgp, from where
+    # bluefin-server/initrd/initrd-ignition-keys.bst installs it in the initrd.
+    "files/release-keys/ignition-pubring.pgp",
     # The public INSECURE dev module signing pair and its README;
     # scripts/gen-dev-keys.sh copies the pair to files/boot-keys/ for
     # non-release builds. Staging it in any element would ship a published
