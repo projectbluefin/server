@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # End-to-end A/B check in QEMU with Secure Boot:
 #   1. boot <dir> diskless and run systemd-sysinstall onto a blank disk
-#   2. boot the installed disk (usr slot A, persistent root)
+#   2. boot the installed disk (usr slot A, persistent root); its first boot
+#      names it bluefin-<machine-id[:8]>, and the probe renames it with
+#      hostnamectl, a name every later boot must keep
 #   3. with <next-dir>: systemd-sysupdate to that version over HTTP, reboot,
 #      and confirm the node runs it from slot B with a boot-counted UKI
 #   4. with <broken-dir>: update to it, break it, and confirm boot counting
@@ -83,6 +85,9 @@ done
 echo "PROBE zfs-module=$(test -d /sys/module/zfs && echo loaded || echo missing) load=$(systemctl show -P Result zfs-load-module.service)"
 echo "PROBE boot-entry=$(bootctl status 2>/dev/null | sed -n 's/^ *Current Entry: *//p' | head -n1)"
 echo "PROBE firstboot-ran=$(systemctl show -P ConditionResult systemd-firstboot.service)"
+# The disk's first boot named it bluefin-<machine-id[:8]>; rename it as an
+# operator would. Every later boot (reboot, A/B update, rollback) must keep it.
+case "$(hostname)" in bluefin-*) hostnamectl set-hostname dogfood-renamed && echo "PROBE renamed=$(hostnamectl --static)" ;; esac
 bootctl list --no-pager 2>/dev/null | sed -n 's/^ *\(title\|id\): */PROBE-LOG \1 /p'
 systemctl start boot-complete.target 2>/dev/null || true
 echo "PROBE ukis=$(ls /boot/EFI/Linux 2>/dev/null | tr '\n' ' ')"
@@ -170,6 +175,8 @@ DOGFOOD_BOOT=disk run "${dir}" "${state}/disk.probe" | tee "${state}/2-disk.log"
 grep -q 'PROBE root=xfs' "${state}/2-disk.log"
 grep -q 'PROBE timers-enabled=enabled enabled' "${state}/2-disk.log"
 grep -q 'PROBE update-timers=active active inactive' "${state}/2-disk.log"
+grep -Eq 'PROBE identity=ok hostname=bluefin-[0-9a-f]{8} static=bluefin-[0-9a-f]{8} ' "${state}/2-disk.log"
+grep -q 'PROBE renamed=dogfood-renamed' "${state}/2-disk.log"
 
 [ -n "${next}" ] || { echo "PASS: installed and booted from disk"; exit 0; }
 
@@ -178,6 +185,7 @@ DOGFOOD_TIMEOUT="${DOGFOOD_UPDATE_TIMEOUT:-900}" DOGFOOD_BOOT=disk run "${next}"
 grep -q 'PROBE update=0' "${state}/3-update.log"
 grep -q 'PROBE kured-flag=set' "${state}/3-update.log"
 grep -q 'PROBE interlock=exec-condition' "${state}/3-update.log"
+grep -q 'PROBE identity=ok hostname=dogfood-renamed static=dogfood-renamed ' "${state}/3-update.log"
 
 echo "==> 4/4 boot the updated disk"
 DOGFOOD_BOOT=disk run "${next}" "${state}/disk.probe" | tee "${state}/4-updated.log"
@@ -185,6 +193,7 @@ new_ver="$(ls "${next}"/bluefin-server-[0-9]*.efi | sed -n 's|.*/bluefin-server-
 grep -q "PROBE os=bluefin-server ${new_ver}" "${state}/4-updated.log"
 sysext_active "${new_ver}" "${state}/4-updated.log"
 grep -q "PROBE health=active active bless=good" "${state}/4-updated.log"
+grep -q 'PROBE identity=ok hostname=dogfood-renamed static=dogfood-renamed ' "${state}/4-updated.log"
 [ -n "${broken}" ] || { echo "PASS: installed, updated A->B and booted ${new_ver} with the ${features} sysext(s)"; exit 0; }
 
 bad_ver="$(ls "${broken}"/bluefin-server-[0-9]*.efi | sed -n 's|.*/bluefin-server-\(.*\)\.efi$|\1|p')"

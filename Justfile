@@ -194,6 +194,12 @@ dogfood:
 dogfood-check:
     bash scripts/dogfood-diskless.sh dist/diskless --check
 
+# QEMU: two diskless appliances on one L2 segment resolve each other as
+# <hostname>.local over mDNS (a default bluefin-<machine-id> and a provisioned name).
+[group('diskless')]
+dogfood-mdns:
+    bash scripts/dogfood-mdns.sh dist/diskless
+
 # Build the OpenZFS systemd-sysext (locked to one image version).
 [group('sysext')]
 build-zfs-sysext: gen-dev-keys

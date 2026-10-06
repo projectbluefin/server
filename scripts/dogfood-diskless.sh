@@ -213,6 +213,24 @@ echo "PROBE verity=$(veritysetup status usr | sed -n 's/^ *status: *//p')"
 echo "PROBE os=$(. /usr/lib/os-release; echo "${IMAGE_ID} ${IMAGE_VERSION}")"
 echo "PROBE var=$(findmnt -no SOURCE,FSTYPE /var)"
 echo "PROBE root-passwd=$(passwd -S root 2>&1 | cut -d' ' -f2)"
+# Appliance identity: a static hostname that is not localhost, mDNS (and no
+# LLMNR) on the wired link, <hostname>.local resolving once DHCP is done, and
+# the interactive bash prompt with a blue @.
+host="$(hostname)"
+for _ in $(seq 90); do
+    self="$(resolvectl query -4 --legend=no "${host}.local" 2>/dev/null | sed -n '1s/^[^ ]* \([0-9.]*\).*/\1/p')"
+    [ -n "${self}" ] && break
+    sleep 1
+done
+static="$(hostnamectl --static 2>/dev/null)"
+mdns="$(resolvectl mdns 2>/dev/null | grep -c '^Link .*: yes$')"
+llmnr="$(resolvectl llmnr 2>/dev/null | grep -c ': yes$')"
+identity=ok
+case "${host}" in ''|localhost|localhost.*) identity=FAIL ;; esac
+[ "${static}" = "${host}" ] && [ "${mdns}" -ge 1 ] && [ "${llmnr}" = 0 ] && [ -n "${self}" ] || identity=FAIL
+echo "PROBE identity=${identity} hostname=${host} static=${static} mdns-links=${mdns} llmnr=${llmnr} self=${self:-none} unit=$(systemctl show -P Result bluefin-hostname.service)"
+resolvectl status 2>&1 | grep -E '^Link|Protocols' | sed 's/^/PROBE-LOG resolved: /'
+echo "PROBE prompt=$(cd / && TERM=xterm bash -lic '__bluefin_prompt; printf "%s" "${PS1@P}"' 2>/dev/null | cat -v) hook=$(TERM=xterm bash -lic 'printf "%s\\n" "${PROMPT_COMMAND[@]}"' 2>/dev/null | grep -cx __bluefin_prompt)"
 etc_writable=$(shopt -s globstar dotglob nullglob; for p in /etc /etc/**; do
     [ -L "${p}" ] && continue
     case "$(stat -c %A "${p}")" in [d-]????w????|[d-]???????w?) ;; *) continue ;; esac
@@ -321,6 +339,12 @@ elif [ "${status}" = 0 ] && ! grep -aq 'PROBE updatectl-features=ok ' "${dir}/do
     status=1
 elif [ "${status}" = 0 ] && ! grep -aq 'PROBE etc-writable=0' "${dir}/dogfood-serial.log"; then
     echo "FAIL: group- or world-writable paths under /etc: $(grep -aoE 'PROBE etc-writable=.*' "${dir}/dogfood-serial.log" | head -n1)" >&2
+    status=1
+elif [ "${status}" = 0 ] && ! grep -aq 'PROBE identity=ok ' "${dir}/dogfood-serial.log"; then
+    echo "FAIL: no unique hostname reachable as <hostname>.local over mDNS: $(grep -aoE 'PROBE identity=.*' "${dir}/dogfood-serial.log" | head -n1)" >&2
+    status=1
+elif [ "${status}" = 0 ] && ! grep -aqE 'PROBE prompt=root\^A\^\[\[34m\^B@\^A\^\[\[0m\^B[^:]+:/# +hook=1' "${dir}/dogfood-serial.log"; then
+    echo "FAIL: the login shell prompt is not root@host:/# with a blue @: $(grep -aoE 'PROBE prompt=.*' "${dir}/dogfood-serial.log" | head -n1)" >&2
     status=1
 elif [ "${status}" = 0 ] && ! grep -aq 'PROBE secureboot=enabled' "${dir}/dogfood-serial.log"; then
     # Firmware that refuses the enrollment payloads boots on in setup mode,
