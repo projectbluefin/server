@@ -1,0 +1,19 @@
+# Lint for every Python file in the repository: `just lint-python`, run by the
+# unit-tests workflow (docs/skills/ci-tooling.md, "Python lint").
+
+# The lowest Python that runs these files: CI runs them on 3.14 only
+# (actions/setup-python, the ubuntu-26.04 runners' python3), and none of them
+# runs inside the image, which ships no Python.
+target-version = "py314"
+# The tests import tests/unit/_systemd.py as a top-level module.
+src = [".", "tests/unit"]
+
+[lint]
+# pycodestyle errors and warnings, Pyflakes, isort, pyupgrade, bugbear.
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    # Line length is a formatter's call and no formatter is adopted. Over a
+    # thousand lines exceed 88 columns, mostly assertion messages and embedded
+    # shell; wrapping them by hand is churn that finds nothing.
+    "E501",
+]
