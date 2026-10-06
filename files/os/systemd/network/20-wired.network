@@ -3,3 +3,8 @@ Name=e*
 
 [Network]
 DHCP=ipv4
+# Answer and resolve <hostname>.local and DNS-SD over mDNS (systemd-resolved,
+# 50-bluefin-mdns.conf); LLMNR off. networkd leaves both to the link's
+# default otherwise, which is mDNS off.
+MulticastDNS=yes
+LLMNR=no

@@ -32,8 +32,9 @@ depends:
 
 
 
-  # Wired DHCP configuration for the installed OS
+  # Wired DHCP configuration for the installed OS, with mDNS on
   - bluefin-server/os-networkd.bst
+  - bluefin-server/os-resolved.bst
 
   # /etc/resolv.conf symlink to systemd-resolved (tmpfiles.d)
   - bluefin-server/os-resolv-conf.bst
