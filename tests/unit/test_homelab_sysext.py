@@ -463,7 +463,7 @@ def test_homelab_sysext_ships_in_the_signed_release_set() -> None:
 
 
 def test_applier_never_deletes() -> None:
-    code = "\n".join(l for l in APPLIER.read_text().splitlines() if not l.lstrip().startswith("#"))
+    code = "\n".join(line for line in APPLIER.read_text().splitlines() if not line.lstrip().startswith("#"))
     assert not re.search(r"\bdelete\b|--prune", code)
     assert "apply --server-side --force-conflicts" in code
 
