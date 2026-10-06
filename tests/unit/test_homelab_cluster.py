@@ -17,7 +17,7 @@ CLUSTER = ROOT / "files" / "homelab" / "cluster"
 ELEMENT = ROOT / "elements" / "oci" / "homelab-sysext.bst"
 GO_ELEMENT = ROOT / "elements" / "homelab" / "bluefin-cluster.bst"
 MAIN = CLUSTER / "cmd" / "bluefin-cluster" / "main.go"
-UNITS = ("bluefin-cluster-prepare.service", "bluefin-cluster-serve.service", "bluefin-cluster-join.service", "bluefin-cluster-mdns.service", "bluefin-cluster-hosts.service")
+UNITS = ("bluefin-cluster-prepare.service", "bluefin-cluster-serve.service", "bluefin-cluster-join.service", "bluefin-cluster-hosts.service")
 HOMELAB_CONF = "/etc/bluefin/homelab.conf"
 
 
@@ -47,7 +47,6 @@ def test_sysext_wires_each_unit_to_its_role() -> None:
         "kubelet.service.wants/bluefin-cluster-serve.service",
         "k0scontroller.service.wants/bluefin-cluster-serve.service",
         "multi-user.target.wants/bluefin-cluster-join.service",
-        "multi-user.target.wants/bluefin-cluster-mdns.service",
         "multi-user.target.wants/bluefin-cluster-hosts.timer",
     ):
         assert link in script
@@ -56,16 +55,10 @@ def test_sysext_wires_each_unit_to_its_role() -> None:
     assert {"filename": "homelab/bluefin-cluster.bst", "config": {"location": "/bluefin-cluster"}} in deps
 
 
-def test_mdns_config_is_reloaded_after_the_merge_before_any_cluster_unit() -> None:
-    u = unit("bluefin-cluster-mdns.service")
-    assert "systemd-sysext.service" in u.words("Unit", "After")
-    assert u.commands() == [["/usr/bin/networkctl", "reload"]]
-    before = set(u.words("Unit", "Before"))
-    assert {"kubeadm-init.service", "network-online.target"} <= before
-    for name in UNITS[:3]:
-        assert name in before
-        assert "bluefin-cluster-mdns.service" in unit(name).words("Unit", "Wants")
-        assert "bluefin-cluster-mdns.service" in unit(name).words("Unit", "After")
+def test_cluster_units_resolve_names_after_resolved_and_the_network() -> None:
+    for name in UNITS:
+        after = unit(name).words("Unit", "After")
+        assert {"network-online.target", "systemd-resolved.service"} <= set(after), name
 
 
 def test_prepare_runs_between_the_config_seed_and_kubeadm_init() -> None:
@@ -123,12 +116,18 @@ def test_dnssd_advertisement_carries_no_secrets() -> None:
     assert "os.Chmod(dir, 0o755)" in publish and "os.Chmod(dnssdFile, 0o644)" in publish
 
 
-def test_mdns_is_a_homelab_drop_in_and_the_base_profile_is_unchanged() -> None:
-    dropin = SystemdFile(SYSEXT_SRC / "50-bluefin-mdns.conf")
-    assert dropin.value("Network", "MulticastDNS") == "yes"
-    assert '"sysext%{indep-libdir}/systemd/network/20-wired.network.d/50-bluefin-mdns.conf"' in install_script()
-    base = ROOT / "files" / "os" / "systemd" / "network" / "20-wired.network"
-    assert "MulticastDNS" not in base.read_text()
+def test_mdns_comes_from_the_base_os_not_the_homelab_sysext() -> None:
+    base = SystemdFile(ROOT / "files" / "os" / "systemd" / "network" / "20-wired.network")
+    assert base.value("Network", "MulticastDNS") == "yes"
+    assert "/systemd/network/" not in install_script()
+    assert not list(SYSEXT_SRC.glob("*.conf")), "no networkd or resolved drop-ins in the homelab sysext"
+
+
+def test_homelab_names_a_localhost_node_with_the_base_os_helper() -> None:
+    ops = (CLUSTER / "internal" / "ops" / "ops.go").read_text()
+    assert 'HostnameHelper = "/usr/libexec/bluefin-hostname"' in ops
+    body = ops.split("func EnsureHostname(", 1)[1].split("\n}\n", 1)[0]
+    assert "Run(ctx, HostnameHelper)" in body and "machine-id" not in body
 
 
 def test_passphrase_never_reaches_logs_or_the_image() -> None:

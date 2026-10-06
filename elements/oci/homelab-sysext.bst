@@ -10,9 +10,9 @@ description: |
 
   Multi-node (HOMELAB_ROLE in homelab.conf): bluefin-cluster from
   homelab/bluefin-cluster.bst with its units (prepare and serve on the
-  control plane, join on a node; see files/homelab/cluster/README.md) and a
-  20-wired.network drop-in that turns on mDNS. Every unit is a no-op
-  without homelab.conf and outside its role.
+  control plane, join on a node; see files/homelab/cluster/README.md); the
+  base OS turns on mDNS (os-networkd.bst, os-resolved.bst). Every unit is a
+  no-op without homelab.conf and outside its role.
 
   Output: homelab_<image-version>.raw, .raw.zst, and SHA256SUMS. Locked to
   one image version like the KubeStellar sysext and updated in lock-step
@@ -64,7 +64,7 @@ config:
     done
     install -D -m 0644 -t "${unitdir}" "${src}/bluefin-cluster-prepare.service" \
       "${src}/bluefin-cluster-serve.service" "${src}/bluefin-cluster-join.service" \
-      "${src}/bluefin-cluster-mdns.service" "${src}/bluefin-cluster-hosts.service" \
+      "${src}/bluefin-cluster-hosts.service" \
       "${src}/bluefin-cluster-hosts.timer"
     cp -a /bluefin-cluster%{prefix}/. sysext%{prefix}/
     for link in kubeadm-init.service.wants/bluefin-cluster-prepare.service \
@@ -72,13 +72,10 @@ config:
         kubelet.service.wants/bluefin-cluster-serve.service \
         k0scontroller.service.wants/bluefin-cluster-serve.service \
         multi-user.target.wants/bluefin-cluster-join.service \
-        multi-user.target.wants/bluefin-cluster-mdns.service \
         multi-user.target.wants/bluefin-cluster-hosts.timer; do
       mkdir -p "${unitdir}/${link%/*}"
       ln -s "../${link#*/}" "${unitdir}/${link}"
     done
-    install -D -m 0644 "${src}/50-bluefin-mdns.conf" \
-      "sysext%{indep-libdir}/systemd/network/20-wired.network.d/50-bluefin-mdns.conf"
     mkdir -p "${share}"
     cp -a manifests-src/. "${share}/"
     install -m 0644 "${src}/homelab.conf.example" "${share}/homelab.conf.example"

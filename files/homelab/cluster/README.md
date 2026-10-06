@@ -8,15 +8,11 @@ no-op without that file or outside its role.
 
 | Command | Unit | Role | Does |
 |---|---|---|---|
-| `prepare` | `bluefin-cluster-prepare.service` (wanted by `kubeadm-init`, `k0scontroller`) | control-plane | hostname `localhost` → `bluefin-<machine-id[:8]>`; adds `controlPlaneEndpoint: <host>.local:6443` and `apiServer.certSANs` (`<host>.local`, `<host>`, global addresses) to `/etc/kubernetes/bluefin/init.yaml` unless it already sets an endpoint |
+| `prepare` | `bluefin-cluster-prepare.service` (wanted by `kubeadm-init`, `k0scontroller`) | control-plane | hostname `localhost` → `bluefin-<machine-id[:8]>` (`/usr/libexec/bluefin-hostname`, which the base OS already runs on first boot); adds `controlPlaneEndpoint: <host>.local:6443` and `apiServer.certSANs` (`<host>.local`, `<host>`, global addresses) to `/etc/kubernetes/bluefin/init.yaml` unless it already sets an endpoint |
 | `serve` | `bluefin-cluster-serve.service` (wanted by `kubelet`, `k0scontroller`) | control-plane | passphrase, TLS key, `/run/systemd/dnssd/bluefin-cluster.dnssd`, join service on TCP 6447 |
 | `join` | `bluefin-cluster-join.service` (wanted by `multi-user.target`) | node | discover, exchange, `kubeadm join` or `/etc/k0s/token` + `k0s-first-boot.service`; then `/var/lib/bluefin-cluster/joined` and the passphrase removed from `homelab.conf` |
 | `hosts` | `bluefin-cluster-hosts.service` (`.timer`: 2 min after boot, then every 5 min) | both | resolves the control plane's `<host>.local` through resolved and pins it in a marked `/etc/hosts` block (also done by `prepare` and before `kubeadm join`) |
 | `passphrase` | — | control-plane | prints the join passphrase |
-
-`bluefin-cluster-mdns.service` runs `networkctl reload` once the sysext is
-merged (networkd may have read its configuration before the merge), ordered
-before every unit above and `kubeadm-init.service`.
 
 ## Passphrase
 
@@ -40,9 +36,9 @@ joined.
 `serve` writes a DNS-SD service (`Type=_bluefin-cluster._tcp`, port 6447,
 `TxtText=v=1 cluster=<name> runtime=kubeadm|k0s`; nothing secret) to
 `/run/systemd/dnssd` once the control plane exists, and reloads
-systemd-resolved. The homelab sysext's `20-wired.network.d/50-bluefin-mdns.conf`
-turns on `MulticastDNS=yes` for the base wired links (networkd's per-link
-default is off; the plain Server profile keeps it off). A node calls
+systemd-resolved. The base OS turns on mDNS on its wired links ("Node name,
+mDNS and prompt" in
+[tpm2-credential-sealing.md](../../../docs/skills/tpm2-credential-sealing.md)). A node calls
 `io.systemd.Resolve.BrowseServices` (`more`, 10 s window) and
 `ResolveService` on resolved's varlink socket and tries every instance whose
 runtime matches; `HOMELAB_CONTROL_PLANE=host[:port]` skips mDNS. Browsing is

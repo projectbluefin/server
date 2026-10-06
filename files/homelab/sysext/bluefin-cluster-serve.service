@@ -7,8 +7,8 @@
 Description=Homelab join service (bluefin-cluster serve)
 Documentation=https://github.com/projectbluefin/server/blob/main/files/homelab/cluster/README.md
 ConditionPathExists=/etc/bluefin/homelab.conf
-Wants=network-online.target bluefin-cluster-mdns.service
-After=network-online.target bluefin-cluster-mdns.service systemd-resolved.service kubeadm-init.service k0scontroller.service
+Wants=network-online.target
+After=network-online.target systemd-resolved.service kubeadm-init.service k0scontroller.service
 
 [Service]
 Type=simple

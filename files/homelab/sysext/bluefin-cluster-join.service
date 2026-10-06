@@ -10,8 +10,8 @@ Description=Join this node to the homelab control plane (bluefin-cluster join)
 Documentation=https://github.com/projectbluefin/server/blob/main/files/homelab/cluster/README.md
 ConditionPathExists=/etc/bluefin/homelab.conf
 ConditionPathExists=!/var/lib/bluefin-cluster/joined
-Wants=network-online.target bluefin-cluster-mdns.service
-After=network-online.target bluefin-cluster-mdns.service systemd-resolved.service systemd-sysext.service
+Wants=network-online.target
+After=network-online.target systemd-resolved.service systemd-sysext.service
 
 [Service]
 # simple, not oneshot: joining waits for the control plane, and boot must

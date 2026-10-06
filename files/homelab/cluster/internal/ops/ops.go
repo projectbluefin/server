@@ -103,9 +103,14 @@ func (g Grant) Validate() error {
 // ValidHostname reports whether s is usable as a node name and mDNS label.
 func ValidHostname(s string) bool { return hostnameRE.MatchString(s) }
 
-// EnsureHostname gives a node still called localhost (Bluefin's default)
-// the unique name bluefin-<first 8 of machine-id>, before kubeadm init or
-// join registers it and before resolved announces it over mDNS.
+// HostnameHelper is the base OS's naming helper (bluefin-hostname.service
+// runs it on first boot): a node without a static hostname becomes
+// bluefin-<first 8 of machine-id>.
+const HostnameHelper = "/usr/libexec/bluefin-hostname"
+
+// EnsureHostname names a node still called localhost with the base OS's
+// helper, before kubeadm init or join registers it. The OS already does
+// this on first boot; this covers a node installed before it did.
 func EnsureHostname(ctx context.Context) (string, error) {
 	current, err := os.Hostname()
 	if err != nil {
@@ -115,19 +120,10 @@ func EnsureHostname(ctx context.Context) (string, error) {
 	if short != "" && short != "localhost" {
 		return current, nil
 	}
-	id, err := os.ReadFile(path("/etc/machine-id"))
-	if err != nil {
-		return "", err
+	if _, err := Run(ctx, HostnameHelper); err != nil {
+		return "", fmt.Errorf("%s: %w", HostnameHelper, err)
 	}
-	mid := strings.TrimSpace(string(id))
-	if len(mid) < 8 {
-		return "", errors.New("machine-id is not set")
-	}
-	name := "bluefin-" + mid[:8]
-	if _, err := Run(ctx, "hostnamectl", "set-hostname", name); err != nil {
-		return "", fmt.Errorf("hostnamectl set-hostname %s: %w", name, err)
-	}
-	return name, nil
+	return os.Hostname()
 }
 
 // ShortHostname is the first label of the hostname, which is also the

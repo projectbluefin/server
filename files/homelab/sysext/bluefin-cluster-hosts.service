@@ -7,8 +7,7 @@
 Description=Pin the homelab control plane's mDNS name in /etc/hosts
 Documentation=https://github.com/projectbluefin/server/blob/main/files/homelab/cluster/README.md
 ConditionPathExists=/etc/bluefin/homelab.conf
-Wants=bluefin-cluster-mdns.service
-After=bluefin-cluster-mdns.service network-online.target
+After=network-online.target systemd-resolved.service
 
 [Service]
 Type=oneshot

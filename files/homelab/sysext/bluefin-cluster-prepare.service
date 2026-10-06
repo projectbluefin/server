@@ -8,8 +8,8 @@
 Description=Prepare this homelab control plane for nodes to join
 Documentation=https://github.com/projectbluefin/server/blob/main/files/homelab/cluster/README.md
 ConditionPathExists=/etc/bluefin/homelab.conf
-Wants=network-online.target bluefin-cluster-mdns.service
-After=network-online.target bluefin-cluster-mdns.service systemd-sysext.service kubeadm-init-config.service
+Wants=network-online.target
+After=network-online.target systemd-resolved.service systemd-sysext.service kubeadm-init-config.service
 Before=kubeadm-init.service k0scontroller.service
 
 [Service]
