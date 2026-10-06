@@ -213,6 +213,10 @@ boots=$(( $(cat /var/lib/dogfood-boots 2>/dev/null || echo 0) + 1 ))
 echo "${boots}" > /var/lib/dogfood-boots
 echo "PROBE boots=${boots}"
 echo "PROBE update-timers=$(systemctl is-active systemd-sysupdate.timer systemd-sysupdate-reboot.timer bluefin-diskless-update-check.timer | tr '\n' ' ')"
+want="$(ls /usr/lib/sysupdate.d | sed -n 's/\.feature$//p' | sort | tr '\n' ' ')"
+got="$(updatectl --no-pager --no-legend features 2>/run/dogfood-updatectl.err | sed -E 's/^[^ ]+ +([^ ]+).*/\1/' | sort | tr '\n' ' ')"
+if [ -n "${want}" ] && [ "${got}" = "${want}" ]; then echo "PROBE updatectl-features=ok ${got}"
+else echo "PROBE updatectl-features=FAIL want=${want}got=${got}$(tr '\n' ' ' < /run/dogfood-updatectl.err)"; fi
 if [ -e /run/machines/rootdisk.raw ]; then
     systemctl start bluefin-diskless-update-check.service || true
     echo "PROBE update-check=$(systemctl show -P Result bluefin-diskless-update-check.service) flag=$(test -e /run/reboot-required && echo set || echo none)"
@@ -298,6 +302,9 @@ fi
 failed="$(grep -a '\[FAILED\]' "${dir}/dogfood-serial.log" || true)"
 if [ "${status}" = 0 ] && [ -n "${DOGFOOD_EXPECT:-}" ] && ! grep -aqE -- "${DOGFOOD_EXPECT}" "${dir}/dogfood-serial.log"; then
     echo "FAIL: booted, but the probe output does not match DOGFOOD_EXPECT=${DOGFOOD_EXPECT}" >&2
+    status=1
+elif [ "${status}" = 0 ] && ! grep -aq 'PROBE updatectl-features=ok ' "${dir}/dogfood-serial.log"; then
+    echo "FAIL: updatectl features does not list the image's optional features: $(grep -aoE 'PROBE updatectl-features=.*' "${dir}/dogfood-serial.log" | head -n1)" >&2
     status=1
 elif [ "${status}" = 0 ] && ! grep -aq 'PROBE etc-writable=0' "${dir}/dogfood-serial.log"; then
     echo "FAIL: group- or world-writable paths under /etc: $(grep -aoE 'PROBE etc-writable=.*' "${dir}/dogfood-serial.log" | head -n1)" >&2

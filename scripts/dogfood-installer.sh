@@ -531,6 +531,10 @@ echo "PROBE slot-b=$(lsblk -rno PARTLABEL "${target}" | grep -cx _empty)"
 lsblk -o NAME,PARTLABEL,FSTYPE,SIZE,MOUNTPOINTS | sed 's/^/PROBE-LOG /'
 for s in /sys/block/*/serial; do echo "PROBE-LOG $(basename "$(dirname "${s}")") serial=$(cat "${s}")"; done
 echo "PROBE timers-enabled=$(systemctl is-enabled systemd-sysupdate.timer systemd-sysupdate-reboot.timer | tr '\n' ' ')"
+want="$(ls /usr/lib/sysupdate.d | sed -n 's/\.feature$//p' | sort | tr '\n' ' ')"
+got="$(updatectl --no-pager --no-legend features 2>/run/dogfood-updatectl.err | sed -E 's/^[^ ]+ +([^ ]+).*/\1/' | sort | tr '\n' ' ')"
+if [ -n "${want}" ] && [ "${got}" = "${want}" ]; then echo "PROBE updatectl-features=ok ${got}"
+else echo "PROBE updatectl-features=FAIL want=${want}got=${got}$(tr '\n' ' ' < /run/dogfood-updatectl.err)"; fi
 echo "PROBE keyring=$(sha256sum < /usr/lib/systemd/import-pubring.pgp | cut -d' ' -f1) etc-override=$(test -e /etc/systemd/import-pubring.pgp && echo present || echo none)"
 systemctl start boot-complete.target 2>/dev/null || true
 echo "PROBE bless=$(/usr/lib/systemd/systemd-bless-boot status 2>/dev/null)"
@@ -672,6 +676,11 @@ check_disk_boot() {
             || fail "$1: /usr backed by ${b#PROBE usr-backing=}, not the target's bluefin_usr_${v} slot"
     done < <(grep -aoE 'PROBE usr-backing=.*' "${log}")
     grep -aq 'PROBE timers-enabled=enabled enabled' "${log}" || fail "$1: the update timers are not enabled"
+    # A published release older than the fix for #375 cannot list them.
+    if [ "${next}" != release ] || [ "${v}" = "${ver}" ]; then
+        grep -aq 'PROBE updatectl-features=ok ' "${log}" \
+            || fail "$1: updatectl features does not list the image's optional features: $(grep -ao 'PROBE updatectl-features=.*' "${log}")"
+    fi
     grep -aq "PROBE keyring=${keyring_sum} etc-override=none" "${log}" \
         || fail "$1: the keyring is not ${keyring##*/} of the set: $(grep -ao 'PROBE keyring=.*' "${log}")"
     grep -aqF "PROBE banner-boot=Bluefin Server ${v}," "${log}" || fail "$1: the console banner does not show ${v}"
