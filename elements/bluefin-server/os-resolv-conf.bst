@@ -5,6 +5,8 @@ description: |
   (upstream systemd leaves the symlink to the distro), and this DDI boots
   with an empty /etc, so nothing ever creates the symlink and kubelet fails
   every pod sandbox with "open /etc/resolv.conf: no such file or directory".
+  The other files/os/tmpfiles.d rules land here too (iSCSI, motd, and the
+  /etc/profile.d link to the bash prompt from os-prompt.bst).
 
 sources:
   - kind: local

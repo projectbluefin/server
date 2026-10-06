@@ -58,5 +58,8 @@ depends:
   # Console issue banner (the KubeStellar sysext adds its dashboard URL)
   - bluefin-server/os-issue.bst
 
+  # Interactive bash prompt (user@host:cwd$, blue @)
+  - bluefin-server/os-prompt.bst
+
   # udev rules (USB installer: other disks' stale partition devices, #359)
   - bluefin-server/os-udev-rules.bst
