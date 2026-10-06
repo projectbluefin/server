@@ -88,7 +88,9 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass
+from http.client import HTTPResponse
 from pathlib import Path
 from typing import NamedTuple
 
@@ -110,7 +112,7 @@ class NotFound(TrackError):
     pass
 
 
-def _open(url: str, method: str = "GET"):
+def _open(url: str, method: str = "GET") -> HTTPResponse:
     headers = {"User-Agent": "projectbluefin-server-track-binaries"}
     if url.startswith("https://api.github.com/"):
         headers["Accept"] = "application/vnd.github+json"
@@ -420,9 +422,9 @@ class BstComponent(Component):
     # driver, which is x86_64 only) override this to False.
     multi_arch = True
 
-    def __init__(self, name, repo, sums, include, variables, element, marker,
-                 stable_channel="", version_re=None, version_fmt="{0}",
-                 element_variables=()):
+    def __init__(self, name: str, repo: str, sums: str, include: str, variables: tuple[str, ...], element: str,
+                 marker: str, stable_channel: str = "", version_re: str | None = None, version_fmt: str = "{0}",
+                 element_variables: Iterable[str] = ()) -> None:
         self.name, self.repo, self.sums, self.stable_channel = name, repo, sums, stable_channel
         self.include, self.variables, self.element, self.marker = include, variables, element, marker
         self.version_re = version_re or Component.version_re
@@ -434,24 +436,23 @@ class BstComponent(Component):
         # element, not the include.
         self.element_variables = tuple(element_variables)
 
-    def current(self, tree):
+    def current(self, tree: Tree) -> str:
         return self.version_fmt.format(*(_variable(tree, self.include, v)["value"] for v in self.variables))
 
-    def set_version(self, tree, version):
-        for name, value in zip(self.variables, self.parse(version)):
+    def set_version(self, tree: Tree, version: str) -> None:
+        for name, value in zip(self.variables, self.parse(version), strict=True):
             match = _variable(tree, self.include, name)
             text = tree[self.include]
             tree[self.include] = text[: match.start("value")] + value + text[match.end("value") :]
 
-    def pins(self, tree):
+    def pins(self, tree: Tree) -> list[Pin]:
         variables = {m["name"]: m["value"] for m in VARIABLE_RE.finditer(tree[self.include])}
         # Element-defined variables override include-defined ones by name. Only the
         # subset named in `element_variables` is read; reading every variable in
         # the element would add strip-binaries, etc., that the URL never uses
         # and would silently mask include variables of the same name.
         for name in self.element_variables:
-            match = _variable(tree, self.element, name)
-            variables[name] = match["value"]
+            variables[name] = _variable(tree, self.element, name)["value"]
         aliases = {m["name"]: m["url"] for m in ALIAS_RE.finditer(tree["include/aliases.yml"])}
         version = self.current(tree)
         pins = []
@@ -488,16 +489,16 @@ class NvidiaDriverComponent(BstComponent):
                          marker="%{nvidia-version}", element_variables=("nvidia-version",),
                          version_re=rf"({re.escape(branch)}\.\d+(?:\.\d+)?)")
 
-    def series(self, version):
+    def series(self, version: str) -> str:
         return version.split(".", 1)[0]
 
-    def pins(self, tree):
+    def pins(self, tree: Tree) -> list[Pin]:
         pins = super().pins(tree)
         if len(pins) != 1:
             raise TrackError(f"{self.element}: expected one source url with {self.marker}, found {len(pins)}")
         return [Pin(self.include, "", f"{self.name}-sha256", pins[0].url, pins[0].sums, standalone_key=True)]
 
-    def candidates(self, tree, series):
+    def candidates(self, tree: Tree, series: str) -> list[str]:
         current = self.current(tree)
         index = _get(self.INDEX).decode("utf-8", "replace")
         listed = {m[1] for m in self.DIR_RE.finditer(index) if re.fullmatch(self.version_re, m[1])}
@@ -512,7 +513,7 @@ class NvidiaDriverComponent(BstComponent):
                 found.append(version)
         return found
 
-    def notes(self, version):
+    def notes(self, version: str) -> str:
         return f"{self.INDEX}{version}/"
 
 
@@ -532,13 +533,13 @@ class SnapshotComponent(BstComponent):
         super().__init__(name, repo, sums, include=element, variables=(variable,), element=element,
                          marker=f"%{{{variable}}}", version_re=r"(\d{8})")
 
-    def series(self, version):
+    def series(self, version: str) -> str:
         return "date"
 
-    def headline(self, old, new):
+    def headline(self, old: str, new: str) -> str:
         return f"New **{self.name}** snapshot: `{old}` → `{new}`."
 
-    def policy(self):
+    def policy(self) -> str:
         return f"Every newer {self.name} snapshot is proposed; there is no series to stay inside."
 
 
@@ -566,10 +567,10 @@ class GitTagComponent(Component):
         self.version_variable, self.commit_variable = f"{name}-version", f"{name}-commit"
         self.git_url = f"https://github.com/{repo}.git"
 
-    def current(self, tree):
+    def current(self, tree: Tree) -> str:
         return _variable(tree, self.include, self.version_variable)["value"]
 
-    def set_version(self, tree, version):
+    def set_version(self, tree: Tree, version: str) -> None:
         (value,) = self.parse(version)
         match = _variable(tree, self.include, self.version_variable)
         text = tree[self.include]
@@ -578,7 +579,7 @@ class GitTagComponent(Component):
     def ref_template(self) -> str:
         return f"v%{{{self.version_variable}}}-0-g%{{{self.commit_variable}}}"
 
-    def pins(self, tree):
+    def pins(self, tree: Tree) -> list[Pin]:
         variables = {m["name"]: m["value"] for m in VARIABLE_RE.finditer(tree[self.include])}
         aliases = {m["name"]: m["url"] for m in ALIAS_RE.finditer(tree["include/aliases.yml"])}
         anchors = [
@@ -595,7 +596,7 @@ class GitTagComponent(Component):
         api = f"https://api.github.com/repos/{self.repo}/commits/refs/tags/{tag}"
         return [Pin(self.include, "", self.commit_variable, self.git_url, api, standalone_key=True)]
 
-    def verify(self, tree):
+    def verify(self, tree: Tree) -> list[Change]:
         (pin,) = self.pins(tree)
         tag = f"v{self.current(tree)}"
         from_api = json.loads(_get(pin.sums)).get("sha", "")
@@ -608,7 +609,7 @@ class GitTagComponent(Component):
         write_pin(tree, pin, from_api)
         return [change]
 
-    def evidence(self, result):
+    def evidence(self, result: Result) -> list[str]:
         tag = f"refs/tags/v{result.new}"
         lines = ["The commit is the one two upstream answers agree on for the tag:", ""]
         for pin, _, _ in result.changes:
@@ -628,8 +629,8 @@ def _git_tag_commit(url: str, tag: str) -> str:
         raise TrackError(f"{' '.join(command)}: {str(detail).strip()}") from None
     refs = {}
     for line in listing.splitlines():
-        commit, _, name = line.partition("\t")
-        refs[name] = commit
+        oid, _, name = line.partition("\t")
+        refs[name] = oid
     commit = refs.get(ref + "^{}") or refs.get(ref)
     if commit is None:
         raise TrackError(f"{url} has no {ref}")
@@ -651,7 +652,7 @@ class OrasComponent(Component):
         r"v(?P<tag>\d+\.\d+\.\d+)/oras_(?P<version>\d+\.\d+\.\d+)_linux_amd64\.tar\.gz"
     )
 
-    def _sites(self, tree):
+    def _sites(self, tree: Tree) -> tuple[list[tuple[str, str]], list[tuple[str, re.Match[str]]]]:
         sites = [("Justfile", m["version"]) for m in self.IMAGE_RE.finditer(tree["Justfile"])]
         if not sites:
             raise TrackError("Justfile: no ghcr.io/oras-project/oras:vX.Y.Z image")
@@ -662,7 +663,7 @@ class OrasComponent(Component):
             sites += [(path, match["tag"]), (path, match["version"])]
         return sites, urls
 
-    def current(self, tree):
+    def current(self, tree: Tree) -> str:
         sites, _ = self._sites(tree)
         versions = {version for _, version in sites}
         if len(versions) != 1:
@@ -670,7 +671,7 @@ class OrasComponent(Component):
             raise TrackError(f"ORAS pins disagree ({pinned}); make them one version first")
         return versions.pop()
 
-    def set_version(self, tree, version):
+    def set_version(self, tree: Tree, version: str) -> None:
         self.parse(version)
         _, urls = self._sites(tree)
         tree["Justfile"] = self.IMAGE_RE.sub(lambda m: m["head"] + version, tree["Justfile"])
@@ -678,7 +679,7 @@ class OrasComponent(Component):
         for path in sorted({path for path, _ in urls}):
             tree[path] = self.URL_RE.sub(new, tree[path])
 
-    def pins(self, tree):
+    def pins(self, tree: Tree) -> list[Pin]:
         version = self.current(tree)
         _, urls = self._sites(tree)
         return [

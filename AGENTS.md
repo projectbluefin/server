@@ -51,6 +51,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 |---|---|
 | `just validate` | Merge-contract graph check — run this on every change. |
 | `just test-unit` | Unit tests (pytest + bats). |
+| `just lint-python` | ruff and mypy over the Python, as CI runs them (tools pinned in `.github/requirements-ci.txt`). |
 | `just gen-dev-keys` | Generate throwaway Secure Boot and image (`SHA256SUMS`) signing keys in `files/boot-keys/` (gitignored), plus the committed public INSECURE dev module pair from `files/dev-keys/` (`--private-module-key` for a fresh one). |
 | `just set-version V` | Set `image-version` in `include/image.yml` (≤17 chars, increasing under strverscmp). |
 | `just build-image` / `just export-image` | Build and export the release image set to `dist/diskless/`. |

@@ -26,9 +26,12 @@ drops back onto the OS release axis, and cross-checks that the derived asset
 filename still matches the sysupdate transfer's MatchPattern.
 """
 
+from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[2]
 K0S_INCLUDE = ROOT / "include" / "k0s.yml"
@@ -41,13 +44,13 @@ SAFE_VERSION_RE = re.compile(r"^[A-Za-z0-9._~^+-]+$")
 LITERAL_VERSION_RE = re.compile(r"v?[0-9]+\.[0-9]+\.[0-9]+(?:\+|%2B|-)k0s\.[0-9]+")
 
 
-def read(path):
+def read(path: Path) -> str:
     if not path.is_file():
         sys.exit(f"ERROR: expected file not found: {path.relative_to(ROOT)}")
     return path.read_text(encoding="utf-8")
 
 
-def scalar(text, name, where):
+def scalar(text: str, name: str, where: str) -> str:
     """Read a ``name: "value"`` scalar out of a BuildStream YAML fragment."""
     match = re.search(
         rf"^\s*{re.escape(name)}:\s*[\"']([^\"']+)[\"']\s*$", text, re.MULTILINE
@@ -57,7 +60,7 @@ def scalar(text, name, where):
     return match.group(1)
 
 
-def expand(value, variables, where):
+def expand(value: str, variables: dict[str, str], where: str) -> str:
     """Resolve ``%{...}`` references the way BuildStream would."""
     for _ in range(len(variables) + 1):
         refs = re.findall(r"%\{([a-zA-Z][a-zA-Z0-9_-]*)\}", value)
@@ -72,11 +75,11 @@ def expand(value, variables, where):
     sys.exit(f"ERROR: {where} has a circular variable reference: {value}")
 
 
-def fail(problem, fix):
+def fail(problem: str, fix: str) -> NoReturn:
     sys.exit(f"ERROR: {problem}\n\nFix: {fix}")
 
 
-def main():
+def main() -> None:
     include = read(K0S_INCLUDE)
     atoms = {
         "k0s-k8s-version": scalar(include, "k0s-k8s-version", "include/k0s.yml"),

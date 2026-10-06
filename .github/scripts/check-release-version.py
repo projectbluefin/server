@@ -17,9 +17,12 @@ FSDK point release:
   --fix         set installer-version to it, then check (track-junctions.yml)
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,13 +37,13 @@ FSDK_REF_RE = re.compile(r"freedesktop-sdk-([0-9]+\.[0-9]+\.[0-9]+)")
 INSTALLER_LINE_RE = re.compile(r"^([ \t]*installer-version:[ \t]*).*$", re.MULTILINE)
 
 
-def read(path):
+def read(path: Path) -> str:
     if not path.is_file():
         sys.exit(f"ERROR: expected file not found: {path.relative_to(ROOT)}")
     return path.read_text(encoding="utf-8")
 
 
-def pinned_fsdk_version():
+def pinned_fsdk_version() -> str:
     fsdk_match = FSDK_REF_RE.search(read(FSDK_JUNCTION))
     if not fsdk_match:
         sys.exit(
@@ -50,14 +53,14 @@ def pinned_fsdk_version():
     return fsdk_match.group(1)
 
 
-def fix_installer_version(fsdk_pinned):
+def fix_installer_version(fsdk_pinned: str) -> None:
     conf = read(PROJECT_CONF)
     fixed = INSTALLER_LINE_RE.sub(lambda m: f'{m.group(1)}"{fsdk_pinned}"', conf, count=1)
     if fixed != conf:
         PROJECT_CONF.write_text(fixed, encoding="utf-8")
 
 
-def main(argv=()):
+def main(argv: Sequence[str] = ()) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--print-fsdk", action="store_true", help="print the pinned FSDK point release")

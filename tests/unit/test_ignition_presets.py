@@ -1,9 +1,9 @@
 """Apply Ignition enablement to a populated root using real systemctl offline."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 

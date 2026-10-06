@@ -1,7 +1,7 @@
 """Exercise the Homelab installer's host-side log checks without booting QEMU."""
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import pytest
 

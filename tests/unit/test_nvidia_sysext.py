@@ -63,7 +63,7 @@ def test_flavour_pins_a_release_of_its_own_branch(flavour: str) -> None:
 
 @pytest.mark.parametrize("flavour", flavours())
 def test_every_flavour_element_uses_the_shared_recipe(flavour: str) -> None:
-    for role, path in element_files(flavour).items():
+    for path in element_files(flavour).values():
         element = load(path)
         assert {"include/nvidia.yml", "include/nvidia-driver.yml"} <= set(element["(@)"]), path
         assert element["variables"]["nvidia-flavour"] == flavour, path

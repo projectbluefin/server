@@ -202,7 +202,7 @@ def snapshot(root: Path, extra=()) -> dict[str, str]:
 def changed_lines(before: dict[str, str], root: Path) -> dict[str, list[tuple[str, str]]]:
     diff = {}
     for path, text in before.items():
-        pairs = [(a, b) for a, b in zip(text.splitlines(), (root / path).read_text(encoding="utf-8").splitlines()) if a != b]
+        pairs = [(a, b) for a, b in zip(text.splitlines(), (root / path).read_text(encoding="utf-8").splitlines(), strict=False) if a != b]
         if pairs:
             diff[path] = pairs
     return diff

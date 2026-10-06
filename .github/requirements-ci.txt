@@ -1,9 +1,17 @@
 # Python packages for the unit-tests and docs-checks workflows, pinned
 # exactly (the full set pip resolves) so CI does not change with a PyPI
 # release. Renovate's pip_requirements manager proposes the bumps.
+ast-serialize==0.12.1
 iniconfig==2.3.0
+librt==0.16.0
+mypy==2.4.0
+mypy-extensions==1.1.0
 packaging==26.3
+pathspec==1.1.1
 pluggy==1.6.0
 pygments==2.21.0
 pytest==9.1.1
 pyyaml==6.0.3
+ruff==0.16.10
+types-pyyaml==6.0.12.20260906
+typing-extensions==4.16.0

@@ -69,7 +69,7 @@ def strings(node):
 
 
 def index(directory: str) -> tuple[str, str]:
-    lines = [l for l in (ADDONS / directory / "addon").read_text().splitlines() if l.strip() and not l.startswith("#")]
+    lines = [line for line in (ADDONS / directory / "addon").read_text().splitlines() if line.strip() and not line.startswith("#")]
     assert len(lines) == 1, lines
     default, runtimes = lines[0].split()
     return default, runtimes
@@ -269,8 +269,8 @@ def test_mcp_client_token_is_generated_by_kubernetes_and_reads_only() -> None:
 
 
 def secrets(directory: str) -> list[list[str]]:
-    return [l.split() for l in (ADDONS / directory / "secrets").read_text().splitlines()
-            if l.strip() and not l.startswith("#")]
+    return [line.split() for line in (ADDONS / directory / "secrets").read_text().splitlines()
+            if line.strip() and not line.startswith("#")]
 
 
 CONSOLE = "30-kubestellar-console"
