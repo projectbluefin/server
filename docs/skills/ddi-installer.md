@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server boot chain, the d
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-03"
+  last_updated: "2026-10-05"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -176,6 +176,20 @@ Installed nodes update with `systemd-sysupdate` against the transfers in
   `/var/lib/extensions` (two versions kept, `ProtectVersion=%A`); systemd-sysext
   merges only the one matching the booted image, so a boot-counted rollback
   keeps ZFS (or the NVIDIA driver).
+
+`updatectl features` lists the optional features on installed and diskless
+nodes; every QEMU boot test asserts it (`PROBE updatectl-features=ok`). Two
+systemd 261 limits keep it working (#375):
+
+- A `.feature` file carries only `Description=` (and `Enabled=`).
+  `Documentation=` or `AppStream=` makes `systemd-sysupdate --json` emit a
+  field updatectl's strict parser rejects, so every `updatectl features`
+  fails with "Cannot assign requested address" (fixed in systemd 262).
+- A diskless node mounts no `$BOOT`, so `20-uki.transfer` cannot resolve and
+  sysupdated would have no host target ("Invalid target: host").
+  `systemd-sysupdated.service.d/10-diskless.conf` masks that transfer in
+  `/run/sysupdate.d/` on diskless boots; enabled features are fetched there
+  by `bluefin-sysext-fetch` (systemd-sysext-extensions.md).
 
 The k0s and NVIDIA Container Toolkit sysexts are separate sysupdate components
 on their own version axes (`sysupdate.k0s.d/`,
