@@ -175,7 +175,7 @@ Disabling is Ignition's own: its files stage runs `systemctl disable` on
 every enabled unit the config disables, on each boot, so an operator's
 `systemctl enable` of such a unit lasts only until the next boot, and a
 preset sorting before `20-ignition.preset` (such as
-`03-bluefin-countme.preset`) cannot re-enable it. A diskless node's fresh
+`03-projectbluefin-countme.preset`) cannot re-enable it. A diskless node's fresh
 `/etc` gets every selection on every boot; a unit that is missing or masked
 is retried on the next boot.
 
