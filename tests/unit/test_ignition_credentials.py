@@ -5,11 +5,13 @@ or, for a network-booted node, from bluefin-node.ign next to the UKI. The
 node config used to be applied with no signature: an on-path attacker on the
 (often plain-HTTP) provisioning network got root despite the signed boot
 chain. The signature is now the gate, whatever the transport: a config next to
-the UKI is applied only if bluefin-node.ign.gpg verifies against the import
-keyring, or, unsigned (the .gpg is a 404, nothing else), with the
-bluefin.ignition.allow-unsigned credential, which the netboot UKI sets until
-Booty signs configs (projectbluefin/server#327). Runs against local HTTP and
-HTTPS servers and throwaway GnuPG keys; no files/boot-keys are needed.
+the UKI is applied only if bluefin-node.ign.gpg verifies against the Ignition
+config keyring in the initrd (never the release keyring that authenticates
+SHA256SUMS), or, unsigned (the .gpg is a 404, nothing else), with the
+bluefin.ignition.allow-unsigned credential, which the netboot UKI sets while
+the ignition_allow_unsigned build option is on (projectbluefin/server#327).
+Runs against local HTTP and HTTPS servers and throwaway GnuPG keys; no
+files/boot-keys are needed.
 """
 
 from __future__ import annotations
@@ -30,13 +32,15 @@ SCRIPT = ROOT / "files" / "initrd-ignition" / "usr" / "libexec" / "bluefin-ignit
 UNIT = ROOT / "files" / "initrd-ignition" / "usr" / "lib" / "systemd" / "system" / "bluefin-ignition-credentials.service"
 ELEMENTS = ROOT / "elements" / "bluefin-server" / "initrd"
 BOOT = ROOT / "elements" / "oci" / "bluefin-server-boot.bst"
+PROJECT = ROOT / "project.conf"
+DEFAULT_KEYRING = "/usr/lib/bluefin/ignition-pubring.pgp"
 needs_tools = pytest.mark.skipif(
     not all(shutil.which(t) for t in ("curl", "gpg", "gpgv", "openssl")),
     reason="needs curl, gpg, gpgv and openssl",
 )
 
-# The script picks its keyring from fixed paths; a private user and mount
-# namespace lets a test put its own keyrings there.
+# The release keyring's paths; a private user and mount namespace lets a test
+# put a keyring there that the script must never use.
 KEYRING_DIRS = ("/etc/systemd", "/usr/lib/systemd")
 
 
@@ -65,6 +69,7 @@ def test_ships_in_the_initrd_stack_and_is_executable_bash() -> None:
     doc = yaml.safe_load((ELEMENTS / "initrd-ignition-stack.bst").read_text(encoding="utf-8"))
     assert doc["kind"] == "stack"
     assert "bluefin-server/initrd/initrd-ignition.bst" in doc["depends"]
+    assert "bluefin-server/initrd/initrd-ignition-keys.bst" in doc["depends"]
     assert SCRIPT.read_text(encoding="utf-8").startswith("#!/usr/bin/bash\n")
     assert SCRIPT.stat().st_mode & stat.S_IXUSR
     subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
@@ -78,7 +83,7 @@ def test_the_script_is_shellcheck_clean(shellcheck: str) -> None:
 def keys(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     base = tmp_path_factory.mktemp("gpg")
     out = {}
-    for name in ("release", "stranger"):
+    for name in ("config", "release", "stranger"):
         home = base / name
         home.mkdir(mode=0o700)
         env = dict(os.environ, GNUPGHOME=str(home))
@@ -192,9 +197,9 @@ def run(
     out.mkdir(parents=True)
     env = dict(os.environ, BLUEFIN_IGNITION_OUT=str(out / "user.ign"), CURL_CA_BUNDLE=str(tmp_path / "cert.pem"))
     env.pop("CREDENTIALS_DIRECTORY", None)
-    env.pop("BLUEFIN_IMPORT_KEYRING", None)
+    env.pop("BLUEFIN_IGNITION_KEYRING", None)
     if keyring is not None:
-        env["BLUEFIN_IMPORT_KEYRING"] = str(keyring)
+        env["BLUEFIN_IGNITION_KEYRING"] = str(keyring)
     if creds:
         cred_dir = tmp_path / "creds"
         cred_dir.mkdir(exist_ok=True)
@@ -226,19 +231,36 @@ ALLOW = {"bluefin.ignition.allow-unsigned": "1"}
 @needs_tools
 def test_signed_config_over_plain_http_is_staged_verbatim(tmp_path: Path, origin, keys) -> None:
     url, srv, _ = origin
-    _publish(srv, sign_key=keys["release"])
-    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["release-ring"])
+    _publish(srv, sign_key=keys["config"])
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["config-ring"])
     assert rc == 0, log
     assert contents == CONFIG, "the verified bytes are staged, not re-fetched"
-    assert f"gpgv-verified against {keys['release-ring']}" in log
-    assert 'gpgv: Good signature from "release' in log, "gpgv's report reaches the journal"
+    assert f"gpgv-verified against {keys['config-ring']}" in log
+    assert 'gpgv: Good signature from "config' in log, "gpgv's report reaches the journal"
 
 
 @needs_tools
 def test_signed_config_over_https_is_staged_verbatim(tmp_path: Path, tls_origin, keys) -> None:
     url, srv = tls_origin
-    _publish(srv, sign_key=keys["release"])
-    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["release-ring"])
+    _publish(srv, sign_key=keys["config"])
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["config-ring"])
+    assert rc == 0, log
+    assert contents == CONFIG
+
+
+@needs_tools
+def test_the_signing_helper_signs_what_a_node_accepts(tmp_path: Path, origin, keys) -> None:
+    # scripts/sign-node-config.sh is the documented operator procedure.
+    url, srv, _ = origin
+    _publish(srv)
+    secret = tmp_path / "ignition-signing.asc"
+    secret.write_bytes(subprocess.run(
+        ["gpg", "--batch", "--armor", "--export-secret-keys"],
+        check=True, capture_output=True, env=dict(os.environ, GNUPGHOME=str(keys["config"])),
+    ).stdout)
+    subprocess.run(["bash", str(ROOT / "scripts" / "sign-node-config.sh"), str(secret), str(srv / "bluefin-node.ign")],
+                   check=True, capture_output=True)
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["config-ring"])
     assert rc == 0, log
     assert contents == CONFIG
 
@@ -246,7 +268,7 @@ def test_signed_config_over_https_is_staged_verbatim(tmp_path: Path, tls_origin,
 @needs_tools
 def test_http_origin_without_a_config_boots_with_nothing_to_apply(tmp_path: Path, origin, keys) -> None:
     url, _, _ = origin
-    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["release-ring"])
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["config-ring"])
     assert rc == 0, log
     assert contents is None
     assert "nothing to apply" in log
@@ -255,17 +277,25 @@ def test_http_origin_without_a_config_boots_with_nothing_to_apply(tmp_path: Path
 @needs_tools
 @pytest.mark.parametrize(
     "damage,reason",
-    [("other-key", "No public key"), ("config-changed", "BAD signature"), ("signature-truncated", "gpgv: ")],
+    [
+        ("release-key", "No public key"),
+        ("other-key", "No public key"),
+        ("config-changed", "BAD signature"),
+        ("signature-truncated", "gpgv: "),
+    ],
 )
 def test_a_signature_that_does_not_verify_is_refused(tmp_path: Path, origin, keys, damage: str, reason: str) -> None:
+    # release-key: a config signed with the key that signs SHA256SUMS is not a
+    # config the Ignition config keyring vouches for.
     url, srv, _ = origin
-    _publish(srv, sign_key=keys["stranger" if damage == "other-key" else "release"])
+    signer = {"release-key": "release", "other-key": "stranger"}.get(damage, "config")
+    _publish(srv, sign_key=keys[signer])
     if damage == "config-changed":
         (srv / "bluefin-node.ign").write_text(CONFIG.replace("/bin/true", "/bin/sh"), encoding="utf-8")
     if damage == "signature-truncated":
         sig = srv / "bluefin-node.ign.gpg"
         sig.write_bytes(sig.read_bytes()[:-8])
-    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["release-ring"])
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["config-ring"])
     assert rc == 1, log
     assert contents is None
     assert "does not verify" in log
@@ -277,7 +307,7 @@ def test_a_signature_that_does_not_verify_is_refused(tmp_path: Path, origin, key
 def test_an_unsigned_config_is_refused_without_the_opt_out(tmp_path: Path, origin, keys, scheme: str) -> None:
     url, srv, _ = origin
     _publish(srv)
-    rc, log, contents = run(tmp_path, origin_url=url.replace("http", scheme, 1) + UKI, keyring=keys["release-ring"])
+    rc, log, contents = run(tmp_path, origin_url=url.replace("http", scheme, 1) + UKI, keyring=keys["config-ring"])
     assert rc == 1, log
     assert contents is None
     assert "bluefin.ignition.allow-unsigned is not set" in log
@@ -287,7 +317,7 @@ def test_an_unsigned_config_is_refused_without_the_opt_out(tmp_path: Path, origi
 def test_an_unsigned_config_is_staged_verbatim_with_the_opt_out(tmp_path: Path, origin, keys) -> None:
     url, srv, _ = origin
     _publish(srv)
-    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["release-ring"])
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["config-ring"])
     assert rc == 0, log
     assert contents == CONFIG
     assert "UNAUTHENTICATED" in log
@@ -297,9 +327,9 @@ def test_an_unsigned_config_is_staged_verbatim_with_the_opt_out(tmp_path: Path, 
 @pytest.mark.parametrize("failure", [500, "drop"])
 def test_a_signature_that_cannot_be_fetched_is_not_a_missing_one(tmp_path: Path, origin, keys, failure) -> None:
     url, srv, fail = origin
-    _publish(srv, sign_key=keys["release"])
+    _publish(srv, sign_key=keys["config"])
     fail["/bluefin-node.ign.gpg"] = failure
-    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["release-ring"])
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["config-ring"])
     assert rc == 1, log
     assert contents is None
 
@@ -308,8 +338,8 @@ def test_a_signature_that_cannot_be_fetched_is_not_a_missing_one(tmp_path: Path,
 @pytest.mark.parametrize("kind", ["missing", "dangling-symlink", "directory"])
 def test_an_unreadable_keyring_refuses_a_signed_config(tmp_path: Path, origin, keys, kind: str) -> None:
     url, srv, _ = origin
-    _publish(srv, sign_key=keys["release"])
-    ring = tmp_path / "import-pubring.pgp"
+    _publish(srv, sign_key=keys["config"])
+    ring = tmp_path / "ignition-pubring.pgp"
     if kind == "dangling-symlink":
         ring.symlink_to(tmp_path / "gone.pgp")
     if kind == "directory":
@@ -317,59 +347,64 @@ def test_an_unreadable_keyring_refuses_a_signed_config(tmp_path: Path, origin, k
     rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=ring)
     assert rc == 1, log
     assert contents is None
-    assert f"import keyring {ring} is missing or unreadable" in log
+    assert f"Ignition config keyring {ring} is missing or unreadable" in log
     assert "gpgv:" not in log, "no other keyring is tried"
 
 
 @needs_tools
 @needs_mount_ns
-@pytest.mark.parametrize(
-    "override,vendor,chosen,ok",
-    [
-        (None, "release", "/usr/lib/systemd/import-pubring.pgp", True),
-        ("release", "stranger", "/etc/systemd/import-pubring.pgp", True),
-        ("dangling", "release", "/etc/systemd/import-pubring.pgp", False),
-    ],
-)
-def test_the_etc_keyring_overrides_the_image_one_without_falling_back(
-    tmp_path: Path, origin, keys, override: str | None, vendor: str, chosen: str, ok: bool
-) -> None:
-    # Without BLUEFIN_IMPORT_KEYRING the script trusts what systemd-importd
-    # does: /etc/systemd/import-pubring.pgp when present, else the image's.
-    # A broken override fails the boot even though the image keyring would
-    # have verified the config.
+@pytest.mark.skipif(os.path.exists(DEFAULT_KEYRING), reason=f"{DEFAULT_KEYRING} exists on this host")
+def test_the_release_keyring_never_verifies_a_node_config(tmp_path: Path, origin, keys) -> None:
+    # Domain separation: with the release keyring in both places
+    # systemd-importd reads it from, a config signed with the release key is
+    # still refused. The script reads only its own keyring, absent here.
     url, srv, _ = origin
     _publish(srv, sign_key=keys["release"])
     etc, usr = tmp_path / "etc-systemd", tmp_path / "usr-lib-systemd"
     etc.mkdir()
     usr.mkdir()
-    shutil.copy(keys[f"{vendor}-ring"], usr / "import-pubring.pgp")
-    if override == "release":
-        shutil.copy(keys["release-ring"], etc / "import-pubring.pgp")
-    if override == "dangling":
-        (etc / "import-pubring.pgp").symlink_to(tmp_path / "gone.pgp")
-    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring_dirs=(etc, usr))
-    if ok:
-        assert rc == 0, log
-        assert contents == CONFIG
-        assert f"gpgv-verified against {chosen}" in log
-    else:
-        assert rc == 1, log
-        assert contents is None
-        assert f"import keyring {chosen} is missing or unreadable" in log
+    for d in (etc, usr):
+        shutil.copy(keys["release-ring"], d / "import-pubring.pgp")
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring_dirs=(etc, usr))
+    assert rc == 1, log
+    assert contents is None
+    assert f"Ignition config keyring {DEFAULT_KEYRING} is missing or unreadable" in log
+    assert "gpgv:" not in log
+
+
+def test_the_initrd_ships_the_ignition_config_keyring_from_the_key_set() -> None:
+    import yaml
+
+    doc = yaml.safe_load((ELEMENTS / "initrd-ignition-keys.bst").read_text(encoding="utf-8"))
+    assert doc["kind"] == "import"
+    assert doc["sources"] == [{"kind": "local", "path": "files/boot-keys/ignition-pubring.pgp"}]
+    assert doc["config"]["target"] + "/ignition-pubring.pgp" == DEFAULT_KEYRING
+    assert f'"${{BLUEFIN_IGNITION_KEYRING:-{DEFAULT_KEYRING}}}"' in SCRIPT.read_text(encoding="utf-8")
 
 
 def test_only_the_netboot_uki_accepts_an_unsigned_node_config_by_default() -> None:
     # Transitional until Booty signs per-node configs (#327): UEFI HTTP Boot
     # with Secure Boot cannot pass the opt-out except on the UKI's own
-    # command line. Installed and installer boots never get it.
+    # command line. One build option, on by default, puts it there; installed
+    # and installer boots never get it.
     import yaml
 
+    option = yaml.safe_load(PROJECT.read_text(encoding="utf-8"))["options"]["ignition_allow_unsigned"]
+    assert option["type"] == "bool"
+    assert option["default"] is True, "flip to False once Booty signs node configs (booty-integration.md)"
+
     text = BOOT.read_text(encoding="utf-8")
-    variables = yaml.safe_load(text)["variables"]
-    assert "systemd.set_credential=bluefin.ignition.allow-unsigned:1" in variables["netboot-cmdline"].split()
+    doc = yaml.safe_load(text)
+    variables = doc["variables"]
+    assert variables["netboot-ignition-cmdline"] == ""
+    assert "%{netboot-ignition-cmdline}" in variables["netboot-cmdline"].split()
+    assert doc["(?)"] == [
+        {"ignition_allow_unsigned": {"variables": {
+            "netboot-ignition-cmdline": "systemd.set_credential=bluefin.ignition.allow-unsigned:1"}}}
+    ]
+    assert text.count("bluefin.ignition.allow-unsigned:1") == 1
     for name in ("common-cmdline", "disk-cmdline", "installer-cmdline"):
-        assert "bluefin.ignition.allow-unsigned" not in variables[name], name
+        assert "ignition" not in variables[name], name
     assert text.count("%{netboot-cmdline}") == 1
     assert 'uki bluefin-server-netboot_%{image-version} "%{netboot-cmdline}"' in text
     assert "ImportCredential=bluefin.ignition.allow-unsigned" in UNIT.read_text(encoding="utf-8").splitlines()
