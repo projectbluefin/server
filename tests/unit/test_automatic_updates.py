@@ -111,6 +111,32 @@ def test_update_units_are_inert_on_diskless_and_installer_boots(dropin: str) -> 
     assert conditions(UNITS / dropin) == expected
 
 
+@pytest.mark.parametrize("diskless", [True, False])
+def test_sysupdated_masks_the_uki_transfer_only_on_diskless_boots(tmp_path: Path, diskless: bool) -> None:
+    # Without $BOOT, a transfer relative to it fails every sysupdate verb and
+    # leaves sysupdated with no host target (#375); the UKI is the only one.
+    needs_boot = [
+        p.name
+        for p in sorted((ROOT / "files" / "os" / "sysupdate.d").glob("*.transfer"))
+        if ini(p)["Target"].get("PathRelativeTo", "root") != "root"
+    ]
+    assert needs_boot == ["20-uki.transfer"]
+
+    argv = shlex.split(ini(UNITS / "systemd-sysupdated.service.d" / "10-diskless.conf")["Service"]["ExecStartPre"])
+    assert argv[:2] == ["/usr/bin/sh", "-c"] and DISKLESS_ONLY in argv[2]
+    script = argv[2].replace("/run/", f"{tmp_path}/run/")
+    if diskless:
+        (tmp_path / "run" / "machines").mkdir(parents=True)
+        (tmp_path / "run" / "machines" / "rootdisk.raw").touch()
+    for _ in range(2):
+        subprocess.run(["sh", "-c", script], check=True)
+
+    mask = tmp_path / "run" / "sysupdate.d" / "20-uki.transfer"
+    if diskless:
+        assert mask.is_symlink() and os.readlink(mask) == "/dev/null"
+    else:
+        assert not mask.is_symlink() and not mask.exists()
+
 def test_kured_flag_is_set_only_when_an_update_is_pending() -> None:
     service = ini(KURED)["Service"]
     assert "ExecStartPost" not in service, "Type=simple: ExecStartPost runs before the update"
