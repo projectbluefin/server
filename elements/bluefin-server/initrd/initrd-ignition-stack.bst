@@ -17,6 +17,8 @@ depends:
 - ignition/ignition.bst
 - ignition/gptfdisk.bst
 - bluefin-server/initrd/initrd-ignition.bst
+# The keyring bluefin-node.ign.gpg is verified against (not the release keyring)
+- bluefin-server/initrd/initrd-ignition-keys.bst
 # bluefin-boot-origin: the HTTP boot origin, for bluefin-node.ign next to the UKI
 - bluefin-server/boot-origin.bst
 
