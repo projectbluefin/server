@@ -1,8 +1,7 @@
 """The k0s sysext's controller and worker units."""
 
-from pathlib import Path
-
 import posixpath
+from pathlib import Path
 
 from _systemd import SystemdFile
 

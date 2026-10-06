@@ -20,7 +20,6 @@ checking less, which is the failure mode this file exists to catch.
 
 import pytest
 
-
 BUDGET_TARGETS = [
     # (relative path, hard limit, warning threshold) as passed by main()
     ("AGENTS.md", 200, 150),
