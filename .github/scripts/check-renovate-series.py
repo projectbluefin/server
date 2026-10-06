@@ -23,6 +23,8 @@ junction's `track:` glob and asserts the matching `extractVersion` in
 renovate.json is anchored to the same one.
 """
 
+from __future__ import annotations
+
 import json
 import re
 import sys
@@ -41,13 +43,13 @@ JUNCTIONS = {
 TRACK_RE = re.compile(r"^\s*track:\s*[\"']?([^\"'\s]+)[\"']?\s*$", re.MULTILINE)
 
 
-def read(path):
+def read(path: Path) -> str:
     if not path.is_file():
         sys.exit(f"ERROR: expected file not found: {path.relative_to(ROOT)}")
     return path.read_text(encoding="utf-8")
 
 
-def series_of(track):
+def series_of(track: str) -> str:
     """The literal prefix of a track glob, with the trailing '*' removed.
 
     `freedesktop-sdk-26.08*` -> `freedesktop-sdk-26.08`
@@ -56,7 +58,7 @@ def series_of(track):
     return track.split("*", 1)[0]
 
 
-def digits(text):
+def digits(text: str) -> list[str]:
     """Version-ish digit groups, so an escaped regex and a plain glob compare.
 
     `^freedesktop-sdk-(?<version>26\\.08\\.[0-9]+)$` -> ['26', '08']
@@ -67,7 +69,7 @@ def digits(text):
     return [g for g in re.findall(r"\d+", stripped)]
 
 
-def main():
+def main() -> None:
     config = json.loads(read(RENOVATE_JSON))
     rules = config.get("packageRules", [])
     failures = []
