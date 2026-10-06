@@ -8,6 +8,8 @@ Enforces:
 - Internal link validity
 """
 
+from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
@@ -23,19 +25,19 @@ STALERE = re.compile(r"TODO:|FIXME:|XXX|HACK")
 DRAFT_RE = re.compile(r"\bdraft\b", re.IGNORECASE)
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
-errors = []
-warnings = []
+errors: list[str] = []
+warnings: list[str] = []
 
 
-def err(path, msg):
+def err(path: Path, msg: str) -> None:
     errors.append(f"{path}: {msg}")
 
 
-def warn(path, msg):
+def warn(path: Path, msg: str) -> None:
     warnings.append(f"{path}: {msg}")
 
 
-def load_fm(text):
+def load_fm(text: str) -> tuple[str | None, str]:
     if not text.startswith("---"):
         return None, text
     parts = text.split("---", 2)
@@ -44,7 +46,7 @@ def load_fm(text):
     return parts[1].strip(), parts[2]
 
 
-def validate_frontmatter(path, fm):
+def validate_frontmatter(path: Path, fm: str) -> None:
     try:
         import yaml
         data = yaml.safe_load(fm)
@@ -92,7 +94,7 @@ def validate_frontmatter(path, fm):
         err(path, "metadata.status must be 'stable' on the main branch")
 
 
-def check_budget(path, max_lines, warning_lines=None):
+def check_budget(path: Path, max_lines: int, warning_lines: int | None = None) -> None:
     lines = path.read_text().splitlines()
     line_count = len(lines)
     if line_count > max_lines:
@@ -101,7 +103,7 @@ def check_budget(path, max_lines, warning_lines=None):
         warn(path, f"exceeds {warning_lines} lines ({line_count})")
 
 
-def validate_skill(path):
+def validate_skill(path: Path) -> None:
     text = path.read_text()
     fm, _ = load_fm(text)
     if fm is None:
@@ -112,7 +114,7 @@ def validate_skill(path):
     check_stale_flags(path)
 
 
-def check_stale_flags(path):
+def check_stale_flags(path: Path) -> None:
     text = path.read_text()
     # Allow "draft" in planning/reference files and in the meta-skill that defines the rule
     if path.name in {"MVP_1_0_READINESS.md", "skill-improvement.md"}:
@@ -125,7 +127,7 @@ def check_stale_flags(path):
         err(path, "contains 'draft' marker")
 
 
-def check_internal_links(path, md_files):
+def check_internal_links(path: Path, md_files: set[Path]) -> None:
     text = path.read_text()
     for label, target in LINK_RE.findall(text):
         if target.startswith(("http://", "https://", "mailto:")):
@@ -151,7 +153,7 @@ def check_internal_links(path, md_files):
                 err(path, f"broken internal link: [{label}]({target})")
 
 
-def main():
+def main() -> None:
     import yaml  # noqa: F401 - imported where available
 
     md_files = set(ROOT.rglob("*.md"))
