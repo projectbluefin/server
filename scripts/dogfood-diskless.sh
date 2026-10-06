@@ -261,7 +261,7 @@ probe_done() { grep -aq 'PROBE failed=' "${probe_log}" 2>/dev/null; }
 # middle of a line (the initrd's failure summary writes to the console while
 # systemd-importd logs), so strip all three before matching.
 clean_log() { sed -E 's/\x1b\][^\x07\x1b]*(\x07|\x1b\\)//g; s/\x1bP[^\x1b]*\x1b\\//g; s/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr -d '\r'; }
-refused() { clean_log < "${work}/serial.log" 2>/dev/null | grep -aqE "${refusal_re}"; }
+refused() { { clean_log < "${work}/serial.log"; } 2>/dev/null | grep -aqE "${refusal_re}"; }
 status=1
 if [ -n "${refusal}" ]; then
     stop() { probe_done || refused; }
