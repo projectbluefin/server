@@ -105,13 +105,19 @@ def test_version_locked_sysexts_are_optional_features(name: str, transfer: str |
 
 @pytest.mark.parametrize("name", _feature_names())
 def test_sysupdate_feature_definition_parses(name: str) -> None:
-    """Every ``*.feature`` file must parse as a valid ``[Feature]`` section.
+    """Every ``*.feature`` file is a ``[Feature]`` section that updatectl can read.
 
-    ``systemd-sysupdate`` (and sysupdated's ``DescribeFeature``, since v257) accept
-    ``Description=``, ``Documentation=`` and ``AppStream=``; unknown keys are
-    silently dropped with a parse warning. A missing ``[Feature]`` section
-    makes ``updatectl features`` print the feature with empty fields instead
-    of refusing to list it, so we assert the shape explicitly.
+    A missing ``[Feature]`` section makes ``updatectl features`` print the
+    feature with empty fields, so the shape is asserted explicitly.
+
+    ``Documentation=`` and ``AppStream=`` are refused (#375): in systemd 261
+    (FSDK 26.08) ``systemd-sysupdate --json features <name>`` reports them as
+    ``documentation``/``appStream``, while updatectl's strict JSON dispatch
+    only knows ``documentationUrl``, so one such key makes every
+    ``updatectl features`` fail with "Unexpected object field
+    'documentation'" and EADDRNOTAVAIL ("Cannot assign requested address").
+    systemd 262 aligns both sides (systemd/systemd#43617); allow them again
+    once FSDK ships it.
     """
     parser = ini(SYSUPDATE / f"{name}.feature")
     assert "Feature" in parser, (
@@ -123,11 +129,14 @@ def test_sysupdate_feature_definition_parses(name: str) -> None:
         f"{name}.feature has no Description=; the updatectl features table "
         "falls back to an empty column"
     )
-    doc = section.get("Documentation", "").strip()
-    assert doc.startswith("https://") and doc.removeprefix("https://").strip(), (
-        f"{name}.feature Documentation={doc!r} must be an https:// URL; "
-        "systemd-sysupdate's config_parse_url_specifiers silently drops "
-        "anything that fails http_url_is_valid()"
+    unreadable = sorted({"Documentation", "AppStream"} & set(section))
+    assert not unreadable, (
+        f"{name}.feature sets {unreadable}: systemd 261's updatectl cannot "
+        "parse them, and `updatectl features` fails for every feature (#375)"
+    )
+    assert set(section) <= {"Description", "Enabled"}, (
+        f"{name}.feature carries keys systemd-sysupdate does not know: "
+        f"{sorted(set(section) - {'Description', 'Enabled'})}"
     )
 
 
