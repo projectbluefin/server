@@ -87,7 +87,7 @@ def signers():
     homes = [Path(tempfile.mkdtemp(prefix="gpg", dir="/tmp")) for _ in range(2)]
     made = [Signer(home) for home in homes]
     yield made
-    for signer, home in zip(made, homes):
+    for signer, home in zip(made, homes, strict=True):
         signer.close()
         shutil.rmtree(home, ignore_errors=True)
 
