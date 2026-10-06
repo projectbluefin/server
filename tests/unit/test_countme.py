@@ -7,6 +7,7 @@ from a pinned commit of common.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -18,11 +19,43 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ELEMENTS = REPO_ROOT / "elements" / "bluefin-server"
+TRANSFERS = REPO_ROOT / "files" / "os" / "sysupdate.d"
 COMMON_URL = "https://github.com/projectbluefin/common.git"
 
 
 def _element(name: str) -> dict:
     return yaml.safe_load((ELEMENTS / name).read_text(encoding="utf-8"))
+
+
+def _image_info() -> dict:
+    commands = "\n".join(_element("os-image-info.bst")["config"]["install-commands"])
+    body = re.search(r"<<'JSON'\n(.*?)\n\s*JSON\s*$", commands, re.S | re.M)
+    assert body, "os-image-info.bst must write image-info.json from a JSON heredoc"
+    return json.loads(body.group(1))
+
+
+def _transfer_channels() -> set[str]:
+    channels = set()
+    for transfer in TRANSFERS.glob("*.transfer"):
+        for path in re.findall(r"^Path=(https://\S+)$", transfer.read_text(encoding="utf-8"), re.M):
+            match = re.fullmatch(r"https://github\.com/[^/]+/[^/]+/releases/(.+)/download/", path)
+            assert match, f"{transfer.name}: unexpected source Path={path}"
+            channels.add(match.group(1))
+    return channels
+
+
+def test_image_info_declares_name_and_stream_only():
+    # No image-flavor: a DDI has no flavors, and a guessed one would be counted
+    # as a real population (projectbluefin/server#97).
+    assert _image_info() == {"image-name": "server", "image-tag": "latest"}
+
+
+def test_image_tag_is_the_channel_sysupdate_follows():
+    # The tag is the stream, not the version: it must name the one GitHub
+    # Releases channel every transfer pulls from, and change with it.
+    channels = _transfer_channels()
+    assert channels == {"latest"}, f"transfers follow {sorted(channels)}"
+    assert _image_info()["image-tag"] in channels
 
 
 def test_countme_ships_main_reporter_units():
