@@ -120,7 +120,7 @@ def publish(
             f"zfs_{v}.raw.zst",
         )
     ]
-    sums = "".join(f"{'%064x' % i}  {name}\n" for i, name in enumerate(names))
+    sums = "".join(f"{i:064x}  {name}\n" for i, name in enumerate(names))
     (directory / "SHA256SUMS").write_text(sums, encoding="utf-8")
     if sign:
         subprocess.run(
