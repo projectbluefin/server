@@ -1,0 +1,28 @@
+[Unit]
+Description=Name this node bluefin-<machine-id> unless it has a hostname
+Documentation=man:hostname(5) file:/usr/libexec/bluefin-hostname
+# First boot only: every diskless boot, and the first boot of an installed
+# disk. A node that updated from an image without this unit keeps its name,
+# which a Kubernetes node may already be registered under.
+ConditionFirstBoot=yes
+ConditionPathIsReadWrite=/etc
+DefaultDependencies=no
+# Ignition (initrd), systemd-firstboot and bluefin-firstboot-credentials write
+# a provisioned /etc/hostname first; this keeps it.
+After=systemd-remount-fs.service systemd-tmpfiles-setup.service
+After=systemd-firstboot.service bluefin-firstboot-credentials.service
+# Named before networkd's first DHCP request and resolved's first mDNS
+# announcement.
+Before=sysinit.target systemd-networkd.service systemd-resolved.service systemd-hostnamed.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ImportCredential=firstboot.hostname
+ImportCredential=system.hostname
+ExecStart=/usr/libexec/bluefin-hostname
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,110 @@
+#!/usr/bin/bash
+# bluefin-hostname — give a node without a static hostname a unique one.
+#
+# A node whose static hostname (/etc/hostname) is unset or "localhost" gets,
+# in this order:
+#   1. the firstboot.hostname credential (bluefin-firstboot-credentials
+#      normally wrote it already; this covers that unit failing on another
+#      credential),
+#   2. the system.hostname credential, which PID 1 only applies as the
+#      transient hostname: here it becomes the static one,
+#   3. bluefin-<first 8 hex digits of /etc/machine-id>, so appliances on one
+#      LAN never collide over mDNS (<hostname>.local).
+# It writes /etc/hostname and sets the kernel hostname, before networkd's
+# first DHCP request and before resolved announces the name.
+#
+# A static hostname that is already set (Ignition, firstboot.hostname,
+# hostnamectl set-hostname) is kept. An invalid one, or an invalid hostname
+# credential, fails the run: nothing is written and no other name is
+# substituted, so the mistake shows in `systemctl --failed`.
+#
+# bluefin-hostname.service runs it on first boot (every diskless boot, the
+# first boot of an installed disk); the homelab's bluefin-cluster runs it
+# when a node is still called localhost.
+#
+# Usage: bluefin-hostname [--root=DIR]
+# --root is for tests: read and write DIR/etc and leave the kernel alone.
+
+set -euo pipefail
+export LC_ALL=C
+
+PROG="${0##*/}"
+ROOT=""
+for arg in "$@"; do
+  case "${arg}" in
+    --root=*) ROOT="${arg#--root=}"; ROOT="${ROOT%/}" ;;
+    *) printf '%s: unknown argument: %s\n' "${PROG}" "${arg}" >&2; exit 2 ;;
+  esac
+done
+
+log() { printf '%s: %s\n' "${PROG}" "$*" >&2; }
+die() { log "$*"; exit 1; }
+
+# Same rule as bluefin-firstboot-credentials (at least as strict as systemd's
+# hostname_is_valid()): dot-separated labels of letters, digits and inner
+# hyphens, at most 63 characters each and 64 in total.
+HOSTNAME_RE='^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'
+valid() { [[ "$1" =~ ${HOSTNAME_RE} ]] && [ "${#1}" -le 64 ]; }
+
+# "localhost" and its variants mean "not named yet" (systemd's is_localhost()).
+unnamed() {
+  local h="${1,,}"
+  h="${h%.}"
+  case "${h}" in
+    ''|localhost|localhost.localdomain|*.localhost|*.localhost.localdomain) return 0 ;;
+  esac
+  return 1
+}
+
+# The first line of /etc/hostname that is not a comment, trimmed, as
+# systemd reads it.
+static_hostname() {
+  local line
+  [ -f "${ROOT}/etc/hostname" ] || return 0
+  while IFS= read -r line || [ -n "${line}" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    case "${line}" in ''|'#'*) continue ;; esac
+    printf '%s' "${line}"
+    return 0
+  done < "${ROOT}/etc/hostname"
+}
+
+credential() {
+  local file="${CREDENTIALS_DIRECTORY:-}/$1" value
+  [ -n "${CREDENTIALS_DIRECTORY:-}" ] && [ -s "${file}" ] || return 0
+  value="$(<"${file}")"
+  printf '%s' "${value}"
+}
+
+current="$(static_hostname)"
+if ! unnamed "${current}"; then
+  valid "${current}" \
+    || die "invalid static hostname in /etc/hostname: $(printf '%q' "${current}"); set one with hostnamectl set-hostname"
+  log "keeping static hostname ${current}"
+  exit 0
+fi
+
+name="" source=""
+for cred in firstboot.hostname system.hostname; do
+  value="$(credential "${cred}")"
+  [ -n "${value}" ] || continue
+  valid "${value}" || die "invalid hostname in credential ${cred}: $(printf '%q' "${value}")"
+  name="${value}" source="credential ${cred}"
+  break
+done
+
+if [ -z "${name}" ]; then
+  id="$(cat "${ROOT}/etc/machine-id" 2>/dev/null || true)"
+  [[ "${id}" =~ ^[0-9a-f]{32}$ ]] || die "no machine ID in /etc/machine-id to derive a hostname from"
+  name="bluefin-${id:0:8}" source="machine ID"
+fi
+
+umask 022
+mkdir -p "${ROOT}/etc"
+printf '%s\n' "${name}" > "${ROOT}/etc/hostname.bluefin-new"
+mv -f "${ROOT}/etc/hostname.bluefin-new" "${ROOT}/etc/hostname"
+if [ -z "${ROOT}" ] && [ -w /proc/sys/kernel/hostname ]; then
+  printf '%s' "${name}" > /proc/sys/kernel/hostname
+fi
+log "set hostname ${name} (from ${source})"

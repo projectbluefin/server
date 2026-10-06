@@ -18,6 +18,13 @@ description: |
   static hostname honoured only when none is set, while this helper applies
   it unconditionally.
 
+  /usr/libexec/bluefin-hostname and bluefin-hostname.service run on first
+  boot after those: a node whose static hostname is still unset or
+  "localhost" gets the firstboot.hostname or system.hostname credential, or
+  else bluefin-<first 8 hex of the machine ID>, as its static hostname, so
+  appliances on one LAN never share an mDNS name. An invalid provisioned
+  hostname fails the unit instead of being replaced.
+
   The same files/os/libexec directory holds /usr/libexec/bluefin-sysext-modules,
   the generic loader for kernel modules shipped by system extensions (ZFS,
   NVIDIA): they ship no modules.* index, so it indexes the merged module tree
@@ -74,6 +81,8 @@ config:
       cp -a systemd-src/. "%{install-root}/usr/lib/systemd/system/"
       install -Dm0755 libexec-src/bluefin-firstboot-credentials \
         "%{install-root}/usr/libexec/bluefin-firstboot-credentials"
+      install -Dm0755 libexec-src/bluefin-hostname \
+        "%{install-root}/usr/libexec/bluefin-hostname"
       install -Dm0755 libexec-src/bluefin-sysext-modules \
         "%{install-root}/usr/libexec/bluefin-sysext-modules"
       install -Dm0755 libexec-src/bluefin-homelab-install \
