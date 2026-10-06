@@ -300,7 +300,11 @@ def test_lan_stop_stops_the_switch_and_the_router(tmp_path: Path) -> None:
             with pytest.raises(ProcessLookupError):
                 os.kill(pid, 0)
         sock.settimeout(2)
-        assert sock.recv(1) == b"", "the switch must close its ports when it stops"
+        # FIN if the switch had accepted the port, RST if it was still queued.
+        try:
+            assert sock.recv(1) == b"", "the switch must close its ports when it stops"
+        except ConnectionResetError:
+            pass
     with socket.socket() as probe, pytest.raises(ConnectionRefusedError):
         probe.connect(("127.0.0.1", segment.port))
 
