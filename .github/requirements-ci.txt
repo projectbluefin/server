@@ -2,7 +2,7 @@
 # exactly (the full set pip resolves) so CI does not change with a PyPI
 # release. Renovate's pip_requirements manager proposes the bumps.
 ast-serialize==0.12.1
-iniconfig==2.3.0
+iniconfig==2.3.1
 librt==0.16.0
 mypy==2.4.0
 mypy-extensions==1.1.0
