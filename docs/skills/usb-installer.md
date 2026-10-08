@@ -361,29 +361,36 @@ the stick itself.
    ver=${tag#v}; dir=/var/tmp/usbstick/$tag; mkdir -p "$dir" && cd "$dir"
    gh release download "$tag" --repo projectbluefin/server \
      --pattern "bluefin-server-installer_${ver}.raw" --pattern 'SHA256SUMS*'
-   git -C ~/src/server show origin/main:files/os/sysupdate-keys/import-pubring.gpg > pubring.gpg
+   gh api repos/projectbluefin/server/contents/files/os/sysupdate-keys/import-pubring.gpg \
+     --jq .content | base64 -d > pubring.gpg
    gpgv --keyring ./pubring.gpg SHA256SUMS.gpg SHA256SUMS
    sha256sum --check --ignore-missing SHA256SUMS
    ```
 
 2. Take the keys from GitHub instead of `~/.ssh/*.pub`, check every line
    parses, and run the recipe above in a `creds/` directory with
-   `key="$(cat ../keys)"`. All keys go into one `authorized_keys`:
+   `key="$(cat ../keys)"`, then return to `$dir`. All keys go into one
+   `authorized_keys`:
 
    ```bash
    curl -fsSL https://github.com/<github-user>.keys > keys
    ssh-keygen -lf keys
+   mkdir -p creds && cd creds
+   # run the recipe above here, with key="$(cat ../keys)"
+   cd "$dir"
    ```
 
 3. Write the stick by its `/dev/disk/by-id/usb-*` name, not `/dev/sdX`
    (`lsblk -o NAME,TRAN,RM,SIZE,MODEL` to find it; unmount it first), then
-   copy the credentials onto its ESP:
+   copy the credentials onto its ESP. Mount the ESP through `$stick`, not
+   `/dev/disk/by-partlabel/bluefin-installer`: every burned stick carries that
+   label, so with another one plugged in it may resolve to the wrong device:
 
    ```bash
    stick=/dev/disk/by-id/usb-<vendor>_<model>_<serial>-0:0
    sudo dd if="bluefin-server-installer_${ver}.raw" of="$stick" bs=4M conv=fsync status=progress
    sudo partx -u "$stick"; udevadm settle
-   mkdir -p mnt && sudo mount /dev/disk/by-partlabel/bluefin-installer mnt
+   mkdir -p mnt && sudo mount "${stick}-part3" mnt
    sudo mkdir -p mnt/loader/credentials && sudo cp creds/*.cred mnt/loader/credentials/
    sync && sudo umount mnt
    ```
