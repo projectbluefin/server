@@ -231,6 +231,8 @@ installer, which installs kubeadm only.
 - `python3 -m pytest tests/unit/test_homelab_addons.py` and
   `tests/unit/bluefin-homelab-apply_test.bats` (add-on discovery, order,
   gates)
+- `python3 -m pytest tests/unit/test_render_homelab_manifests.py` after
+  changing `scripts/render-homelab-manifests.py` (its transforms, offline)
 - `just dogfood-homelab-templates`: a diskless control plane from
   `homelab-control-plane.bu` and a node from `homelab-node.ign` with the
   passphrase it showed; the default set applied (monitoring off, MetalLB
