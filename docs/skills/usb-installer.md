@@ -4,7 +4,7 @@ description: The offline USB installer bluefin-server-installer_<ver>.raw. Load 
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-05"
+  last_updated: "2026-10-07"
   context7-sources:
     - /systemd/systemd
 ---
@@ -346,6 +346,68 @@ secret — `*` and `!*` are password *fields*, not passwords. Do not add a
 hash) this way; seal those with `--with-key=tpm2` per node instead, which
 also means Secure Boot can stay on. See
 [tpm2-credential-sealing.md](tpm2-credential-sealing.md).
+
+### Burning a developer stick end to end
+
+The sequence used to burn developer sticks for the homelab: newest release,
+verified, the recipe above with a GitHub user's public keys, then checked on
+the stick itself.
+
+1. Fetch the newest release and verify it. The keyring is the one the image
+   ships for sysupdate:
+
+   ```bash
+   tag=$(gh release view --repo projectbluefin/server --json tagName --jq .tagName)
+   ver=${tag#v}; dir=/var/tmp/usbstick/$tag; mkdir -p "$dir" && cd "$dir"
+   gh release download "$tag" --repo projectbluefin/server \
+     --pattern "bluefin-server-installer_${ver}.raw" --pattern 'SHA256SUMS*'
+   git -C ~/src/server show origin/main:files/os/sysupdate-keys/import-pubring.gpg > pubring.gpg
+   gpgv --keyring ./pubring.gpg SHA256SUMS.gpg SHA256SUMS
+   sha256sum --check --ignore-missing SHA256SUMS
+   ```
+
+2. Take the keys from GitHub instead of `~/.ssh/*.pub`, check every line
+   parses, and run the recipe above in a `creds/` directory with
+   `key="$(cat ../keys)"`. All keys go into one `authorized_keys`:
+
+   ```bash
+   curl -fsSL https://github.com/<github-user>.keys > keys
+   ssh-keygen -lf keys
+   ```
+
+3. Write the stick by its `/dev/disk/by-id/usb-*` name, not `/dev/sdX`
+   (`lsblk -o NAME,TRAN,RM,SIZE,MODEL` to find it; unmount it first), then
+   copy the credentials onto its ESP:
+
+   ```bash
+   stick=/dev/disk/by-id/usb-<vendor>_<model>_<serial>-0:0
+   sudo dd if="bluefin-server-installer_${ver}.raw" of="$stick" bs=4M conv=fsync status=progress
+   sudo partx -u "$stick"; udevadm settle
+   mkdir -p mnt && sudo mount /dev/disk/by-partlabel/bluefin-installer mnt
+   sudo mkdir -p mnt/loader/credentials && sudo cp creds/*.cred mnt/loader/credentials/
+   sync && sudo umount mnt
+   ```
+
+4. Verify before unplugging. The usr and usr-verity partitions must match the
+   image byte for byte (the ESP will not, since it now holds the credentials),
+   and the credentials must decrypt to the expected users, keys, and sudoers:
+
+   ```bash
+   l=$(sudo losetup -fPr --show "bluefin-server-installer_${ver}.raw")
+   for p in 1 2; do sudo cmp "${l}p$p" "${stick}-part$p" && echo "part$p ok"; done
+   sudo losetup -d "$l"
+   sudo mount -o ro "${stick}-part3" mnt
+   dec() { sudo systemd-creds decrypt --with-key=null --name="$1" "mnt/loader/credentials/$1.cred"; }
+   dec sysusers.extra
+   dec tmpfiles.extra | awk '/authorized_keys/{print $NF}' | base64 -d | diff - keys && echo "keys ok"
+   dec tmpfiles.extra | awk '/sudoers/{print $NF}' | base64 -d   # <user> ALL=(ALL:ALL) NOPASSWD: ALL
+   base64 -w0 mnt/loader/credentials/ssh.listen.cred \
+     | sudo systemd-creds decrypt --with-key=null --name=ssh.listen - -   # 22
+   sudo umount mnt && sudo udisksctl power-off -b "$stick"
+   ```
+
+Boot the target with Secure Boot off. After the install, `ssh <user>@<node>`
+works with any of the keys, and `sudo` asks for no password.
 
 ## Secure Boot
 
