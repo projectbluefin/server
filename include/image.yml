@@ -1,4 +1,11 @@
 variables:
   # Image version shared by the usr DDI, the UKI, and sysupdate transfers.
   # sysupdate orders versions with strverscmp(), so keep it monotonic.
+  #
+  # The committed value is the local development default. CI replaces it
+  # with `just set-version` (YY.MM.<run> on main, 0.<run> on every other
+  # build) before every build, so a release never carries this value. Keep it
+  # below every published release: a local dogfood build must sort as
+  # older than what the boot server or GitHub Releases offer, or an
+  # installed test node would see it as an update.
   image-version: "26.09.2"

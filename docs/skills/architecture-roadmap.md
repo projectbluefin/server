@@ -50,6 +50,11 @@ Priorities are derived from [gap-analysis-distros.md](gap-analysis-distros.md).
 - Any implementation work should preserve the current systemd-native model and avoid custom daemons.
 - See [gap-analysis-distros.md](gap-analysis-distros.md) for the source-verified comparison that produced this list.
 
+## Decided, not planned
+
+- **OS payload and kernel source.** Between #132 and #262 the OS payload was briefly the imported Flatcar `/usr` with its kernel, and [#249](https://github.com/projectbluefin/server/issues/249) collected notes on shipping alternative kernels (Fedora CoreOS, Flatcar LTS, Ubuntu Server) as extra UKIs. #262 settled this: the whole OS, kernel included, composes from FSDK components (AGENTS.md hard rule 1), and there is one kernel per image. Alternative kernels or a Flatcar-based payload are not planned; reopening either means changing hard rule 1 first.
+- **Installer and per-node configuration.** The same notes left "pure systemd" against "also support Ignition / cloud-init" open. #262 kept stock `systemd-sysinstall` as the only installer (hard rule 3) and opt-in Ignition delivered as a system credential, next to systemd's own first-boot credentials; cloud-init is not planned. The boot and install flow is in [ddi-installer.md](ddi-installer.md), the credentials in [tpm2-credential-sealing.md](tpm2-credential-sealing.md).
+
 ## See also
 
 - [gap-analysis-distros.md](gap-analysis-distros.md) — source-verified distro comparison.
