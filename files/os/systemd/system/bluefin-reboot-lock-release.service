@@ -1,0 +1,36 @@
+[Unit]
+Description=Release This Node's Fleet Reboot Slot
+Documentation=file:/usr/libexec/bluefin-reboot-lock
+# Enabled in /usr (elements/oci/bluefin-server-usr.bst), not by preset, so
+# nodes that updated into it run it too; without a FleetLock server it does
+# nothing. Installed nodes only, like
+# systemd-sysupdate-reboot.service.d/10-diskless.conf: diskless nodes and the
+# USB installer never take a slot.
+ConditionPathExists=!/run/machines/rootdisk.raw
+ConditionKernelCommandLine=!root=tmpfs
+# boot-complete.target is in the transaction only on boot-counted boots (the
+# systemd-bless-boot generator pulls it in); ordered, not required, so other
+# boots do not pull it in. After=multi-user.target keeps multi-user.target
+# from ordering itself after this unit, which would close a cycle through
+# systemd-boot-check-no-failures.service.
+After=multi-user.target boot-complete.target systemd-bless-boot.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ImportCredential=bluefin.reboot-lock.*
+# Only a good boot gives the slot back: blessed ("good") or not boot-counted
+# ("clean", e.g. the previous UKI after a rollback). A counted boot that has
+# not been blessed ("indeterminate", "bad", "dirty") keeps it, so the fleet
+# does not reboot another node while this one is unhealthy.
+ExecCondition=/usr/bin/sh -c 's=$$(/usr/lib/systemd/systemd-bless-boot status); case "$$s" in good|clean) ;; *) echo "boot is $${s:-unknown}: keeping the reboot slot"; exit 1 ;; esac'
+ExecStart=/usr/libexec/bluefin-reboot-lock release
+# The FleetLock server may be down; retry with backoff until it confirms.
+Restart=on-failure
+RestartSec=1min
+RestartSteps=5
+RestartMaxDelaySec=1h
+
+[Install]
+WantedBy=multi-user.target

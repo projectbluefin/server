@@ -238,7 +238,8 @@ GPG-signed `SHA256SUMS` with `Verify=yes` (see
 
 `files/os/systemd/system-preset/80-bluefin-updates.preset` enables FSDK's
 `systemd-sysupdate.timer` (15 min after boot, then every 2 h, randomized) and
-`systemd-sysupdate-reboot.timer` (04:10, randomized), which FSDK's
+`systemd-sysupdate-reboot.timer` (04:10, randomized; two more runs for the
+fleet reboot lock below), which FSDK's
 `90-sysupdate.preset` would otherwise disable. The timer runs the same
 `systemd-sysupdate update` as a manual update, so enabled features follow the
 OS in lock-step. The reboot unit runs `systemd-sysupdate reboot`, which reboots
@@ -274,7 +275,8 @@ only when a newer version than the booted one is installed.
     failed the node is `NotReady`, has nothing to drain and cannot run kured,
     so it reboots directly.
   - *Operator hold*: `/run/reboot-lock` or `/etc/reboot-lock` stops the
-    reboot and the kured flag, like the nightly reboot below.
+    reboot and the kured flag, like the nightly reboot below. With a fleet
+    reboot lock configured the reboot also waits for a slot (below).
   - After a rollback, `systemd-sysupdate pending` still reports the failed
     version, which would bring the node back to it every night (or through
     kured every two hours). `/usr/libexec/bluefin-update-pending` wraps it and
@@ -298,6 +300,49 @@ only when a newer version than the booted one is installed.
     `/run/reboot-required` after each run once `bluefin-update-pending` reports
     an update. Without kured, a Kubernetes node keeps the staged update until
     someone reboots it.
+- **Fleet reboot lock.** Hosts that serve together without Kubernetes can
+  take turns: every local reboot, the nightly one and the boot deadline's,
+  first takes a reboot slot from a
+  [FleetLock](https://coreos.github.io/zincati/development/fleetlock/protocol/)
+  server, the protocol Zincati uses on Fedora CoreOS (for example
+  [poseidon/fleetlock](https://github.com/poseidon/fleetlock) or
+  [coreos/airlock](https://github.com/coreos/airlock)). Configure it in
+  `/etc/bluefin/reboot-lock.conf` (not shipped; write it with Ignition or by
+  hand):
+
+  ```ini
+  URL=https://<fleetlock-host>/
+  GROUP=web
+  ```
+
+  or with the system credentials `bluefin.reboot-lock.url` and
+  `bluefin.reboot-lock.group`, which override the file. `GROUP` defaults to
+  `default`. Without a URL nothing changes, so single hosts and Kubernetes
+  nodes (kured) are unaffected. `/usr/libexec/bluefin-reboot-lock` is the
+  client (bash and curl, no daemon); its client id is the machine ID hashed
+  with an application key (`systemd-id128 machine-id
+  --app-specific=924987751bb64ad68c398e4be4e32e2f`), and every message logs it.
+  - *Acquire*: `bluefin-reboot-lock acquire` is the last `ExecCondition=` of
+    `20-interlock.conf`, so a slot is requested only when the reboot would
+    happen; anything but HTTP 200 (all slots taken, server unreachable) skips
+    that run. `systemd-sysupdate-reboot.timer.d/20-fleet-lock.conf` adds runs
+    at 04:40 and 05:10, each with up to 30 minutes of random delay, so a group
+    takes turns within one night. `bluefin-boot-deadline` takes a slot before
+    it reboots a counted boot and, when the server refuses one, runs again
+    every 5 minutes (exit 75, `RestartForceExitStatus=`). When the server
+    cannot be reached at all (the client exits 3, not 1) it reboots without a
+    slot, since the update it rolls back may be what broke the network. A node
+    that rebooted for an update still holds its slot, so its tries and the
+    fallback are not delayed.
+  - *Release*: `bluefin-reboot-lock-release.service` gives the slot back after
+    `boot-complete.target`, only when `systemd-bless-boot status` is `good` or
+    `clean` (not counted, e.g. the previous UKI after a rollback), and retries
+    with backoff (1 minute up to 1 hour) until the server confirms. It is
+    enabled in /usr, so nodes that updated into it run it too. A node whose
+    boot is not blessed keeps its slot and holds back its group; release it
+    from anywhere with `curl -H 'fleet-lock-protocol: true' -d
+    '{"client_params":{"id":"<id>","group":"<group>"}}'
+    https://<fleetlock-host>/v1/steady-state`.
 - **Opting out.** `systemctl disable --now systemd-sysupdate-reboot.timer`
   stages updates without rebooting; also disable `systemd-sysupdate.timer` to
   stop updating. Presets apply on first boot only, so nodes installed before

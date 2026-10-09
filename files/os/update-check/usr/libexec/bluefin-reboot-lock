@@ -1,0 +1,139 @@
+#!/usr/bin/bash
+# bluefin-reboot-lock — take or give back this node's reboot slot on a
+# FleetLock server, so a fleet without Kubernetes reboots a few nodes at a time.
+#
+# FleetLock is the HTTP protocol Zincati uses on Fedora CoreOS
+# (https://coreos.github.io/zincati/development/fleetlock/protocol/). A POST
+# to <URL>/v1/pre-reboot takes a reboot slot in the node's group and a POST to
+# <URL>/v1/steady-state gives it back. Both carry the header
+# `fleet-lock-protocol: true` and the body
+# {"client_params":{"id":"<id>","group":"<group>"}}; HTTP 200 means done,
+# any other answer means not. Slots are owned and recursive: a node that holds
+# one gets it again, and only that node releases it.
+#
+#   acquire  before every local reboot: an ExecCondition= of
+#            systemd-sysupdate-reboot.service (20-interlock.conf), and
+#            bluefin-boot-deadline before it reboots a counted boot.
+#   release  by bluefin-reboot-lock-release.service once a boot is good; the
+#            unit retries until the server confirms.
+#
+# Exit status:
+#   0  the slot is held (acquire) or given back (release), or no server is
+#      configured;
+#   1  refused: the server answered, but not with HTTP 200 (acquire: every
+#      slot of the group is taken), or the configuration is bad (URL, group,
+#      client id);
+#   2  usage error;
+#   3  unreachable: no answer from the server at all (DNS, connect, TLS or
+#      timeout; curl failed). The nightly reboot skips on any non-zero status,
+#      but bluefin-boot-deadline does not wait on 3: the update it rolls back
+#      may be what cut the node off.
+#
+# Configuration: URL= and GROUP= in /etc/bluefin/reboot-lock.conf. The system
+# credentials bluefin.reboot-lock.url and bluefin.reboot-lock.group, imported
+# by the units that run this (ImportCredential=), override the file. GROUP
+# defaults to "default", as in Zincati. Without a URL both verbs do nothing
+# and exit 0, so single hosts and Kubernetes nodes (kured) are unaffected.
+# The URL may carry credentials (https://user:password@host/); messages show
+# it without them.
+#
+# The client id is the machine ID hashed with this tool's application key
+# (systemd-id128 machine-id --app-specific=): stable across reboots and
+# updates, without sending the machine ID itself, which machine-id(5) keeps
+# off the network. Every message logs it.
+#
+# Journal priorities come from SyslogLevelPrefix: <3> err, <4> warning,
+# <6> info.
+#
+# Test overrides: BLUEFIN_REBOOT_LOCK_CONF, CREDENTIALS_DIRECTORY (as systemd
+# sets it); commands (curl, systemd-id128) through PATH.
+
+set -euo pipefail
+export LC_ALL=C
+
+conf="${BLUEFIN_REBOOT_LOCK_CONF:-/etc/bluefin/reboot-lock.conf}"
+app_id=924987751bb64ad68c398e4be4e32e2f
+
+info() { printf '<6>%s\n' "$*"; }
+warn() { printf '<4>%s\n' "$*"; }
+err() { printf '<3>%s\n' "$*"; }
+
+case "${1:-}" in
+  acquire) endpoint=pre-reboot fail="not rebooting" ;;
+  release) endpoint=steady-state fail="not released" ;;
+  *) echo "usage: ${0##*/} acquire|release" >&2; exit 2 ;;
+esac
+
+url="" group=""
+if [ -r "${conf}" ]; then
+  while IFS='=' read -r key value || [ -n "${key}" ]; do
+    key="${key//[[:space:]]/}"
+    value="${value%$'\r'}"
+    value="${value#"${value%%[![:space:]]*}"}"; value="${value%"${value##*[![:space:]]}"}"
+    value="${value%\"}"; value="${value#\"}"
+    case "${key}" in
+      URL) url="${value}" ;;
+      GROUP) group="${value}" ;;
+    esac
+  done < "${conf}"
+fi
+for name in url group; do
+  cred="${CREDENTIALS_DIRECTORY:-/nonexistent}/bluefin.reboot-lock.${name}"
+  if [ -r "${cred}" ]; then
+    value="$(< "${cred}")"
+    printf -v "${name}" '%s' "${value//[$'\r\n']/}"
+  fi
+done
+
+if [ -z "${url}" ]; then
+  info "no FleetLock server configured (${conf}, credential bluefin.reboot-lock.url); nothing to ${1}"
+  exit 0
+fi
+group="${group:-default}"
+# The URL as messages show it: the authority only from its last "@" on, so
+# https://user:password@host/ is logged as https://host/.
+rest="${url#*://}" authority="${rest%%/*}"
+log_url="${url%"${rest}"}${authority##*@}${rest#"${authority}"}"
+if [[ ! "${url}" =~ ^https?://[^[:space:]]+$ ]]; then
+  err "FleetLock URL ${log_url} is not an http(s) URL; ${fail}"
+  exit 1
+fi
+while [ "${url%/}" != "${url}" ]; do url="${url%/}" log_url="${log_url%/}"; done
+if [[ ! "${group}" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+  err "FleetLock group ${group} must match [a-zA-Z0-9.-]+; ${fail}"
+  exit 1
+fi
+if ! id="$(systemd-id128 machine-id --app-specific="${app_id}")" || [ -z "${id}" ]; then
+  err "cannot derive the FleetLock client id from the machine ID; ${fail}"
+  exit 1
+fi
+
+body="{\"client_params\":{\"id\":\"${id}\",\"group\":\"${group}\"}}"
+who="id ${id}, group ${group}"
+# No --location: the protocol header guards against redirected requests.
+rc=0
+reply="$(curl -sS --proto '=http,https' --retry 2 --connect-timeout 10 --max-time 30 \
+    -H 'fleet-lock-protocol: true' -H 'Content-Type: application/json' \
+    --data-binary "${body}" -w '\n%{http_code}' "${url}/v1/${endpoint}")" || rc=$?
+if [ "${rc}" -ne 0 ]; then
+  # No HTTP answer at all, which is not a refusal (exit 3); what happens next
+  # is the caller's call, so the message does not say.
+  err "FleetLock server ${log_url}/v1/${endpoint} is unreachable (${who}): curl exit ${rc}"
+  exit 3
+fi
+code="${reply##*$'\n'}"
+detail="$(printf '%s' "${reply%$'\n'*}" | tr -d '\000-\037\177' | cut -c1-200)"
+
+if [ "${code}" = 200 ]; then
+  case "$1" in
+    acquire) info "holding a reboot slot on ${log_url} (${who})" ;;
+    release) info "released the reboot slot on ${log_url} (${who})" ;;
+  esac
+  exit 0
+fi
+# Refused: the server answered, but not with 200.
+case "$1" in
+  acquire) warn "no reboot slot on ${log_url} (${who}): HTTP ${code}${detail:+ ${detail}}; ${fail}" ;;
+  release) err "the reboot slot on ${log_url} (${who}) is ${fail}: HTTP ${code}${detail:+ ${detail}}" ;;
+esac
+exit 1

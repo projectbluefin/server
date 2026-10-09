@@ -6,7 +6,7 @@ description: |
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-10-08"
 ---
 # Gap Analysis: Bluefin Server versus Comparable Server OSes
 
@@ -101,7 +101,7 @@ kernel). No other distribution's binaries ship in the image.
 | **Updates** | Installed nodes: `systemd-sysupdate` fills the inactive usr / usr-verity slot (`files/os/sysupdate.d/10-usr.transfer`, `11-usr-verity.transfer`) and installs the new disk UKI with boot counting (`20-uki.transfer`), so a failed update rolls back automatically. Assets are published to GitHub Releases and as an OCI artifact; the combined `SHA256SUMS` manifest covering the whole set is signed inside the image build (`oci/bluefin-server-image.bst`) and `Verify=yes` is the default. `systemd-sysupdate.timer` is enabled by preset, and `systemd-boot-check-no-failures.service` gates `boot-complete.target`, so an update is blessed only when no unit failed; `bluefin-boot-deadline.timer` reboots a counted boot that is not blessed in 15 minutes so systemd-boot falls back, and `bluefin-update-pending` keeps a rolled-back node off the failed version. Diskless nodes update by rebooting into a newer image (sysupdate is disabled when booted diskless); `bluefin-diskless-update-check` flags `/run/reboot-required` when the boot server offers a newer signed release that the next boot would pull (not for a node pinned to a versioned image). Sources: [ddi-installer.md](ddi-installer.md), [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md), [10-usr.transfer](../../files/os/sysupdate.d/10-usr.transfer), [20-uki.transfer](../../files/os/sysupdate.d/20-uki.transfer), [80-bluefin-updates.preset](../../files/os/systemd/system-preset/80-bluefin-updates.preset), [10-diskless.conf](../../files/os/systemd/system/systemd-sysupdate.service.d/10-diskless.conf), also `systemd-sysupdate(8)`. |
 | **Provisioning** | Stock `systemd-sysinstall` copies `/usr` onto a target disk, started either from the offline USB installer (`bluefin-server-installer_<ver>.raw`) or on a diskless-booted node (see [ddi-installer.md](ddi-installer.md)). Per-node configuration is opt-in via Ignition, delivered as `ignition.config` / `ignition.config.url` system credentials (the cmdline is locked inside the signed UKI); Ignition runs on every boot, so configs must be idempotent. First-boot systemd credentials also cover root password, `tmpfiles.extra`, `network.*`, and `firstboot.*`. Sources: [bluefin-server-image.bst](../../elements/oci/bluefin-server-image.bst), [initrd-ignition.bst](../../elements/bluefin-server/initrd/initrd-ignition.bst), [os-creds-prov.bst](../../elements/bluefin-server/os-creds-prov.bst), [tpm2-credential-sealing.md](tpm2-credential-sealing.md). |
 | **Customization** | Adds software through opt-in `systemd-sysext` images (overlay `/usr`): k0s (Kubernetes) and OpenZFS are built in-tree. The base OS `os-release` identifies as `ID=bluefin-server`; the ZFS sysext pins `VERSION_ID` to the image version because its kernel modules are built against the exact FSDK kernel. Sources: [systemd-sysext-extensions.md](systemd-sysext-extensions.md), [k0s-sysext.md](k0s-sysext.md), [os-release.bst](../../elements/bluefin-server/os-release.bst), [systemd-sysext(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html). |
-| **Reboot coordination** | `systemd-sysupdate-reboot.timer` reboots installed nodes into a staged update in a nightly window. `/run/reboot-lock` (until the next boot) or `/etc/reboot-lock` holds the reboot. On Kubernetes nodes an `ExecCondition=` stands the local reboot down while kubelet or k0s runs, and `systemd-sysupdate.service` touches `/run/reboot-required` once an update is pending so Kured drains and reboots nodes one at a time. The lock files and the Kubernetes interlock come from [#182](https://github.com/projectbluefin/server/pull/182). Sources: [20-kured.conf](../../files/os/systemd/system/systemd-sysupdate.service.d/20-kured.conf), [20-interlock.conf](../../files/os/systemd/system/systemd-sysupdate-reboot.service.d/20-interlock.conf), [Kured project](https://github.com/kubereboot/kured). |
+| **Reboot coordination** | `systemd-sysupdate-reboot.timer` reboots installed nodes into a staged update in a nightly window. `/run/reboot-lock` (until the next boot) or `/etc/reboot-lock` holds the reboot. On Kubernetes nodes an `ExecCondition=` stands the local reboot down while kubelet or k0s runs, and `systemd-sysupdate.service` touches `/run/reboot-required` once an update is pending so Kured drains and reboots nodes one at a time. The lock files and the Kubernetes interlock come from [#182](https://github.com/projectbluefin/server/pull/182). Hosts without Kubernetes can share a reboot lock: with a FleetLock server configured, `bluefin-reboot-lock` takes a slot before the nightly reboot and the boot deadline's reboot and gives it back after a good boot, the protocol Zincati uses. Sources: [20-kured.conf](../../files/os/systemd/system/systemd-sysupdate.service.d/20-kured.conf), [20-interlock.conf](../../files/os/systemd/system/systemd-sysupdate-reboot.service.d/20-interlock.conf), [bluefin-reboot-lock](../../files/os/update-check/usr/libexec/bluefin-reboot-lock), [Kured project](https://github.com/kubereboot/kured), [FleetLock protocol](https://coreos.github.io/zincati/development/fleetlock/protocol/). |
 
 ## 4. Factual Gaps
 
@@ -131,15 +131,16 @@ kernel). No other distribution's binaries ship in the image.
 ### Reboot coordination
 
 - **Resolved:** single-node and non-Kubernetes hosts reboot in the nightly `systemd-sysupdate-reboot.timer` window, held by `/run/reboot-lock` or `/etc/reboot-lock`; Kubernetes nodes stand down for Kured (lock files and interlock from #182).
-- **Gap:** there is no built-in cluster lock manager similar to Zincati's FleetLock or Flatcar's `locksmithd`/`etcd-lock`, so non-Kubernetes hosts that serve together may reboot in the same window.
+- **Resolved:** non-Kubernetes hosts that serve together take turns through a FleetLock server, as with Zincati: `bluefin-reboot-lock` (bash and curl, no daemon) takes a slot before every local reboot and `bluefin-reboot-lock-release.service` returns it after a good boot. Bluefin Server ships the client only; the lock manager is any FleetLock server, where Flatcar's `locksmithd` builds it in on etcd. See [ddi-installer.md](ddi-installer.md) "Updates".
 
 ## 5. Summary of Biggest Gaps
 
-1. **No cluster-wide reboot lock outside Kubernetes.** Hosts reboot in a nightly window; there is no FleetLock/locksmith equivalent for non-Kubernetes fleets.
-2. **Credential provisioning hardware proof is incomplete.** SSH keys, Ignition configs, network files, and firstboot settings are wired through systemd credentials; TPM2-sealed decryption still needs a hardware boot proof.
+1. **Credential provisioning hardware proof is incomplete.** SSH keys, Ignition configs, network files, and firstboot settings are wired through systemd credentials; TPM2-sealed decryption still needs a hardware boot proof.
 
 The earlier gap on the unverified diskless DDI download is closed: the pull
-runs with `verify=signature` against the keyring in the initrd.
+runs with `verify=signature` against the keyring in the initrd. So is the
+missing cluster-wide reboot lock outside Kubernetes: a FleetLock client gates
+every local reboot.
 
 These gaps drive the priorities in [architecture-roadmap.md](architecture-roadmap.md).
 
@@ -191,6 +192,8 @@ Specific claims carry inline links in section 2. Documentation roots:
 - [files/os/systemd/system/systemd-sysupdate.service.d/20-kured.conf](../../files/os/systemd/system/systemd-sysupdate.service.d/20-kured.conf)
 - [files/os/systemd/system/systemd-sysupdate-reboot.service.d/20-interlock.conf](../../files/os/systemd/system/systemd-sysupdate-reboot.service.d/20-interlock.conf)
 - [files/os/systemd/system/bluefin-boot-deadline.timer](../../files/os/systemd/system/bluefin-boot-deadline.timer)
+- [files/os/systemd/system/bluefin-reboot-lock-release.service](../../files/os/systemd/system/bluefin-reboot-lock-release.service)
+- [files/os/update-check/usr/libexec/bluefin-reboot-lock](../../files/os/update-check/usr/libexec/bluefin-reboot-lock)
 - [files/os/update-check/usr/libexec/bluefin-boot-deadline](../../files/os/update-check/usr/libexec/bluefin-boot-deadline)
 - [files/os/update-check/usr/libexec/bluefin-diskless-update-check](../../files/os/update-check/usr/libexec/bluefin-diskless-update-check)
 - [files/os/systemd/system/systemd-sysupdate.service.d/10-diskless.conf](../../files/os/systemd/system/systemd-sysupdate.service.d/10-diskless.conf)

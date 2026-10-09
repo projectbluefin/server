@@ -15,3 +15,10 @@ Before=shutdown.target
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/bluefin-boot-deadline
+# The fleet reboot lock (bluefin-reboot-lock): exit 75 means the FleetLock
+# server gave no slot. Try again, re-checking the boot first, until it does;
+# other failures do not restart. A server that cannot be reached does not
+# hold the rollback: the script then reboots without a slot.
+ImportCredential=bluefin.reboot-lock.*
+RestartForceExitStatus=75
+RestartSec=5min

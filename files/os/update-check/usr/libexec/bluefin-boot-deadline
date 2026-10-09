@@ -21,7 +21,16 @@
 #   - otherwise reboot, so systemd-boot uses up the next try and, after the
 #     last one, falls back to the previous UKI. A Kubernetes unit that is
 #     stopped or failed leaves the node NotReady with nothing to drain, and
-#     kured cannot run there either, so that node reboots directly.
+#     kured cannot run there either, so that node reboots directly. With a
+#     FleetLock server configured it first takes a reboot slot
+#     (bluefin-reboot-lock acquire); when the server refuses one (or the
+#     client fails otherwise) it exits 75 and bluefin-boot-deadline.service
+#     runs it again later (RestartForceExitStatus=). When the server cannot
+#     be reached (the client exits 3) it reboots without a slot: the update it
+#     rolls back may be what broke the network, DNS or TLS, and waiting would
+#     keep the node on it for good.
+#     A node that rebooted for an update still holds its slot until a boot is
+#     good, so its tries and the fallback get the slot straight away.
 #
 # The last try boots as "dirty" (no tries left). It reboots only when another
 # UKI still has tries or no counter, so a node with nothing to fall back to
@@ -31,12 +40,14 @@
 # <6> info.
 #
 # Test overrides: BLUEFIN_BLESS_BOOT, BLUEFIN_BOOT_PATH, BLUEFIN_OS_RELEASE,
-# BLUEFIN_REBOOT_LOCKS (space-separated), BLUEFIN_REBOOT_SENTINEL.
+# BLUEFIN_REBOOT_LOCKS (space-separated), BLUEFIN_REBOOT_SENTINEL,
+# BLUEFIN_REBOOT_LOCK (the FleetLock client).
 
 set -euo pipefail
 export LC_ALL=C
 
 bless="${BLUEFIN_BLESS_BOOT:-/usr/lib/systemd/systemd-bless-boot}"
+reboot_lock="${BLUEFIN_REBOOT_LOCK:-/usr/libexec/bluefin-reboot-lock}"
 sentinel="${BLUEFIN_REBOOT_SENTINEL:-/run/reboot-required}"
 os_release="${BLUEFIN_OS_RELEASE:-/usr/lib/os-release}"
 read -r -a locks <<< "${BLUEFIN_REBOOT_LOCKS:-/run/reboot-lock /etc/reboot-lock}"
@@ -114,6 +125,17 @@ for u in kubelet.service k0scontroller.service k0sworker.service; do
       exit 0 ;;
   esac
 done
+
+rc=0
+"${reboot_lock}" acquire || rc=$?
+case "${rc}" in
+  0) ;;
+  3)
+    warn "the FleetLock server could not be reached; the rollback goes ahead without a reboot slot" ;;
+  *)
+    warn "${msg}; no fleet reboot slot, retrying later"
+    exit 75 ;;
+esac
 
 err "${msg}; rebooting so systemd-boot falls back after the last try"
 exec systemctl --no-block reboot

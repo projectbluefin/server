@@ -15,6 +15,12 @@ description: |
   - bluefin-update-pending: `systemd-sysupdate pending`, minus a version whose
     UKI already used up its boot tries; gates the kured flag and the nightly
     reboot so a rolled-back node does not reboot into it again.
+  - bluefin-reboot-lock: FleetLock client (curl). `acquire` gates the nightly
+    reboot and the boot deadline's reboot on a reboot slot from the server in
+    /etc/bluefin/reboot-lock.conf or the bluefin.reboot-lock.* credentials;
+    `release`, run by bluefin-reboot-lock-release.service (enabled in /usr by
+    elements/oci/bluefin-server-usr.bst) after a good boot, gives it back.
+    Both do nothing without a server.
   - bluefin-update-status, run by bluefin-update-status.service at boot and
     after every systemd-sysupdate.service run: records the last successful
     check and the last error in /var/lib/bluefin-update-status and writes the
@@ -33,8 +39,8 @@ description: |
     on the ESP, the boot server (diskless) or the release
     (systemd-sysupdate), and merges them.
   Runtime tools: bash, coreutils, curl, gpgv, agetty, bootctl, journalctl,
-  systemd-analyze, systemd-sysupdate, systemd-sysext (os-base.bst) and
-  bluefin-boot-origin (boot-origin.bst).
+  systemd-analyze, systemd-id128, systemd-sysupdate, systemd-sysext
+  (os-base.bst) and bluefin-boot-origin (boot-origin.bst).
 
 sources:
 - kind: local

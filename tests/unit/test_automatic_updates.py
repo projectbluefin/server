@@ -164,12 +164,12 @@ def test_reboot_is_held_by_the_operator_lock_files() -> None:
 
 def test_reboot_skips_an_update_that_already_failed_its_tries() -> None:
     conds = values(INTERLOCK, "ExecCondition")
-    assert len(conds) == 2
+    assert len(conds) == 3
     assert conds[0] == "/usr/libexec/bluefin-update-pending"
 
 
 def _interlock_script() -> str:
-    cmd = values(INTERLOCK, "ExecCondition")[-1]
+    cmd = values(INTERLOCK, "ExecCondition")[1]
     argv = shlex.split(cmd.replace("$$", "$"))
     assert argv[:2] == ["/usr/bin/sh", "-c"] and len(argv) == 3, argv
     return argv[2]

@@ -192,6 +192,11 @@ config:
     # does, once per installed node (projectbluefin/server#367).
     ln -sf ../bluefin-update-status-migrate.service \
       /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-update-status-migrate.service
+    # Enabled in /usr, not by preset: a node that updated into this image
+    # must still give its FleetLock slot back once an operator configures a
+    # server, or its group stops rebooting. Inert without a server.
+    ln -sf ../bluefin-reboot-lock-release.service \
+      /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-reboot-lock-release.service
 
     find /sysroot \( -type d ! -perm -1000 -o -type f \) -perm /022 -exec chmod go-w {} +
     echo "Cleared group/other write; /etc paths to repair in place: $(wc -l < "${list}")"
