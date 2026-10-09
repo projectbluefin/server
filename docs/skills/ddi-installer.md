@@ -4,7 +4,7 @@ description: Use when building or debugging the Bluefin Server boot chain, the d
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-05"
+  last_updated: "2026-10-08"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -72,6 +72,41 @@ so installed disks and the netboot ESP get a loader firmware accepts.
 The signing keys (dev vs CI, and the pair that signs and verifies
 `SHA256SUMS`): [secure-boot-keys.md](secure-boot-keys.md) and
 [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
+
+### Shim path (`-o shim True`, off by default)
+
+With the `shim` project option the netboot and installer ESPs boot shim
+(built from source with the DB certificate as its vendor certificate; build,
+SBAT and shim-review in "Shim" of [secure-boot-keys.md](secure-boot-keys.md)):
+
+```text
+firmware -> EFI/BOOT/BOOTX64.EFI (shim, DB-signed; Microsoft-signed once reviewed)
+  -> \EFI\systemd\systemd-bootx64.efi (DB-signed systemd-boot, shim's DEFAULT_LOADER)
+  -> UKI, verified through shim against the vendor certificate or db
+```
+
+`EFI/BOOT/mmx64.efi` (MokManager) sits next to shim; the fallback loader
+does not, so booting a stick never writes firmware boot entries. loader.conf
+keeps `secure-boot-enroll if-safe`: firmware in Setup Mode does not check
+shim, systemd-boot enrolls the Bluefin keys, and the DB-signed shim boots
+with them afterwards. Default builds lay out the ESPs exactly as before.
+
+Not wired yet, so the option is groundwork rather than an enrollment-free
+path:
+
+- **Installed disks.** `systemd-sysinstall` runs `bootctl install`, which
+  writes systemd-boot to `EFI/BOOT/BOOTX64.EFI` and registers a firmware
+  boot entry for `\EFI\systemd\systemd-bootx64.efi`, so an installed disk
+  boots systemd-boot directly, as without the option. Shim there needs
+  `EFI/bluefin-server/` (shim, MokManager, `BOOTX64.CSV`) with the boot
+  entry on shim; `bootctl update` already leaves a non-systemd-boot
+  `BOOTX64.EFI` alone.
+- **Microsoft-only firmware.** Until shim is Microsoft-signed it boots only
+  where the Bluefin db is enrolled, and the USB installer's Secure Boot
+  check still refuses firmware that lacks the Bluefin db.
+- **UEFI HTTP boot** loads the netboot UKI directly, without shim. shim
+  fetches `DEFAULT_LOADER` relative to its own URL when HTTP-booted; serving
+  a shim chain that way is Booty-side work.
 
 ### Diskless (netboot UKI)
 

@@ -64,7 +64,7 @@ Priority order. Each item depends on the ones above it.
 - [x] Reboot coordination for non-Kubernetes hosts: nightly `systemd-sysupdate-reboot.timer`, operator lock files and a kured interlock (both from #182), and a boot health gate that reboots an unhealthy counted boot (#139).
 - [ ] Cluster-wide reboot lock (FleetLock-style) for multi-node fleets without Kubernetes.
 - [x] Booty Bluefin support merged upstream ([jeefy/booty#39](https://github.com/jeefy/booty/pull/39)): UEFI HTTP boot, iPXE chainload, legacy BIOS diskless, per-node Ignition, kubeadm join, install-to-disk.
-- [ ] Shim-signed Secure Boot path for enrollment-free first boots.
+- [ ] Shim-signed Secure Boot path for enrollment-free first boots. Layout and a shim not yet signed by Microsoft landed behind `-o shim True`; Microsoft signature pending shim-review ([secure-boot-keys.md](skills/secure-boot-keys.md), "Shim").
 - [ ] Tag `v1.0.0-MVP` once Phase D items land.
 - [ ] Publish release notes: verified boot path, trust model, known gaps.
 

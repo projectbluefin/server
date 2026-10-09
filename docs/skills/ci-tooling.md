@@ -407,8 +407,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
-  `efi-keys.bst`, `os-sd-boot-signed.bst`, `openzfs-signed.bst` and the
-  `nvidia-open-*-signed.bst` elements
+  `efi-keys.bst`, `os-sd-boot-signed.bst`, `shim.bst`, `openzfs-signed.bst`
+  and the `nvidia-open-*-signed.bst` elements
   build-depend on it, so a release build's own cache must never be saved or
   pushed anywhere a pull request can read.
 - **Most pull requests do not build the image.** The full build costs up to

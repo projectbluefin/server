@@ -4,7 +4,7 @@ description: Roadmap for future Bluefin Server architecture work. Use when plann
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-09-29"
+  last_updated: "2026-10-08"
   context7-sources:
     - /systemd/systemd
 ---
@@ -40,7 +40,7 @@ Priorities are derived from [gap-analysis-distros.md](gap-analysis-distros.md).
 |---|------|------------------------|
 | 1 | TPM2-sealed /var on installed nodes | Credential sealing exists (`tpm2-credential-sealing.md`); persistent state is not yet bound to the TPM. |
 | 2 | aarch64 build axis | `project.conf`, `include/arch.yml` and the k0s/kubeadm arm64 binary pins resolve `-o arch aarch64`. Missing: aarch64 FSDK artifacts in any cache (a full bootstrap build), an aarch64 CI build, and an aarch64 dogfood path (`scripts/dogfood-*.sh` run `qemu-system-x86_64` with x64 OVMF). |
-| 3 | Booty Secure Boot shim story | Bluefin HTTP-boot support is merged in [Booty](https://github.com/jeefy/booty) ([jeefy/booty#39](https://github.com/jeefy/booty/pull/39)); enrollment-free first boots still need a shim-signed path. |
+| 3 | Booty Secure Boot shim story | Bluefin HTTP-boot support is merged in [Booty](https://github.com/jeefy/booty) ([jeefy/booty#39](https://github.com/jeefy/booty/pull/39)). Shim built from source with the DB certificate as vendor certificate, laid out on the netboot and installer ESPs, landed behind `-o shim True` (unsigned by Microsoft). Missing: the shim-review submission and Microsoft signature, the installed-disk shim layout, and a shim chain over HTTP boot ("Shim path" in [ddi-installer.md](ddi-installer.md)). |
 | 4 | Credential provisioning smoke tests on real hardware | SSH keys, static network, and firstboot settings are wired through systemd credentials; TPM2-sealed credential decryption still needs hardware proof. |
 | 5 | Cluster-wide reboot lock for non-Kubernetes fleets | Single hosts reboot in the nightly window and Kubernetes nodes use kured; several non-Kubernetes hosts sharing a service still have no FleetLock/locksmith-style lock, so they may reboot in the same window. |
 

@@ -4,7 +4,7 @@ description: Secure Boot and image signing key management for Bluefin Server. Lo
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-04"
+  last_updated: "2026-10-08"
 ---
 # Secure Boot Key Management
 
@@ -17,7 +17,7 @@ This skill covers what each key signs, where it lives, and how CI gets it.
 |---|---|---|---|
 | PK (Platform Key) | KEK updates | `files/boot-keys/PK.key` | `files/boot-keys/PK.crt` |
 | KEK (Key Exchange Key) | db updates | `files/boot-keys/KEK.key` | `files/boot-keys/KEK.crt` |
-| DB (Signature Database) | systemd-boot, UKIs | `files/boot-keys/DB.key` | `files/boot-keys/DB.crt` |
+| DB (Signature Database) | systemd-boot, UKIs, shim and MokManager (`-o shim True`) | `files/boot-keys/DB.key` | `files/boot-keys/DB.crt`; also shim's vendor certificate |
 | linux-module-cert | kernel modules | `files/boot-keys/linux-module-cert.key` | `files/boot-keys/modules/linux-module-cert.crt` |
 | sysupdate-signing | `SHA256SUMS` | `files/boot-keys/sysupdate-signing.asc` | `files/boot-keys/import-pubring.pgp` |
 | ignition-signing | `bluefin-node.ign` | dev: `files/boot-keys/ignition-signing.asc`; release: off CI | `files/boot-keys/ignition-pubring.pgp` (release: `files/release-keys/ignition-pubring.pgp`); see "The Ignition config key" in [booty-integration.md](booty-integration.md) |
@@ -103,6 +103,64 @@ dev module pair); they never see the real secrets.
 The module key is the hardest to rotate: it is baked into the kernel, so a
 new kernel build is mandatory. Plan kernel rebuilds into the rotation window.
 
+## Shim
+
+Today a machine boots Bluefin Server with Secure Boot only once the Bluefin
+PK/KEK/db are enrolled (Setup Mode, systemd-boot's `secure-boot-enroll`).
+The enrollment-free path is shim signed by Microsoft's UEFI CA, which most
+firmware already trusts. `bluefin-server/shim.bst` builds shim from the
+upstream release tarball (`shim-16.1.tar.bz2`, sha256-pinned; it bundles
+gnu-efi) with the FSDK toolchain, no distro binary involved:
+
+- **Vendor certificate = DB certificate.** `VENDOR_CERT_FILE` is
+  `DB.crt` in DER, so shim trusts exactly what DB already signs:
+  systemd-boot (its `DEFAULT_LOADER`, `\EFI\systemd\systemd-bootx64.efi`),
+  the UKIs, and MokManager. No new key. A Microsoft-signed shim makes DB
+  as powerful as Microsoft's own CA on every machine that trusts it, so
+  that key needs stronger custody than the `BOOT_KEYS_TARBALL` CI secret
+  before a submission (shim-review asks how it is protected).
+- **SBAT.** `data/sbat.bluefin-server.csv` adds
+  `shim.bluefin-server,1,Bluefin Server,shim,<ver>,https://github.com/projectbluefin/server`
+  to shim's and MokManager's `.sbat`. Raise the generation (the `1`) to
+  revoke every earlier Bluefin Server shim.
+- **Checks.** The build fails unless `.vendor_cert` holds the DB
+  certificate, `.sbat` holds the entry above, and `DEFAULT_LOADER` is
+  systemd-boot. With `SOURCE_DATE_EPOCH` set the binary is bit-for-bit
+  reproducible.
+- **Outputs.** `shimx64.efi` unsigned (what Microsoft signs) plus
+  DB-signed `shimx64.efi.signed` and `mmx64.efi.signed`, so a shim build
+  still boots where the Bluefin keys are enrolled. Only the image's
+  `shim` option uses them; where they land on the ESPs and what is not
+  wired yet: "Shim path" in [ddi-installer.md](ddi-installer.md).
+
+### shim-review submission
+
+Microsoft signs shim only after review in
+[rhboot/shim-review](https://github.com/rhboot/shim-review) (and only with
+the UEFI CA 2023). The submission is a tagged repository with the filled-in
+template, the unsigned `shimx64.efi` from a **release-key** build (dev builds
+embed throwaway DB certificates), build logs and its SHA-256. Reviewers
+expect:
+
+- **A reproducible recipe in a separate repository.** Reviewers run
+  `docker build .` and compare the hash. That Containerfile lives in a
+  `projectbluefin/shim-review` fork, not here (this repository stays
+  Containerfile-free); it reproduces this element's `make` invocation from
+  the same tarball.
+- **Two security contacts** (primary and secondary), each with a PGP key on
+  a public keyserver. A reviewer mails each a PGP-encrypted challenge whose
+  contents go back into the review issue.
+- **Organization proof**: a legal entity, and the EV certificate used with
+  Microsoft's Hardware Dev Center for the `.cab` submission.
+- **SBAT for everything shim starts**: the entries above, plus a
+  vendor-specific entry in systemd-boot's and systemd-stub's `.sbat` (both
+  from FSDK's systemd build).
+- **Answers on the rest of the chain**: lockdown (`lockdown=integrity`
+  always on), the module signing key (persistent, not ephemeral, see "Key
+  inventory"), the NX-compatibility flag (shim's default, off), whether the
+  embedded certificate is a CA, and reviews of other applicants, which
+  speed up one's own.
+
 ## Verification
 
 - [ ] `just validate` passes after key generation.
@@ -111,6 +169,8 @@ new kernel build is mandatory. Plan kernel rebuilds into the rotation window.
 - [ ] No private keys are committed outside the gitignored `files/boot-keys/`,
       except the public INSECURE dev module key in `files/dev-keys/`.
 - [ ] `bash scripts/check-release-keys.sh` passes on a release key set.
+- [ ] `just bst build bluefin-server/shim.bst` passes (its vendor certificate,
+      SBAT and signature checks run in the element).
 
 ## See also
 

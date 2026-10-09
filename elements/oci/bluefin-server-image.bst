@@ -112,6 +112,31 @@ variables:
   (?):
   - arch == "aarch64":
       efi-arch: aa64
+  # Set by the shim option (project.conf) below.
+  shim-esp: "false"
+
+# shim option (off by default): the netboot and installer ESPs boot shim as
+# EFI/BOOT/BOOT<ARCH>.EFI, with MokManager (mm<arch>.efi) next to it, and
+# shim chain-loads its DEFAULT_LOADER, the DB-signed systemd-boot at
+# EFI/systemd/systemd-boot<arch>.efi, which both ESPs carry either way.
+# loader.conf keeps `secure-boot-enroll if-safe`: firmware in Setup Mode
+# does not check shim, and systemd-boot still enrolls the Bluefin keys; the
+# DB-signed shim then boots with them. On firmware that trusts only
+# Microsoft's keys, a Microsoft-signed shim (pending shim-review) would take
+# over instead, and it trusts what DB signs through its vendor certificate.
+# The OS DDI's ESP is unchanged: firmware never boots it (it carries no boot
+# loader), and systemd-sysinstall's `bootctl install` writes systemd-boot to
+# an installed disk's EFI/BOOT regardless, so the installed-disk shim layout
+# is a follow-up (docs/skills/ddi-installer.md, "Shim path").
+(?):
+- shim:
+    variables:
+      shim-esp: "true"
+    build-depends:
+      (>):
+      - filename: bluefin-server/shim.bst
+        config:
+          location: /shim
 
 environment:
   # dosfstools 4.2 ignores SOURCE_DATE_EPOCH and stamps each ESP's volume
@@ -158,6 +183,10 @@ config:
     arch_upper="$(echo '%{efi-arch}' | tr a-z A-Z)"
     install -Dm644 "${sdboot}" "${esp}/EFI/BOOT/BOOT${arch_upper}.EFI"
     install -Dm644 "${sdboot}" "${esp}/EFI/systemd/systemd-boot%{efi-arch}.efi"
+    if [ "%{shim-esp}" = true ]; then
+      install -Dm644 /shim%{datadir}/bluefin-server/shim/shim%{efi-arch}.efi.signed "${esp}/EFI/BOOT/BOOT${arch_upper}.EFI"
+      install -Dm644 /shim%{datadir}/bluefin-server/shim/mm%{efi-arch}.efi.signed "${esp}/EFI/BOOT/mm%{efi-arch}.efi"
+    fi
     install -Dm644 /boot-out/%{netboot-name}.efi "${esp}/EFI/Linux/%{netboot-name}.efi"
     install -Dm644 -t "${esp}/loader/keys/auto" /boot-out/efi-keys/*.auth
     mkdir -p "${esp}/loader/credentials"
@@ -177,6 +206,10 @@ config:
     arch_upper="$(echo '%{efi-arch}' | tr a-z A-Z)"
     install -Dm644 "${sdboot}" "${esp}/EFI/BOOT/BOOT${arch_upper}.EFI"
     install -Dm644 "${sdboot}" "${esp}/EFI/systemd/systemd-boot%{efi-arch}.efi"
+    if [ "%{shim-esp}" = true ]; then
+      install -Dm644 /shim%{datadir}/bluefin-server/shim/shim%{efi-arch}.efi.signed "${esp}/EFI/BOOT/BOOT${arch_upper}.EFI"
+      install -Dm644 /shim%{datadir}/bluefin-server/shim/mm%{efi-arch}.efi.signed "${esp}/EFI/BOOT/mm%{efi-arch}.efi"
+    fi
     install -Dm644 /boot-out/%{installer-uki} "${esp}/EFI/Linux/%{installer-uki}"
     # Outside EFI/Linux so systemd-boot never offers the disk UKI on the
     # stick; systemd-sysinstall --kernel= installs it onto the target disk.
