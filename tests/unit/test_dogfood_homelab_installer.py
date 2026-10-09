@@ -1,5 +1,7 @@
 """Exercise the Homelab installer's host-side log checks without booting QEMU."""
 
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -10,6 +12,12 @@ SCRIPT = ROOT / "scripts/dogfood-homelab-installer.sh"
 VERSION = "26.09.2"
 BASE = ("homelab", "kubeadm")
 ALL = ("argo-workflows", "homelab", "kubeadm", "kubestellar", "mcp")
+# The firmware console of a key enrollment boot whose reset hung, as QEMU
+# writes it.
+HUNG_ENROLLMENT = (
+    "Enrolling secure boot keys from directory: \\loader\\keys\\auto\r\n"
+    "Custom Secure Boot keys successfully enrolled, rebooting the system now!\r\n"
+)
 
 
 def check_logs(tmp_path, *, cp=ALL, node=BASE, seed=ALL):
@@ -61,3 +69,50 @@ def test_incorrect_role_or_seed_sets_fail(tmp_path, change):
     result = check_logs(tmp_path, **change)
     assert result.returncode != 0
     assert "FAIL:" in result.stderr
+
+
+def enroll_finish():
+    """The done-regex, timeout and serial install() hands finish for the key
+    enrollment boot."""
+    call = re.search(r'^ *finish "\$\{role\}-1-enroll" "\$\{VM_PID\}" (.+?) \|\| fail ', SCRIPT.read_text(), re.M)
+    assert call
+    return shlex.split(call[1])
+
+
+def finish(tmp_path, *args):
+    """finish <args> for cp-1-enroll against a stand-in QEMU that never exits;
+    prints finish's status and whether QEMU still runs once it returns."""
+    for serial, text in (("ttyS0", HUNG_ENROLLMENT), ("ttyS1", ""), ("ttyS2", "")):
+        (tmp_path / f"cp-1-enroll.{serial}").write_text(text)
+    body = re.search(r"^finish\(\) \{\n.*?^\}\n", SCRIPT.read_text(), re.M | re.S)[0]
+    return subprocess.run(
+        ["bash", "-c", 'set -euo pipefail; state="$1"; shift\n' + body
+         + "sleep 300 </dev/null >/dev/null 2>&1 &\npid=$!\n"
+         "trap 'kill \"${pid}\" 2>/dev/null || true' EXIT\n"
+         'rc=0; finish cp-1-enroll "${pid}" "$@" || rc=$?\n'
+         'if kill -0 "${pid}" 2>/dev/null; then echo "rc=${rc} qemu running"; else echo "rc=${rc} qemu stopped"; fi\n',
+         "finish", str(tmp_path), *args],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
+def test_the_enrollment_marker_ends_a_boot_whose_reset_hangs(tmp_path):
+    marker, _, serial = enroll_finish()
+    result = finish(tmp_path, marker, "20", serial)
+    assert result.stdout.splitlines()[-1] == "rc=0 qemu stopped", result.stderr
+    assert marker in (tmp_path / f"cp-1-enroll.{serial}.log").read_text()
+
+
+def test_without_a_serial_only_the_probe_console_ends_a_boot(tmp_path):
+    # The install and disk boots end on their probe's ttyS1 lines.
+    marker, _, _ = enroll_finish()
+    result = finish(tmp_path, marker, "2")
+    assert result.stdout.splitlines()[-1] == "rc=1 qemu stopped"
+
+
+def test_the_enrollment_checks_the_marker_it_waits_for_on_the_firmware_console():
+    marker, _, serial = enroll_finish()
+    assert serial == "ttyS0"
+    assert f"grep -aq '{marker}' \"${{state}}/${{role}}-1-enroll.{serial}.log\" || fail" in SCRIPT.read_text()

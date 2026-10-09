@@ -87,7 +87,7 @@
 #   DOGFOOD_INSTALL=<mode>     unattended (default: the drop-in credential) or
 #                              console (typed at the monitor, see above)
 #   DOGFOOD_MEM=<MiB>          guest memory (default 4096)
-#   DOGFOOD_TIMEOUT=<s>        per-boot timeout (default 600)
+#   DOGFOOD_TIMEOUT=<s>        per-boot timeout (default 600; key enrollment: 120)
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -243,15 +243,15 @@ boot_start() {
     qemu_pid=$! qemu_deadline=$(( $(date +%s) + timeout_s )) screen_seen=0
 }
 
-# boot_wait <name> <done-regex>: wait until QEMU exits (-no-reboot turns every
-# reboot into an exit), <done-regex> shows up in the ttyS1 log, or the
-# timeout hits.
+# boot_wait <name> <done-regex> [<serial>]: wait until QEMU exits (-no-reboot
+# turns every reboot into an exit), <done-regex> shows up in the <serial> log
+# (default ttyS1), or the timeout hits.
 boot_wait() {
-    local name="$1" done_re="$2"
+    local name="$1" done_re="$2" serial="${3:-ttyS1}"
     local log="${state}/${name}"
     while kill -0 "${qemu_pid}" 2>/dev/null && [ "$(date +%s)" -lt "${qemu_deadline}" ]; do
         # A few seconds of grace so the journal mirror catches up.
-        [ -n "${done_re}" ] && grep -aqE "${done_re}" "${log}.ttyS1" 2>/dev/null && { sleep 3; break; }
+        [ -n "${done_re}" ] && grep -aqE "${done_re}" "${log}.${serial}" 2>/dev/null && { sleep 3; break; }
         sleep 2
     done
     local timed_out=0
@@ -367,7 +367,12 @@ if [ "${secure_boot}" = off ]; then
     echo "==> 1/${steps} firmware without Secure Boot (${code##*/}): nothing to enroll"
 else
     echo "==> 1/${steps} enroll Secure Boot keys from the installer (${ver})"
-    boot 1-enroll '' "${stick[@]}" -nic none
+    # systemd-boot says "successfully enrolled" on the firmware console once
+    # db, KEK and PK are written, then resets, which -no-reboot turns into an
+    # exit; OVMF sometimes hangs in that reset instead, so the message ends
+    # the boot. Enrolling takes seconds, not the per-boot timeout.
+    timeout_s=120 boot_start 1-enroll "${stick[@]}" -nic none
+    timeout_s=120 boot_wait 1-enroll 'successfully enrolled' ttyS0
     grep -aq 'successfully enrolled' "${state}/1-enroll.ttyS0.log" || fail "key enrollment"
 fi
 # Firmware state right after enrollment: no boot entry for the target yet.

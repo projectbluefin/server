@@ -104,12 +104,13 @@ vm() {
     VM_PID=$!
     pids+=("${VM_PID}")
 }
-# finish <name> <pid> <done-regex> <timeout>: wait for the regex on ttyS1 or
-# for QEMU to exit (-no-reboot), then stop it; 1 on a timeout.
+# finish <name> <pid> <done-regex> <timeout> [<serial>]: wait for the regex on
+# <serial> (default ttyS1) or for QEMU to exit (-no-reboot), then stop it; 1
+# on a timeout.
 finish() {
-    local name="$1" pid="$2" done_re="$3" deadline=$(( $(date +%s) + $4 )) log="${state}/$1" rc=0
+    local name="$1" pid="$2" done_re="$3" deadline=$(( $(date +%s) + $4 )) log="${state}/$1" rc=0 serial="${5:-ttyS1}"
     while kill -0 "${pid}" 2>/dev/null && [ "$(date +%s)" -lt "${deadline}" ]; do
-        [ -n "${done_re}" ] && grep -aqE "${done_re}" "${log}.ttyS1" 2>/dev/null && { sleep 3; break; }
+        [ -n "${done_re}" ] && grep -aqE "${done_re}" "${log}.${serial}" 2>/dev/null && { sleep 3; break; }
         sleep 2
     done
     if kill -0 "${pid}" 2>/dev/null; then
@@ -251,7 +252,9 @@ install() {
     # shellcheck disable=SC2054 # commas belong to the QEMU options
     local stick_args=(-drive "if=none,id=stick,format=raw,file=${stick}" -device virtio-blk-pci,drive=stick,serial=bluefin-installer)
     MEM=4096 vm "${role}-1-enroll" "${role}" "${stick_args[@]}" -nic none
-    finish "${role}-1-enroll" "${VM_PID}" '' 300 || fail "${role}: key enrollment timed out"
+    # OVMF sometimes hangs in the reset after enrolling: systemd-boot's
+    # message on the firmware console ends the boot instead.
+    finish "${role}-1-enroll" "${VM_PID}" 'successfully enrolled' 120 ttyS0 || fail "${role}: key enrollment timed out"
     grep -aq 'successfully enrolled' "${state}/${role}-1-enroll.ttyS0.log" || fail "${role}: key enrollment"
     MEM=4096 vm "${role}-2-install" "${role}" "${stick_args[@]}" \
         -drive "if=none,id=target,format=raw,file=${target}" -device "virtio-blk-pci,drive=target,serial=${target_serial}" \
