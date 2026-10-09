@@ -119,3 +119,28 @@ jobs:
             --title "chore(deps): update ${COMPONENT} ${FROM} -> ${TO}" \
             --body-file "$RUNNER_TEMP/pr-body.md" --skip-closed-title \
             -- "${files[@]}"
+
+  # Scheduled runs block nothing, so a failure is invisible unless this says
+  # so: same shared script and semantics as build.yml's nightly-status.
+  status:
+    needs: [check, propose]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout the tracking-issue script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/tracking-issue.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/tracking-issue.sh "Binary tracker failing" "The Track upstream binaries workflow" "a later run"

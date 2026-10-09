@@ -7,7 +7,8 @@
 - pip installs come from the exactly pinned .github/requirements-ci.txt.
 - renovate.json's regex managers match the pins as written today; a manager
   that silently matches nothing reports no updates rather than an error.
-- The nightly build opens, updates and closes one tracking issue.
+- The nightly build and the trackers each open, update and close one
+  tracking issue through .github/scripts/tracking-issue.sh.
 """
 
 from __future__ import annotations
@@ -191,15 +192,30 @@ def test_actionlint_knows_every_runner_label() -> None:
 
 
 NIGHTLY = workflow("build.yml")["jobs"]["nightly-status"]
+STATUS_JOBS = {
+    "build.yml": ("nightly-status", "${{ !cancelled() && github.event_name == 'schedule' }}"),
+    "track-junctions.yml": ("status", "${{ !cancelled() }}"),
+    "track-binaries.yml": ("status", "${{ !cancelled() }}"),
+}
 
 
-def test_nightly_status_runs_only_for_the_schedule_with_issues_write_only() -> None:
-    assert NIGHTLY["if"] == "${{ !cancelled() && github.event_name == 'schedule' }}"
-    assert NIGHTLY["permissions"] == {"issues": "write"}
-    assert {"build", "boot-test"} <= set(NIGHTLY["needs"])
-    for step in NIGHTLY["steps"]:
-        assert "uses" not in step, "the job runs no repository code or actions"
-        assert "${{" not in step.get("run", ""), "context goes through env:, not inline"
+@pytest.mark.parametrize("name", sorted(STATUS_JOBS))
+def test_status_jobs_hold_issues_write_only_and_run_the_shared_script(name: str) -> None:
+    wf = workflow(name)
+    job_name, cond = STATUS_JOBS[name]
+    job = wf["jobs"][job_name]
+    assert job["if"] == cond
+    assert job["permissions"] == {"issues": "write"}
+    if name == "build.yml":
+        assert {"build", "boot-test"} <= set(job["needs"])
+    else:
+        assert set(job["needs"]) == set(wf["jobs"]) - {job_name}, "every other job reports"
+    checkout, report = job["steps"]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"]["sparse-checkout"] == ".github/scripts/tracking-issue.sh"
+    assert report["run"].startswith("bash .github/scripts/tracking-issue.sh ")
+    assert "${{" not in report["run"], "context goes through env:, not inline"
+    assert report["env"]["FAILED"] == "${{ contains(needs.*.result, 'failure') }}"
 
 
 FAKE_GH = """#!/usr/bin/env bash
@@ -216,7 +232,7 @@ fi
     [
         ("true", "", "issue create --title Nightly build failing"),
         ("true", "42", "issue comment 42 --body Failed again: https://run"),
-        ("false", "42", "issue close 42 --comment The nightly build passes again: https://run"),
+        ("false", "42", "issue close 42 --comment The nightly build of main passes again: https://run"),
         ("false", "", None),
     ],
 )
@@ -235,7 +251,7 @@ def test_nightly_status_script(tmp_path: Path, failed: str, open_issue: str, exp
         "FAILED": failed,
         "RUN_URL": "https://run",
     }
-    subprocess.run(["bash", "-c", NIGHTLY["steps"][0]["run"]], env=env, check=True)
+    subprocess.run(["bash", "-c", NIGHTLY["steps"][1]["run"]], env=env, check=True, cwd=ROOT)
     calls = log.read_text().splitlines()
     assert calls[0].startswith("issue list --state open")
     if expected is None:

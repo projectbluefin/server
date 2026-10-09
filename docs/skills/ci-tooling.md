@@ -4,7 +4,7 @@ description: CI workflow conventions for Bluefin Server. Use when writing or edi
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-07"
+  last_updated: "2026-10-09"
   context7-sources:
     - /websites/github_en_actions
     - /websites/cli_github_manual
@@ -122,7 +122,9 @@ contents and packages are granted to exactly one job:
 
 Its pull-request rehearsal, `release-dry-run`, keeps the read-only default
 and uses no secrets. `nightly-status` holds `issues: write` and nothing else;
-it runs only for the `schedule` event and executes no repository code.
+it runs only for the `schedule` event and executes only
+`.github/scripts/tracking-issue.sh` (sparse checkout). The trackers' `status`
+jobs are the same.
 
 Junction ref tracking must never run on `pull_request`. It used to, as a
 `track-refs` job gated on `startsWith(github.head_ref, 'renovate/')`, and a
@@ -220,7 +222,8 @@ use: remove only this repository from their repository access.
 | `image-check` | `build.yml` | after `build` | Runs `.github/scripts/check-image.py` on the built image set: no missing libraries, required dlopen libraries, or unit/udev programs in `/usr`, the disk UKI's initrd, or the sysexts (resolved over `/usr`); the step summary diffs `/usr` paths against the latest release. `release` needs it. Read-only token. |
 | `release` | `build.yml` | `release=true` | Publishes `dist/diskless/` as-is through `scripts/publish-release.sh`: an immutable GitHub Release tagged `v<image-version>` plus an ORAS OCI artifact at `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per file, artifact type `application/vnd.projectbluefin.server.release.v1`), with provenance and SBOM attestations for both. It runs only when `build`, `boot-test` and `image-check` succeeded (`!cancelled()` plus each job's result, so a failed `kernel-cache` does not hold it back), and marks the set latest (GitHub "Latest", ghcr `latest`) only when no newer version is published (see "Publishing" in `systemd-sysupdate-verification.md`). Write permissions listed above. Main runs queue, so a merge that edits `build.yml` can land before an earlier run publishes; GitHub then refuses `GITHUB_TOKEN` a tag at that run's commit (it would need the `workflows` permission). `publish-release.sh taggable` detects this before anything is published and skips that version with a warning; the newer run releases its content. |
 | `release-dry-run` | `build.yml` | `pull_request` that builds | Runs the same `scripts/publish-release.sh` commands against the PR's image set: verify, render `gh release create`, and a real `oras push` to a `registry` service container (pinned by digest) that it pulls back. Read-only token, no secrets. |
-| `nightly-status` | `build.yml` | `schedule`, after `boot-test` and `image-check` | Opens the "Nightly build failing" issue (or comments on the open one) with the run URL when `changes`, `build`, `boot-test` or `image-check` failed, and closes it when a later nightly passes. `issues: write` only. |
+| `nightly-status` | `build.yml` | `schedule`, after `boot-test` and `image-check` | Opens the "Nightly build failing" issue (or comments on the open one) with the run URL when `changes`, `build`, `boot-test` or `image-check` failed, and closes it when a later nightly passes, through `.github/scripts/tracking-issue.sh` (finds the open issue by exact title). `issues: write` only. |
+| `status` | `track-junctions.yml`, `track-binaries.yml` | after every other job of the tracker, unless cancelled | The same script and semantics for the trackers: "Junction tracker failing" / "Binary tracker failing". `issues: write` only. |
 | `docs` | `docs-checks.yml` | every `pull_request`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. No `paths:` filter, so it can be a required check. Read-only token. |
 | `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the final-assembly artifacts, rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). Throwaway keys, nothing published. Read-only token. |
 | `unit`, `go` | `unit-tests.yml` | every `pull_request`, `push/main` | `unit` runs `just lint-python` (see [Python lint](#python-lint)), then the pytest and BATS suites; `go` runs `gofmt -l`, `go vet` and `go test -race` for each Go module in the repository (a matrix; `tests/unit/test_ci_workflows.py` fails if a `go.mod` is missing from it). No `paths:` filter, so both can be required checks. Read-only token. |

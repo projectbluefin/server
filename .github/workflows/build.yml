@@ -808,8 +808,9 @@ jobs:
 
   # Nightly failures block nothing, so nobody sees them unless this says so:
   # one open "Nightly build failing" issue gets a comment per failed nightly
-  # run and is closed by the next one that passes. Schedule events only; the
-  # job holds nothing but issues: write and runs no repository code.
+  # run and is closed by the next one that passes. Schedule events only (so
+  # the scheduled main checkout); the job holds nothing but issues: write and
+  # runs only .github/scripts/tracking-issue.sh, shared with the trackers.
   nightly-status:
     needs: [changes, build, boot-test, image-check]
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
@@ -818,24 +819,17 @@ jobs:
     permissions:
       issues: write
     steps:
+      - name: Checkout the tracking-issue script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/tracking-issue.sh
+          sparse-checkout-cone-mode: false
+
       - name: Open, update or close the tracking issue
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           FAILED: ${{ contains(needs.*.result, 'failure') }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          title="Nightly build failing"
-          issue="$(gh issue list --state open --limit 500 --json number,title \
-            --jq "[.[] | select(.title == \"${title}\")][0].number // empty")"
-          if [ "${FAILED}" = true ]; then
-            if [ -n "${issue}" ]; then
-              gh issue comment "${issue}" --body "Failed again: ${RUN_URL}"
-            else
-              gh issue create --title "${title}" \
-                --body "The nightly build of main failed: ${RUN_URL}"$'\n\n'"This issue closes when a later nightly build passes."
-            fi
-          elif [ -n "${issue}" ]; then
-            gh issue close "${issue}" --comment "The nightly build passes again: ${RUN_URL}"
-          fi
+        run: bash .github/scripts/tracking-issue.sh "Nightly build failing" "The nightly build of main" "a later nightly build"
