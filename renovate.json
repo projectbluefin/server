@@ -41,10 +41,6 @@
       "currentValueTemplate": "master"
     }
   ],
-  "homebrew": {
-    "description": "Formula/*.rb pin per-arch release binaries (kc-agent_<v>_<os>_<arch>.tar.gz) with one sha256 each. Renovate's homebrew manager only understands source-archive formulae: it rewrites the url to https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz and carries over a single checksum, which leaves `bin.install \"kc-agent\"` with no binary to install and the other three architectures unresolvable. It produced exactly that in projectbluefin/server#209. Bumping these formulae means fetching four assets and four checksums, so it stays a manual change until a generator exists.",
-    "enabled": false
-  },
   "packageRules": [
     {
       "matchDatasources": ["git-refs"],
