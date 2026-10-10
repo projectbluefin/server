@@ -12,6 +12,6 @@ pluggy==1.6.0
 pygments==2.21.0
 pytest==9.1.1
 pyyaml==6.0.3
-ruff==0.16.10
+ruff==0.17.0
 types-pyyaml==6.0.12.20260906
 typing-extensions==4.16.0
