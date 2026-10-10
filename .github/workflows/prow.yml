@@ -17,7 +17,7 @@ on:
   # pull_request_target, not pull_request: fork pull requests get a write token, so they can be
   # labeled and merged too. This is safe because nothing here checks out or runs pull request
   # code; the reusable workflow only checks out cncf/prow-github-actions itself.
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] safe: does not check out or run untrusted PR code
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
   pull_request_review:
     types: [submitted, dismissed]
