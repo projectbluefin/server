@@ -187,7 +187,7 @@ def test_linters_run_from_images_pinned_by_digest() -> None:
 def test_actionlint_knows_every_runner_label() -> None:
     config = yaml.safe_load((ROOT / ".github" / "actionlint.yaml").read_text(encoding="utf-8"))
     labels = set(config["self-hosted-runner"]["labels"])
-    used = {job["runs-on"] for path in all_workflows() for job in yaml.safe_load(path.read_text())["jobs"].values()}
+    used = {job["runs-on"] for path in all_workflows() for job in yaml.safe_load(path.read_text())["jobs"].values() if "runs-on" in job}
     assert "ubuntu-26.04" in used and "ubuntu-26.04" in labels
 
 
