@@ -16,7 +16,7 @@ DRY_RUN = JOBS["release-dry-run"]
 
 
 def steps(job: dict, uses_prefix: str) -> list[dict]:
-    return [s for s in job["steps"] if s.get("uses", "").startswith(uses_prefix)]
+    return [s for s in job.get("steps", []) if s.get("uses", "").startswith(uses_prefix)]
 
 
 def publish_commands(job: dict) -> list[str]:
