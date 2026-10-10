@@ -16,7 +16,7 @@ variables:
   # crictl (cri-tools)
   crictl-version: "1.35.0"
   # containerd static build
-  containerd-version: "2.1.5"
+  containerd-version: "2.1.9"
   # runc static build
   runc-version: "1.3.3"
   # containernetworking/plugins
