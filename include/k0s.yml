@@ -15,7 +15,7 @@
 #   %{k0s-version}        asset / extension-release version 1.36.4-k0s.0
 variables:
   k0s-k8s-version: "1.36.4"
-  k0s-patch: "0"
+  k0s-patch: "1"
 
   k0s-upstream-tag: "v%{k0s-k8s-version}%2Bk0s.%{k0s-patch}"
   k0s-version: "%{k0s-k8s-version}-k0s.%{k0s-patch}"
