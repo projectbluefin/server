@@ -1,12 +1,10 @@
-"""Tests for bluefin-kubestellar recipe and Homebrew formula contracts."""
+"""Tests for the bluefin-kubestellar launcher and setup-kubestellar recipe contracts."""
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 JUSTFILE = ROOT / "Justfile"
 SCRIPT = ROOT / "files" / "bin" / "bluefin-kubestellar"
-FORMULA_LAUNCHER = ROOT / "Formula" / "bluefin-kubestellar.rb"
-FORMULA_AGENT = ROOT / "Formula" / "kc-agent.rb"
 
 
 def test_bluefin_kubestellar_launcher_script_exists_and_sets_contract() -> None:
@@ -24,18 +22,17 @@ def test_justfile_setup_kubestellar_calls_launcher() -> None:
     assert "bluefin-kubestellar" in justfile or "kc-agent" in justfile
 
 
-def test_formulas_exist_and_configure_service_or_binary() -> None:
-    assert FORMULA_LAUNCHER.is_file()
-    assert FORMULA_AGENT.is_file()
-
-    agent_text = FORMULA_AGENT.read_text(encoding="utf-8")
-    assert "service do" in agent_text
-    assert "KAGENTI_CONTROLLER_URL" in agent_text
-
-
 def test_bluefin_kubestellar_supports_ssh_tunnel() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "tunnel" in text
     assert "--tunnel" in text
     assert "--ssh-port" in text
     assert "-L" in text
+
+
+def test_kc_agent_is_installed_from_the_upstream_tap() -> None:
+    # kubestellar/tap owns the kc-agent formula; this repo ships no Formula/ copy.
+    for text in (SCRIPT.read_text(encoding="utf-8"), JUSTFILE.read_text(encoding="utf-8")):
+        assert "brew tap kubestellar/tap" in text
+        assert "brew install kc-agent" in text
+    assert not (ROOT / "Formula").exists()
