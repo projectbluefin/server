@@ -35,7 +35,7 @@ drivers/watchdog/Kconfig.
 diff --git a/files/linux/fdsdk-config.sh b/files/linux/fdsdk-config.sh
 --- a/files/linux/fdsdk-config.sh
 +++ b/files/linux/fdsdk-config.sh
-@@ -2825,2 +2825,15 @@
+@@ -2828,2 +2828,15 @@
  enable INET_DIAG_DESTROY
  module NETFILTER_XT_TARGET_NOTRACK
 +enable WATCHDOG

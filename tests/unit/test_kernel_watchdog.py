@@ -104,13 +104,17 @@ def test_patch_applies_after_0006() -> None:
             f"0006 does not apply on the synthetic tree:\n{result.stderr}"
         )
         result = subprocess.run(
-            ["git", "apply", "--check", str(patch7)],
+            ["git", "apply", "--check", "-v", str(patch7)],
             cwd=tree, capture_output=True, text=True,
         )
         assert result.returncode == 0, (
             "0007 does not apply on top of 0006 — the second hunk in the\n"
             "patch_queue stack fails, which makes the entire kernel build\n"
             f"fail at source staging.  stderr:\n{result.stderr}"
+        )
+        assert "offset" not in result.stderr, (
+            "0007's hunk header is stale relative to 0006 and only applies\n"
+            f"via offset tolerance.  stderr:\n{result.stderr}"
         )
 
 
