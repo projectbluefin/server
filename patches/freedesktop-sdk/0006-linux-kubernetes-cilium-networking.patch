@@ -1,10 +1,10 @@
 diff --git a/files/linux/fdsdk-config.sh b/files/linux/fdsdk-config.sh
 --- a/files/linux/fdsdk-config.sh
 +++ b/files/linux/fdsdk-config.sh
-@@ -2810,3 +2810,17 @@
- if has HAVE_ARCH_TRANSPARENT_HUGEPAGE; then
-     enable TRANSPARENT_HUGEPAGE
- fi
+@@ -2813,3 +2813,17 @@
+ 
+ # Needed and/or helpful for graphics and multimedia (e.g. libcamera and mesa).
+ enable UDMABUF
 +
 +# Bluefin Server: Kubernetes nodes running Cilium (VXLAN/Geneve tunnels,
 +# tc BPF datapath, kube-proxy replacement with socket-LB termination),
