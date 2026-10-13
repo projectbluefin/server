@@ -172,6 +172,15 @@ systemd-creds list
 `systemd-creds` defaults to the TPM2 key when a TPM2 device is available and
 not running in a container.
 
+### PCR-lock compatibility
+
+The firmware-code, firmware-config and make-policy PCR-lock services check
+`systemd-pcrlock --quiet is-supported` before running. A TPM2 can lack the
+SHA-256 or PolicyAuthorizeNV support PCR locking requires. These services
+skip on unsupported hardware. Other TPM functions and credential sealing
+keep their existing behavior. On supported hardware, PCR-lock failures still
+fail the service.
+
 ## Encrypt and seal a credential
 
 Seal the credential against PCR 7 (Secure Boot state) and PCR 11 (Unified Kernel
