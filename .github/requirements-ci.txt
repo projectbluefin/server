@@ -8,7 +8,7 @@ mypy==2.4.0
 mypy-extensions==1.1.0
 packaging==26.3
 pathspec==1.1.1
-pluggy==1.6.0
+pluggy==1.7.0
 pygments==2.21.0
 pytest==9.1.1
 pyyaml==6.0.3
