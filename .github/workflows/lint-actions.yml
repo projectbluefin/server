@@ -40,7 +40,7 @@ jobs:
       # The read-only token enables the online audits (impostor commits,
       # known-vulnerable actions, ref/version mismatches).
       - name: zizmor
-        uses: docker://ghcr.io/zizmorcore/zizmor:1.31.0@sha256:5a91180aefd2c72e585a155ee15938ecc2911b64e7fade998bf79fbd16a07856
+        uses: docker://ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
         env:
           GH_TOKEN: ${{ github.token }}
         with:
