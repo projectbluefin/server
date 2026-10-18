@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -47,7 +49,7 @@ def test_oras_is_pinned_identically_in_both_jobs() -> None:
 def test_build_boot_test_and_dry_run_check_out_the_triggering_commit() -> None:
     # Not the branch tip: main runs queue, so a tip checkout could pair one
     # commit's image set with a later commit's boot-test harness.
-    for name in ("build", "boot-test", "release-dry-run"):
+    for name in ("boot-test-preflight", "build", "boot-test", "release-dry-run"):
         checkout = steps(JOBS[name], "actions/checkout@")[0]["with"]
         assert checkout["ref"] == "${{ github.event.pull_request.head.sha || github.sha }}", name
         assert checkout["repository"] == "${{ github.event.pull_request.head.repo.full_name || github.repository }}", name
@@ -143,11 +145,31 @@ def test_release_publishes_only_a_built_and_boot_tested_set() -> None:
         "!cancelled()",
         "needs.changes.outputs.release == 'true'",
         "needs.build.result == 'success'",
-        "needs.boot-test.result == 'success'",
+        "needs.boot-test-result.result == 'success'",
         "needs.image-check.result == 'success'",
     ):
         assert part in cond
-    assert RELEASE["needs"] == ["changes", "build", "boot-test", "image-check"]
+    assert RELEASE["needs"] == ["changes", "build", "boot-test-result", "image-check"]
+
+
+def test_boot_test_result_is_the_one_gate_of_every_bucket() -> None:
+    # Matrix legs report one check each; boot-test-result turns them into
+    # one result. Skipped like boot-test when nothing was built, so it can
+    # be a required check; otherwise it fails unless every bucket passed.
+    gate = JOBS["boot-test-result"]
+    assert gate["needs"] == ["build", "boot-test"]
+    assert gate["if"] == JOBS["boot-test"]["if"] == "${{ !cancelled() && needs.build.result == 'success' }}"
+    assert gate["permissions"] == {}
+    assert gate["runs-on"] == "ubuntu-26.04" and isinstance(gate["timeout-minutes"], int)
+    (step,) = gate["steps"]
+    assert "uses" not in step
+    assert step["env"] == {"RESULT": "${{ needs.boot-test.result }}"}
+    for result, rc in (("success", 0), ("failure", 1), ("cancelled", 1), ("skipped", 1)):
+        out = subprocess.run(["bash", "-c", step["run"]], env={**os.environ, "RESULT": result}, check=False)
+        assert out.returncode == rc, result
+    for name, job in JOBS.items():
+        if name not in ("boot-test", "boot-test-result"):
+            assert "boot-test" not in job.get("needs", []), f"{name} must gate on boot-test-result"
 
 
 @pytest.mark.parametrize("seeder", ["kernel-cache", "kernel-cache-dev"])
@@ -165,7 +187,7 @@ def test_release_uses_the_job_token_only() -> None:
 def test_jobs_after_build_run_when_kernel_cache_is_skipped() -> None:
     # kernel-cache only runs for release builds; without an explicit check of
     # build's result, a skipped kernel-cache skips every job downstream of build.
-    for name in ("boot-test", "release-dry-run"):
+    for name in ("boot-test", "boot-test-result", "release-dry-run"):
         cond = JOBS[name].get("if", "")
         assert "!cancelled()" in cond and "needs.build.result == 'success'" in cond, name
 

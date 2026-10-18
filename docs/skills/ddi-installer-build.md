@@ -4,7 +4,7 @@ description: Build, export, and dogfood the Bluefin Server image set (OS DDI, si
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-10-16"
+  last_updated: "2026-10-17"
   context7-sources:
     - /systemd/systemd
     - /apache/buildstream
@@ -260,7 +260,8 @@ Type #1 entry `systemd-sysinstall` writes for the installed image carries
 `version 1.<ver>` (`bluefin-server-commit_1.<ver>.conf`), so after
 installing `0.674` an update to `0.674.1` still boots `0.674`; use `1.674.1`.
 Release versions (`YY.MM.<run>`) sort above it. Which of these scenarios CI runs is listed in
-[ci-tooling.md](ci-tooling.md) (the `boot-test` job).
+[ci-tooling.md](ci-tooling.md) (the `boot-test` job); `scripts/ci/boot-test.sh --list`
+prints the exact calls.
 
 ## Pruning and the image check
 

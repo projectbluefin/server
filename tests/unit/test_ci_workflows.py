@@ -207,7 +207,7 @@ def test_status_jobs_hold_issues_write_only_and_run_the_shared_script(name: str)
     assert job["if"] == cond
     assert job["permissions"] == {"issues": "write"}
     if name == "build.yml":
-        assert {"build", "boot-test"} <= set(job["needs"])
+        assert {"build", "boot-test-result"} <= set(job["needs"])
     else:
         assert set(job["needs"]) == set(wf["jobs"]) - {job_name}, "every other job reports"
     checkout, report = job["steps"]

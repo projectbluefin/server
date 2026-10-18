@@ -36,7 +36,7 @@ jobs:
   #    .github/scripts/image-build-needed.py). Other pull requests run
   #    `validate` in minutes instead of the full build (build-time figures:
   #    docs/skills/ci-tooling.md#build-time-and-caches).
-  # A skipped job reports as passing, so `build` and `boot-test` can be
+  # A skipped job reports as passing, so `build` and `boot-test-result` can be
   # required checks without blocking those PRs. The classifier script is
   # checked out from the base revision, so editing it does not skip the PR's
   # own build, and changes to it or to this workflow always count as image
@@ -145,7 +145,7 @@ jobs:
   #    nightly build and local builds. No job needs it, so it never delays
   #    a release.
   # The cache only saves time: a failed seed must not hold back the release,
-  # which checks build's and boot-test's own results.
+  # which checks build's and boot-test-result's own results.
   kernel-cache:
     needs: changes
     if: needs.changes.outputs.release == 'true'
@@ -226,11 +226,36 @@ jobs:
           echo "::warning title=Kernel cache not seeded::${msg}"
           echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
 
-  build:
-    needs: [changes, kernel-cache]
-    # Runs when kernel-cache is skipped (non-release builds) or failed: the
-    # cache only saves time.
+  # Installs what the boot test runs and checks every host tool its dogfood
+  # scripts call is there (scripts/ci/dogfood-preflight.sh), in about a
+  # minute, so a missing one fails before the build instead of after it.
+  boot-test-preflight:
+    needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.image == 'true' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit `build` builds and boot-test checks out.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          persist-credentials: false
+
+      - name: Install QEMU and OVMF
+        run: bash scripts/ci/install-qemu-ovmf.sh
+
+      - name: Check the boot test's host tools
+        run: bash scripts/ci/dogfood-preflight.sh
+
+  build:
+    needs: [changes, kernel-cache, boot-test-preflight]
+    # Runs when kernel-cache is skipped (non-release builds) or failed: the
+    # cache only saves time. A failed preflight stops it.
+    if: ${{ !cancelled() && needs.changes.outputs.image == 'true' && needs.boot-test-preflight.result == 'success' }}
     # The signing secrets live in the `release` environment, which only main
     # may use. Every other build runs with no environment (an empty name):
     # a pull request asking for `release` would be refused before any step.
@@ -397,8 +422,11 @@ jobs:
 
   # Secure Boot QEMU boots of the built images: diskless (network pull,
   # dm-verity /usr, tmpfs root), refusal of a tampered image or manifest,
-  # UEFI HTTP boot, Ignition applying a config, and diskless ->
-  # systemd-sysinstall -> disk; outside releases also A/B update and rollback.
+  # UEFI HTTP boot, Ignition applying a config, diskless ->
+  # systemd-sysinstall -> disk and the offline USB installer; outside
+  # releases also A/B update and rollback. The scenarios live in
+  # scripts/ci/boot-test.sh, in buckets balanced by duration that run in
+  # parallel, one runner each; boot-test-result is their one gate.
   boot-test:
     needs: [changes, build]
     # build needs kernel-cache, which is skipped outside release builds; a
@@ -406,7 +434,12 @@ jobs:
     # own result.
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 90
+    timeout-minutes: 60
+    strategy:
+      # Every bucket reports, so one failure does not hide another.
+      fail-fast: false
+      matrix:
+        scenario: [diskless, install, installer, installer-disks]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -423,172 +456,29 @@ jobs:
           name: image
           path: dist/diskless
 
+      # The next/broken sets and the Ignition signatures; installer-disks
+      # boots only dist/diskless.
       - name: Download update test image sets
-        if: needs.changes.outputs.release != 'true'
+        if: needs.changes.outputs.release != 'true' && matrix.scenario != 'installer-disks'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: image-update
           path: dist
 
-      # Ubuntu's OVMF (2025.11) rejects systemd-boot's PK enrollment with
-      # "Security violation", so the guests kept booting in setup mode with
-      # nothing verified. Use Fedora's edk2 build, pinned by checksum, which
-      # enrolls the keys; dogfood-diskless.sh now fails if Secure Boot is off.
-      # Bumped by hand: Renovate cannot move the URL and its checksum together
-      # (see ci-tooling.md).
       - name: Install QEMU and OVMF
+        run: bash scripts/ci/install-qemu-ovmf.sh
+
+      - name: Boot test (${{ matrix.scenario }})
         env:
-          OVMF_RPM_URL: https://kojipkgs.fedoraproject.org/packages/edk2/20260508/6.fc44/noarch/edk2-ovmf-20260508-6.fc44.noarch.rpm
-          OVMF_RPM_SHA256: 8b157ab2aa0cccccf021f43011308349147c76ae59550f52239ea50678dd0a5f
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 libarchive-tools \
-            fdisk dosfstools e2fsprogs mtools
-          sudo chmod 666 /dev/kvm
-          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/edk2-ovmf.rpm" "${OVMF_RPM_URL}"
-          echo "${OVMF_RPM_SHA256}  ${RUNNER_TEMP}/edk2-ovmf.rpm" | sha256sum -c -
-          mkdir -p "${RUNNER_TEMP}/ovmf"
-          bsdtar -xf "${RUNNER_TEMP}/edk2-ovmf.rpm" -C "${RUNNER_TEMP}/ovmf" \
-            ./usr/share/edk2/ovmf/OVMF_CODE.secboot.fd ./usr/share/edk2/ovmf/OVMF_VARS.fd \
-            ./usr/share/edk2/ovmf/OVMF_CODE.fd
-          {
-            echo "OVMF_CODE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd"
-            echo "OVMF_CODE_INSECURE=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_CODE.fd"
-            echo "OVMF_VARS=${RUNNER_TEMP}/ovmf/usr/share/edk2/ovmf/OVMF_VARS.fd"
-          } >> "$GITHUB_ENV"
-
-      - name: Diskless boot
-        env:
-          DOGFOOD_EXTRA_PROBE: tests/fixtures/nfs/netdb.probe
-          DOGFOOD_EXPECT: "PROBE netdb protocols=0 services=0 rpcinfo=0 nfs3-tcp=resolved "
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      - name: Refuse a tampered image
-        env:
-          DOGFOOD_TAMPER: raw
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      - name: Refuse an unsigned manifest
-        env:
-          DOGFOOD_TAMPER: sums
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      - name: Ignition config from a credential
-        env:
-          DOGFOOD_IGNITION: tests/fixtures/ignition/apply-marker.ign
-          DOGFOOD_EXTRA_PROBE: tests/fixtures/ignition/apply-marker.probe
-          DOGFOOD_EXPECT: "PROBE ignition marker=applied unit=active enabled=enabled ran=yes"
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      - name: UEFI HTTP boot with bluefin-node.ign
-        env:
-          DOGFOOD_BOOT: http
-          DOGFOOD_NODE_IGN: tests/fixtures/ignition/apply-marker.ign
-          DOGFOOD_EXTRA_PROBE: tests/fixtures/ignition/apply-marker.probe
-          DOGFOOD_EXPECT: "PROBE ignition marker=applied unit=active enabled=enabled ran=yes"
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      # The Ignition config gate (#327): only the Ignition config key
-      # vouches for bluefin-node.ign; a refusal fails the boot closed.
-      - name: UEFI HTTP boot with a bluefin-node.ign signed with the Ignition config key
-        if: needs.changes.outputs.release != 'true'
-        env:
-          DOGFOOD_BOOT: http
-          DOGFOOD_NODE_IGN: tests/fixtures/ignition/apply-marker.ign
-          DOGFOOD_NODE_IGN_SIG: dist/ignition-sigs/apply-marker.ign.config.gpg
-          DOGFOOD_EXTRA_PROBE: tests/fixtures/ignition/apply-marker.probe
-          DOGFOOD_EXPECT: "PROBE ignition marker=applied unit=active enabled=enabled ran=yes"
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      - name: Refuse a bluefin-node.ign signed with the image signing key
-        if: needs.changes.outputs.release != 'true'
-        env:
-          DOGFOOD_BOOT: http
-          DOGFOOD_NODE_IGN: tests/fixtures/ignition/apply-marker.ign
-          DOGFOOD_NODE_IGN_SIG: dist/ignition-sigs/apply-marker.ign.release.gpg
-          DOGFOOD_REFUSAL: "bluefin-node.ign.gpg does not verify against /usr/lib/bluefin/ignition-pubring.pgp"
-          DOGFOOD_EXPECT: "gpgv: Can't check signature: No public key"
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      - name: Refuse a bluefin-node.ign with a bad signature
-        if: needs.changes.outputs.release != 'true'
-        env:
-          DOGFOOD_BOOT: http
-          DOGFOOD_NODE_IGN: tests/fixtures/ignition/var-on-disk.ign
-          DOGFOOD_NODE_IGN_SIG: dist/ignition-sigs/apply-marker.ign.config.gpg
-          DOGFOOD_REFUSAL: "bluefin-node.ign.gpg does not verify against /usr/lib/bluefin/ignition-pubring.pgp"
-          DOGFOOD_EXPECT: "gpgv: BAD signature"
-        run: bash scripts/dogfood-diskless.sh dist/diskless --check
-
-      - name: Refuse an unsigned bluefin-node.ign without allow-unsigned
-        if: needs.changes.outputs.release != 'true'
-        env:
-          DOGFOOD_BOOT: http
-          DOGFOOD_NODE_IGN: tests/fixtures/ignition/apply-marker.ign
-          DOGFOOD_REFUSAL: "bluefin-node.ign is not signed .* bluefin.ignition.allow-unsigned is not set"
-        run: bash scripts/dogfood-diskless.sh dist/diskless-next --check
-
-      - name: Install to disk and boot it
-        if: needs.changes.outputs.release == 'true'
-        run: bash scripts/dogfood-install.sh dist/diskless
-
-      # Both kernel-module sysexts (ZFS and the NVIDIA driver, plus the
-      # toolkit) follow the update and the rollback together.
-      - name: Install, A/B update and boot-counted rollback
-        if: needs.changes.outputs.release != 'true'
-        env:
-          DOGFOOD_SYSEXT: zfs,nvidia
-        run: bash scripts/dogfood-install.sh dist/diskless dist/diskless-next dist/diskless-broken
-
-      - name: Install from the offline USB installer and boot it
-        if: needs.changes.outputs.release == 'true'
-        run: bash scripts/dogfood-installer.sh dist/diskless
-
-      # The out-of-the-box update contract of a stick install (#310): failed
-      # checks on the login banner, then sysupdate to the next set and boot it.
-      - name: Install from the offline USB installer, then update it
-        if: needs.changes.outputs.release != 'true'
-        run: bash scripts/dogfood-installer.sh dist/diskless dist/diskless-next
-
-      # Disks that are not empty (#359): a reinstall over the install above's
-      # layout, and another OS's GPT disk (ESP, ext4, swap). About a minute
-      # each; fdisk, dosfstools and e2fsprogs build the foreign disk.
-      - name: Install from the offline USB installer, boot it, reinstall over it
-        env:
-          DOGFOOD_TARGET: prior-install
-          DOGFOOD_STATE: dist/dogfood-installer-prior-install
-        run: bash scripts/dogfood-installer.sh dist/diskless
-
-      - name: Install from the offline USB installer over another OS's disk
-        env:
-          DOGFOOD_TARGET: foreign-gpt
-          DOGFOOD_STATE: dist/dogfood-installer-foreign-gpt
-        run: bash scripts/dogfood-installer.sh dist/diskless
-
-      # The supervised console path (#311), typed on the guest keyboard: the
-      # disk picked by number from a list with size and model, the
-      # "installed" screen, then the root password and a login at tty1, with
-      # the hostname and IP address on the login banner.
-      - name: Install from the USB installer at the console and log in
-        env:
-          DOGFOOD_INSTALL: console
-          DOGFOOD_STATE: dist/dogfood-installer-console
-        run: bash scripts/dogfood-installer.sh dist/diskless
-
-      # Without Secure Boot (#309) an unattended install is refused before any
-      # disk write, and installs only with bluefin.install-allow-insecure-boot.
-      - name: Refuse to install from the USB installer without Secure Boot
-        env:
-          DOGFOOD_SECURE_BOOT: "off"
-          DOGFOOD_STATE: dist/dogfood-installer-secure-boot-off
-        run: bash scripts/dogfood-installer.sh dist/diskless
+          RELEASE: ${{ needs.changes.outputs.release }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: bash scripts/ci/boot-test.sh "${SCENARIO}"
 
       - name: Upload boot logs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: boot-test-logs
+          name: boot-test-logs-${{ matrix.scenario }}
           path: |
             dist/*/dogfood-*.log
             dist/dogfood-install/*.log
@@ -596,6 +486,26 @@ jobs:
             dist/dogfood-installer-*/*.log
           if-no-files-found: ignore
           retention-days: 7
+
+  # The one result of every boot-test bucket, for `release`, the nightly
+  # report and branch protection. Skipped (which reports as passing) when
+  # nothing was built, like boot-test itself; once build succeeded, it fails
+  # unless every bucket passed.
+  boot-test-result:
+    needs: [build, boot-test]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check every boot-test bucket passed
+        env:
+          RESULT: ${{ needs.boot-test.result }}
+        run: |
+          if [ "${RESULT}" != success ]; then
+            echo "::error title=boot-test::boot-test result: ${RESULT}"
+            exit 1
+          fi
 
   # Pruning guard: every library, dlopen dependency and unit/udev program the
   # /usr image, initrd and sysexts reference must still ship. The step summary
@@ -655,8 +565,8 @@ jobs:
     # Explicit results, not !failure(): a failed kernel-cache (only a cache)
     # must not hold back a release, and nothing but a built, boot-tested and
     # image-checked set may publish.
-    if: ${{ !cancelled() && needs.changes.outputs.release == 'true' && needs.build.result == 'success' && needs.boot-test.result == 'success' && needs.image-check.result == 'success' }}
-    needs: [changes, build, boot-test, image-check]
+    if: ${{ !cancelled() && needs.changes.outputs.release == 'true' && needs.build.result == 'success' && needs.boot-test-result.result == 'success' && needs.image-check.result == 'success' }}
+    needs: [changes, build, boot-test-result, image-check]
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
@@ -812,7 +722,7 @@ jobs:
   # the scheduled main checkout); the job holds nothing but issues: write and
   # runs only .github/scripts/tracking-issue.sh, shared with the trackers.
   nightly-status:
-    needs: [changes, build, boot-test, image-check]
+    needs: [changes, build, boot-test-result, image-check]
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
