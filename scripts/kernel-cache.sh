@@ -7,7 +7,8 @@
 # "Build time and caches") and no upstream cache holds it: its cache key
 # depends on the module certificate it trusts (the
 # linux-module-cert junction override) and on the patches in
-# patches/freedesktop-sdk/ that edit its config (0006 kubenet, 0007 watchdog).
+# patches/freedesktop-sdk/ that edit its config (0006 kubenet, 0007 watchdog,
+# 0009 no-firmware drivers and zstd).
 # `seed` stages one committed certificate as
 # files/boot-keys/modules/linux-module-cert.crt, the only file the kernel's
 # linux-module-cert override imports:

@@ -3,15 +3,14 @@
 # modules through bluefin-sysext-modules, and succeed when at least one GPU
 # is driven by nvidia. ExecStart= of nvidia-load.service.
 #
-# nouveau ships in the base image, and udev binds it to every NVIDIA GPU at
-# boot, before systemd-sysext merges this extension: the sysext's
-# /usr/lib/modprobe.d blacklist only covers loads after the merge, and a
-# shared UKI cannot blacklist it on the command line for GPU nodes alone.
-# nvidia refuses a GPU another driver holds ("NVRM: GPU 0000:01:00.0 is
-# already bound to nouveau"), so nouveau goes first: `modprobe -r nouveau`
-# (a base-image module, so the base index resolves it; nothing has opened
-# /dev/dri this early) and, when the module is in use anyway, each GPU is
-# unbound from it through sysfs.
+# The base kernel does not build nouveau (patches/freedesktop-sdk/0009), so
+# normally no driver holds the GPUs. On a kernel that does build it, udev binds
+# nouveau to every NVIDIA GPU at boot, before systemd-sysext merges this
+# extension: the sysext's /usr/lib/modprobe.d blacklist only covers loads
+# after the merge. nvidia refuses a GPU another driver holds ("NVRM: GPU
+# 0000:01:00.0 is already bound to nouveau"), so nouveau goes first:
+# `modprobe -r nouveau` (nothing has opened /dev/dri this early) and, when the
+# module is in use anyway, each GPU is unbound from it through sysfs.
 #
 # The open modules drive Turing and newer GPUs only. On a mixed host nvidia
 # binds the GPUs it supports and leaves the others: the unit succeeds when

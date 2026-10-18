@@ -76,15 +76,17 @@ Before merging a bump:
   it; there is no gnome-build-meta junction to keep in step.
 - A point-release tag is immutable: once a GitHub Release for a given
   `image-version` is published, never republish different bits under it.
-- **Four patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
+- **Five patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
   CAS servers to `project.conf`; **`0006`
   carries the Cilium/Kubernetes kernel options** (VXLAN, GENEVE, tc BPF,
   conntrack/ss diagnostics) and `0007` the hardware watchdog core and drivers,
   appended below `0006` in the same `fdsdk-config.sh`; `0008` pins
   `elements/include/go-source.yml` to go1.27.2 and is dropped once FSDK itself
-  ships that Go or newer. A bumper must not drop `0006` or the kubeadm and
+  ships that Go or newer; `0009`, appended below `0007`, turns off the
+  firmware-bound Wi-Fi, Bluetooth and GPU drivers and compresses vmlinuz with
+  zstd. A bumper must not drop `0006` or the kubeadm and
   k0s sysexts lose their datapath. If a release changed a patched file,
-  refresh the patches in place, `0006` before `0007`; never delete `0006` because "it looks small". Why each patch exists and when it can be dropped is in
+  refresh the patches in place, `0006` before `0007` before `0009`; never delete `0006` because "it looks small". Why each patch exists and when it can be dropped is in
   [`patches/README.md`](../../patches/README.md).
 - Junction overrides are only meaningful for components your local elements
   reference directly. The 25 GNOME sdk/* overrides (cairo, gtk3, pango, glib,

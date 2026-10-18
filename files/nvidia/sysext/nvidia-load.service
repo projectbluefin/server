@@ -9,8 +9,8 @@ RemainAfterExit=yes
 # Skip (not fail) unless a PCI display controller (class 0x03) from NVIDIA
 # (vendor 0x10de) is present.
 ExecCondition=/usr/bin/sh -c 'for d in /sys/bus/pci/devices/*; do [ "$$(cat "$$d/vendor")" = 0x10de ] && case "$$(cat "$$d/class")" in 0x03*) exit 0 ;; esac; done; exit 1'
-# nouveau, from the base image, holds every NVIDIA GPU by the time the sysext
-# merges; the helper removes it (or unbinds the GPUs from it), then loads all
+# The helper evicts nouveau from the GPUs if a kernel that builds it bound
+# them (the base kernel does not), then loads all
 # four modules through the base image's bluefin-sysext-modules (the sysext
 # ships no module index), nvidia-uvm included, so nvidia-modprobe
 # (nvidia-device-nodes.service) finds them loaded and never runs a bare

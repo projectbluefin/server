@@ -116,6 +116,23 @@ def test_patch_applies_after_0006() -> None:
             "0007's hunk header is stale relative to 0006 and only applies\n"
             f"via offset tolerance.  stderr:\n{result.stderr}"
         )
+        # 0009 (no-firmware drivers, zstd vmlinuz) takes 0007's tail as its
+        # context, so it stacks the same way.
+        subprocess.run(["git", "apply", str(patch7)], cwd=tree, check=True)
+        patch9 = ROOT / "patches" / "freedesktop-sdk" / (
+            "0009-linux-server-no-firmware-hw.patch"
+        )
+        result = subprocess.run(
+            ["git", "apply", "--check", "-v", str(patch9)],
+            cwd=tree, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, (
+            f"0009 does not apply on top of 0007.  stderr:\n{result.stderr}"
+        )
+        assert "offset" not in result.stderr, (
+            "0009's hunk header is stale relative to 0007 and only applies\n"
+            f"via offset tolerance.  stderr:\n{result.stderr}"
+        )
 
 
 @pytest.mark.parametrize(

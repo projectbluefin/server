@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bluefin Server maintainers <noreply@projectbluefin.io>
+Date: Sat, 17 Oct 2026 00:00:00 +0000
+Subject: [PATCH] linux: drop firmware-bound Wi-Fi, Bluetooth and GPU drivers;
+ zstd vmlinuz
+
+Bluefin Server ships no /usr/lib/firmware. Wi-Fi (cfg80211, mac80211 and
+every WLAN driver), Bluetooth, and the amdgpu, radeon, nouveau and xe GPU
+drivers need firmware for all or nearly all of the hardware they drive,
+so turn them off. On 26.10.1215 they were ~24 MB of modules in /usr plus
+cfg80211, mac80211 and the Bluetooth core built into vmlinux. Consoles
+keep simpledrm, i915, virtio-gpu, hyperv_drm, vmwgfx and vboxvideo.
+
+FSDK's `module`/`enable` lines put every option they set in
+expected-configs, and linux.bst fails the build on any that olddefconfig
+leaves unset. The block therefore records which expected options are set
+before it runs, applies the `remove`s, runs olddefconfig, and takes out
+of expected-configs exactly the options that went from set to unset (the
+build log lists them). Everything else is still checked. Besides the
+drivers and their sub-options this drops CEC_CORE/MEDIA_CEC_RC: CEC_CORE
+has no prompt and was only selected through CEC_NOTIFIER by amdgpu's
+display code.
+
+Switch the vmlinuz compression from gzip to zstd (KERNEL_ZSTD; linux.bst
+already build-depends on zstd): ~3 MB smaller in every UKI.
+
+Appended after 0007, whose last three lines are the hunk's context.
+
+---
+ files/linux/fdsdk-config.sh | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/files/linux/fdsdk-config.sh b/files/linux/fdsdk-config.sh
+--- a/files/linux/fdsdk-config.sh
++++ b/files/linux/fdsdk-config.sh
+@@ -2840,3 +2840,28 @@ case "$arch" in
+         module W83627HF_WDT     # W83627HF + NCT6775/6776/6779/6791/6792 Super-I/O watchdog.
+         ;;
+ esac
++
++# Bluefin Server ships no /usr/lib/firmware. Wi-Fi (cfg80211, mac80211 and
++# every WLAN driver), Bluetooth, and the AMD, Radeon, Nouveau and Xe GPU
++# drivers need firmware for all or nearly all of the hardware they drive, so
++# they are not built. FSDK's lines above put them and their sub-options in
++# expected-configs: drop from that check exactly the options this block turns
++# off (listed in the build log), so it still catches everything else.
++make -s olddefconfig
++was_set="$(for c in $(sort -u expected-configs); do if has "${c}"; then echo "${c}"; fi; done)"
++remove WLAN
++remove CFG80211
++remove MAC80211
++remove BT
++remove DRM_AMDGPU
++remove DRM_RADEON
++remove DRM_NOUVEAU
++remove DRM_XE
++# A zstd-compressed vmlinuz makes every UKI smaller than gzip does.
++remove KERNEL_GZIP
++enable KERNEL_ZSTD
++make -s olddefconfig
++for c in ${was_set}; do if ! has "${c}"; then echo "${c}"; fi; done >no-firmware-configs
++sed 's/^/Off with the firmware-bound drivers: /' no-firmware-configs
++{ grep -vxF -f no-firmware-configs expected-configs || true; } >expected-configs.new
++mv expected-configs.new expected-configs
+-- 
+2.43.0

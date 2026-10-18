@@ -183,20 +183,20 @@ toolkit's drop-in skips `nvidia-cdi-refresh.service` on the same PCI check.
 
 ### nouveau and mixed-generation hosts
 
-nouveau ships in the base image (not in the initrd), and udev binds it to
-every NVIDIA GPU before systemd-sysext merges the driver sysext. The
+The base kernel no longer builds nouveau (`patches/freedesktop-sdk/0009`
+turns off the GPU drivers that need firmware the image never ships), so no
+driver holds an NVIDIA GPU when the sysext merges. The eviction below stays
+as a guard for a kernel that does build it: there udev binds nouveau to
+every NVIDIA GPU before systemd-sysext merges the driver sysext, the
 sysext's `/usr/lib/modprobe.d/nvidia.conf` (`blacklist nouveau`, `options
-nouveau modeset=0`) only covers loads after the merge, and the UKI is shared
-by every node, so its command line cannot blacklist nouveau for GPU nodes
-alone. nvidia refuses a GPU another driver holds (`NVRM: GPU 0000:01:00.0
-is already bound to nouveau`, then `could not insert 'nvidia': No such
-device`), and while nouveau holds the card a container's `ffmpeg` picks up
-its userspace (`nouveau_drv_video.so`).
+nouveau modeset=0`) only covers loads after the merge, and nvidia refuses a
+GPU another driver holds (`NVRM: GPU 0000:01:00.0 is already bound to
+nouveau`, then `could not insert 'nvidia': No such device`).
 
 `nvidia-load.service` runs `/usr/libexec/nvidia-load`
 (`files/nvidia/sysext/nvidia-load`), which: lists the NVIDIA display
-controllers and, when nouveau holds any, runs `modprobe -r nouveau` (a
-base-image module; nothing has opened `/dev/dri` this early), writing each
+controllers and, when nouveau holds any, runs `modprobe -r nouveau`
+(nothing has opened `/dev/dri` this early), writing each
 held address to `/sys/bus/pci/drivers/nouveau/unbind` when the module is in
 use; loads `nvidia nvidia-uvm nvidia-modeset nvidia-drm` through
 `bluefin-sysext-modules`; succeeds when `/proc/driver/nvidia/gpus/` lists at

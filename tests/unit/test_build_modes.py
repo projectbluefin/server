@@ -70,6 +70,8 @@ ELEMENT = ("elements/bluefin-server/nfs-utils.bst",)
          ("true", "false", "true")),
         ({"event": "pull_request", "action": "opened", "changed": ("patches/freedesktop-sdk/0007-x.patch",)},
          ("true", "false", "true")),
+        ({"event": "pull_request", "action": "opened", "changed": ("patches/freedesktop-sdk/0009-x.patch",)},
+         ("true", "false", "true")),
         ({"event": "pull_request", "action": "opened", "changed": ("docs/skills/index.md",),
           "labels": ("full-build",)}, ("false", "false", "true")),
         ({"event": "pull_request", "action": "labeled", "label": "hold", "changed": ELEMENT,

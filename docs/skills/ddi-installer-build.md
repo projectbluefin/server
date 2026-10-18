@@ -290,7 +290,11 @@ the check). CI runs it as the `image-check` job against the latest release.
 
 Only prune what the check can prove unused, or what nothing outside an
 interactive shell runs. Kernel modules, hwdb, keymaps and tools users run
-directly are product decisions, not prune-list entries. The check cannot see
+directly are product decisions, not prune-list entries. Decided so far: the
+drivers whose hardware needs firmware the image never ships (Wi-Fi,
+Bluetooth, AMD/Radeon/Nouveau/Xe GPUs) are off in the kernel config
+(`patches/freedesktop-sdk/0009`); i915, simpledrm and the virtual GPUs stay;
+sound, media and IIO are untouched pending a product call. The check cannot see
 programs a binary execs itself: `systemd-pull` (behind `systemd-sysupdate`)
 runs `gpg`, which starts `gpg-agent` and `keyboxd`, so those stay with `gpgv`.
 
