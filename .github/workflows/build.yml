@@ -800,8 +800,8 @@ jobs:
         if: steps.taggable.outputs.publish == 'true'
         uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
         with:
-          url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
-          checksum: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
+          url: https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz
+          checksum: f48a73ea6d026a862c3919fc773da9a8c86fc259c2c737d5baed3b8b9614ad22
 
       - name: Push OCI artifact
         if: steps.taggable.outputs.publish == 'true'
@@ -891,8 +891,8 @@ jobs:
       - name: Set up oras
         uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
         with:
-          url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
-          checksum: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
+          url: https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz
+          checksum: f48a73ea6d026a862c3919fc773da9a8c86fc259c2c737d5baed3b8b9614ad22
 
       - name: Push the OCI artifact to a local registry and pull it back
         run: bash scripts/publish-release.sh oci dist/diskless "${VERSION}" localhost:5000/bluefin-server --plain-http --pull-back
