@@ -76,13 +76,11 @@ Before merging a bump:
   it; there is no gnome-build-meta junction to keep in step.
 - A point-release tag is immutable: once a GitHub Release for a given
   `image-version` is published, never republish different bits under it.
-- **Five patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
+- **Four patches live under `patches/freedesktop-sdk/`.** `0001` adds the GNOME
   CAS servers to `project.conf`; **`0006`
   carries the Cilium/Kubernetes kernel options** (VXLAN, GENEVE, tc BPF,
   conntrack/ss diagnostics) and `0007` the hardware watchdog core and drivers,
-  appended below `0006` in the same `fdsdk-config.sh`; `0008` pins
-  `elements/include/go-source.yml` to go1.27.2 and is dropped once FSDK itself
-  ships that Go or newer; `0009`, appended below `0007`, turns off the
+  appended below `0006` in the same `fdsdk-config.sh`; `0009`, appended below `0007`, turns off the
   firmware-bound Wi-Fi, Bluetooth and GPU drivers and compresses the x86_64 vmlinuz with
   zstd. A bumper must not drop `0006` or the kubeadm and
   k0s sysexts lose their datapath. If a release changed a patched file,
