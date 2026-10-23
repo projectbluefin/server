@@ -42,7 +42,13 @@ case \${args} in
     [ "\${c}" -ge "\${WAIT_FAILS:-0}" ]; exit \$? ;;
 *" get secret "*"jsonpath={.data.password}"*) printf %s "\${LOGIN_PASSWORD:-}" | base64; exit 0 ;;
 *" get secret "*) exit \${SECRET_RC:-1} ;;
-*" create secret "*) printf 'kind: Secret\n' ; exit 0 ;;
+*" create secret "*)
+    # Every value arrives in a file; log it as "secret-data <name> <key>=<value>".
+    name=\$(sed -n 's/.* generic \([^ ]*\).*/\\1/p' <<<"\${args}")
+    for a in "\$@"; do
+        case \${a} in --from-file=*=*) a=\${a#--from-file=}; echo "secret-data \${name} \${a%%=*}=\$(cat "\${a#*=}")" >>"${LOG}" ;; esac
+    done
+    printf 'kind: Secret\n' ; exit 0 ;;
 *" get -f "*)
     f=\$(sed -n 's/.* -f \([^ ]*\) .*/\1/p' <<<"\${args}")
     if grep -q '^kind: Deployment' "\${f}"; then echo "Deployment demo web"; fi
@@ -222,14 +228,22 @@ EOF
     grep -q -- '--time-zone=UTC"' "${APPLIED}"/*-10-kured.yaml
 }
 
-@test "Grafana's admin Secret is generated once, never rotated, never logged" {
+@test "Grafana's admin Secret is generated once, never rotated, never logged, never on a command line" {
     kubeadm_node
     run_applier HOMELAB_KUBE_PROMETHEUS_STACK=yes
     line=$(grep 'create secret generic grafana-admin' "${LOG}")
-    [[ "${line}" == *"--from-literal=admin-user=admin"* ]]
-    [[ "${line}" =~ --from-literal=admin-password=[0-9a-f]{48} ]]
-    password=$(sed 's/.*admin-password=\([0-9a-f]*\).*/\1/' <<<"${line}")
+    # The values reach kubectl through files in the private work directory,
+    # never as arguments (readable by every user through /proc).
+    [[ "${line}" != *"--from-literal"* ]]
+    [[ "${line}" =~ \ --from-file=admin-user=(/[^ ]+)/secret/admin-user\  ]]
+    work=${BASH_REMATCH[1]}
+    [[ "${line}" == *" --from-file=admin-password=${work}/secret/admin-password "* ]]
+    grep -qx 'secret-data grafana-admin admin-user=admin' "${LOG}"
+    password=$(sed -n 's/^secret-data grafana-admin admin-password=//p' "${LOG}")
+    [[ "${password}" =~ ^[0-9a-f]{48}$ ]]
     [[ "$output" != *"${password}"* ]]
+    # The work directory and the files are gone with the run.
+    [ ! -e "${work}" ]
     : >"${LOG}"
     run_applier SECRET_RC=0 HOMELAB_KUBE_PROMETHEUS_STACK=yes
     ! grep -q 'create secret generic grafana-admin' "${LOG}"
@@ -329,7 +343,8 @@ with_addons() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"argo-workflows: disabled (HOMELAB_ARGO_WORKFLOWS)"* ]]
     [[ "$(applied_components)" == *"mcp kubestellar-console kubestellar-full" ]]
-    grep -q 'create secret generic postgres-postgresql --from-literal=postgres-password=' "${LOG}"
+    grep -q 'create secret generic postgres-postgresql --from-file=postgres-password=' "${LOG}"
+    [[ "$(sed -n 's/^secret-data postgres-postgresql postgres-password=//p' "${LOG}")" =~ ^[0-9a-f]{48}$ ]]
 }
 
 @test "add-ons behind the https listener warn without cert-manager" {
@@ -385,15 +400,20 @@ console_issue() {
     ! grep -q 'HOMELAB_' "${console}"
     grep -q '"kubestellar.home.arpa"' "${APPLIED}"/*-11-login-gate.yaml
     ! grep -q 'create secret generic kubestellar-console-github-oauth' "${LOG}"
-    [[ "$(grep 'create secret generic kubestellar-console-bootstrap' "${LOG}")" =~ --from-literal=bootstrap-token=[0-9a-f]{48} ]]
+    ! grep -q -- '--from-literal' "${LOG}"
+    [[ "$(sed -n 's/^secret-data kubestellar-console-bootstrap bootstrap-token=//p' "${LOG}")" =~ ^[0-9a-f]{48}$ ]]
     line=$(grep 'create secret generic kubestellar-console-login' "${LOG}")
-    [[ "${line}" =~ --from-literal=\.htpasswd=admin:\{SHA\}([A-Za-z0-9+/]{27}=)\ --from-literal=password=([0-9a-f]{32})\  ]]
-    hash=${BASH_REMATCH[1]} password=${BASH_REMATCH[2]}
+    [[ "${line}" == *" --from-file=.htpasswd="*"/secret/.htpasswd --from-file=password="*"/secret/password "* ]]
+    [[ "$(sed -n 's/^secret-data kubestellar-console-login \.htpasswd=//p' "${LOG}")" =~ ^admin:\{SHA\}([A-Za-z0-9+/]{27}=)$ ]]
+    hash=${BASH_REMATCH[1]}
+    password=$(sed -n 's/^secret-data kubestellar-console-login password=//p' "${LOG}")
+    [[ "${password}" =~ ^[0-9a-f]{32}$ ]]
     # Envoy's {SHA}: base64 of the binary SHA-1 of the password.
     [ "$(printf %s "${hash}" | base64 -d | od -An -tx1 | tr -d ' \n')" = "$(printf %s "${password}" | sha1sum | sed 's/ .*//')" ]
     [[ "$output" != *"${password}"* ]] && [[ "$output" != *"${hash}"* ]]
     for secret in jwt-secret bootstrap-token; do
-        value=$(grep -o -- "--from-literal=${secret}=[0-9a-f]*" "${LOG}" | cut -d= -f3)
+        value=$(sed -n "s/^secret-data [^ ]* ${secret}=//p" "${LOG}")
+        [[ "${value}" =~ ^[0-9a-f]{48}$ ]]
         [[ "$output" != *"${value}"* ]]
     done
     # The login on the local consoles (like the join passphrase), not the journal.

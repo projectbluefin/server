@@ -59,17 +59,10 @@ ver="${esp##*/bluefin-server-netboot_}"; ver="${ver%.esp.raw}"
 image="bluefin-server_${ver}.raw"
 [ -f "${dir}/${image}" ] || { echo "ERROR: ${dir}/${image} missing" >&2; exit 1; }
 
-first_existing() { for f in "$@"; do [ -f "$f" ] && { echo "$f"; return 0; }; done; return 1; }
-code="${OVMF_CODE:-$(first_existing \
-    /usr/share/edk2/ovmf/OVMF_CODE.secboot.fd \
-    /usr/share/OVMF/OVMF_CODE_4M.secboot.fd \
-    /usr/share/OVMF/OVMF_CODE.secboot.fd \
-    /usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd)}" || { echo "ERROR: no Secure Boot OVMF_CODE found (set OVMF_CODE)" >&2; exit 1; }
-vars_tmpl="${OVMF_VARS:-$(first_existing \
-    /usr/share/edk2/ovmf/OVMF_VARS.fd \
-    /usr/share/OVMF/OVMF_VARS_4M.fd \
-    /usr/share/OVMF/OVMF_VARS.fd \
-    /usr/share/edk2/x64/OVMF_VARS.4m.fd)}" || { echo "ERROR: no blank OVMF_VARS found (set OVMF_VARS)" >&2; exit 1; }
+# shellcheck source=scripts/dogfood-firmware.sh
+. "$(dirname "${BASH_SOURCE[0]}")/dogfood-firmware.sh"
+code="$(ovmf_code)" || exit 1
+vars_tmpl="$(ovmf_vars)" || exit 1
 
 work="$(mktemp -d /tmp/bluefin-dogfood.XXXXXX)"
 probe_log="${DOGFOOD_PROBE_LOG:-${work}/probe.log}"

@@ -19,5 +19,5 @@
 # requests never edit adjacent lines and merge in any order.
 variables:
   # nvidia-open-595: production branch 595
-  nvidia-open-595-version: "595.104.02"
-  nvidia-open-595-sha256: "e421c202e4c79f58c3c7f3161bbe71454ebb3d88936f88205a0e327cd04c59ca"
+  nvidia-open-595-version: "595.112.07"
+  nvidia-open-595-sha256: "1a38ecd538a2da6232a7330184063af59e9fc946c908cca555bd07909848b9f0"

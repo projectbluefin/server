@@ -276,14 +276,20 @@ missing_files() {
 # Creates the Secrets a component's "secrets" list declares: @random and
 # @htpasswd values once (never rotated), operator files on every run; a line
 # with an @optfile whose file is missing is left out. Generated values are
-# never logged.
+# never logged, and never put on a command line either: every literal goes
+# through a file under the private work directory (a process's arguments
+# are readable by every user of the node through /proc), so the Secret is
+# built from --from-file alone.
 apply_secrets() {
-	local list=$1/secrets ns name kvs kv key value from_file password
+	local list=$1/secrets ns name kvs kv key value from_file password dir
 	local -a args
 	[ -f "${list}" ] || return 0
 	while read -r ns name kvs; do
 		case ${ns} in '' | \#*) continue ;; esac
 		args=() from_file=
+		dir=${WORK}/secret
+		rm -rf "${dir}"
+		mkdir -m 0700 "${dir}" || return 1
 		for kv in ${kvs}; do
 			key=${kv%%=*} value=${kv#*=}
 			case ${value} in
@@ -292,25 +298,34 @@ apply_secrets() {
 				[ -r "${ROOT}${value#@optfile:}" ] || continue 2
 				from_file=1 args+=("--from-file=${key}=${ROOT}${value#@optfile:}")
 				;;
-			@random) args+=("--from-literal=${key}=$(random_hex 24)") ;;
+			@random) literal "${dir}" "${key}" "$(random_hex 24)" || return 1 ;;
 			# A login for the Gateway's basicAuth: <user>:{SHA}<digest> in
 			# this key, the password itself in "password".
 			@htpasswd:*)
 				password=$(random_hex 16)
-				args+=("--from-literal=${key}=${value#@htpasswd:}:{SHA}$(sha1_base64 "${password}")"
-					"--from-literal=password=${password}")
+				literal "${dir}" "${key}" "${value#@htpasswd:}:{SHA}$(sha1_base64 "${password}")" || return 1
+				literal "${dir}" password "${password}" || return 1
 				;;
-			*) args+=("--from-literal=${key}=${value}") ;;
+			*) literal "${dir}" "${key}" "${value}" || return 1 ;;
 			esac
 		done
 		if [ -z "${from_file}" ] && k -n "${ns}" get secret "${name}" >/dev/null 2>&1; then
+			rm -rf "${dir}"
 			continue
 		fi
 		k -n "${ns}" create secret generic "${name}" "${args[@]}" --dry-run=client -o yaml |
 			k apply --server-side --force-conflicts --field-manager="${FIELD_MANAGER}" -f - >/dev/null ||
 			return 1
+		rm -rf "${dir}"
 		notice "${COMPONENT}: Secret ${ns}/${name} applied"
 	done <"${list}"
+}
+
+# Stores the literal value $3 of key $2 as the file $1/$2 (owner-only, no
+# trailing newline, printf being a builtin) and adds it to args.
+literal() {
+	(umask 077 && printf %s "$3" >"$1/$2") || return 1
+	args+=("--from-file=$2=$1/$2")
 }
 
 # Applies one manifest file and waits for what it creates. Returns 1 on

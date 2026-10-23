@@ -68,7 +68,7 @@ def test_the_repository_passes_with_every_host_tool(tmp_path: Path) -> None:
     out = preflight(runner(tmp_path))
     assert out.returncode == 0, out.stdout + out.stderr
     scanned = out.stdout.splitlines()[0].removeprefix("Scanned: ").split()
-    assert sorted(scanned) == ["dogfood-diskless.sh", "dogfood-install.sh", "dogfood-installer.sh"]
+    assert sorted(scanned) == ["dogfood-diskless.sh", "dogfood-firmware.sh", "dogfood-install.sh", "dogfood-installer.sh"]
 
 
 @pytest.mark.parametrize("tool", ["mcopy", "qemu-system-x86_64", "mkfs.vfat", "sfdisk"])
