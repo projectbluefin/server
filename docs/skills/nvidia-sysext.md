@@ -4,7 +4,7 @@ description: Build and ship the NVIDIA driver (open kernel modules) and NVIDIA C
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-10-01"
+  last_updated: "2026-10-23"
 ---
 # NVIDIA sysexts
 
@@ -65,14 +65,16 @@ Both are opt-in: nothing in the base image ships or enables them.
 
 ## Flavours
 
-`include/nvidia.yml` is the only list of flavours. Each flavour is a comment
-line and two atoms, so per-flavour pull requests never edit adjacent lines:
+[`include/nvidia.yml`](../../include/nvidia.yml) is the only list of flavours
+and their current versions and checksums. Each flavour is a comment line and
+two atoms, so per-flavour pull requests never edit adjacent lines. This example
+shows the structure with placeholders for the values that change on each bump:
 
 ```yaml
 variables:
   # nvidia-open-595: production branch 595
-  nvidia-open-595-version: "595.104.02"
-  nvidia-open-595-sha256: "e421c202e4c79f58c3c7f3161bbe71454ebb3d88936f88205a0e327cd04c59ca"
+  nvidia-open-595-version: "<version>"
+  nvidia-open-595-sha256: "<sha256>"
 ```
 
 The version is NVIDIA's directory under
