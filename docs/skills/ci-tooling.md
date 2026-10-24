@@ -290,15 +290,11 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
    against the shipped keyring). Other pull requests run `validate`. Every
    job that builds keeps the podman and BuildStream caches on the runner's
    `/mnt` SSD (`scripts/ci-runner-disk.sh`).
-4. **Boot test:** Downloads the exported image sets and runs, in QEMU with
-   Secure Boot OVMF, each as one `scripts/dogfood-diskless.sh --check` or
-   `scripts/dogfood-install.sh` or `scripts/dogfood-installer.sh` call, from
-   the buckets of `scripts/ci/boot-test.sh` (`--list` prints them); a bucket
-   stops at its first failure. The firmware is Fedora's `edk2-ovmf` (Koji
-   URL + SHA-256 in `scripts/ci/install-qemu-ovmf.sh`): Ubuntu 26.04's OVMF
-   2025.11 rejects systemd-boot's PK enrollment (`Security violation`) and
-   boots on with Secure Boot off (see [ddi-installer-build.md](ddi-installer-build.md)).
-   Bump the pin by hand: Renovate could move the URL but not its SHA-256.
+4. **Boot test:** Runs the exported sets in Secure Boot QEMU via
+   `scripts/ci/boot-test.sh` (`--list` prints the scenarios); each bucket stops at its first failure.
+   Fedora's `edk2-ovmf` is pinned by Koji URL + SHA-256 in `scripts/ci/install-qemu-ovmf.sh`:
+   Ubuntu 26.04's OVMF 2025.11 rejects PK enrollment and boots with Secure Boot off
+   ([details](ddi-installer-build.md)). Bump by hand: Renovate cannot update the SHA-256.
    - diskless netboot, no failed units; `tests/fixtures/nfs/netdb.probe`
      must resolve `tcp` and `sunrpc`, reach the local portmapper (`rpcinfo`)
      and get an NFSv3 mount past the protocol lookup (`DOGFOOD_EXPECT`);
@@ -320,16 +316,20 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
      versions: [ddi-installer-build.md](ddi-installer-build.md)). Releases
      skip it: their extra sets would be release-signed versions nobody
      publishes.
-   - `scripts/dogfood-installer.sh`: the offline USB installer installs
-     unattended onto a blank disk, which then boots with and without the
-     installer attached. Outside releases it then gets `1.<run>.1` the way
-     a PC installed from the stick does: an unreachable and a foreign-signed
-     source must fail `systemd-sysupdate.service` and show on the login
-     banner, the update must stage, boot and be blessed (see "Update health
-     on the node" in
-     [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)).
-     Two more runs install over a Bluefin install and over another OS's GPT
-     disk (`DOGFOOD_TARGET=prior-install`, `foreign-gpt`; #359).
+   - `scripts/dogfood-installer.sh`: offline unattended install onto a blank disk, then boot
+     with and without the stick. Outside releases, update to `1.<run>.1`: unreachable and
+     foreign-signed sources must fail `systemd-sysupdate.service` and appear on the login banner;
+     the update must stage, boot and be blessed (see "Update health on the node" in
+     [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)). Two more runs install
+     over Bluefin and another OS's GPT disk (`DOGFOOD_TARGET=prior-install`, `foreign-gpt`; #359).
+   - The `installer` bucket always runs the attended install with `DOGFOOD_CONSOLE_NOISE=1`,
+     then `DOGFOOD_CONSOLE_FAILURE=kernel` in separate disposable state (#454). The harness checks
+     fresh foreground state, keyboard input, journal-only noise and disk boot/login on success;
+     failure must retain the error and journal, without success handling, reboot/halt or partitions.
+     Synthetic noise does not establish physical Bluetooth coverage (#453). On success or failure,
+     `boot-test-logs-installer` retains serial journals, screen snapshots and console proof, plus
+     `installer-artifact-identity.txt`: the source commit and pre-boot SHA-256 of the installer,
+     manifest and signature. Partial logs survive regressions; disks and credentials stay excluded.
 5. **Version Derivation:** The release version is set per build with
    `just set-version`: `YY.MM.<run>` for releases, `0.<run>` for every other
    build so it can never sort above a release.

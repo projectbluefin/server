@@ -99,7 +99,8 @@ bucket_install() {
 
 # The offline USB installer onto a blank disk: outside releases also the
 # out-of-the-box update contract of a stick install (#310); the supervised
-# console path (#311); and the refusal without Secure Boot (#309).
+# console path under concurrent noise, including a real prewrite failure
+# (#454); and the refusal without Secure Boot (#309).
 bucket_installer() {
     if [ "${release}" = true ]; then
         scenario "Install from the offline USB installer and boot it" \
@@ -108,8 +109,12 @@ bucket_installer() {
         scenario "Install from the offline USB installer, then update it" \
             -- scripts/dogfood-installer.sh dist/diskless dist/diskless-next
     fi
-    scenario "Install from the USB installer at the console and log in" \
-        DOGFOOD_INSTALL=console DOGFOOD_STATE=dist/dogfood-installer-console \
+    scenario "Install from the USB installer at the console under noise and log in" \
+        DOGFOOD_INSTALL=console DOGFOOD_CONSOLE_NOISE=1 DOGFOOD_STATE=dist/dogfood-installer-console \
+        -- scripts/dogfood-installer.sh dist/diskless
+    scenario "Keep a failed USB console install visible under noise" \
+        DOGFOOD_INSTALL=console DOGFOOD_CONSOLE_NOISE=1 DOGFOOD_CONSOLE_FAILURE=kernel \
+        DOGFOOD_STATE=dist/dogfood-installer-console-failure \
         -- scripts/dogfood-installer.sh dist/diskless
     scenario "Refuse to install from the USB installer without Secure Boot" \
         DOGFOOD_SECURE_BOOT=off DOGFOOD_STATE=dist/dogfood-installer-secure-boot-off \

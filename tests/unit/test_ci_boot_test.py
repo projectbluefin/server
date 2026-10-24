@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shlex
@@ -85,7 +86,70 @@ def test_each_scenario_runs_once_and_its_fixtures_exist(release: bool) -> None:
                 for path in re.findall(r"\btests/fixtures/\S+", word):
                     assert (ROOT / path).is_file(), f"{name}: {path}"
     assert len(names) == len(set(names))
-    assert len(names) == (11 if release else 15)
+    assert len(names) == (12 if release else 16)
+
+
+@pytest.mark.parametrize("release", [False, True], ids=["pull-request", "release"])
+def test_console_noise_and_real_failure_use_the_matching_installer(release: bool) -> None:
+    console = [words for _, words in scenarios("installer", release) if "DOGFOOD_INSTALL=console" in words]
+    assert len(console) == 2
+    states = []
+    for words in console:
+        env = dict(word.split("=", 1) for word in words[:words.index("bash")])
+        assert env["DOGFOOD_CONSOLE_NOISE"] == "1"
+        assert words[words.index("bash"):] == ["bash", "scripts/dogfood-installer.sh", "dist/diskless"]
+        states.append(env["DOGFOOD_STATE"])
+    assert "DOGFOOD_CONSOLE_FAILURE=kernel" not in console[0]
+    assert "DOGFOOD_CONSOLE_FAILURE=kernel" in console[1]
+    assert states == ["dist/dogfood-installer-console", "dist/dogfood-installer-console-failure"]
+
+
+def test_console_evidence_is_retained_on_success_and_failure(tmp_path: Path) -> None:
+    upload = next(s for s in JOB["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+    assert upload["if"] == "${{ always() && (matrix.scenario == 'installer' || failure()) }}"
+    assert upload["with"]["name"] == "boot-test-logs-${{ matrix.scenario }}"
+    evidence = {"dist/installer-artifact-identity.txt"}
+    for state in ("dist/dogfood-installer-console", "dist/dogfood-installer-console-failure"):
+        evidence.update(f"{state}/2-install.{suffix}" for suffix in (
+            "console-proof.log", "screen.log", "ttyS1.log", "ttyS2.log",
+        ))
+    evidence.add("dist/dogfood-installer-console-failure/2-install.failure.screen.txt")
+    evidence.add("dist/dogfood-installer-console/3-disk.login-screen.log")
+    private = {f"dist/dogfood-installer-console-failure/{name}" for name in (
+        "target.raw", "decoy.raw", "OVMF_VARS.fd", "password", "screen.sh",
+    )}
+    for path in evidence | private:
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+    matched = {str(p.relative_to(tmp_path)) for pattern in upload["with"]["path"].splitlines()
+               for p in tmp_path.glob(pattern)}
+    assert evidence <= matched
+    assert not private & matched
+
+
+def test_installer_identity_records_the_commit_and_actual_artifact_bytes(tmp_path: Path) -> None:
+    steps = JOB["steps"]
+    identity = next(s for s in steps if s.get("name") == "Record installer artifact identity")
+    boot = next(s for s in steps if "scripts/ci/boot-test.sh" in s.get("run", ""))
+    assert identity["if"] == "matrix.scenario == 'installer'"
+    assert steps.index(identity) < steps.index(boot)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.org",
+                    "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "fixture"],
+                   cwd=tmp_path, check=True)
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True).strip()
+    artifacts = tmp_path / "dist/diskless"
+    artifacts.mkdir(parents=True)
+    files = ["bluefin-server-installer_0.1.raw", "SHA256SUMS", "SHA256SUMS.gpg"]
+    for name in files:
+        (artifacts / name).write_text(name)
+    out = subprocess.run([BASH, "-e", "-o", "pipefail", "-c", identity["run"]],
+                         cwd=tmp_path, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert (tmp_path / "dist/installer-artifact-identity.txt").read_text().splitlines() == [commit, *(
+        f"{hashlib.sha256(name.encode()).hexdigest()}  dist/diskless/{name}" for name in files
+    )]
 
 
 def test_update_sets_are_read_only_where_they_are_downloaded() -> None:
