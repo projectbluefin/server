@@ -602,6 +602,15 @@ jobs:
       - name: Install QEMU and OVMF
         run: bash scripts/ci/install-qemu-ovmf.sh
 
+      - name: Record installer artifact identity
+        if: matrix.scenario == 'installer'
+        run: |
+          {
+            git rev-parse HEAD
+            sha256sum dist/diskless/bluefin-server-installer_*.raw \
+              dist/diskless/SHA256SUMS dist/diskless/SHA256SUMS.gpg
+          } > dist/installer-artifact-identity.txt
+
       - name: Boot test (${{ matrix.scenario }})
         env:
           RELEASE: ${{ needs.changes.outputs.release }}
@@ -609,7 +618,8 @@ jobs:
         run: bash scripts/ci/boot-test.sh "${SCENARIO}"
 
       - name: Upload boot logs
-        if: failure()
+        # Keep successful console proof too, and partial evidence on failure.
+        if: ${{ always() && (matrix.scenario == 'installer' || failure()) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: boot-test-logs-${{ matrix.scenario }}
@@ -618,6 +628,8 @@ jobs:
             dist/dogfood-install/*.log
             dist/dogfood-installer/*.log
             dist/dogfood-installer-*/*.log
+            dist/dogfood-installer-console-failure/*.failure.screen.txt
+            dist/installer-artifact-identity.txt
           if-no-files-found: ignore
           retention-days: 7
 
