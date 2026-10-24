@@ -4,7 +4,7 @@ description: Add or document system containers that should behave like first-cla
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-10-22"
+  last_updated: "2026-10-24"
   context7-sources:
     - /systemd/systemd
 ---
@@ -13,86 +13,35 @@ metadata:
 Use this skill when adding or documenting system containers that should behave
 like first-class systemd machines rather than podman/OCI workloads.
 
-A system container is a plain rootfs image imported with
-`machinectl import-tar`. It is managed with `machinectl` and the thin
-`/usr/bin/system-container` helper shipped in the OS image (backed by
-`machinectl start`/`poweroff`/`shell`/`remove`).
+A system container runs another Linux userspace with the host's kernel. It is
+not a VM, an OCI workload, or a layer merged into the host's `/usr`.
 
-The host experience should be a transparent machine experience, not a container
-runtime UI.
+Homebrew runs as the managed machine `bluefin-homebrew`; separate toolboxes are
+imported and managed independently.
 
 ## When to Use
 
 - Shipping a development or debugging toolbox as a `systemd-nspawn` rootfs.
 - Documenting how operators import, start, enter, and reset a machine image.
-- Changing `files/bin/system-container` or the default toolbox justfile in
-  `files/os/justfile`.
+- Changing `files/bin/system-container` or the bridge in `files/homebrew/`.
 
 ## When NOT to Use
 
 - Adding a distroless OCI runtime image — the server repo does not build those.
 - Kubernetes workload or cluster questions — use `k0s-sysext.md`.
 
-## Lifecycle
+## Operator guide
 
-The OS image ships a small helper at `/usr/bin/system-container`:
-
-```bash
-system-container start <name>
-system-container stop  <name>    # machinectl poweroff
-system-container enter <name>    # machinectl shell
-system-container reset <name>    # machinectl remove
-```
-
-Under the hood these map directly to `machinectl`.
-
-## First-time setup
-
-Replace `<image-url>` with the published `.tar.zst` rootfs URL for the toolbox.
-
-```bash
-sudo machinectl import-tar <image-url> homebrew
-sudo system-container start homebrew
-sudo system-container enter homebrew
-```
-
-When done inside the container:
-
-```bash
-exit
-sudo system-container stop homebrew
-```
-
-## Reset a container
-
-Resetting removes the machine and starts over from a fresh import:
-
-```bash
-sudo system-container reset homebrew
-sudo machinectl import-tar <image-url> homebrew
-sudo system-container start homebrew
-```
-
-## Inspecting machines on a host
-
-```bash
-machinectl list
-machinectl list-images
-```
-
-## Homebrew conventions
-
-If the toolbox is Homebrew-based, use `/home/linuxbrew` as the writable prefix.
-Set `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_INSTALL_CLEANUP=1` in its
-environment so updates are explicit and the environment behaves like a standard
-Linux Homebrew installation.
+User-facing setup, host/guest checks, Homebrew administration and the Ubuntu
+toolbox example live in [System Containers](https://docs.projectbluefin.io/server/system-containers).
+Keep operator procedures there and implementation contracts below.
 
 ## Transparent Homebrew profile
 
-The optional `homebrew` sysupdate feature delivers two signed, host-version-locked
-assets: `homebrew_<ver>.raw.zst` in `/var/lib/machines` and
-`homebrew-integration_<ver>.raw.zst` in `/var/lib/extensions`. The latter contains
-the helper, restricted all-users sudo rule, lifecycle units, shell/SSH hooks and
+The optional `homebrew` sysupdate feature downloads two signed, host-version-locked
+assets, decompressing them to `/var/lib/machines/homebrew_<ver>.raw` and
+`/var/lib/extensions/homebrew-integration_<ver>.raw`. The latter contains the
+helper, restricted all-users sudo rule, lifecycle units, shell/SSH hooks and
 Python closure. None of that bridge ships in the base OS. Ship this consumer only
 with a merged producer main SHA; the producer owns its independent FSDK machine.
 
@@ -107,6 +56,8 @@ Provision a nonroot owner and private account/key credentials for headless use;
 otherwise owner setup uses the console before getty. See
 [tpm2-credential-sealing.md](tpm2-credential-sealing.md) for credential transport.
 
+### Storage and package updates
+
 Installed packages persist at `/var/lib/bluefin-homebrew/prefix`, bound into the
 machine at `/home/linuxbrew/.linuxbrew`. The root-owned owner record prevents a
 silent UID/GID change. Only the owner runs `brew`; other provisioned users execute
@@ -118,6 +69,17 @@ same dispatch. Login never waits for it; a failed run (no network) retries next
 boot. The `/var/lib/bluefin-homebrew/default-formulae` stamp keeps it from running
 again, so formulae the owner removes stay removed.
 
+Shared-cwd authorization comes from caller homes and explicit `PROJECT_ROOTS`
+in root-owned `/etc/bluefin-homebrew.conf`; dispatch rejects other working
+directories. Preparation rebuilds guest `/etc` at `/run/bluefin-homebrew/etc`
+on host boot or an explicit preparation rerun. Restarting only the machine does
+not rerun the active `RemainAfterExit` preparation service. Guest `/var` is bound
+from persistent `/var/lib/bluefin-homebrew/guest-var`; other overlay writes are
+discarded when the machine stops.
+
+The guest command launcher sets `HOMEBREW_NO_AUTO_UPDATE=1` and
+`HOMEBREW_NO_INSTALL_CLEANUP=1`, keeping package updates and cleanup explicit.
+
 Dispatch preserves sudo's authenticated active primary GID, NSS supplementary
 groups and inherited descriptors. Shared cwd identity is pinned and compared in
 host and guest, then reopened under caller permissions before execution; `/`
@@ -127,21 +89,13 @@ remain enabled, and user scopes have a fixed description. Foreground PTYs relay
 input; background jobs retain their streams. Application output and independent
 system auditing remain outside this argv privacy guarantee.
 
-## Interacting with a machine service
-
-To run a command inside a running machine:
-
-```bash
-systemd-run --machine=homebrew --pty /usr/bin/env
-```
-
 ## Verification
 
 - [ ] `files/bin/system-container` exists and maps to valid `machinectl` commands.
-- [ ] The rootfs image format is documented (`.tar.zst` for `import-tar`).
-- [ ] Toolbox images are not confused with OCI images or sysexts in docs.
+- [ ] Image imports use `importctl` with a verified local rootfs archive.
+- [ ] Host/guest boundaries and toolbox procedures stay in the linked operator guide.
 
 ## See also
 
 - [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.
-- `machinectl(1)`, `systemd-nspawn(1)`
+- `machinectl(1)`, `importctl(1)`, `systemd-nspawn(1)`, `systemd-detect-virt(1)`
