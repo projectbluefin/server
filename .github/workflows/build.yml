@@ -122,7 +122,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: just@1.59.0
 
@@ -162,7 +162,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: just@1.59.0
 
@@ -202,7 +202,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: just@1.59.0
 
@@ -277,7 +277,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: just@1.59.0
 
@@ -800,8 +800,8 @@ jobs:
         if: steps.taggable.outputs.publish == 'true'
         uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
         with:
-          url: https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz
-          checksum: f48a73ea6d026a862c3919fc773da9a8c86fc259c2c737d5baed3b8b9614ad22
+          url: https://github.com/oras-project/oras/releases/download/v1.3.6/oras_1.3.6_linux_amd64.tar.gz
+          checksum: 66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0
 
       - name: Push OCI artifact
         if: steps.taggable.outputs.publish == 'true'
@@ -891,8 +891,8 @@ jobs:
       - name: Set up oras
         uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
         with:
-          url: https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz
-          checksum: f48a73ea6d026a862c3919fc773da9a8c86fc259c2c737d5baed3b8b9614ad22
+          url: https://github.com/oras-project/oras/releases/download/v1.3.6/oras_1.3.6_linux_amd64.tar.gz
+          checksum: 66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0
 
       - name: Push the OCI artifact to a local registry and pull it back
         run: bash scripts/publish-release.sh oci dist/diskless "${VERSION}" localhost:5000/bluefin-server --plain-http --pull-back
