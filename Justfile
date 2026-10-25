@@ -6,7 +6,7 @@ default:
 # Same bst2 container image FSDK/dakota CI uses -- pinned by commit-named tag.
 # Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3).
 export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44")
-export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.5")
+export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6")
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:532130dd64ebdf7a409bb28cef523d9cd6fbb65a")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
