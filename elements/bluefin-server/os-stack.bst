@@ -35,6 +35,9 @@ depends:
   - bluefin-server/os-networkd.bst
   - bluefin-server/os-resolved.bst
 
+  # Runtime hardware watchdog (system.conf.d)
+  - bluefin-server/os-system-conf.bst
+
   # /etc/resolv.conf symlink to systemd-resolved (tmpfiles.d)
   - bluefin-server/os-resolv-conf.bst
 

@@ -93,6 +93,7 @@ file system capped at 20% of RAM: 371 MiB free there, MemAvailable 1374 MiB.
 | `systemd-veritysetup@usr.service` or `sysusr-usr.mount` failed | The DDI does not match the `usrhash=` of the UKI that booted (mixed versions on the server) | After the download |
 | "No unit failed: a device or job timed out" | A device never appeared within `systemd.default_device_timeout_sec=300` | 300 s |
 | `ignition-<stage>.service` failed | See [Ignition](#ignition) | During the stage |
+| None: the node stops answering (no ping, no SSH, console frozen) | The kernel or PID 1 froze, while running or while a drain or reboot stops services | PID 1 keeps the hardware watchdog (`iTCO_wdt`, `sp5100_tco`, `i6300esb`) armed with `RuntimeWatchdogSec=1min` (`/usr/lib/systemd/system.conf.d/50-bluefin-watchdog.conf`): the board resets about a minute after the freeze and boots again. A node without a watchdog device (`journalctl -b _PID=1 \| grep -i watchdog` shows no "Using hardware watchdog") stays frozen. A hang in the firmware or PXE stage, before Linux runs, is not covered. Turn it off per node with `RuntimeWatchdogSec=0` in `/etc/systemd/system.conf.d/`. |
 
 ## Getting logs from a diskless node
 
