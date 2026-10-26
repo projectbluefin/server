@@ -35,12 +35,16 @@ fingerprints() {
 
 ring="${dir}/ignition-pubring.pgp"
 [ -s "${ring}" ] || die "missing ${ring} (just gen-dev-keys; release builds copy ${committed})"
-ignition_fprs="$(fingerprints "${ring}")"
+ignition_fprs="$(fingerprints "${ring}")" || die "${ring} is not OpenPGP data"
 [ -n "${ignition_fprs}" ] || die "${ring} holds no OpenPGP key"
 
+# Read the release keyring here, not in the process substitution below:
+# a failure there is invisible to set -e and would read as "no shared key".
 import_ring="${dir}/import-pubring.pgp"
 [ -s "${import_ring}" ] || die "missing ${import_ring}"
-shared="$(comm -12 <(printf '%s\n' "${ignition_fprs}") <(fingerprints "${import_ring}"))"
+release_fprs="$(fingerprints "${import_ring}")" || die "${import_ring} is not OpenPGP data"
+[ -n "${release_fprs}" ] || die "${import_ring} holds no OpenPGP key"
+shared="$(comm -12 <(printf '%s\n' "${ignition_fprs}") <(printf '%s\n' "${release_fprs}"))"
 [ -z "${shared}" ] \
     || die "${ring} and ${import_ring} share keys (${shared//$'\n'/ }); the Ignition config key must not be a release key"
 

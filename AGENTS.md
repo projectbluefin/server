@@ -11,7 +11,7 @@ Bluefin Server is an image-based Linux server OS composed from freedesktop-sdk (
 - an SPDX 2.3 SBOM `bluefin-server_<ver>.spdx.json` (`oci/bluefin-server-sbom.bst`)
 - a `SHA256SUMS` over the whole set, signed in-element (`SHA256SUMS.gpg`); nodes verify it against the image keyring (see the sysupdate verification skill). CI adds one unlisted, informational file to the release: `bluefin-server_<ver>.size.json`
 
-A release publishes `dist/diskless/` as-is: a GitHub Release `v<ver>` and an ORAS OCI artifact `ghcr.io/<owner>/bluefin-server:<ver>,latest`, both with provenance and SBOM attestations; pull requests that build rehearse it in `release-dry-run`. Most pull requests run only `validate`; the full build runs on `main`, nightly, and on pull requests labeled `full-build` or changing the FSDK junction or its patches.
+A release publishes `dist/diskless/` as-is: a GitHub Release `v<ver>` and an ORAS OCI artifact `ghcr.io/<owner>/bluefin-server:<ver>,latest`, both with provenance and SBOM attestations; pull requests that build rehearse it in `release-dry-run`. `main` merges only through the merge queue, whose required checks include the full build and boot test of every merge group that can change the image set; before the queue, most pull requests run only `validate`, and the full build runs on pull requests labeled `full-build` or changing the FSDK junction or its patches, on `main` and nightly. Opt-in features get a weekly QEMU end-to-end run against the latest release (`e2e-opt-in.yml`).
 
 ## What agents should know first
 
@@ -79,6 +79,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | Build or ship the k0s sysext | [`docs/skills/k0s-sysext.md`](docs/skills/k0s-sysext.md), [`docs/skills/k0s-sysext-ops.md`](docs/skills/k0s-sysext-ops.md) |
 | Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
 | CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
+| Merge queue, required checks, adding or renaming a gating CI job | [`docs/skills/merge-queue.md`](docs/skills/merge-queue.md) |
 | Release signing / sysupdate trust | [`docs/skills/systemd-sysupdate-verification.md`](docs/skills/systemd-sysupdate-verification.md) |
 | Secure Boot / module / signing key inventory, rotation, CI secrets | [`docs/skills/secure-boot-keys.md`](docs/skills/secure-boot-keys.md) |
 | Node access (root / SSH) and credential sealing with TPM2 | [`docs/skills/tpm2-credential-sealing.md`](docs/skills/tpm2-credential-sealing.md) |

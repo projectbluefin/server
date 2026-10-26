@@ -44,6 +44,7 @@ SKIP_FILES = frozenset(
     {
         ".github/actionlint.yaml",
         ".github/requirements-ci.txt",
+        ".github/rulesets/main-merge-queue.json",
         ".github/scripts/docs-checks.py",
         ".github/workflows/docs-checks.yml",
         ".github/workflows/lint-actions.yml",

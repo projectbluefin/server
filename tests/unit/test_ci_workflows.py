@@ -1,13 +1,13 @@
 """Contracts of the lightweight CI workflows and the Renovate pins they use.
 
-- unit-tests, docs-checks and lint-actions report on every pull request and
-  push to main, so each can be a required check.
+- unit-tests, docs-checks and lint-actions report on every pull request,
+  merge group and push to main, so each can be a required check.
 - The unit workflow runs the tests of every Go module in the repository; the
   image build runs them too, and a failure found only there fails a release.
 - pip installs come from the exactly pinned .github/requirements-ci.txt.
 - renovate.json's regex managers match the pins as written today; a manager
   that silently matches nothing reports no updates rather than an error.
-- The nightly build and the trackers each open, update and close one
+- The nightly build, the trackers and the weekly e2e run each open, update and close one
   tracking issue through .github/scripts/tracking-issue.sh.
 """
 
@@ -50,9 +50,10 @@ def all_workflows() -> list[Path]:
 def test_check_workflows_run_on_every_pull_request_and_main_push(name: str) -> None:
     wf = workflow(name)
     on = triggers(wf)
-    assert set(on) == {"pull_request", "push"}, name
+    assert set(on) == {"pull_request", "push", "merge_group"}, name
     assert not on["pull_request"], f"{name}: a filtered pull_request trigger cannot be a required check"
     assert on["push"] == {"branches": ["main"]}, name
+    assert on["merge_group"] == {"types": ["checks_requested"]}, f"{name}: the merge queue waits for its checks"
     for job_name, job in wf["jobs"].items():
         assert isinstance(job.get("timeout-minutes"), int), f"{name}:{job_name} has no timeout-minutes"
 
@@ -196,6 +197,7 @@ STATUS_JOBS = {
     "build.yml": ("nightly-status", "${{ !cancelled() && github.event_name == 'schedule' }}"),
     "track-junctions.yml": ("status", "${{ !cancelled() }}"),
     "track-binaries.yml": ("status", "${{ !cancelled() }}"),
+    "e2e-opt-in.yml": ("status", "${{ !cancelled() && github.event_name == 'schedule' }}"),
 }
 
 
