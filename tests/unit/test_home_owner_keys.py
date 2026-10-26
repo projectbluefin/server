@@ -16,7 +16,7 @@ spec = importlib.util.spec_from_loader(loader.name, loader)
 prepare = importlib.util.module_from_spec(spec)
 loader.exec_module(prepare)
 KEYS = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBqzDgD4BSxzGtXT+kRrjk9D5XR49PgBmYMzNRNPGBhX owner-test"
-pytestmark = pytest.mark.skipif(os.geteuid() != 0, reason="requires real privilege drop and ownership")
+pytestmark = pytest.mark.root
 
 
 @pytest.fixture

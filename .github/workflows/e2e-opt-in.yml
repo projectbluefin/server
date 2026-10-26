@@ -1,0 +1,130 @@
+name: Opt-in feature e2e
+
+# Weekly QEMU checks of the opt-in features build.yml's boot test never
+# boots: mDNS between appliances, the kubeadm and homelab sysexts as a
+# cluster, and the NVIDIA driver sysext. Each matrix entry is one scenario
+# of scripts/ci/e2e-opt-in.sh on the latest release (or the dispatched
+# tag), verified against the committed release keyring, with the harness
+# checked out at that release's tag. Nothing is built or published; a
+# failed scheduled run opens or updates a tracking issue.
+on:
+  schedule:
+    - cron: '0 9 * * 3'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release tag to test (v<version>); empty for the latest release
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-opt-in
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Resolve the release
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          tag="${REQUESTED:-$(gh release view --json tagName --jq .tagName)}"
+          [[ "${tag}" =~ ^v[0-9][0-9A-Za-z.]{0,16}$ ]] || { echo "::error::not a release tag: ${tag}"; exit 1; }
+          gh release view "${tag}" --json tagName > /dev/null
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Testing release ${tag}"
+
+  e2e:
+    needs: release
+    runs-on: ubuntu-26.04
+    # homelab-templates' guests alone may take 90 min (dogfood timeouts).
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        # tests/unit/test_ci_e2e_opt_in.py fails if this drifts from
+        # `scripts/ci/e2e-opt-in.sh --scenarios`.
+        scenario: [mdns, kubeadm, nvidia, homelab-cluster, homelab-templates, homelab-installer]
+    steps:
+      - name: Checkout the release's tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          persist-credentials: false
+
+      # The release set (~3 GB) and the guests' disks go on /mnt.
+      - name: Put dist/ on the runner's large disk
+        run: |
+          set -euo pipefail
+          sudo install -d -o "$(id -u)" -g "$(id -g)" /mnt/dist
+          mkdir dist
+          sudo mount --bind /mnt/dist dist
+
+      - name: Download and verify the release set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release download "${TAG}" --dir dist/release
+          bash scripts/publish-release.sh verify dist/release "${TAG#v}" files/os/sysupdate-keys/import-pubring.gpg
+
+      - name: Install QEMU and OVMF
+        run: bash scripts/ci/install-qemu-ovmf.sh
+
+      - name: Install the scenarios' other host tools
+        run: bash scripts/ci/e2e-opt-in.sh --install-tools
+
+      - name: End to end (${{ matrix.scenario }})
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: bash scripts/ci/e2e-opt-in.sh "${SCENARIO}" dist/release
+
+      - name: Upload the guests' logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-logs-${{ matrix.scenario }}
+          path: |
+            dist/dogfood-*/*.log
+            dist/dogfood-*/*.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Nobody watches a weekly run: one open "Opt-in feature e2e failing" issue
+  # gets a comment per failed scheduled run and is closed by the next one
+  # that passes. Dispatched runs (a chosen tag, a retry) do not touch it.
+  status:
+    needs: [release, e2e]
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout the tracking-issue script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/tracking-issue.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/tracking-issue.sh "Opt-in feature e2e failing" "The weekly opt-in feature e2e run" "a later weekly run"

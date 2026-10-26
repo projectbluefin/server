@@ -44,6 +44,8 @@ def decide(tmp_path: Path, event: str, ref: str = "refs/heads/main", action: str
         "PR_LABELS": json.dumps(list(labels)),
         "ACTION": action,
         "LABEL": label,
+        "MERGE_BASE": "0" * 40,
+        "MERGE_HEAD": "1" * 40,
     }
     subprocess.run(["bash", "-c", DECIDE], cwd=ROOT, env=env, check=True, capture_output=True)
     return dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
@@ -76,6 +78,13 @@ ELEMENT = ("elements/bluefin-server/nfs-utils.bst",)
           "labels": ("full-build",)}, ("false", "false", "true")),
         ({"event": "pull_request", "action": "labeled", "label": "hold", "changed": ELEMENT,
           "labels": ("hold", "full-build")}, ("false", "false", "false")),
+        # The merge queue builds whatever can change the image set, label or not.
+        ({"event": "merge_group", "ref": "refs/heads/gh-readonly-queue/main/pr-1-abc", "changed": ELEMENT},
+         ("true", "false", "true")),
+        ({"event": "merge_group", "ref": "refs/heads/gh-readonly-queue/main/pr-1-abc",
+          "changed": ("docs/skills/index.md",)}, ("false", "false", "true")),
+        ({"event": "merge_group", "ref": "refs/heads/gh-readonly-queue/main/pr-1-abc",
+          "changed": tuple(f"docs/{i}.md" for i in range(300))}, ("true", "false", "true")),
     ],
 )
 def test_decide(tmp_path: Path, kwargs: dict, expected: tuple[str, str, str]) -> None:

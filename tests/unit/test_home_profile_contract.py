@@ -81,7 +81,7 @@ def test_explicit_podman_disable_wins_template_default(tmp_path: Path) -> None:
     assert result.stdout == "false:false\n"
 
 
-@pytest.mark.skipif(os.geteuid() != 0, reason="selection state requires root ownership")
+@pytest.mark.root
 def test_persisted_operator_disable_wins_template_default(tmp_path: Path) -> None:
     credentials = template_credentials(tmp_path)
     (tmp_path / "runtimes.state").write_text("false:false\n")
@@ -90,8 +90,10 @@ def test_persisted_operator_disable_wins_template_default(tmp_path: Path) -> Non
     assert result.stdout == "false:false\n"
 
 
-@pytest.mark.skipif(os.geteuid() != 0 or not shutil.which("systemd-analyze"),
-                    reason="requires root ownership and real systemd configuration merging")
+# Real systemd configuration merging: the bootstrap reads the drop-ins with
+# systemd-analyze.
+@pytest.mark.root
+@pytest.mark.usefixtures("systemd_analyze")
 @pytest.mark.parametrize("operator_name", ["90-operator.conf", "50-bluefin-home-server.conf"])
 def test_operator_feature_disable_is_not_reenabled_or_recorded_as_running(
     tmp_path: Path, operator_name: str,

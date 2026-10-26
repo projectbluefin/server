@@ -60,7 +60,7 @@ def test_changes_job_runs_the_base_revision_classifier():
     checkouts = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
     assert len(checkouts) == 1
     ref = checkouts[0]["with"]["ref"]
-    assert ref == "${{ github.event.pull_request.base.sha }}"
+    assert ref == "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
     assert "repository" not in checkouts[0]["with"]
     run = "\n".join(s.get("run", "") for s in steps)
     assert "python3 .github/scripts/image-build-needed.py" in run

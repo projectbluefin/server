@@ -9,10 +9,17 @@ source =
     .github/scripts
     files
 branch = true
-# Python launched via subprocess (sys.executable, script.py) is measured only
-# when COVERAGE_PROCESS_START points at this file; nothing sets it today, so
-# those runs are not measured. See docs/skills/ci-tooling.md, "Python lint".
+# Python the tests launch as a subprocess (sys.executable, script.py) is
+# measured too: coverage's subprocess patch (7.10+) starts coverage in every
+# child Python whose environment keeps COVERAGE_PROCESS_CONFIG (a child given
+# a fresh env= dict is not measured). It implies parallel data files, which
+# pytest-cov combines with the xdist workers' data before reporting. See
+# docs/skills/ci-tooling.md, "Python lint".
+patch = subprocess
 [report]
+# A ratchet, enforced by pytest --cov and `coverage report`: the measured
+# total rounded down. Raise it when coverage grows; never lower it to pass.
+fail_under = 84
 skip_covered = true
 show_missing = true
 exclude_also =

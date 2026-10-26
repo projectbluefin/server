@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 SOURCE = Path(__file__).resolve().parents[2] / "files/homebrew/bluefin-homebrew-prepare"
 loader = importlib.machinery.SourceFileLoader("homebrew_seed_prepare", str(SOURCE))
 spec = importlib.util.spec_from_loader(loader.name, loader)
@@ -16,6 +18,9 @@ loader.exec_module(prepare)
 
 
 class SeedSecurityTests(unittest.TestCase):
+    # skipUnless keeps `python3 -m unittest` usable; under pytest the root
+    # marker decides first (tests/unit/conftest.py).
+    @pytest.mark.root
     @unittest.skipUnless(os.geteuid() == 0, "requires real ownership changes")
     def test_owner_cannot_replace_directories_during_privileged_seeding(self):
         with tempfile.TemporaryDirectory() as directory:

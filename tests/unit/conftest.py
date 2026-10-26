@@ -32,6 +32,36 @@ def shellcheck() -> str:
     return _required_tool("shellcheck")
 
 
+@pytest.fixture(scope="session")
+def gpg() -> str:
+    return _required_tool("gpg")
+
+
+@pytest.fixture(scope="session")
+def gpgv() -> str:
+    return _required_tool("gpgv")
+
+
+@pytest.fixture(scope="session")
+def systemd_analyze() -> str:
+    return _required_tool("systemd-analyze")
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Tests marked ``root`` need real ownership changes and privilege drops.
+
+    Unprivileged they skip. The unit job runs them in a separate step with
+    ``sudo ... pytest -m root``; there, in CI, an unprivileged run fails
+    rather than skips, so a broken sudo cannot pass the job vacuously.
+    """
+    if item.get_closest_marker("root") is None or os.geteuid() == 0:
+        return
+    if os.environ.get("CI") == "true" and item.config.getoption("markexpr") == "root":
+        pytest.fail("not running as root; .github/workflows/unit-tests.yml must run `-m root` with sudo")
+    pytest.skip("requires root")
+
+
 HOST_MODULE = REPO_ROOT / "files" / "homelab" / "cluster"
 # The helpers elements/bluefin-server/os-host.bst links to /usr/bin/bluefin-host.
 HOST_HELPERS = (

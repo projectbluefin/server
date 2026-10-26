@@ -6,6 +6,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The merge queue's checks run on the merge group's commit.
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -39,7 +42,7 @@ jobs:
           fi
 
       - name: Set up just
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
         with:
           tool: just@1.59.0
 
@@ -56,9 +59,17 @@ jobs:
       - name: Run unit tests
         run: just test-unit
 
-      # The coverage step summary is report-only; no fail-under threshold.
+      # The floor is .coveragerc's fail_under, which `just test-unit` already
+      # enforces; this step only renders the same report for the summary.
       - name: Python coverage summary
         run: python -m coverage report --format=markdown >> "${GITHUB_STEP_SUMMARY}"
+
+      # The `root` tests (pytest.ini) change ownership and drop privileges for
+      # real, so the unprivileged run above skips them; here an unprivileged
+      # run fails (tests/unit/conftest.py). Last, and with no coverage, cache
+      # or bytecode, so it leaves nothing root-owned in the checkout.
+      - name: Run root unit tests
+        run: sudo --preserve-env=CI env "PATH=${PATH}" PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -m root -p no:cacheprovider
 
   # The Go modules the image builds. Their element runs `go vet` and
   # `go test` inside the image build, so a failing or flaky test would
