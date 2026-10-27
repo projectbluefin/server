@@ -169,6 +169,13 @@ def test_renovate_tracks_the_bst2_image_tag() -> None:
     assert image.group(1).endswith(":" + found[0][1].group("currentDigest"))
 
 
+def test_renovate_automerges_through_the_merge_queue() -> None:
+    # The org-inherited Renovate config automerges with platformAutomerge
+    # off, so Renovate would merge directly, which the merge queue refuses.
+    # GitHub's auto-merge enqueues instead (docs/skills/merge-queue.md).
+    assert RENOVATE["platformAutomerge"] is True
+
+
 def test_renovate_tracks_the_ci_requirements() -> None:
     # Renovate's default pip_requirements file pattern.
     default = re.compile(r"(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$")

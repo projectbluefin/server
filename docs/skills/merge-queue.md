@@ -4,7 +4,7 @@ description: The merge queue on main and its required status checks. Use when ad
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-26"
+  last_updated: "2026-10-27"
 ---
 # Merge queue and required checks
 
@@ -53,6 +53,17 @@ compare API, at most 300; more always builds) with the base revision's
 classifier and builds whenever the image set can change, label or not, so
 no image change merges unbuilt. A pull request still builds before the
 queue only with `full-build` or an FSDK change.
+
+### Who enqueues
+
+| Pull requests | Enqueued by |
+|---|---|
+| Renovate's digest, pin, patch and minor updates | GitHub auto-merge, which Renovate enables (`platformAutomerge: true` in `renovate.json`) and which enqueues as the mergeraptor app once the pull request's required checks pass. The org-inherited Renovate config sets `platformAutomerge: false`; with it Renovate merges directly and the queue refuses (405). |
+| Anything with `lgtm` + `approved` | Prow, with `PROW_TOKEN` (below) |
+| The rest (Hive's, the trackers', a maintainer's own) | A maintainer, with *Merge when ready* |
+
+Hive's auto-merge sweeps merge directly; behind the queue they record a
+`merge-queue-required` skip, so its pull requests wait for Prow or a person.
 
 ### Prow token
 

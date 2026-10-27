@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended"
   ],
+  "platformAutomerge": true,
   "customManagers": [
     {
       "customType": "regex",
