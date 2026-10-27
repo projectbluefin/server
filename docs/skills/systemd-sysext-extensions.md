@@ -248,6 +248,13 @@ caveat: the refresh happens after PID 1 has built the boot transaction, so
 re-requests `multi-user.target`, which adds jobs for the now-visible wants;
 that is how `zfs.target` comes up at boot when the ZFS sysext is merged.
 
+A later refresh unmerges `/usr` for a moment, so a kernel module load running
+then (`zfs-load-module.service`, `nvidia-load.service`) finds no module and
+fails. Every unit that refreshes at boot (`bluefin-sysext-fetch.service`,
+`k0s-first-boot.service`, `nvidia-container-toolkit-activate.service`) is
+therefore ordered `After=` both load units; `tests/unit/test_kmod_sysexts.py`
+fails if a new refresher is not.
+
 ## Removing an extension
 
 ```bash

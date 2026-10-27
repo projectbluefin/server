@@ -8,6 +8,10 @@ Documentation=file:/usr/libexec/bluefin-sysext-fetch
 ConditionPathExists=!/var/lib/bluefin-sysext-fetch/%A
 Wants=network-online.target
 After=network-online.target systemd-sysext.service
+# Its `systemd-sysext refresh` unmerges /usr and merges it again; a module
+# load unit reading /usr/lib/modules meanwhile finds nothing and fails. Let
+# the ones in this boot's transaction finish first (ordering only).
+After=zfs-load-module.service nvidia-load.service
 # What it merges must be there before the units that use it start:
 # bluefin-sysext-activate.service starts what the merged sysexts enable.
 Before=bluefin-sysext-activate.service kubeadm-init.service k0s-first-boot.service

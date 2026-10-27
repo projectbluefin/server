@@ -10,6 +10,10 @@ After=nvidia-container-toolkit-fetch.service
 # whenever it is part of the same transaction. A node without containerd.service
 # is unaffected.
 After=containerd.service
+# `systemd-sysext refresh` unmerges /usr and merges it again; a module load
+# unit reading /usr/lib/modules meanwhile finds nothing and fails. Let the
+# ones in this boot's transaction finish first (ordering only).
+After=zfs-load-module.service nvidia-load.service
 RequiresMountsFor=/var/lib/nvidia-container-toolkit
 
 [Service]

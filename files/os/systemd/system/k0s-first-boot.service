@@ -4,6 +4,10 @@ Wants=network-online.target
 Wants=k0s-first-boot-fetch.service
 After=network-online.target
 After=k0s-first-boot-fetch.service
+# `systemd-sysext refresh` unmerges /usr and merges it again; a module load
+# unit reading /usr/lib/modules meanwhile finds nothing and fails. Let the
+# ones in this boot's transaction finish first (ordering only).
+After=zfs-load-module.service nvidia-load.service
 RequiresMountsFor=/var/lib/k0s
 
 [Service]

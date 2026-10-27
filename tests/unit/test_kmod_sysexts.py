@@ -5,6 +5,11 @@ module sysext's through the overlay. Each module sysext ships only its own
 modules under /usr/lib/modules/<kver>/extra/<name>/, and its load unit runs
 /usr/libexec/bluefin-sysext-modules (bluefin-host), which indexes the
 merged tree under /run and loads through `modprobe -d`.
+
+Every base-image unit that runs `systemd-sysext refresh` at boot is ordered
+after the module load units: the refresh unmerges /usr for a moment, and a
+load running then finds no module (zfs-load-module.service failed that way
+in the boot test's A/B update, racing nvidia-container-toolkit-activate).
 """
 
 from __future__ import annotations
@@ -142,3 +147,36 @@ def test_docs_state_the_rule_once_and_no_exclusivity() -> None:
     for path in [ROOT / "AGENTS.md", ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]:
         text = path.read_text(encoding="utf-8")
         assert not re.search(r"mutually\s+exclusive", text), path
+
+
+OS_UNITS = ROOT / "files" / "os" / "systemd" / "system"
+LOAD_UNITS = ("nvidia-load.service", "zfs-load-module.service")
+
+
+def runs_sysext_refresh(unit: Path) -> bool:
+    conf = SystemdFile(unit)
+    commands = [c for key in ("ExecStartPre", "ExecStart", "ExecStartPost") for c in conf.values("Service", key)]
+    return any(re.search(r"(^|/)systemd-sysext refresh\b", c.lstrip("-+!@:")) for c in commands)
+
+
+def boot_refreshers() -> list[str]:
+    # Units that run the refresh themselves, plus bluefin-sysext-fetch.service,
+    # whose helper runs it (sysextfetch.go).
+    fetch = ROOT / "files" / "homelab" / "cluster" / "internal" / "host" / "sysextfetch" / "sysextfetch.go"
+    assert '{"systemd-sysext", "refresh"}' in fetch.read_text(encoding="utf-8")
+    direct = [p.name for p in sorted(OS_UNITS.glob("*.service")) if runs_sysext_refresh(p)]
+    return sorted(direct + ["bluefin-sysext-fetch.service"])
+
+
+def test_the_load_units_and_boot_refreshers_are_known() -> None:
+    assert sorted(p.name for p in NVIDIA_SRC.glob("nvidia-load.service")) + \
+        sorted(p.name for p in ZFS_SRC.glob("zfs-load-module.service")) == list(LOAD_UNITS)
+    assert boot_refreshers() == ["bluefin-sysext-fetch.service", "k0s-first-boot.service",
+                                 "nvidia-container-toolkit-activate.service"]
+
+
+@pytest.mark.parametrize("refresher", boot_refreshers())
+def test_boot_refreshers_wait_for_the_module_loads(refresher: str) -> None:
+    after = " ".join(SystemdFile(OS_UNITS / refresher).values("Unit", "After")).split()
+    for unit in LOAD_UNITS:
+        assert unit in after, f"{refresher} must be After={unit}"
