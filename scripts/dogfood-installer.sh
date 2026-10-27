@@ -536,10 +536,16 @@ ExecStart=
 ExecStart=${exec_start} ${install_args} ${target_dev}
 ExecStopPost=/bin/bash -c 'exec >/dev/ttyS1 2>&1; echo "PROBE sysinstall=\$\${SERVICE_RESULT} \$\${EXIT_STATUS}"; udevadm settle -t 10 || true; echo "PROBE installed-slot-b=\$\$(lsblk -rno PARTLABEL ${target_dev} | grep -cx _empty) installed-parts=\$\$(lsblk -rno TYPE ${target_dev} | grep -cx part)"; lsblk -o NAME,PARTLABEL,FSTYPE,SIZE ${target_dev} | sed "s/^/PROBE-LOG installed /"'
 EOF
+# The mirror opens the journal only after journald flushed it to /var: a
+# `journalctl -f` started while /var/log/journal does not exist yet never
+# watches it, and once the flush drops the runtime journal in /run it shows
+# nothing more, while still running (#550). -b replays the whole boot, so
+# starting a little later loses nothing.
 cat > "${state}/journal.service" <<'EOF'
 [Unit]
 Description=Dogfood journal mirror on ttyS2
 DefaultDependencies=no
+After=systemd-journal-flush.service
 [Service]
 ExecStart=journalctl -b -f --no-pager -o short-monotonic
 StandardOutput=tty

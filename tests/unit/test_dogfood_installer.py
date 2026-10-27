@@ -18,6 +18,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "dogfood-installer.sh"
 TEXT = SCRIPT.read_text(encoding="utf-8")
@@ -89,3 +91,16 @@ def test_without_a_serial_only_the_probe_console_ends_a_boot(tmp_path: Path) -> 
     assert f"FAIL: {args[0]}: no result within 2s" in result.stderr
 
 
+
+
+@pytest.mark.parametrize("script", ["dogfood-installer.sh", "dogfood-homelab-installer.sh"])
+def test_the_journal_mirror_opens_after_the_flush(script: str) -> None:
+    # A `journalctl -f` opened before /var/log/journal exists never watches
+    # it and goes silent, still running, when journald flushes and drops the
+    # runtime journal; correct installs failed on the empty ttyS2 log (#550).
+    text = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+    unit = re.search(r"""^cat > "\$\{state\}/journal\.service" <<'EOF'\n(.*?)^EOF$""", text, re.M | re.S)
+    assert unit, f"no journal.service in {script}"
+    lines = unit[1].splitlines()
+    assert "ExecStart=journalctl -b -f --no-pager -o short-monotonic" in lines
+    assert "After=systemd-journal-flush.service" in lines
