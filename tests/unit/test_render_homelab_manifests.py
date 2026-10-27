@@ -274,6 +274,26 @@ def test_argo_workflows_patch_hands_auth_to_the_client_and_pins_the_executor() -
     assert [s.get("namespace") for s in crb["subjects"]] == ["argo", "kept", None]
 
 
+def test_argocd_patch_pulls_ecr_library_images_from_docker_hub() -> None:
+    redis = {"kind": "Deployment", "metadata": {"name": "argocd-redis"}, "spec": {"template": {"spec": {
+        "initContainers": [{"image": "quay.io/argoproj/argocd:v3.5.3"}],
+        "containers": [{"image": "public.ecr.aws/docker/library/redis:8.2.3-alpine"}]}}}}
+    other = {"kind": "ConfigMap", "metadata": {"name": "argocd-cm"}, "data": {}}
+    (dep, cm) = render.patch_argocd([redis, other])
+    pod = dep["spec"]["template"]["spec"]
+    assert pod["containers"][0]["image"] == "docker.io/library/redis:8.2.3-alpine"
+    assert pod["initContainers"][0]["image"] == "quay.io/argoproj/argocd:v3.5.3"
+    assert cm == other
+
+
+def test_no_vendored_manifest_pulls_from_ecr_public() -> None:
+    # ECR Public refuses anonymous pulls from shared addresses once their
+    # per-IP share is used (the CI runners hit it); see patch_argocd.
+    manifests = ROOT / "files" / "homelab"
+    hits = [str(p.relative_to(ROOT)) for p in manifests.rglob("*.yaml") if "public.ecr.aws" in p.read_text()]
+    assert hits == []
+
+
 def test_mcp_patch_replaces_the_config_and_hands_restarts_to_reloader() -> None:
     docs = [
         {"kind": "ConfigMap", "metadata": {"name": "mcp"}, "data": {"config.toml": "chart default"}},

@@ -485,7 +485,24 @@ def patch_kubestellar_full(docs: list[dict]) -> list[dict]:
     return [d for d in docs if not (d["kind"] == "Job" and "install-postgresql" in d["metadata"]["name"])]
 
 
+# ECR Public limits anonymous pulls per source IP and refuses them once a
+# shared address (GitHub-hosted runners, carrier-grade NAT) has used its
+# share; its docker/library images are Docker Hub's official ones, with the
+# same index digests, so pull them from Docker Hub like the rest of the set.
+ECR_LIBRARY = "public.ecr.aws/docker/library/"
+
+
+def patch_argocd(docs: list[dict]) -> list[dict]:
+    for d in docs:
+        pod = d.get("spec", {}).get("template", {}).get("spec", {})
+        for c in pod.get("initContainers", []) + pod.get("containers", []):
+            if c["image"].startswith(ECR_LIBRARY):
+                c["image"] = "docker.io/library/" + c["image"][len(ECR_LIBRARY):]
+    return docs
+
+
 PATCHES = {
+    "50-argocd": patch_argocd,
     "20-local-path-provisioner": lambda docs: patch_local_path(docs),
     "10-argo-workflows": patch_argo_workflows,
     "20-mcp": patch_mcp,
