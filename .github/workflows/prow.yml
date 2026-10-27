@@ -7,6 +7,9 @@
 #   - reusable workflow pinned to the v3.0.1 commit SHA
 #   - prow-commands limited to the commands whose labels exist in the org config
 #   - triage/priority and generic label commands require the canonical YAML roster
+#   - the prow job acts with PROW_TOKEN, a classic PAT (repo scope): a merge group enqueued
+#     with GITHUB_TOKEN starts no workflow, so it would never get its required checks
+#     (docs/skills/merge-queue.md); label-sync and authorize keep GITHUB_TOKEN
 # Docs: https://github.com/cncf/prow-github-actions/blob/v3.0.1/docs/installing.md
 name: Prow
 on:
@@ -66,6 +69,8 @@ jobs:
       # Aliases inherit their base command: /remove-triage and /remove-priority are gated too.
       # Keep generic /label gated so a verbatim allowlist cannot bypass the restriction.
       prow-commands: /kind /area /hold /lgtm /approve /assign /unassign /cc /uncc /close /reopen /retest /test /ok-to-test /help /good-first-issue /check-required-labels ${{ needs.authorize.outputs.triage == 'true' && '/triage /priority /label' || '' }}
+    secrets:
+      token: ${{ secrets.PROW_TOKEN }}
 
   label-sync:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'

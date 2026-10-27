@@ -152,7 +152,8 @@ rootless `podman info` works and `sudo` otherwise.
 
 ### No PATs; GitHub App tokens for automation that must trigger CI
 
-- Personal Access Tokens (PATs) are banned.
+- Personal Access Tokens (PATs) are banned, except Prow's `PROW_TOKEN`
+  ("Prow token" in [merge-queue.md](merge-queue.md)).
 - `repository_dispatch` is not used for build handoff.
 - `github.token` (the job's `GITHUB_TOKEN`) is used for release uploads
   inside `build.yml`.
@@ -191,7 +192,8 @@ empty name means no environment, which is how pull requests, the nightly
 build and branch dispatches run. Inside the job, the `&& secrets.X || ''`
 gates stay as a second layer. `release` publishes with `github.token` alone
 and names no environment. `tests/unit/test_release_workflow.py` fails if a
-job outside this table reads a secret or a listed job loses its environment.
+job outside this table reads a secret or a listed job loses its environment;
+`PROW_TOKEN` is the one exception ("Prow token" in [merge-queue.md](merge-queue.md)).
 
 Moving a value is an admin step (no workflow change). Environment secrets
 override repository and organization secrets of the same name, so set the

@@ -4,7 +4,7 @@ description: The merge queue on main and its required status checks. Use when ad
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-25"
+  last_updated: "2026-10-26"
 ---
 # Merge queue and required checks
 
@@ -54,20 +54,39 @@ classifier and builds whenever the image set can change, label or not, so
 no image change merges unbuilt. A pull request still builds before the
 queue only with `full-build` or an FSDK change.
 
-Enqueue by hand (*Merge when ready*), or let a GitHub App do it: GitHub
-starts no workflow for an event `GITHUB_TOKEN` caused, so a merge group
-that `github-actions` enqueued gets no checks and sits until the timeout.
-Prow (`tide.merge_queue: auto` in the org config) enqueues with the
-workflow's `GITHUB_TOKEN`; until it gets an app token, merge its `lgtm` +
-`approved` pull requests by hand, and dequeue any entry `github-actions`
-added.
+### Prow token
+
+GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a merge
+group that `github-actions` enqueued gets no checks and sits until the
+timeout. Prow (`tide.merge_queue: auto` in the org config) therefore acts
+with `PROW_TOKEN`, passed as the `token` secret of the `prow` job in
+`prow.yml`: a classic PAT with the `repo` scope, the one exception to the
+PAT ban in [ci-tooling.md](ci-tooling.md). `label-sync` and `authorize`
+keep `GITHUB_TOKEN`.
+
+- It is a repository secret, not an environment one: a job that calls a
+  reusable workflow cannot name an environment. Any same-repository branch
+  could read it, so its owner should be a machine user with write on this
+  repository and nothing else. `tests/unit/test_ci_workflows.py` fails if
+  any other job names it.
+- Everything Prow writes (labels, comments, the `prow/lgtm` status, queue
+  entries) is the token owner's, and fires events as a person's would:
+  Prow's own label writes now start `pull_request` runs (`build.yml`'s
+  `changes` skips them in seconds).
+- Prow dequeues only entries whose enqueuer is `github-actions` or a
+  `[bot]`, so it no longer removes its own entries when a pull request
+  loses `lgtm` or gets `/hold`: dequeue those by hand.
+- When the token expires or is revoked, Prow's runs fail and nothing is
+  enqueued; enqueue by hand (*Merge when ready*) until it is replaced:
+  `gh secret set PROW_TOKEN --repo projectbluefin/server`.
 
 ## Red Flags
 
 - A required check renamed in a workflow but not in the ruleset: every pull
   request waits on a check nothing reports.
 - A `paths:` or `branches:` filter on a `merge_group` trigger.
-- An entry in the queue enqueued by `github-actions`.
+- An entry in the queue enqueued by `github-actions`: Prow ran without
+  `PROW_TOKEN`.
 
 ## Verification
 

@@ -260,3 +260,20 @@ def test_nightly_status_script(tmp_path: Path, failed: str, open_issue: str, exp
         assert calls[1:] == []
     else:
         assert len(calls) == 2 and calls[1].startswith(expected), calls
+
+
+def test_prow_token_reaches_only_the_prow_job() -> None:
+    # PROW_TOKEN is the one repository secret outside a main-only environment
+    # (docs/skills/merge-queue.md): only the prow job, which runs no
+    # repository code, may name it.
+    readers = [
+        (path.name, name)
+        for path in all_workflows()
+        for name, job in yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"].items()
+        if "PROW_TOKEN" in json.dumps(job)
+    ]
+    assert readers == [("prow.yml", "prow")]
+    job = workflow("prow.yml")["jobs"]["prow"]
+    assert job["secrets"] == {"token": "${{ secrets.PROW_TOKEN }}"}
+    assert re.fullmatch(r"cncf/prow-github-actions/\.github/workflows/prow\.yml@[0-9a-f]{40}", job["uses"])
+    assert "steps" not in job
