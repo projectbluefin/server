@@ -12,7 +12,6 @@ into /usr/share/factory/etc and generates one tmpfiles.d line per entry. These
 tests run that generator on a fake sysroot.
 """
 
-from __future__ import annotations
 
 import subprocess
 from pathlib import Path

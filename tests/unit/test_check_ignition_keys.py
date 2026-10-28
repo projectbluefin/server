@@ -19,7 +19,6 @@ the rest of the script's interface:
   never touched.
 """
 
-from __future__ import annotations
 
 import os
 import shutil

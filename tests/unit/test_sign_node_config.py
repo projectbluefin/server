@@ -17,7 +17,6 @@ covers the script itself:
   config or an unwritable signature path fails without a signature.
 """
 
-from __future__ import annotations
 
 import os
 import subprocess

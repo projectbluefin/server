@@ -5,7 +5,6 @@ reporter from projectbluefin/common reads. os-countme.bst installs that reporter
 from a pinned commit of common.
 """
 
-from __future__ import annotations
 
 import json
 import os

@@ -14,7 +14,6 @@ These tests tie each expectation back to the file it was copied from, without
 booting anything.
 """
 
-from __future__ import annotations
 
 import re
 from pathlib import Path

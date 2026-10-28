@@ -1,6 +1,5 @@
 """Contracts for the NVIDIA Container Toolkit (CDI) sysext."""
 
-from __future__ import annotations
 
 import re
 import subprocess

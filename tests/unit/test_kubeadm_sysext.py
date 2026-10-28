@@ -1,6 +1,5 @@
 """Contracts for the kubeadm worker sysext and the kernel options it relies on."""
 
-from __future__ import annotations
 
 import configparser
 import re

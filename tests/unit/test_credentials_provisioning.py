@@ -1,6 +1,5 @@
 """Contracts for first-boot systemd credential provisioning."""
 
-from __future__ import annotations
 
 from pathlib import Path
 
