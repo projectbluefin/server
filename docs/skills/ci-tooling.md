@@ -69,11 +69,9 @@ Renovate's `pip_requirements` manager proposes the bumps.
 
 The Justfile's `bst2_image` is tagged with the freedesktop-sdk-docker-images
 commit it was built from. The docker datasource cannot order those tags, so a
-Renovate `git-refs` manager follows that repository's default branch (every
-merge there publishes a tag for its commit) and moves the tag; it stays a tag,
-not a digest pin. A merge there can precede its image's publication (or the
-pipeline can fail), so that rule disables automerge: confirm the tag exists
-before merging the bump.
+Renovate `git-refs` manager tracks that repo's default branch and moves the tag
+(a tag, not a digest pin). A merge there can precede its image's publish, so
+that rule disables automerge: confirm the tag exists before merging the bump.
 
 ### Python lint
 
