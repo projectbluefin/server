@@ -131,6 +131,8 @@ echo "PROBE cp-nodes-ready=$(ready) nodes=$(kubectl get nodes --no-headers | wc 
 journalctl -b -o cat -u bluefin-cluster-serve.service | sed 's/^/PROBE-LOG serve: /' | tail -n 20
 echo "PROBE cp-issued=$(journalctl -b -o cat -u bluefin-cluster-serve.service | grep -c 'issued a join token') denied=$(journalctl -b -o cat -u bluefin-cluster-serve.service | grep -c 'did not prove the passphrase') leaked=$(journalctl -b -o cat --no-pager | grep -c -e orbit-maple -e 'riverbank')"
 echo "PROBE cp-tokens=$(kubectl -n kube-system get secrets --field-selector type=bootstrap.kubernetes.io/token -o jsonpath='{range .items[*]}{.data.description}{"\n"}{end}' | base64 -d 2>/dev/null | grep -c 'bluefin-cluster join')"
+# Keep the API server up until the joined node has had time to report Ready.
+sleep 600
 EOF
 
 cat > "${state}/node.probe" <<'EOF'
@@ -153,7 +155,7 @@ echo "PROBE node-cilium=$(crictl ps 2>/dev/null | grep -c cilium-agent)"
 systemctl restart bluefin-cluster-join.service
 echo "PROBE node-rerun=$(systemctl show -P ConditionResult bluefin-cluster-join.service)"
 # Stay up while the control plane checks that this node is Ready.
-k() { kubectl --kubeconfig /etc/kubernetes/kubelet.conf "$@"; }
+k() { kubectl --request-timeout=10s --kubeconfig /etc/kubernetes/kubelet.conf "$@"; }
 for _ in $(seq 180); do
     [ "$(k get node "$(hostname)" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = True ] && break
     sleep 5
@@ -205,7 +207,7 @@ boot() {
 }
 
 echo "==> control plane, node and wrong-passphrase node on one L2 segment (logs: ${state}/{cp,node,bad}.log)"
-boot cp "${base_port}" "${DOGFOOD_CP_MEM:-6144}" 3600 "${cp_net}" "${cp_conf}" & cp_pid=$!
+boot cp "${base_port}" "${DOGFOOD_CP_MEM:-6144}" 4200 "${cp_net}" "${cp_conf}" & cp_pid=$!
 sleep "${DOGFOOD_NODE_DELAY:-10}"
 boot node "$((base_port + 1))" "${DOGFOOD_NODE_MEM:-4096}" 3300 "${node_net}" \
     "$(printf 'HOMELAB_ROLE=node\nHOMELAB_JOIN_PASSPHRASE=%s\n' "${pass}")" & node_pid=$!
