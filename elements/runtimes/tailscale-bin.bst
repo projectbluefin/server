@@ -48,4 +48,6 @@ config:
 
     # Bluefin /usr is merged; binaries live in /usr/bin. Adjust unit Exec paths.
     sed -i 's|/usr/sbin/tailscaled|/usr/bin/tailscaled|g' "${unitdir}/tailscaled.service"
-    sed -i 's|EnvironmentFile=/etc/default/tailscaled|EnvironmentFile=-/etc/default/tailscaled\nEnvironmentFile=-/usr/share/bluefin/tailscale/tailscaled.defaults|' "${unitdir}/tailscaled.service"
+    # Later EnvironmentFile= lines override earlier ones, so the image's
+    # defaults must come first for /etc/default/tailscaled to win.
+    sed -i 's|EnvironmentFile=/etc/default/tailscaled|EnvironmentFile=-/usr/share/bluefin/tailscale/tailscaled.defaults\nEnvironmentFile=-/etc/default/tailscaled|' "${unitdir}/tailscaled.service"
