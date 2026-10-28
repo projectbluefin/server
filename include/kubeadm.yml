@@ -12,7 +12,7 @@
 # per-component pull requests never edit adjacent lines and merge in any order.
 variables:
   # kubelet, kubeadm, kubectl (dl.k8s.io)
-  kubernetes-version: "1.35.9"
+  kubernetes-version: "1.35.10"
   # crictl (cri-tools)
   crictl-version: "1.35.0"
   # containerd static build
