@@ -7,7 +7,7 @@ default:
 # Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3).
 export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44")
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6")
-export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:0fadcdcabdb66c7b6cd3721072fd41abe38f5c10")
+export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:2232beb539e95b5c18f64d418fcdff18bf2ea530")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
 # butane (v2.27.0, built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
