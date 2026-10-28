@@ -1012,3 +1012,136 @@ def test_real_iana_etc_element_pins_its_tarball_in_the_element():
     assert (pin.path, pin.key) == (IANA_ELEMENT, "ref")
     assert pin.url == iana_url(version)
     assert pin.sums == iana_url(version) + ".sha256"
+
+
+TS_REPO = "tailscale/tailscale"
+TS_PKGS = "https://pkgs.tailscale.com/stable/"
+TS_INCLUDE = "include/tailscale.yml"
+TS_ELEMENT = "elements/runtimes/tailscale-bin.bst"
+TS_OLD = {arch: sha(f"tailscale-1.104.2-{arch}".encode()) for arch in ("amd64", "arm64")}
+TS_FILES = {
+    "include/aliases.yml": FILES["include/aliases.yml"] + f"  tailscale_pkgs: {TS_PKGS}\n",
+    TS_INCLUDE: f"""# Single source of truth for the Tailscale version axis.
+variables:
+  tailscale-version: "1.104.2"
+  tailscale-x86-64-sha256: "{TS_OLD['amd64']}"
+  tailscale-arm64-sha256: "{TS_OLD['arm64']}"
+""",
+    TS_ELEMENT: """kind: manual
+
+(@):
+- include/arch.yml
+- include/tailscale.yml
+
+sources:
+- kind: tar
+  url: tailscale_pkgs:tailscale_%{tailscale-version}_amd64.tgz
+  ref: "%{tailscale-x86-64-sha256}"
+  base-dir: "tailscale_%{tailscale-version}_amd64"
+  directory: dist
+
+(?):
+- arch == "aarch64":
+    sources:
+    - kind: tar
+      url: tailscale_pkgs:tailscale_%{tailscale-version}_arm64.tgz
+      ref: "%{tailscale-arm64-sha256}"
+      base-dir: "tailscale_%{tailscale-version}_arm64"
+      directory: dist
+""",
+}
+
+
+def ts_url(version: str, arch: str) -> str:
+    return f"{TS_PKGS}tailscale_{version}_{arch}.tgz"
+
+
+def ts_release(upstream: Upstream, version: str, *, sums: bool = True) -> dict[str, str]:
+    """Serve both tarballs of `version` with pkgs.tailscale.com's bare-digest .sha256 files."""
+    pins = {}
+    for arch in ("amd64", "arm64"):
+        pins[arch] = upstream.asset(ts_url(version, arch))
+        if sums:
+            upstream.files[ts_url(version, arch) + ".sha256"] = pins[arch].encode()
+    return pins
+
+
+@pytest.fixture
+def tailscale(repo, upstream, monkeypatch):
+    for path, text in TS_FILES.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(track, "COMPONENTS", {"tailscale": track.COMPONENTS["tailscale"]})
+    return upstream
+
+
+def test_tailscale_proposes_the_newest_stable_release_of_its_series(repo, tailscale):
+    # Tailscale tags releases on GitHub without assets; the tarballs live on pkgs.tailscale.com.
+    tailscale.releases(TS_REPO, [
+        release("v1.106.0"),
+        release("v1.105.20", prerelease=True),
+        release("v1.104.4"),
+        release("v1.104.3", draft=True),
+        release("v1.104.2"),
+        release("v1.104.1"),
+    ])
+    assert newest("tailscale", repo) == "1.104.4"
+
+
+def test_tailscale_apply_moves_the_version_and_both_include_atoms(repo, tailscale, tmp_path, capsys):
+    tailscale.releases(TS_REPO, [release("v1.104.4"), release("v1.104.2")])
+    new = ts_release(tailscale, "1.104.4")
+    before = snapshot(repo, TS_FILES)
+    body = tmp_path / "body.md"
+
+    assert track.main(["apply", "tailscale", "--summary", str(body)], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        TS_INCLUDE: [
+            ('  tailscale-version: "1.104.2"', '  tailscale-version: "1.104.4"'),
+            (f'  tailscale-x86-64-sha256: "{TS_OLD["amd64"]}"', f'  tailscale-x86-64-sha256: "{new["amd64"]}"'),
+            (f'  tailscale-arm64-sha256: "{TS_OLD["arm64"]}"', f'  tailscale-arm64-sha256: "{new["arm64"]}"'),
+        ],
+    }
+    assert capsys.readouterr().out.split() == [TS_INCLUDE]
+    text = body.read_text()
+    assert "Patch release of **tailscale** in the pinned `1.104` series: `1.104.2` → `1.104.4`." in text
+    assert f"https://github.com/{TS_REPO}/releases/tag/v1.104.4" in text
+    for arch in ("amd64", "arm64"):
+        assert f"- {ts_url('1.104.4', arch)}.sha256" in text
+
+
+def test_tailscale_missing_arm64_checksum_writes_nothing(repo, tailscale, capsys):
+    tailscale.releases(TS_REPO, [release("v1.104.4")])
+    ts_release(tailscale, "1.104.4")
+    del tailscale.files[ts_url("1.104.4", "arm64") + ".sha256"]
+    before = snapshot(repo, TS_FILES)
+
+    assert track.main(["apply", "tailscale"], root=repo) == 1
+
+    assert snapshot(repo, TS_FILES) == before
+    assert f"{ts_url('1.104.4', 'arm64')}.sha256: HTTP 404" in capsys.readouterr().err
+
+
+def test_tailscale_tampered_tarball_writes_nothing(repo, tailscale, capsys):
+    tailscale.releases(TS_REPO, [release("v1.104.4")])
+    ts_release(tailscale, "1.104.4")
+    tailscale.files[ts_url("1.104.4", "amd64")] = b"tampered"
+    before = snapshot(repo, TS_FILES)
+
+    assert track.main(["apply", "tailscale"], root=repo) == 1
+
+    assert snapshot(repo, TS_FILES) == before
+    assert f"{ts_url('1.104.4', 'amd64')} hashes to {sha(b'tampered')}" in capsys.readouterr().err
+
+
+def test_real_tailscale_element_pins_the_include_atoms():
+    tree = track.Tree(ROOT)
+    component = track.COMPONENTS["tailscale"]
+    version = component.current(tree)
+    pins = {pin.key: pin for pin in component.pins(tree)}
+    assert set(pins) == {"tailscale-x86-64-sha256", "tailscale-arm64-sha256"}
+    for arch, key in (("amd64", "tailscale-x86-64-sha256"), ("arm64", "tailscale-arm64-sha256")):
+        assert (pins[key].path, pins[key].url) == (TS_INCLUDE, ts_url(version, arch))
+        assert pins[key].sums == ts_url(version, arch) + ".sha256"
+        assert f'"%{{{key}}}"' in tree[TS_ELEMENT]

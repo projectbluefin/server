@@ -21,6 +21,9 @@ BuildStream source ref.
                    nvidia-container-toolkit-version                                    commit in the same include
   iana-etc         elements/bluefin-server/iana-etc.bst     iana-etc-<date>.tar.gz     ref: in the same element
                    iana-etc-version
+  tailscale        include/tailscale.yml                    tailscale_<version>_       tailscale-x86-64-sha256 and
+                   tailscale-version                        {amd64,arm64}.tgz          tailscale-arm64-sha256 in
+                                                                                       the same include
 
 The .bst pins cover every architecture the element fetches: the top-level
 amd64 sources and the arm64 ones under `(?): arch == "aarch64"`. Every
@@ -34,7 +37,10 @@ fetched with git, and NVIDIA publishes no checksum for any archive of it, so
 its pin is the release tag's commit instead of a sha256
 (GitTagComponent). iana-etc (/etc/protocols and /etc/services) is a data
 snapshot tagged with its date, so it has no series: every newer release is
-proposed (SnapshotComponent).
+proposed (SnapshotComponent). Tailscale's tarballs come from pkgs.tailscale.com
+with a bare-digest `.sha256` next to each; its two sha256 atoms sit next to the
+version in include/tailscale.yml and the element's `ref:` lines read them
+(TailscaleComponent), while its releases are listed on GitHub.
 
 check   Newest release of each component inside its pinned MAJOR.MINOR series:
         Kubernetes from dl.k8s.io/release/stable-X.Y.txt, an NVIDIA driver
@@ -639,6 +645,35 @@ def _git_tag_commit(url: str, tag: str) -> str:
     return commit
 
 
+class TailscaleComponent(BstComponent):
+    """Tailscale from pkgs.tailscale.com: one version atom, one sha256 atom per architecture.
+
+    The element's `ref:` lines read `%{tailscale-x86-64-sha256}` and
+    `%{tailscale-arm64-sha256}` from include/tailscale.yml, so the pins are
+    those include atoms, as for an NVIDIA driver, one per architecture.
+    Releases are tagged on GitHub but the tarballs and their `.sha256`
+    (a bare digest) are served from pkgs.tailscale.com/stable/.
+    """
+
+    ATOMS = {"amd64": "tailscale-x86-64-sha256", "arm64": "tailscale-arm64-sha256"}
+
+    def __init__(self) -> None:
+        super().__init__("tailscale", "tailscale/tailscale", "{url}.sha256", include="include/tailscale.yml",
+                         variables=("tailscale-version",), element="elements/runtimes/tailscale-bin.bst",
+                         marker="%{tailscale-version}")
+
+    def pins(self, tree: Tree) -> list[Pin]:
+        pins = []
+        for pin in super().pins(tree):
+            arches = [arch for arch in self.ATOMS if f"_{arch}.tgz" in pin.asset]
+            if len(arches) != 1:
+                raise TrackError(f"{self.element}: cannot tell the architecture of {pin.url}")
+            pins.append(Pin(self.include, "", self.ATOMS[arches[0]], pin.url, pin.sums, standalone_key=True))
+        if len(pins) != len(self.ATOMS):
+            raise TrackError(f"{self.element}: expected {len(self.ATOMS)} tailscale tarballs, found {len(pins)}")
+        return pins
+
+
 class OrasComponent(Component):
     """The Justfile's ORAS image tag plus every setup-oras url and checksum."""
 
@@ -713,6 +748,7 @@ COMPONENTS: dict[str, Component] = {
         GitTagComponent("nvidia-container-toolkit", "NVIDIA/nvidia-container-toolkit",
                         include="include/nvidia-container-toolkit.yml",
                         element="elements/nvidia/nvidia-container-toolkit.bst"),
+        TailscaleComponent(),
         OrasComponent(),
     )
 }
