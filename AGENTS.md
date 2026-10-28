@@ -59,7 +59,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | `just dogfood` / `just dogfood-check` | Boot `dist/diskless/` diskless in QEMU with Secure Boot (interactive / headless probe). |
 | `just dogfood-install [<next-dir> [<broken-dir>]]` | QEMU end-to-end: diskless boot, install to disk, boot it, A/B update to `<next-dir>`, then roll back from a broken `<broken-dir>` (`DOGFOOD_SYSEXT=nvidia` or `zfs,nvidia` follows the NVIDIA sysexts instead of, or with, ZFS). |
 | `just publish-oci REF [DIR] [PLAIN_HTTP]` | Push `dist/diskless/` as an ORAS OCI artifact tagged `<version>,latest` (one layer per file). Local rehearsal; CI publishes via `scripts/publish-release.sh`. |
-| `just build-sysext` / `just export-sysext` | Build and export the k0s and KubeStellar `systemd-sysext` images. |
+| `just build-sysext` / `just export-sysext` | Build and export the k0s `systemd-sysext` image (KubeStellar ships with the homelab add-ons: `just export-homelab-sysext`). |
 | `just build-zfs-sysext` / `just export-zfs-sysext` | Build and export the OpenZFS `systemd-sysext`. |
 | `just build-nvidia-sysext` / `just export-nvidia-sysext` | Build and export an NVIDIA open-kernel-module `systemd-sysext` (`FLAVOUR=nvidia-open-595`). |
 | `just dogfood-nvidia` | Install `dist/diskless/` in QEMU, merge its NVIDIA sysext and probe it (no GPU). |
