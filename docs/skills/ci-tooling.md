@@ -75,14 +75,14 @@ unpublished, so a fresh `bst2_image` bump can fail `just bst` with "manifest unk
 
 ### Python lint
 
-`just lint-python`, which the `unit` job runs before the tests, runs ruff over
-every Python file (`ruff.toml`: the E, F, W, I, UP and B rules, each disabled
-rule with its reason) and mypy over `scripts/` and `.github/scripts/`
-(`mypy.ini`: every function there is annotated). ruff's `target-version` is the
-oldest interpreter that runs these files — today the runners' system python3, 3.14 — not the `setup-python` version the workflows install; raise it only when every caller runs that version or newer. Locally, install
-the pinned tools into a virtualenv with
-`python3 -m pip install -r .github/requirements-ci.txt`, run
-`just lint-python`, and let `python3 -m ruff check --fix` apply the safe fixes.
+`just lint-python` runs ruff on every Python file (`ruff.toml`: E, F, W, I, UP,
+B; disabled rules are explained) and mypy on annotated functions in `scripts/`
+and `.github/scripts/` (`mypy.ini`); the `unit` job runs it before tests. The
+`pyproject.toml`'s `requires-python` and `.python-version` set 3.14; ruff's
+`target-version` matches the runners' system Python, the oldest CI runtime, not
+`setup-python`; raise it only when every caller supports it. Lint locally with
+`python3 -m pip install -r .github/requirements-ci.txt` in a virtualenv, then
+`just lint-python`; `python3 -m ruff check --fix` applies safe fixes.
 
 The pytest half of `just test-unit` runs in parallel (`-n auto`, pytest-xdist)
 and measures coverage of the repo's Python (`.coveragerc`: `scripts/`,
