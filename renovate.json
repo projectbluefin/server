@@ -29,7 +29,7 @@
     },
     {
       "customType": "regex",
-      "description": "The Justfile's bst2 image. Its tags are the freedesktop-sdk-docker-images commit each image was built from, which the docker datasource cannot order, so this follows that repository's default branch with git-refs; every merge there publishes a bst2 tag for its commit. The value stays a tag, not a digest pin.",
+      "description": "The Justfile's bst2 image. Its tags are the freedesktop-sdk-docker-images commit each image was built from, which the docker datasource cannot order, so this follows that repository's default branch with git-refs; the tag is published only after that repository's build pipeline succeeds, so a freshly bumped value can fail 'just bst' with 'manifest unknown' until it is available. The value stays a tag, not a digest pin.",
       "managerFilePatterns": [
         "/^Justfile$/"
       ],

@@ -7,7 +7,7 @@ default:
 # Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3).
 export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44")
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6")
-export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:0fadcdcabdb66c7b6cd3721072fd41abe38f5c10")
+export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:7bad9dd2eb087b7ed1e6362cccc5677870d9511f")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
 # butane (v2.27.0, built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
@@ -38,6 +38,20 @@ bst *ARGS:
     resolv_args=()
     if [ -s /run/systemd/resolve/resolv.conf ]; then
         resolv_args=(-v /run/systemd/resolve/resolv.conf:/etc/resolv.conf:ro)
+    fi
+    # Fail fast with a clear message when the bst2 tag was never published (a
+    # failed upstream build leaves it 'manifest unknown') instead of letting
+    # podman fail deep inside a build. Skip the pull when the image is already
+    # cached locally.
+    if ! {{sudo_cmd}} podman image exists "${bst2_image}" >/dev/null 2>&1; then
+        if ! pull_err=$({{sudo_cmd}} podman pull --quiet "${bst2_image}" 2>&1); then
+            echo "ERROR: could not pull bst2 image '${bst2_image}'." >&2
+            printf '%s\n' "$pull_err" | sed 's/^/    /' >&2 || true
+            echo "    The tag was likely never published by the FSDK build pipeline" >&2
+            echo "    (a failed upstream build leaves it 'manifest unknown')." >&2
+            echo "    Wait for the tag to be published, or set BST2_IMAGE to a known-good tag." >&2
+            exit 1
+        fi
     fi
     # shellcheck disable=SC2086
     {{sudo_cmd}} podman run --rm \
