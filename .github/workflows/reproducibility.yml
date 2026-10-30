@@ -53,6 +53,7 @@ jobs:
         runtimes/docker-sysext.bst
         oci/nspawn-org-sysext.bst
         oci/tailscale-sysext.bst
+        oci/netbird-sysext.bst
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

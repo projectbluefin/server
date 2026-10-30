@@ -52,6 +52,7 @@ def release_files(version: str) -> list[str]:
         f"docker_{version}.raw.zst",
         f"nspawn-org_{version}.raw.zst",
         f"tailscale_{version}.raw.zst",
+        f"netbird_{version}.raw.zst",
         "home-server.bu",
         "home-server-cluster.bu",
         f"nvidia-open-595_{version}.raw.zst",

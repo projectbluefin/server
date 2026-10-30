@@ -134,6 +134,9 @@ build-depends:
 - filename: oci/tailscale-sysext.bst
   config:
     location: /sysext/tailscale
+- filename: oci/netbird-sysext.bst
+  config:
+    location: /sysext/netbird
 
 variables:
   image-name: bluefin-server_%{image-version}
@@ -283,7 +286,8 @@ config:
       /sysext/podman/podman_%{image-version}.raw.zst \
       /sysext/docker/docker_%{image-version}.raw.zst \
       /sysext/nspawn-org/nspawn-org_%{image-version}.raw.zst \
-      /sysext/tailscale/tailscale_%{image-version}.raw.zst
+      /sysext/tailscale/tailscale_%{image-version}.raw.zst \
+      /sysext/netbird/netbird_%{image-version}.raw.zst
     (cd "${extensions}" && sha256sum --binary *.raw.zst > SHA256SUMS)
     # FAT metadata/slack plus room for both installed UKIs and updates.
     payload="$(du -sb "${extensions}")"
@@ -331,7 +335,8 @@ config:
        /sysext/podman/podman_%{image-version}.raw.zst \
        /sysext/docker/docker_%{image-version}.raw.zst \
        /sysext/nspawn-org/nspawn-org_%{image-version}.raw.zst \
-       /sysext/tailscale/tailscale_%{image-version}.raw.zst "%{install-root}/"
+       /sysext/tailscale/tailscale_%{image-version}.raw.zst \
+       /sysext/netbird/netbird_%{image-version}.raw.zst "%{install-root}/"
     install -m644 -t "%{install-root}" /homebrew-templates/home-server*.bu
 
   - |

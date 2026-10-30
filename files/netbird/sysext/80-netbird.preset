@@ -1,0 +1,3 @@
+# NetBird units are opt-in on Bluefin Server: disabled by default preset.
+# An operator or provisioning profile enables netbird.service explicitly.
+disable netbird.service

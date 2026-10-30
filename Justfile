@@ -367,6 +367,22 @@ export-tailscale-sysext: build-tailscale-sysext
     rm -rf dist/tailscale-checkout
     @echo "==> wrote tailscale sysext:" && ls -lh dist/sysext/
 
+# Build the NetBird systemd-sysext (locked to one image version).
+[group('sysext')]
+build-netbird-sysext:
+    just bst build oci/netbird-sysext.bst
+
+# Export the NetBird sysext + SHA256SUMS to dist/sysext/.
+[group('sysext')]
+export-netbird-sysext: build-netbird-sysext
+    rm -rf dist/netbird-checkout
+    mkdir -p dist/sysext
+    just bst artifact checkout oci/netbird-sysext.bst --directory /src/dist/netbird-checkout
+    cp dist/netbird-checkout/netbird_*.raw.zst dist/sysext/
+    grep 'raw.zst$' dist/netbird-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
+    rm -rf dist/netbird-checkout
+    @echo "==> wrote netbird sysext:" && ls -lh dist/sysext/
+
 # Set up KubeStellar kc-agent for the user in ONE command.
 [group('test')]
 setup-kubestellar ORIGIN="http://localhost:8080,http://127.0.0.1:8080":

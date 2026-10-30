@@ -133,6 +133,12 @@ upstream Tailscale VPN daemon and CLI tool. Units are opt-in and disabled by
 `80-tailscale.preset`; an operator or Ignition profile enables `tailscaled.service`
 once merged.
 
+The optional **NetBird** system extension (`oci/netbird-sysext.bst`,
+`netbird_<image-version>.raw`, sysupdate feature `netbird`) provides the
+upstream NetBird VPN daemon and CLI tool. Units are opt-in and disabled by
+`80-netbird.preset`; an operator or Ignition profile enables `netbird.service`
+once merged.
+
 The **homelab** sysext (`oci/homelab-sysext.bst`, `homelab_<image-version>.raw`,
 sysupdate feature `homelab`) is version-locked the same way and carries no
 binaries: the default homelab component set as plain YAML under
