@@ -48,6 +48,15 @@
       "matchPackageNames": ["https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git"],
       "extractVersion": "^freedesktop-sdk-(?<version>26\\.08\\.[0-9]+)$",
       "versioning": "semver"
+    },
+    {
+      "description": "git-refs sees a master commit the moment it lands, before the image pipeline has built and pushed its bst2 tag (and the pipeline can fail), so the proposed pin may not be pullable yet. Hold it for a human to confirm the tag exists instead of automerging.",
+      "matchDatasources": ["git-refs"],
+      "matchPackageNames": ["https://gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images.git"],
+      "automerge": false,
+      "prBodyNotes": [
+        "Before merging, confirm the tag exists: `skopeo inspect docker://registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:<new commit>`. A master commit whose image pipeline failed or is still running has no tag."
+      ]
     }
   ]
 }

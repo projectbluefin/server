@@ -180,6 +180,24 @@ def test_renovate_tracks_the_bst2_image_tag() -> None:
     assert image.group(1).endswith(":" + found[0][1].group("currentDigest"))
 
 
+def test_renovate_holds_bst2_bumps_for_a_human_to_confirm_the_tag() -> None:
+    # git-refs reports a master commit before its image pipeline has published
+    # the bst2 tag, so the bump must not automerge.
+    # matchPackageNames compares against packageName, not depName, so the rule
+    # must name the manager's packageNameTemplate or it never applies.
+    manager = next(m for m in RENOVATE["customManagers"] if m.get("depNameTemplate") == "bst2")
+    rules = [
+        r
+        for r in RENOVATE["packageRules"]
+        if r.get("matchPackageNames") == [manager["packageNameTemplate"]] and "automerge" in r
+    ]
+    assert len(rules) == 1, rules
+    rule = rules[0]
+    assert rule.get("matchDatasources", [manager["datasourceTemplate"]]) == [manager["datasourceTemplate"]]
+    assert rule["automerge"] is False
+    assert any("skopeo inspect" in note for note in rule["prBodyNotes"])
+
+
 def test_renovate_automerges_through_the_merge_queue() -> None:
     # The org-inherited Renovate config automerges with platformAutomerge
     # off, so Renovate would merge directly, which the merge queue refuses.
