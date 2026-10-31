@@ -155,8 +155,8 @@ check-image DIR="dist/diskless" BASELINE="":
     set -euo pipefail
     args=(/src/{{DIR}})
     [ -n "{{BASELINE}}" ] && args+=(--baseline-usr "/src/{{BASELINE}}")
-    podman run --rm --security-opt label=disable -v "{{justfile_directory()}}:/src:ro" -w /src \
-        {{check_image_base}} sh -c 'dnf -yq install erofs-utils binutils cpio zstd python3 >/dev/null 2>&1 && python3 .github/scripts/check-image.py "$@"' -- "${args[@]}"
+    {{sudo_cmd}} podman run --rm --security-opt label=disable -v "{{justfile_directory()}}:/src:ro" -w /src \
+        {{check_image_base}} sh -c 'dnf -yq install erofs-utils binutils cpio zstd python3 >/dev/null && python3 .github/scripts/check-image.py "$@"' -- "${args[@]}"
 
 # Set the image version in include/image.yml; it must increase under
 # strverscmp() (CI uses YY.MM.<run number>).
