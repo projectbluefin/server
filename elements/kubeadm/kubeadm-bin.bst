@@ -55,7 +55,7 @@ sources:
   directory: runc
 - kind: tar
   url: github:containernetworking/plugins/releases/download/v%{cni-plugins-version}/cni-plugins-linux-amd64-v%{cni-plugins-version}.tgz
-  ref: b275772da4026d2161bf8a8b41ed4786754c8a93ebfb6564006d5da7f23831e5
+  ref: b98f74a0f8522f0a83867178729c1aa70f2158f90c45a2ca8fa791db1c76b303
   base-dir: ''
   directory: cni
 
@@ -90,7 +90,7 @@ sources:
       directory: runc
     - kind: tar
       url: github:containernetworking/plugins/releases/download/v%{cni-plugins-version}/cni-plugins-linux-arm64-v%{cni-plugins-version}.tgz
-      ref: 16484966a46b4692028ba32d16afd994e079dc2cc63fbc2191d7bfaf5e11f3dd
+      ref: 56171987d3947707c3563db2f4001bccaf50fd63468611b9f3cbecb1375ee7ec
       base-dir: ''
       directory: cni
 
