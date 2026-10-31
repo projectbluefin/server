@@ -214,6 +214,15 @@ fail() {
     [ -z "${qemu_pid:-}" ] || kill "${qemu_pid}" 2>/dev/null || true
     exit 1
 }
+# Never leave a guest or the release server behind, whatever ends the script
+# (fail, set -e, an early PASS, a signal): an orphaned QEMU keeps its disks
+# and port. Only kill PIDs that are set; `kill 0` signals the process group.
+# shellcheck disable=SC2329 # the EXIT trap below runs it
+cleanup() {
+    local pid
+    for pid in ${qemu_pid:-} ${http_pid:-}; do kill "${pid}" 2>/dev/null || true; done
+}
+trap cleanup EXIT
 
 # put_fs <start MiB> <size MiB> <mkfs command...>: make a filesystem in a
 # scratch file and write it into the target at that offset.
@@ -1095,7 +1104,6 @@ if [ -n "${next_ver}" ]; then
     gpg --batch --quiet --detach-sign --output "${www}/foreign/SHA256SUMS.gpg" "${next}/SHA256SUMS"
     (cd "${www}" && exec python3 -m http.server --bind 127.0.0.1 "${port}" >"${state}/http.log" 2>&1) &
     http_pid=$!
-    trap 'kill "${http_pid}" 2>/dev/null || true' EXIT
 fi
 
 checks="an unreachable and a foreign-signed source, then ${next_ver}"
