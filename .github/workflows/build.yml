@@ -722,8 +722,9 @@ jobs:
           [ -n "${base}" ] && args+=(--baseline-usr "${base}")
           python3 .github/scripts/check-image.py "${args[@]}"
 
-      # Informational: growth over 5 % or 5 MiB is a warning, never a failure,
-      # and the report stays outside the signed SHA256SUMS.
+      # Growth over 5 % or 5 MiB is a warning, never a failure, and the report
+      # stays outside the signed SHA256SUMS. A /usr or verity image over 90 %
+      # of its repart.d A/B slot fails: installed nodes could not update to it.
       - name: Measure image sizes
         env:
           VERSION: ${{ needs.build.outputs.version }}
