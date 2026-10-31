@@ -227,6 +227,7 @@ def test_image_check_measures_the_set_against_the_latest_release(tmp_path: Path)
     # The step itself, on a one-file set and the latest release's files.
     (tmp_path / "scripts" / "ci").mkdir(parents=True)
     shutil.copy(ROOT / "scripts" / "ci" / "image-sizes.py", tmp_path / "scripts" / "ci")
+    shutil.copytree(ROOT / "files" / "os" / "repart.d", tmp_path / "files" / "os" / "repart.d")
     uuid = "d3107d37-a9da-32cf-3c19-49fa3b0cb1df"
     (tmp_path / "dist" / "diskless").mkdir(parents=True)
     (tmp_path / "dist" / "diskless" / f"bluefin-server_0.42_{uuid}.usr.raw").write_bytes(b"u" * 300)
