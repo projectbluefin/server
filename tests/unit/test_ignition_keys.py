@@ -8,7 +8,6 @@ requires the committed files/release-keys/ignition-pubring.pgp and no
 Ignition secret key. build.yml runs it on every key set.
 """
 
-from __future__ import annotations
 
 import os
 import shutil

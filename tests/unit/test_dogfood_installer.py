@@ -11,7 +11,6 @@ These tests run the script's own ``boot_wait`` against a stand-in QEMU that
 never exits, without booting anything.
 """
 
-from __future__ import annotations
 
 import re
 import shlex

@@ -7,7 +7,6 @@ Job renaming, per-chart patches, file layout and main()) offline: podman and
 the network are replaced by in-process fakes.
 """
 
-from __future__ import annotations
 
 import hashlib
 import importlib.util

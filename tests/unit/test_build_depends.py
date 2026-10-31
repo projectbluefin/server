@@ -6,7 +6,6 @@ sandbox and must depend on base/base-stack.bst in build-depends to guarantee
 a working shell environment.
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

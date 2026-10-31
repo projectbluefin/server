@@ -4,7 +4,6 @@
 nothing else notices when a unit is renamed or a path moves under it.
 """
 
-from __future__ import annotations
 
 import re
 from pathlib import Path

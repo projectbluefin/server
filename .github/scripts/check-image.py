@@ -16,7 +16,6 @@ With --baseline-usr (a previous release's *.usr.raw) it also prints which
 Needs readelf, zstd, cpio and fsck.erofs (erofs-utils) on PATH.
 """
 
-from __future__ import annotations
 
 import argparse
 import json

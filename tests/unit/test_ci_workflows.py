@@ -11,7 +11,6 @@
   tracking issue through .github/scripts/tracking-issue.sh.
 """
 
-from __future__ import annotations
 
 import json
 import os

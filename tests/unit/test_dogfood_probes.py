@@ -6,7 +6,6 @@ run then times out, far from the cause; shellcheck of the host script never
 sees the heredoc's contents.
 """
 
-from __future__ import annotations
 
 import re
 import subprocess

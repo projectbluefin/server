@@ -1,6 +1,5 @@
 """Contracts for the NVIDIA open-kernel-module driver sysexts (include/nvidia.yml)."""
 
-from __future__ import annotations
 
 import re
 import subprocess

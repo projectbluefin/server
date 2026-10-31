@@ -1,6 +1,5 @@
 """The release job and its pull-request rehearsal run the same publish path."""
 
-from __future__ import annotations
 
 import json
 import os

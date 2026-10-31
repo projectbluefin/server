@@ -5,7 +5,6 @@ the amdgpu/radeon/nouveau/xe GPU drivers in FSDK's fdsdk-config.sh and takes
 exactly the options that turned off out of FSDK's expected-configs check.
 """
 
-from __future__ import annotations
 
 import subprocess
 from pathlib import Path

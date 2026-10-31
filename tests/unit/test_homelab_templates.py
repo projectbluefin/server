@@ -9,7 +9,6 @@ byte-for-byte). Here the .ign is checked against the .bu semantically, so
 the gate needs neither podman nor the network.
 """
 
-from __future__ import annotations
 
 import base64
 import gzip

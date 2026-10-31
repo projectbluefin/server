@@ -7,7 +7,6 @@ it. It runs here, as bluefin-host's bluefin-update-pending, against a fake
 systemd-sysupdate.
 """
 
-from __future__ import annotations
 
 import os
 import shutil

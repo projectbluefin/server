@@ -11,7 +11,6 @@ The same definitions serve three consumers:
 Pure static checks: no BuildStream, no block devices.
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

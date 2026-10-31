@@ -1,6 +1,5 @@
 """Contracts for signed downloads, version-locked sysexts and HTTP-boot Ignition."""
 
-from __future__ import annotations
 
 import configparser
 from pathlib import Path

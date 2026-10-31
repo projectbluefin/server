@@ -10,7 +10,6 @@
   part a later consumer reads is uploaded with if-no-files-found: error.
 """
 
-from __future__ import annotations
 
 import fnmatch
 import itertools

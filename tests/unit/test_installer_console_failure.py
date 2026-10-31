@@ -20,7 +20,6 @@ That a successful install still reboots on its own, and the installer command
 line's quiet settings, are pinned in test_usb_installer_prompts.py.
 """
 
-from __future__ import annotations
 
 import shlex
 from pathlib import Path

@@ -5,7 +5,6 @@ openssl: every module, whether shipped as .ko or .ko.zst, must come out signed
 and compressed, and one failing worker must fail the step.
 """
 
-from __future__ import annotations
 
 import os
 import subprocess

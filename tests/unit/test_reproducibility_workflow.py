@@ -5,7 +5,6 @@ every oci/* target `just validate` resolves must be in FINAL_ASSEMBLY, or its
 cached artifact is reused by the second build and never compared.
 """
 
-from __future__ import annotations
 
 import re
 from pathlib import Path

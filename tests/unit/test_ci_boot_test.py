@@ -11,7 +11,6 @@
   row in the job's step summary.
 """
 
-from __future__ import annotations
 
 import hashlib
 import os

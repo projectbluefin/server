@@ -6,7 +6,6 @@ back. It runs here, as bluefin-host's bluefin-boot-deadline, against fake
 systemd tools.
 """
 
-from __future__ import annotations
 
 import configparser
 import os

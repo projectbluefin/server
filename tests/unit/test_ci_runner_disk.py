@@ -1,6 +1,5 @@
 """scripts/ci-runner-disk.sh is the one runner disk setup, and is safe to run twice."""
 
-from __future__ import annotations
 
 import os
 import subprocess

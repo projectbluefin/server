@@ -7,7 +7,6 @@ local reboot; boot-complete.target requires that no unit failed before
 systemd-bless-boot marks a counted UKI good.
 """
 
-from __future__ import annotations
 
 import configparser
 import os

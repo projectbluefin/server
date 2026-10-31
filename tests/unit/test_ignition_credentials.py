@@ -14,7 +14,6 @@ Runs against local HTTP and HTTPS servers and throwaway GnuPG keys; no
 files/boot-keys are needed.
 """
 
-from __future__ import annotations
 
 import functools
 import os

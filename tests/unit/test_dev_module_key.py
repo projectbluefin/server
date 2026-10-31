@@ -9,7 +9,6 @@ one; and no element stages files/dev-keys/, so the published private key ships
 in no artifact.
 """
 
-from __future__ import annotations
 
 import shutil
 import subprocess

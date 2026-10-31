@@ -1,7 +1,6 @@
 """Behavior of scripts/publish-release.sh, the one publish path build.yml runs
 on main (release) and on pull requests (release-dry-run)."""
 
-from __future__ import annotations
 
 import hashlib
 import json

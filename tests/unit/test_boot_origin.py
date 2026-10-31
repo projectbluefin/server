@@ -7,7 +7,6 @@ the initrd looks for bluefin-node.ign next to it, and the diskless update check
 fetches the signed SHA256SUMS from its directory.
 """
 
-from __future__ import annotations
 
 import os
 import stat

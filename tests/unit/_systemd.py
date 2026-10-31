@@ -4,7 +4,6 @@ A test built on these helpers survives comments, whitespace and key order in
 the payload, and fails when a setting systemd would act on changes.
 """
 
-from __future__ import annotations
 
 import fnmatch
 import re

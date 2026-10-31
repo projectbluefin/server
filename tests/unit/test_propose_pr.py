@@ -8,7 +8,6 @@ content differs; open one otherwise; with --skip-closed-title, never reopen a
 title that was turned down; and stop, without pushing, when `gh` fails.
 """
 
-from __future__ import annotations
 
 import os
 import subprocess
