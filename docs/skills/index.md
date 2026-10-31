@@ -26,7 +26,8 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`architecture-roadmap.md`](architecture-roadmap.md) | Future architecture direction, long-lead design | Roadmap for systemd-native architecture work. |
 | [`booty-integration.md`](booty-integration.md) | HTTP boot, iPXE chainloading, per-node Ignition, kubeadm worker provisioning via Booty | How the Booty network boot server serves releases to nodes. |
 | [`bump-fsdk-version.md`](bump-fsdk-version.md) | Pinning or retagging the FSDK junction | Update the pinned FSDK release and derived tags. |
-| [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
+| [`ci-conventions.md`](ci-conventions.md) | GitHub Actions conventions, workflow SHA pinning, environments and secrets | Org-wide workflow conventions and the per-job table. |
+| [`ci-tooling.md`](ci-tooling.md) | CI process, labels, build times and caches | Core process, label reference, build-time figures, cache layout. |
 | [`ddi-installer-build.md`](ddi-installer-build.md) | Building and exporting the image set | Local build, export, pruning, reproducibility, keys. |
 | [`ddi-installer-dogfood.md`](ddi-installer-dogfood.md) | Boot-testing the image set in QEMU | `just dogfood*`, `scripts/dogfood-*.sh`, the `DOGFOOD_*` variables. |
 | [`ddi-installer.md`](ddi-installer.md) | Boot flow, diskless pull, `systemd-sysinstall` | Boot, install, and update architecture. |

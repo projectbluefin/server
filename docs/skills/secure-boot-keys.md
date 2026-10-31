@@ -76,7 +76,7 @@ certificate, so the kernel still compiles; `just gen-dev-keys` says so, and
 
 On `main`, the workflow unpacks two secrets from the `release` environment,
 which only `main` may use (see "Environments and secrets" in
-[ci-tooling.md](ci-tooling.md)):
+[ci-conventions.md](ci-conventions.md)):
 
 - `BOOT_KEYS_TARBALL` — gzipped tar of `files/boot-keys/` with the real
   PK/KEK/DB, module key, and sysupdate signing key.
