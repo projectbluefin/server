@@ -49,7 +49,8 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md) | Image-based A/B updates and signed manifests | Release signing, `systemd-sysupdate`, and trust model. |
 | [`sysupdate-operations.md`](sysupdate-operations.md) | Operating sysupdate trust in the field | Update-health banner, checking status by hand, signing-key rotation. |
 | [`tpm2-credential-sealing.md`](tpm2-credential-sealing.md) | First-boot credentials, root/SSH node access, TPM2 sealing | Provisioning credentials, node access, and sealing with `systemd-creds`. |
-| [`usb-installer.md`](usb-installer.md) | The offline USB installer image, unattended installs, install-time provisioning | `bluefin-server-installer_<ver>.raw` boot flow, sysinstall drop-in, ESP credentials. |
+| [`usb-installer.md`](usb-installer.md) | The offline USB installer image and its prompts | `bluefin-server-installer_<ver>.raw` boot flow, sysinstall drop-in, Secure Boot check. |
+| [`usb-installer-provisioning.md`](usb-installer-provisioning.md) | Unattended installs and install-time provisioning from the stick | Homelab entries, Home Server credentials, ESP credentials, developer-mode sticks. |
 
 ## Standing facts
 

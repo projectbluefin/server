@@ -43,7 +43,7 @@ SYSUSERS_DROPIN = (
 )
 NETWORK = REPO_ROOT / "files" / "os" / "systemd" / "network" / "20-wired.network"
 TPM2_SKILL = REPO_ROOT / "docs" / "skills" / "tpm2-credential-sealing.md"
-USB_INSTALLER_SKILL = REPO_ROOT / "docs" / "skills" / "usb-installer.md"
+USB_INSTALLER_SKILL = REPO_ROOT / "docs" / "skills" / "usb-installer-provisioning.md"
 
 
 def test_creds_provisioning_element_stages_all_credential_consumers() -> None:
