@@ -187,7 +187,7 @@ prompt" in [tpm2-credential-sealing.md](tpm2-credential-sealing.md)),
 `\a` the usable addresses of every interface, `\4`
 the best IPv4 address; agetty reprints the banner when an address changes,
 so a DHCP lease that arrives after the prompt still shows. The update lines
-follow ([systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)),
+follow ([sysupdate-operations.md](sysupdate-operations.md)),
 and on a Homelab control plane the join passphrase and the KubeStellar
 Console's address and login ([homelab-profile.md](homelab-profile.md)).
 

@@ -372,7 +372,7 @@ only when a newer version than the booted one is installed.
   timers, so an opt-out survives updates.
 - **Update health** (version, last check, staged update, last error) is on
   the console and SSH login banners; see "Update health on the node" in
-  [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md).
+  [sysupdate-operations.md](sysupdate-operations.md).
 
 ### Diskless and installer boots
 

@@ -325,7 +325,7 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
      with and without the stick. Outside releases, update to `1.<run>.1`: unreachable and
      foreign-signed sources must fail `systemd-sysupdate.service` and appear on the login banner;
      the update must stage, boot and be blessed (see "Update health on the node" in
-     [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md)). Two more runs install
+     [sysupdate-operations.md](sysupdate-operations.md)). Two more runs install
      over Bluefin and another OS's GPT disk (`DOGFOOD_TARGET=prior-install`, `foreign-gpt`; #359).
    - The `installer` bucket always runs the attended install with `DOGFOOD_CONSOLE_NOISE=1`,
      then `DOGFOOD_CONSOLE_FAILURE=kernel` in separate disposable state (#454). The harness checks
@@ -494,7 +494,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
       workflow; `tests/unit/test_release_workflow.py` keeps `release` and
       `release-dry-run` on the same commands and the same `setup-oras` pin.
 - [ ] The signing secret names (`BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY`)
-      match `docs/skills/systemd-sysupdate-verification.md`.
+      match `docs/skills/sysupdate-operations.md`.
 - [ ] A job that reads a secret names its main-only environment
       ([Environments and secrets](#environments-and-secrets)).
 - [ ] Every `actions/checkout` sets `persist-credentials: false`.

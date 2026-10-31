@@ -46,6 +46,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and version matching. |
 | [`sysext-kernel-modules.md`](sysext-kernel-modules.md) | Kernel-module-carrying sysexts (OpenZFS, NVIDIA) | No `modules.*` index in a sysext; `bluefin-sysext-modules` builds the merged index and loads modules. |
 | [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md) | Image-based A/B updates and signed manifests | Release signing, `systemd-sysupdate`, and trust model. |
+| [`sysupdate-operations.md`](sysupdate-operations.md) | Operating sysupdate trust in the field | Update-health banner, checking status by hand, signing-key rotation. |
 | [`tpm2-credential-sealing.md`](tpm2-credential-sealing.md) | First-boot credentials, root/SSH node access, TPM2 sealing | Provisioning credentials, node access, and sealing with `systemd-creds`. |
 | [`usb-installer.md`](usb-installer.md) | The offline USB installer image, unattended installs, install-time provisioning | `bluefin-server-installer_<ver>.raw` boot flow, sysinstall drop-in, ESP credentials. |
 
