@@ -102,10 +102,14 @@ variables:
   # The installer medium opens its own usr/verity by partition label, not by
   # the usrhash-derived UUIDs: those belong to installed usr slots, so an
   # existing install (or the disk being installed) is never picked up as the
-  # installer's /usr. The installer is offline: neither the initrd nor the
-  # booted stick may wait for network-online (netboot needs it, the
-  # installer never does; the userspace wait would fail after ~2 min and
-  # print over the sysinstall prompt).
+  # installer's /usr. The labels carry no version: with one,
+  # bluefin-installer-usr-verity_<ver> would pass GPT's 36-character limit.
+  # So attach one installer stick at a time: with two, by-partlabel points
+  # at either, and a stick of another version fails usrhash verification.
+  # The installer is offline: neither the initrd nor the booted stick may
+  # wait for network-online (netboot needs it, the installer never does; the
+  # userspace wait would fail after ~2 min and print over the sysinstall
+  # prompt).
   # tty0 comes last so /dev/console, where systemd-sysinstall.service draws
   # its interface, is the monitor. firstboot.keymap is a well-known
   # systemd-firstboot credential: with it set, firstboot does not ask for a
