@@ -175,6 +175,19 @@ def test_the_load_units_and_boot_refreshers_are_known() -> None:
                                  "nvidia-container-toolkit-activate.service"]
 
 
+def ordered(first: str, then: str) -> bool:
+    return then in SystemdFile(OS_UNITS / first).words("Unit", "Before") or \
+        first in SystemdFile(OS_UNITS / then).words("Unit", "After")
+
+
+def test_boot_refreshers_never_overlap() -> None:
+    # Two refreshes at once race on the /usr overlay; each pair is ordered.
+    refreshers = boot_refreshers()
+    for i, a in enumerate(refreshers):
+        for b in refreshers[i + 1:]:
+            assert ordered(a, b) or ordered(b, a), f"{a} and {b} must be ordered"
+
+
 @pytest.mark.parametrize("refresher", boot_refreshers())
 def test_boot_refreshers_wait_for_the_module_loads(refresher: str) -> None:
     after = " ".join(SystemdFile(OS_UNITS / refresher).values("Unit", "After")).split()
