@@ -207,4 +207,4 @@ on every boot:
 ## See also
 
 - [ddi-installer.md](ddi-installer.md) — boot chain, diskless pull, Ignition credentials.
-- [ddi-installer-build.md](ddi-installer-build.md) — dogfood harness and its `DOGFOOD_*` variables.
+- [ddi-installer-dogfood.md](ddi-installer-dogfood.md) — dogfood harness and its `DOGFOOD_*` variables.

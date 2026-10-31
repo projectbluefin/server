@@ -176,6 +176,6 @@ expect:
 
 - [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md) —
   manifest signing and sysupdate trust model.
-- [ddi-installer-build.md](ddi-installer-build.md) — local build and dogfood
-  workflow.
+- [ddi-installer-build.md](ddi-installer-build.md) — local build workflow.
+- [ddi-installer-dogfood.md](ddi-installer-dogfood.md) — dogfood workflow.
 - [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary.

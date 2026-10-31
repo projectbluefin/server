@@ -27,7 +27,8 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`booty-integration.md`](booty-integration.md) | HTTP boot, iPXE chainloading, per-node Ignition, kubeadm worker provisioning via Booty | How the Booty network boot server serves releases to nodes. |
 | [`bump-fsdk-version.md`](bump-fsdk-version.md) | Pinning or retagging the FSDK junction | Update the pinned FSDK release and derived tags. |
 | [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
-| [`ddi-installer-build.md`](ddi-installer-build.md) | Building and dogfooding the image set | Local build, export, and QEMU dogfood workflow. |
+| [`ddi-installer-build.md`](ddi-installer-build.md) | Building and exporting the image set | Local build, export, pruning, reproducibility, keys. |
+| [`ddi-installer-dogfood.md`](ddi-installer-dogfood.md) | Boot-testing the image set in QEMU | `just dogfood*`, `scripts/dogfood-*.sh`, the `DOGFOOD_*` variables. |
 | [`ddi-installer.md`](ddi-installer.md) | Boot flow, diskless pull, `systemd-sysinstall`, A/B sysupdate | Boot, install, and update architecture. |
 | [`diskless-troubleshooting.md`](diskless-troubleshooting.md) | Diskless node reboot-loops, RAM sizing, keeping logs, writing Ignition configs | Failure summary, minimum RAM, failure modes, logs, supported Ignition subset. |
 | [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |

@@ -478,7 +478,8 @@ specifying the URL to pull `bluefin-server_<ver>.raw` and its signed SHA256SUMS.
 
 ## See also
 
-- [ddi-installer-build.md](ddi-installer-build.md) — local build, export, and dogfood workflow.
+- [ddi-installer-build.md](ddi-installer-build.md) — local build and export.
+- [ddi-installer-dogfood.md](ddi-installer-dogfood.md) — QEMU dogfood workflow.
 - [diskless-troubleshooting.md](diskless-troubleshooting.md) — failure summary, minimum RAM, logs, supported Ignition subset.
 - [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md) — release signing and transfer verification.
 - [CONTEXT.md](../../CONTEXT.md) — canonical project domain glossary (OS DDI, Netboot UKI, Disk UKI, Slot).

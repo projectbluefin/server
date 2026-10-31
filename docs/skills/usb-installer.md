@@ -157,7 +157,7 @@ output and scrollback before drawing, never on exit, preserving cancellation
 reasons. A failure after erasure leaves the disk blank
 ([#308](https://github.com/projectbluefin/server/issues/308)); boot the stick again to retry.
 
-The `DOGFOOD_CONSOLE_*` runs in [ddi-installer-build.md](ddi-installer-build.md) check this in QEMU.
+The `DOGFOOD_CONSOLE_*` runs in [ddi-installer-dogfood.md](ddi-installer-dogfood.md) check this in QEMU.
 
 All profiles use stock `systemd-sysinstall` and the same discoverable
 partition layout from `files/os/repart.d/` ([ddi-installer.md](ddi-installer.md)).
@@ -493,7 +493,7 @@ Unattended installs never ask: see [Unattended installs](#unattended-installs).
 ## See also
 
 - [ddi-installer.md](ddi-installer.md) — boot, install, and update architecture.
-- [ddi-installer-build.md](ddi-installer-build.md) — image build and dogfood procedure.
+- [ddi-installer-dogfood.md](ddi-installer-dogfood.md) — dogfood procedure for the installer.
 - [tpm2-credential-sealing.md](tpm2-credential-sealing.md) — first-boot
   credentials and ESP credential files.
 - [secure-boot-keys.md](secure-boot-keys.md) — the keys that sign the stick.

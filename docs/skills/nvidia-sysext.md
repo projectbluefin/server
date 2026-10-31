@@ -219,8 +219,9 @@ Running a GPU node — choosing the sysexts, nouveau eviction, CDI, the
 - [systemd-sysupdate-verification.md](systemd-sysupdate-verification.md) —
   features, components, signing.
 - [booty-integration.md](booty-integration.md) — per-host `extensions`.
-- [ddi-installer-build.md](ddi-installer-build.md) — build and dogfood
-  commands.
+- [ddi-installer-build.md](ddi-installer-build.md) — build commands.
+- [ddi-installer-dogfood.md](ddi-installer-dogfood.md) — dogfood commands
+  (`DOGFOOD_SYSEXT`).
 - [ci-tooling.md](ci-tooling.md) — `track-binaries.yml` and the build cost.
 - [k0s-sysext.md](k0s-sysext.md) — the other `ID=_any` sysext.
 - [skill-improvement.md](skill-improvement.md) — how to update this skill.
