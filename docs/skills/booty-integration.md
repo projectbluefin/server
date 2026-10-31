@@ -46,10 +46,12 @@ with `zfs`), and a k0s token. The image-locked extensions land in
 NVIDIA rules are in the Booty README's
 [NVIDIA GPU hosts](https://github.com/jeefy/booty#nvidia-gpu-hosts).
 
-A node with no `ignition.config` / `ignition.config.url` credential HEADs
-`bluefin-node.ign` next to its boot origin. Nothing there means nothing to
-apply. If it is there, `bluefin-ignition-credentials` in the initrd applies it
-only if it is signed:
+A node with no `ignition.config` / `ignition.config.url` credential fetches
+`bluefin-node.ign` next to its boot origin. Only an HTTP 404 means nothing to
+apply; any other error or status (a 5xx, a 403, a 405, a timeout) fails the
+boot, so a flaky boot server never brings a node up unconfigured. If it is
+there, `bluefin-ignition-credentials` in the initrd applies it only if it is
+signed:
 
 - It fetches `bluefin-node.ign.gpg` from the same directory and verifies it
   with `gpgv` against the Ignition config keyring
