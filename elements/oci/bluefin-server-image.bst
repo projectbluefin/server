@@ -343,15 +343,20 @@ config:
     set -eu
     # SPDX requires a creation time, which the plugin leaves to the build,
     # and unique SPDXIDs: FSDK bootstrap elements reached through two
-    # junction paths are collected twice, as identical packages.
+    # junction paths are collected twice, as identical packages (and their
+    # relationships twice). Only exact duplicates are dropped: two different
+    # packages under one SPDXID fail the build rather than losing one, and a
+    # relationship is a duplicate only if all three of its fields match.
     # SOURCE_DATE_EPOCH is BuildStream's fixed sandbox default (1321009871),
     # so created is always 2011-11-11T11:11:11Z. That keeps the SBOM bit
     # identical across rebuilds; the real build time lives in the SLSA
     # provenance attestation, not here.
     jq --arg created "$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
       '.creationInfo.created = $created
-       | .packages |= unique_by(.SPDXID)
-       | .relationships |= unique_by(.relatedSpdxElement)' \
+       | .packages |= (unique | sort_by(.SPDXID))
+       | if (.packages | map(.SPDXID) | unique | length) != (.packages | length)
+         then error("different SBOM packages share an SPDXID") else . end
+       | .relationships |= unique_by([.spdxElementId, .relationshipType, .relatedSpdxElement])' \
       /sbom/bluefin-server.spdx.json > "%{install-root}/%{image-name}.spdx.json"
 
   - |
