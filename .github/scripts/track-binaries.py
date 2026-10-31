@@ -24,6 +24,9 @@ BuildStream source ref.
   tailscale        include/tailscale.yml                    tailscale_<version>_       tailscale-x86-64-sha256 and
                    tailscale-version                        {amd64,arm64}.tgz          tailscale-arm64-sha256 in
                                                                                        the same include
+  netbird          include/netbird.yml                      netbird_<version>_linux_   netbird-x86-64-sha256 and
+                   netbird-version                          {amd64,arm64}.tar.gz       netbird-arm64-sha256 in
+                                                                                       the same include
 
 The .bst pins cover every architecture the element fetches: the top-level
 amd64 sources and the arm64 ones under `(?): arch == "aarch64"`. Every
@@ -40,7 +43,10 @@ snapshot tagged with its date, so it has no series: every newer release is
 proposed (SnapshotComponent). Tailscale's tarballs come from pkgs.tailscale.com
 with a bare-digest `.sha256` next to each; its two sha256 atoms sit next to the
 version in include/tailscale.yml and the element's `ref:` lines read them
-(TailscaleComponent), while its releases are listed on GitHub.
+(TailscaleComponent), while its releases are listed on GitHub. NetBird has the
+same two-atom shape in include/netbird.yml, but its tarballs are GitHub release
+assets whose sha256s sit in the release's netbird_<version>_checksums.txt
+(NetBirdComponent).
 
 check   Newest release of each component inside its pinned MAJOR.MINOR series:
         Kubernetes from dl.k8s.io/release/stable-X.Y.txt, an NVIDIA driver
@@ -674,6 +680,35 @@ class TailscaleComponent(BstComponent):
         return pins
 
 
+class NetBirdComponent(BstComponent):
+    """NetBird from its GitHub releases: one version atom, one sha256 atom per architecture.
+
+    Same shape as Tailscale: the element's `ref:` lines read
+    `%{netbird-x86-64-sha256}` and `%{netbird-arm64-sha256}` from
+    include/netbird.yml, so the pins are those include atoms. Unlike
+    Tailscale, the tarballs are release assets and the sha256s come from the
+    `netbird_<version>_checksums.txt` (sha256sum format) attached next to them.
+    """
+
+    ATOMS = {"amd64": "netbird-x86-64-sha256", "arm64": "netbird-arm64-sha256"}
+
+    def __init__(self) -> None:
+        super().__init__("netbird", "netbirdio/netbird", "{dir}/netbird_{version}_checksums.txt",
+                         include="include/netbird.yml", variables=("netbird-version",),
+                         element="elements/runtimes/netbird-bin.bst", marker="%{netbird-version}")
+
+    def pins(self, tree: Tree) -> list[Pin]:
+        pins = []
+        for pin in super().pins(tree):
+            arches = [arch for arch in self.ATOMS if f"_linux_{arch}.tar.gz" in pin.asset]
+            if len(arches) != 1:
+                raise TrackError(f"{self.element}: cannot tell the architecture of {pin.url}")
+            pins.append(Pin(self.include, "", self.ATOMS[arches[0]], pin.url, pin.sums, standalone_key=True))
+        if len(pins) != len(self.ATOMS):
+            raise TrackError(f"{self.element}: expected {len(self.ATOMS)} netbird tarballs, found {len(pins)}")
+        return pins
+
+
 class OrasComponent(Component):
     """The Justfile's ORAS image tag plus every setup-oras url and checksum."""
 
@@ -749,6 +784,7 @@ COMPONENTS: dict[str, Component] = {
                         include="include/nvidia-container-toolkit.yml",
                         element="elements/nvidia/nvidia-container-toolkit.bst"),
         TailscaleComponent(),
+        NetBirdComponent(),
         OrasComponent(),
     )
 }

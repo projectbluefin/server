@@ -1145,3 +1145,155 @@ def test_real_tailscale_element_pins_the_include_atoms():
         assert (pins[key].path, pins[key].url) == (TS_INCLUDE, ts_url(version, arch))
         assert pins[key].sums == ts_url(version, arch) + ".sha256"
         assert f'"%{{{key}}}"' in tree[TS_ELEMENT]
+
+
+NB_REPO = "netbirdio/netbird"
+NB_INCLUDE = "include/netbird.yml"
+NB_ELEMENT = "elements/runtimes/netbird-bin.bst"
+NB_OLD = {arch: sha(f"netbird-0.81.3-{arch}".encode()) for arch in ("amd64", "arm64")}
+NB_FILES = {
+    NB_INCLUDE: f"""# Single source of truth for the NetBird version axis.
+variables:
+  netbird-version: "0.81.3"
+  netbird-x86-64-sha256: "{NB_OLD['amd64']}"
+  netbird-arm64-sha256: "{NB_OLD['arm64']}"
+""",
+    NB_ELEMENT: """kind: manual
+
+(@):
+- include/arch.yml
+- include/netbird.yml
+
+sources:
+- kind: tar
+  url: github:netbirdio/netbird/releases/download/v%{netbird-version}/netbird_%{netbird-version}_linux_amd64.tar.gz
+  ref: "%{netbird-x86-64-sha256}"
+  directory: dist
+  base-dir: ""
+
+(?):
+- arch == "aarch64":
+    sources:
+    - kind: tar
+      url: github:netbirdio/netbird/releases/download/v%{netbird-version}/netbird_%{netbird-version}_linux_arm64.tar.gz
+      ref: "%{netbird-arm64-sha256}"
+      directory: dist
+      base-dir: ""
+""",
+}
+
+
+def nb_url(version: str, arch: str) -> str:
+    return f"https://github.com/{NB_REPO}/releases/download/v{version}/netbird_{version}_linux_{arch}.tar.gz"
+
+
+def nb_sums_url(version: str) -> str:
+    return f"https://github.com/{NB_REPO}/releases/download/v{version}/netbird_{version}_checksums.txt"
+
+
+def nb_release(version: str, *, prerelease: bool = False, draft: bool = False) -> dict:
+    """A GitHub release of NetBird with both Linux tarballs and the checksums file attached."""
+    return release(f"v{version}", f"netbird_{version}_linux_amd64.tar.gz", f"netbird_{version}_linux_arm64.tar.gz",
+                   f"netbird_{version}_checksums.txt", prerelease=prerelease, draft=draft)
+
+
+def nb_serve(upstream: Upstream, version: str) -> dict[str, str]:
+    """Serve both tarballs of `version` plus one sha256sum-format checksums file listing every asset."""
+    pins = {}
+    lines = []
+    for arch in ("amd64", "arm64"):
+        pins[arch] = upstream.asset(nb_url(version, arch))
+        lines.append(f"{pins[arch]}  netbird_{version}_linux_{arch}.tar.gz")
+    # Upstream's file also lists the other tools of the release (nblink, the migrate helpers).
+    lines.insert(0, f"{sha(b'nblink')}  nblink_{version}_linux_amd64.tar.gz")
+    upstream.files[nb_sums_url(version)] = ("\n".join(lines) + "\n").encode()
+    return pins
+
+
+@pytest.fixture
+def netbird(repo, upstream, monkeypatch):
+    for path, text in NB_FILES.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(track, "COMPONENTS", {"netbird": track.COMPONENTS["netbird"]})
+    return upstream
+
+
+def test_netbird_proposes_the_newest_stable_release_of_its_series(repo, netbird):
+    netbird.releases(NB_REPO, [
+        nb_release("0.82.0"),
+        nb_release("0.81.6", prerelease=True),
+        nb_release("0.81.5"),
+        nb_release("0.81.4", draft=True),
+        nb_release("0.81.3"),
+        nb_release("0.81.2"),
+    ])
+    assert newest("netbird", repo) == "0.81.5"
+
+
+def test_netbird_release_without_its_assets_does_not_count(repo, netbird):
+    # A release can be published while its assets are still uploading.
+    netbird.releases(NB_REPO, [
+        release("v0.81.5", "netbird_0.81.5_linux_amd64.tar.gz", "netbird_0.81.5_checksums.txt"),
+        nb_release("0.81.4"),
+        nb_release("0.81.3"),
+    ])
+    assert newest("netbird", repo) == "0.81.4"
+
+
+def test_netbird_apply_moves_the_version_and_both_include_atoms(repo, netbird, tmp_path, capsys):
+    netbird.releases(NB_REPO, [nb_release("0.81.5"), nb_release("0.81.3")])
+    new = nb_serve(netbird, "0.81.5")
+    before = snapshot(repo, NB_FILES)
+    body = tmp_path / "body.md"
+
+    assert track.main(["apply", "netbird", "--summary", str(body)], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        NB_INCLUDE: [
+            ('  netbird-version: "0.81.3"', '  netbird-version: "0.81.5"'),
+            (f'  netbird-x86-64-sha256: "{NB_OLD["amd64"]}"', f'  netbird-x86-64-sha256: "{new["amd64"]}"'),
+            (f'  netbird-arm64-sha256: "{NB_OLD["arm64"]}"', f'  netbird-arm64-sha256: "{new["arm64"]}"'),
+        ],
+    }
+    assert capsys.readouterr().out.split() == [NB_INCLUDE]
+    text = body.read_text()
+    assert "Patch release of **netbird** in the pinned `0.81` series: `0.81.3` → `0.81.5`." in text
+    assert f"https://github.com/{NB_REPO}/releases/tag/v0.81.5" in text
+    assert f"- {nb_sums_url('0.81.5')}" in text
+
+
+def test_netbird_missing_checksums_file_writes_nothing(repo, netbird, capsys):
+    netbird.releases(NB_REPO, [nb_release("0.81.5")])
+    nb_serve(netbird, "0.81.5")
+    del netbird.files[nb_sums_url("0.81.5")]
+    before = snapshot(repo, NB_FILES)
+
+    assert track.main(["apply", "netbird"], root=repo) == 1
+
+    assert snapshot(repo, NB_FILES) == before
+    assert f"{nb_sums_url('0.81.5')}: HTTP 404" in capsys.readouterr().err
+
+
+def test_netbird_tampered_tarball_writes_nothing(repo, netbird, capsys):
+    netbird.releases(NB_REPO, [nb_release("0.81.5")])
+    nb_serve(netbird, "0.81.5")
+    netbird.files[nb_url("0.81.5", "arm64")] = b"tampered"
+    before = snapshot(repo, NB_FILES)
+
+    assert track.main(["apply", "netbird"], root=repo) == 1
+
+    assert snapshot(repo, NB_FILES) == before
+    assert f"{nb_url('0.81.5', 'arm64')} hashes to {sha(b'tampered')}" in capsys.readouterr().err
+
+
+def test_real_netbird_element_pins_the_include_atoms():
+    tree = track.Tree(ROOT)
+    component = track.COMPONENTS["netbird"]
+    version = component.current(tree)
+    pins = {pin.key: pin for pin in component.pins(tree)}
+    assert set(pins) == {"netbird-x86-64-sha256", "netbird-arm64-sha256"}
+    for arch, key in (("amd64", "netbird-x86-64-sha256"), ("arm64", "netbird-arm64-sha256")):
+        assert (pins[key].path, pins[key].url) == (NB_INCLUDE, nb_url(version, arch))
+        assert pins[key].sums == nb_sums_url(version)
+        assert f'"%{{{key}}}"' in tree[NB_ELEMENT]
