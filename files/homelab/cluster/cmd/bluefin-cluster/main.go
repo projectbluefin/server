@@ -438,17 +438,30 @@ func attempt(ctx context.Context, cl *join.Client, manual string) (join.Payload,
 			return join.Payload{}, fmt.Errorf("no %s control plane advertised %s on the local network yet", cl.Runtime, discover.ServiceType)
 		}
 	}
+	return tryCandidates(ctx, cl.Join, cands)
+}
+
+// tryCandidates asks each candidate in turn. One that cannot prove the
+// passphrase (an impostor, or another cluster's control plane) is skipped
+// rather than ending the round: its other addresses would only spend guesses
+// on the same answer, and stopping would let whichever instance is listed
+// first hide the real control plane for good. Only the guess budget, shared
+// by every candidate, ends the round early.
+func tryCandidates(ctx context.Context, joinAt func(context.Context, netip.AddrPort) (join.Payload, error), cands []discover.Candidate) (join.Payload, error) {
 	var errs []error
 	for _, cand := range cands {
 		for _, addr := range cand.Addrs {
-			p, err := cl.Join(ctx, addr)
+			p, err := joinAt(ctx, addr)
 			if err == nil {
 				return p, nil
 			}
 			errs = append(errs, fmt.Errorf("%s (%s): %w", cand.Name, addr, err))
 			var be *join.ErrBudget
-			if errors.As(err, &be) || errors.Is(err, join.ErrNotProven) {
+			if errors.As(err, &be) {
 				return join.Payload{}, errors.Join(errs...)
+			}
+			if errors.Is(err, join.ErrNotProven) {
+				break
 			}
 		}
 	}
