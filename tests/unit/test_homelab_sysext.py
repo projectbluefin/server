@@ -448,7 +448,11 @@ def test_element_stages_applier_unit_wants_and_manifests() -> None:
     assert '"sysext%{datadir}/bluefin/homelab"' in text
     assert "%{sysext-pack}" in text
     release = (HOMELAB / "sysext" / "extension-release.homelab").read_text().splitlines()
-    assert release == ["NAME=homelab", "ID=bluefin-server"]
+    # It ships units (bluefin-cluster-join in multi-user.target.wants): the
+    # boot merge must reload PID 1 or bluefin-sysext-activate.service starts
+    # multi-user.target without them. The kubeadm sysext would reload too;
+    # the k0s one does not.
+    assert release == ["NAME=homelab", "ID=bluefin-server", "EXTENSION_RELOAD_MANAGER=1"]
 
 
 def test_homelab_sysext_ships_in_the_signed_release_set() -> None:
