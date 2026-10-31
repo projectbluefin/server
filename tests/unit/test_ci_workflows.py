@@ -321,3 +321,12 @@ def test_prow_token_reaches_only_the_prow_job() -> None:
     assert job["secrets"] == {"token": "${{ secrets.PROW_TOKEN }}"}
     assert re.fullmatch(r"cncf/prow-github-actions/\.github/workflows/prow\.yml@[0-9a-f]{40}", job["uses"])
     assert "steps" not in job
+
+
+@pytest.mark.parametrize("path", ["docs/skills/ci-tooling.md", "docs/skills/index.md", "AGENTS.md", "README.md", "CONTRIBUTING.md"])
+def test_pre_commit_docs_checks_run_on_every_doc(path: str) -> None:
+    # pre-commit matches `files` against each changed path with re.search, so
+    # a bare `docs/` followed by `)$` would only match the directory itself.
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    hook = next(h for repo in config["repos"] for h in repo["hooks"] if h["id"] == "docs-checks")
+    assert re.search(hook["files"], path)
