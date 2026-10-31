@@ -206,9 +206,9 @@ tell a human or a policy engine which commit and workflow run produced it.
   set was built. The SBOM ships as `bluefin-server_<ver>.spdx.json`, listed
   in `SHA256SUMS`, so the GPG signature covers it too. No transfer matches
   it, so nodes never download it.
-- **Publishing.** In CI, `scripts/publish-release.sh` is the only publish
-  path (`just publish-oci` pushes to a local or personal registry for
-  rehearsal and runs none of the script's checks).
+- **Publishing.** `scripts/publish-release.sh` is the only publish path
+  (`just publish-oci` runs its `verify` and `oci` against a local or
+  personal registry).
   `verify` checks what nodes will check (`gpgv` against the keyring, every
   `SHA256SUMS` entry present and matching), plus: every published file is
   listed, every file name carries the release version, and the SBOM is valid
