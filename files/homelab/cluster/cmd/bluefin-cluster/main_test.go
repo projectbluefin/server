@@ -4,12 +4,59 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/discover"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/join"
+	"github.com/projectbluefin/server/files/homelab/cluster/internal/ops"
 )
+
+// withRoot points ops.Root (every host path) at a fresh directory and
+// creates files under it.
+func withRoot(t *testing.T, files ...string) string {
+	t.Helper()
+	root := t.TempDir()
+	orig := ops.Root
+	ops.Root = root
+	t.Cleanup(func() { ops.Root = orig })
+	for _, f := range files {
+		p := filepath.Join(root, f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func TestJoined(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		files []string
+		want  bool
+	}{
+		{"fresh node", nil, false},
+		{"marker", []string{joinedMarker}, true},
+		{"kubeadm join bootstrapped kubelet", []string{ops.KubeadmKubelet}, true},
+		{"k0s worker bootstrapped kubelet", []string{ops.K0sTokenFile, ops.K0sKubelet}, true},
+		// Written before k0s-first-boot.service starts: if that failed, or
+		// the token expired unused, the node must ask for a fresh one.
+		{"k0s token alone", []string{ops.K0sTokenFile}, false},
+		{"kubeadm bootstrap kubeconfig alone", []string{"/etc/kubernetes/bootstrap-kubelet.conf"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withRoot(t, tc.files...)
+			if got := joined(); got != tc.want {
+				t.Errorf("joined() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestTryCandidates(t *testing.T) {
 	a1 := netip.MustParseAddrPort("192.0.2.1:6447")

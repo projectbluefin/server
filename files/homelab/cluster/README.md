@@ -111,7 +111,10 @@ and the `admin.conf` server (`<cp>.local:6443`). The node writes a
 `kubeadm join --config`; a failed join is reset and retried with a fresh
 token. k0s: `k0s token create --role=worker --expiry=15m0s` (embeds the CA
 and server); the node writes `/etc/k0s/token` (0600) and starts
-`k0s-first-boot.service`, which starts `k0sworker`.
+`k0s-first-boot.service`, which starts `k0sworker`. A restarted `join`
+counts the node as joined only by the marker or a bootstrapped kubelet
+kubeconfig (`/etc/kubernetes/kubelet.conf`, `/var/lib/k0s/kubelet.conf`),
+never by the token alone.
 
 **Rate limits.** Server: every PAKE run is charged before `Exchange`, under
 one lock with the limit check, to the source (IPv4 address, or IPv6 /64)

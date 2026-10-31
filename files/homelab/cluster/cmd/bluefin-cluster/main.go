@@ -329,9 +329,14 @@ func nodePassphrase(c conf.Config) (string, error) {
 	return passphrase.Normalize(raw)
 }
 
+// joined is true once this node is in a cluster: the marker, or the kubelet
+// kubeconfig kubeadm join or the k0s worker writes after bootstrapping. A
+// k0s join token alone is no evidence: Join writes it before it starts
+// k0s-first-boot.service, so a failed start, or a token that expired before
+// k0sworker used it, would otherwise pass for a join and stop retrying.
 func joined() bool {
-	for _, p := range []string{joinedMarker, ops.KubeadmKubelet, ops.K0sTokenFile} {
-		if _, err := os.Stat(p); err == nil {
+	for _, p := range []string{joinedMarker, ops.KubeadmKubelet, ops.K0sKubelet} {
+		if _, err := os.Stat(filepath.Join(ops.Root, p)); err == nil {
 			return true
 		}
 	}
