@@ -6,7 +6,8 @@ description: |
     bluefin-server-netboot_<ver>.efi  diskless: pulls bluefin-server_<ver>.raw into RAM
                                       (UEFI HTTP boot origin, or the import.pull
                                       credential), dm-verity /usr, tmpfs root
-    bluefin-server-<ver>.efi          installed: A/B usr slot found by partition label,
+    bluefin-server-<ver>.efi          installed: A/B usr slot found by the partition
+                                      UUIDs dm-verity derives from usrhash,
                                       persistent root found by gpt-auto
     bluefin-server-installer_<ver>.efi
                                       USB installer: usr from the installer medium's
