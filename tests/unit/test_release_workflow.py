@@ -40,8 +40,8 @@ def publish_commands(job: dict) -> list[str]:
 
 
 def test_both_jobs_publish_through_the_script_only() -> None:
-    assert publish_commands(RELEASE) == ["verify", "taggable", "release", "oci"]
-    assert publish_commands(DRY_RUN) == ["verify", "release", "oci"]
+    assert publish_commands(RELEASE) == ["verify", "taggable", "oci", "release"]
+    assert publish_commands(DRY_RUN) == ["verify", "oci", "release"]
     for job in (RELEASE, DRY_RUN):
         runs = "\n".join(s.get("run", "") for s in job["steps"])
         assert "oras push" not in runs
@@ -253,3 +253,13 @@ def test_release_and_dry_run_publish_the_size_report() -> None:
     assert "if" not in named_step(RELEASE, "Download the size report")
     assert named_step(DRY_RUN, "Download the size report")["if"] == "needs.image-check.result == 'success'"
     assert DRY_RUN["needs"] == ["build", "image-check"]
+
+
+def test_release_creates_the_github_release_last() -> None:
+    # gh release create refuses an existing tag, so a run that created the
+    # release and then failed could never be retried. Every step that can
+    # fail (OCI push and its attestations) runs before it; a retry re-pushes
+    # the same files to the registry.
+    order = step_names(RELEASE)
+    assert order[-1] == "Create GitHub Release"
+    assert order.index("Push OCI artifact") < order.index("Create GitHub Release")
