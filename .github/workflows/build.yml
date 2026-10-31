@@ -931,8 +931,10 @@ jobs:
   # run and is closed by the next one that passes. Schedule events only (so
   # the scheduled main checkout); the job holds nothing but issues: write and
   # runs only .github/scripts/tracking-issue.sh, shared with the trackers.
+  # A failed boot-test-preflight skips build and everything after it, so a
+  # skipped job fails the nightly too (a nightly always builds the image).
   nightly-status:
-    needs: [changes, build, boot-test-result, image-check]
+    needs: [changes, boot-test-preflight, build, boot-test-result, image-check]
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -950,6 +952,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (needs.changes.outputs.image == 'true' && contains(needs.*.result, 'skipped')) }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash .github/scripts/tracking-issue.sh "Nightly build failing" "The nightly build of main" "a later nightly build"

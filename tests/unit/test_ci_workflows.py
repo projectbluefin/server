@@ -245,7 +245,7 @@ def test_status_jobs_hold_issues_write_only_and_run_the_shared_script(name: str)
     assert job["if"] == cond
     assert job["permissions"] == {"issues": "write"}
     if name == "build.yml":
-        assert {"build", "boot-test-result"} <= set(job["needs"])
+        assert {"changes", "boot-test-preflight", "build", "boot-test-result", "image-check"} <= set(job["needs"])
     else:
         assert set(job["needs"]) == set(wf["jobs"]) - {job_name}, "every other job reports"
     checkout, report = job["steps"]
@@ -253,7 +253,15 @@ def test_status_jobs_hold_issues_write_only_and_run_the_shared_script(name: str)
     assert checkout["with"]["sparse-checkout"] == ".github/scripts/tracking-issue.sh"
     assert report["run"].startswith("bash .github/scripts/tracking-issue.sh ")
     assert "${{" not in report["run"], "context goes through env:, not inline"
-    assert report["env"]["FAILED"] == "${{ contains(needs.*.result, 'failure') }}"
+    if name == "build.yml":
+        # A failed preflight skips build and every job after it: on a nightly,
+        # which always builds the image, a skipped or cancelled job is a failure.
+        assert report["env"]["FAILED"] == (
+            "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
+            " || (needs.changes.outputs.image == 'true' && contains(needs.*.result, 'skipped')) }}"
+        )
+    else:
+        assert report["env"]["FAILED"] == "${{ contains(needs.*.result, 'failure') }}"
 
 
 FAKE_GH = """#!/usr/bin/env bash
