@@ -388,11 +388,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   classifier or `build.yml` always builds. The `changes` job itself runs
   from the PR head's `build.yml`, which a PR can edit to skip anything: the
   control for that is reviewing workflow changes. It answers `false` only when every
-  path is docs, Markdown outside the build inputs, `tests/unit/`,
-  `tests/e2e/`, or a workflow or script that does not build the image;
-  `tests/unit/test_image_build_needed.py` fails if any tracked build input
-  (`elements/`, `files/`, `include/`, `patches/`, `plugins/`, `scripts/`,
-  `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
+  path is docs, Markdown outside the build inputs, `tests/unit/`, or a
+  workflow or script that does not build the image (the trackers, Prow,
+  e2e-opt-in, reproducibility); `tests/unit/test_image_build_needed.py` fails
+  if any tracked build input (`elements/`, `files/`, `include/`, `patches/`,
+  `scripts/`, `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
   A skipped job reports as passing, so its required check does not hold it.
 - **Kernel cache in the project CAS, key-free by construction.** Two jobs,
   on releases only, run `scripts/kernel-cache.sh seed`, one per module
