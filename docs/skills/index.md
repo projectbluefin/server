@@ -37,7 +37,8 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`k0s-sysext-ops.md`](k0s-sysext-ops.md) | Operating k0s on Bluefin Server | Runtime operation and troubleshooting for the k0s sysext. |
 | [`k0s-sysext.md`](k0s-sysext.md) | Building the k0s sysext | BuildStream element and publish steps for the k0s sysext. |
 | [`merge-queue.md`](merge-queue.md) | Adding, renaming or removing a gating CI job, the merge queue ruleset, a stuck merge group | Merge queue settings, required checks, and how Prow and bots enqueue. |
-| [`nvidia-sysext.md`](nvidia-sysext.md) | Adding, bumping, or debugging an NVIDIA driver (open kernel modules) or Container Toolkit (CDI) sysext | Flavours and adding one, open-modules-only (Turing+) policy, driver and toolkit bumps, CDI and GPU Operator values. |
+| [`nvidia-sysext.md`](nvidia-sysext.md) | Adding, bumping, or debugging an NVIDIA driver (open kernel modules) or Container Toolkit (CDI) sysext | Flavours and adding one, open-modules-only (Turing+) policy, driver and toolkit bumps. |
+| [`nvidia-sysext-ops.md`](nvidia-sysext-ops.md) | Running an NVIDIA GPU node | Choosing the sysexts, nouveau eviction, CDI and the `nvidia` runtime handler, GPU Operator values. |
 | [`secure-boot-keys.md`](secure-boot-keys.md) | Rotating signing keys, setting up CI secrets, debugging signature verification, shim and shim-review | Key inventory, `gen-dev-keys`, CI secrets, rotation, and the shim vendor certificate. |
 | [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
 | [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
