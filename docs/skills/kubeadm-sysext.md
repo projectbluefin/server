@@ -109,7 +109,7 @@ but never newer. Patch releases change neither constraint.
 - While `kubelet.service` runs or restarts, the base image's automatic reboot
   and the boot-deadline rollback reboot stand down and reboots belong to kured
   (the deadline flags `/run/reboot-required`); see "Updates" in
-  [ddi-installer.md](ddi-installer.md).
+  [updates-operations.md](updates-operations.md).
 
 ## Migration
 

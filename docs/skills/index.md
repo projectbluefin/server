@@ -29,7 +29,8 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
 | [`ddi-installer-build.md`](ddi-installer-build.md) | Building and exporting the image set | Local build, export, pruning, reproducibility, keys. |
 | [`ddi-installer-dogfood.md`](ddi-installer-dogfood.md) | Boot-testing the image set in QEMU | `just dogfood*`, `scripts/dogfood-*.sh`, the `DOGFOOD_*` variables. |
-| [`ddi-installer.md`](ddi-installer.md) | Boot flow, diskless pull, `systemd-sysinstall`, A/B sysupdate | Boot, install, and update architecture. |
+| [`ddi-installer.md`](ddi-installer.md) | Boot flow, diskless pull, `systemd-sysinstall` | Boot, install, and update architecture. |
+| [`updates-operations.md`](updates-operations.md) | Update scheduling, health gate, rollback, reboot interlocks | Sysupdate features/components, reboot timers, `bluefin-boot-deadline`, kured/FleetLock interlocks, diskless update check. |
 | [`diskless-troubleshooting.md`](diskless-troubleshooting.md) | Diskless node reboot-loops, RAM sizing, keeping logs, writing Ignition configs | Failure summary, minimum RAM, failure modes, logs, supported Ignition subset. |
 | [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |
 | [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |

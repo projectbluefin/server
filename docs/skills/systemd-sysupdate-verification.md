@@ -73,7 +73,7 @@ The k0s and NVIDIA Container Toolkit sysexts stay separate components
 Diskless nodes update by rebooting into a newer
 image; `systemd-sysupdate.service` is disabled when booted diskless.
 Update scheduling, the kured flag, and the boot health gate are covered in
-[ddi-installer.md](ddi-installer.md) under "Updates".
+[updates-operations.md](updates-operations.md) under "Updates".
 
 The diskless update check (`bluefin-diskless-update-check`) uses the same trust
 root: it trusts a newer release only after `gpgv` verifies the boot server's

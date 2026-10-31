@@ -42,7 +42,7 @@ While either k0s unit runs, the base image's automatic reboot stands down,
 and so does the boot-deadline rollback reboot, which flags
 `/run/reboot-required` instead; deploy kured to roll staged OS updates (and
 rollbacks) across the cluster (see "Updates" in
-[ddi-installer.md](ddi-installer.md)).
+[updates-operations.md](updates-operations.md)).
 
 ### Worker nodes
 
