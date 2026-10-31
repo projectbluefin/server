@@ -40,6 +40,8 @@ description: |
                                            writable packages persist separately
     homebrew-integration_<ver>.raw.zst     opt-in host bridge and Python runtime
                                            sysext, locked to this image version
+    nspawn-org_<ver>.raw.zst, tailscale_<ver>.raw.zst, netbird_<ver>.raw.zst
+                                           opt-in CLI/VPN sysexts
     home-server.bu, home-server-cluster.bu  Home installer profiles; the cluster
                                            variant reuses the Homelab defaults
     k0s-<k0s-ver>.raw.zst                  opt-in k0s sysext (own version axis)
