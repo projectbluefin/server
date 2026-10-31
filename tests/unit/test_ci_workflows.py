@@ -198,6 +198,51 @@ def test_renovate_holds_bst2_bumps_for_a_human_to_confirm_the_tag() -> None:
     assert any("skopeo inspect" in note for note in rule["prBodyNotes"])
 
 
+def test_renovate_holds_freedesktop_sdk_bumps_for_review() -> None:
+    # The junction is the whole base OS. git-refs has no release timestamps,
+    # so minimumReleaseAge cannot gate it; the human review is the gate.
+    rules = [
+        r
+        for r in RENOVATE["packageRules"]
+        if r.get("matchPackageNames") == ["https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git"]
+    ]
+    assert len(rules) == 1, rules
+    assert rules[0]["automerge"] is False
+    assert "minimumReleaseAge" not in rules[0]
+
+
+def docker_manager() -> dict:
+    managers = [m for m in RENOVATE["customManagers"] if m.get("datasourceTemplate") == "docker"]
+    assert len(managers) == 1, managers
+    return managers[0]
+
+
+def test_renovate_tracks_every_justfile_tool_image_by_tag_and_digest() -> None:
+    justfile = (ROOT / "Justfile").read_text(encoding="utf-8")
+    images = dict(re.findall(r'^export ([a-z0-9_]+_image|check_image_base) := env\("[A-Z0-9_]+", "([^"]+)"\)$', justfile, re.M))
+    assert set(images) == {"check_image_base", "oras_image", "bst2_image", "bats_image", "butane_image"}, images
+    pinned = {name: ref for name, ref in images.items() if name != "bst2_image"}
+    for name, ref in pinned.items():
+        assert re.fullmatch(r"[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}", ref), f"{name} is not tag@sha256: {ref}"
+
+    found = {
+        f"{m['depName']}:{m['currentValue']}@{m['currentDigest']}"
+        for path, m in matches(docker_manager())
+        if path == "Justfile"
+    }
+    assert found == set(pinned.values()), "a Justfile tool image the docker manager does not match"
+
+
+def test_renovate_leaves_the_oras_version_to_track_binaries() -> None:
+    # track-binaries.py moves the Justfile tag together with the setup-oras
+    # url and checksum; a Renovate tag bump would split them.
+    rules = [r for r in RENOVATE["packageRules"] if r.get("matchPackageNames") == ["ghcr.io/oras-project/oras"]]
+    assert len(rules) == 1, rules
+    assert rules[0]["enabled"] is False
+    assert rules[0]["matchDatasources"] == ["docker"]
+    assert "digest" not in rules[0]["matchUpdateTypes"]
+
+
 def test_renovate_automerges_through_the_merge_queue() -> None:
     # The org-inherited Renovate config automerges with platformAutomerge
     # off, so Renovate would merge directly, which the merge queue refuses.

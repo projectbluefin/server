@@ -36,7 +36,7 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-OLD = {name: sha(name.encode()) for name in ("kubelet", "kubeadm", "kubectl", "crictl", "containerd", "runc", "cni", "k0s", "oras")}
+OLD = {name: sha(name.encode()) for name in ("kubelet", "kubeadm", "kubectl", "crictl", "containerd", "runc", "cni", "k0s", "oras", "oras-image")}
 
 FILES = {
     "include/aliases.yml": "aliases:\n  github: https://github.com/\n  k8s_dl: https://dl.k8s.io/\n",
@@ -112,7 +112,7 @@ config:
   install-commands:
     - install -D -m 0755 k0s-%{{k0s-upstream-tag}}-amd64 "%{{install-root}}/usr/bin/k0s"
 """,
-    "Justfile": 'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4")\n',
+    "Justfile": f'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4@sha256:{OLD["oras-image"]}")\n',
     ".github/workflows/build.yml": f"""jobs:
   release:
     steps:
@@ -337,14 +337,32 @@ def test_apply_k0s_moves_both_atoms_and_downloads_the_escaped_tag(repo, upstream
     assert url in [r.full_url for r in upstream.requests]
 
 
-def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstream, tmp_path):
+ORAS_TOKEN = "https://ghcr.io/token?scope=repository%3Aoras-project%2Foras%3Apull&service=ghcr.io"
+ORAS_INDEX = "https://ghcr.io/v2/oras-project/oras/manifests/v1.3.5"
+
+
+def oras_image(upstream, media_type="application/vnd.oci.image.index.v1+json") -> str:
+    """Serve ghcr.io's anonymous token and the v1.3.5 index; return the index digest."""
+    upstream.files[ORAS_TOKEN] = json.dumps({"token": "anonymous-pull"}).encode()
+    upstream.files[ORAS_INDEX] = json.dumps({"schemaVersion": 2, "mediaType": media_type, "manifests": []}).encode()
+    return sha(upstream.files[ORAS_INDEX])
+
+
+def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstream, tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
     url = "https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz"
     new = upstream.asset(url, url.rsplit("/", 1)[0] + "/oras_1.3.5_checksums.txt")
+    digest = oras_image(upstream)
     body = tmp_path / "body.md"
 
     assert track.main(["apply", "oras", "--version", "1.3.5", "--summary", str(body)], root=repo) == 0
 
-    assert "ghcr.io/oras-project/oras:v1.3.5" in (repo / "Justfile").read_text()
+    assert f"ghcr.io/oras-project/oras:v1.3.5@sha256:{digest}\"" in (repo / "Justfile").read_text()
+    assert OLD["oras-image"] not in (repo / "Justfile").read_text()
+    # The registry gets its own anonymous pull token, never the GitHub one.
+    auth = {r.full_url: r.get_header("Authorization") for r in upstream.requests if "ghcr.io" in r.full_url}
+    assert auth == {ORAS_TOKEN: None, ORAS_INDEX: "Bearer anonymous-pull"}
+    assert f"`{digest}` (was `{OLD['oras-image']}`)" in body.read_text()
     workflow = (repo / ".github/workflows/build.yml").read_text()
     assert workflow.count(f"url: {url}") == 2
     assert workflow.count(f"checksum: {new}") == 2
@@ -352,8 +370,22 @@ def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstre
     assert "`.github/workflows/build.yml:4: # pin 1.3.4 (matching the Justfile's oras_image) by URL and checksum.`" in body.read_text()
 
 
+def test_oras_image_that_is_not_an_index_writes_nothing(repo, upstream):
+    url = "https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz"
+    upstream.asset(url, url.rsplit("/", 1)[0] + "/oras_1.3.5_checksums.txt")
+    oras_image(upstream, media_type="application/vnd.oci.image.manifest.v1+json")
+    before = snapshot(repo)
+
+    with pytest.raises(track.TrackError, match="not a multi-arch index"):
+        track.apply(repo, "oras", "1.3.5")
+
+    assert snapshot(repo) == before
+
+
 def test_oras_pins_that_disagree_are_refused(repo, upstream):
-    (repo / "Justfile").write_text('export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.3")\n')
+    (repo / "Justfile").write_text(
+        f'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.3@sha256:{OLD["oras-image"]}")\n'
+    )
     with pytest.raises(track.TrackError, match=r"ORAS pins disagree \(\.github/workflows/build\.yml: 1\.3\.4, Justfile: 1\.3\.3\)"):
         track.apply(repo, "oras", "1.3.5")
 

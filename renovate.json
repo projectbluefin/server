@@ -40,17 +40,30 @@
       "packageNameTemplate": "https://gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images.git",
       "datasourceTemplate": "git-refs",
       "currentValueTemplate": "master"
+    },
+    {
+      "customType": "regex",
+      "description": "The Justfile's other tool images, each pinned as tag@sha256 so a moved tag cannot change what runs. The docker datasource bumps the tag and the digest together.",
+      "managerFilePatterns": [
+        "/^Justfile$/"
+      ],
+      "matchStrings": [
+        "export [a-z0-9_]+ := env\\(\"[A-Z0-9_]+\", \"(?<depName>[^\":@\\s]+):(?<currentValue>[^\"@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})\"\\)"
+      ],
+      "datasourceTemplate": "docker"
     }
   ],
   "packageRules": [
     {
+      "description": "The FSDK junction is the whole base OS, so a bump never automerges: a human reads the upstream changes first (track-junctions.yml, which resolves the ref, already needs one). git-refs reports no release timestamps, so minimumReleaseAge cannot age-gate it: with the default timestamp-required it would hold every bump forever, and timestamp-optional would not wait at all. The human review is the gate.",
       "matchDatasources": ["git-refs"],
       "matchPackageNames": ["https://gitlab.com/freedesktop-sdk/freedesktop-sdk.git"],
       "extractVersion": "^freedesktop-sdk-(?<version>26\\.08\\.[0-9]+)$",
-      "versioning": "semver"
+      "versioning": "semver",
+      "automerge": false
     },
     {
-      "description": "git-refs sees a master commit the moment it lands, before the image pipeline has built and pushed its bst2 tag (and the pipeline can fail), so the proposed pin may not be pullable yet. Hold it for a human to confirm the tag exists instead of automerging.",
+      "description": "git-refs sees a master commit the moment it lands, before the image pipeline has built and pushed its bst2 tag (and the pipeline can fail), so the proposed pin may not be pullable yet. Hold it for a human to confirm the tag exists instead of automerging. git-refs has no release timestamps, so minimumReleaseAge cannot age-gate it (see the freedesktop-sdk rule); the hold is the gate.",
       "matchDatasources": ["git-refs"],
       "matchPackageNames": ["https://gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images.git"],
       "automerge": false,
@@ -61,6 +74,13 @@
     {
       "description": ".python-version is the minimum supported Python, kept equal to pyproject.toml's requires-python and ruff.toml's target-version and tied to the runners' system python3 (docs/skills/ci-tooling.md, \"Python lint\"). It is raised by hand, so the pyenv manager must not propose bumps.",
       "matchManagers": ["pyenv"],
+      "enabled": false
+    },
+    {
+      "description": "track-binaries.py owns the ORAS version: it moves the Justfile tag, its digest and every setup-oras url and checksum in the workflows together. A Renovate tag bump would split them, so Renovate only refreshes the digest of the pinned tag.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/oras-project/oras"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
       "enabled": false
     }
   ]
