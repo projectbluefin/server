@@ -69,6 +69,7 @@ def deadline(
     complete: bool = False,
     failed: tuple[str, ...] = ("dogfood-broken.service",),
     units: dict[str, str] | None = None,
+    substates: dict[str, str] | None = None,
     ukis: tuple[str, ...] = (),
     lock: bool = False,
     fleet: int = 0,
@@ -77,6 +78,7 @@ def deadline(
     bindir.mkdir()
     calls = tmp_path / "systemctl.calls"
     units = units or {}
+    sub_cases = "".join(f"      {u}) echo {s} ;;\n" for u, s in (substates or {}).items())
     unit_cases = "".join(f"      {u}) echo {s}; [ {s} = active ]; exit $? ;;\n" for u, s in units.items())
     failed_lines = "".join(f"echo '{u} loaded failed failed Test'\n" for u in failed)
     executable(
@@ -88,6 +90,11 @@ def deadline(
         f"{failed_lines}"
         "    exit 0 ;;\n"
         '  "--no-block reboot") exit 0 ;;\n'
+        '  "show -P")\n'
+        '    case "$4" in\n'
+        f"{sub_cases}"
+        "    esac\n"
+        "    exit 0 ;;\n"
         "esac\n"
         'if [ "$1" = is-active ]; then\n'
         '  case "$2" in\n'
@@ -171,6 +178,17 @@ def test_kubernetes_node_is_left_to_kured(tmp_path: Path, host_bin: Path, unit: 
     rebooted, flagged, log = deadline(tmp_path, host_bin, "indeterminate", units={unit: state})
     assert not rebooted and flagged, log
     assert f"{unit} is {state}: flagged" in log
+
+
+@pytest.mark.parametrize("unit", ["kubelet.service", "k0sworker.service"])
+def test_node_whose_kubernetes_unit_crash_loops_reboots_directly(tmp_path: Path, host_bin: Path, unit: str) -> None:
+    # Restart=always never lets the unit reach "failed"; waiting to restart it
+    # is just as NotReady, and kured could never act on the flag.
+    rebooted, flagged, log = deadline(
+        tmp_path, host_bin, "indeterminate", units={unit: "activating"}, substates={unit: "auto-restart"}
+    )
+    assert rebooted and not flagged, log
+    assert "rebooting so systemd-boot falls back after the last try" in log
 
 
 def test_node_whose_kubelet_failed_reboots_directly(tmp_path: Path, host_bin: Path) -> None:
