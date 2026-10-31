@@ -15,10 +15,12 @@ on:
     - cron: "30 5 * * *"
   workflow_dispatch:
 
-# Pull requests cancel superseded runs. Pushes to main queue instead: a run
-# on main ends in a release, and cancelling it would skip that version. The
-# nightly build and labels other than full-build get groups of their own, so
-# they neither delay a release nor cancel a pull request's full build.
+# Pull requests cancel superseded runs. Pushes to main never cancel the
+# running release, but GitHub keeps only one pending run per group: a newer
+# push replaces the pending one, whose version is never published (the newer
+# run ships its content). The nightly build and labels other than full-build
+# get groups of their own, so they neither delay a release nor cancel a pull
+# request's full build.
 concurrency:
   group: build-${{ github.event_name == 'schedule' && 'nightly' || (github.event.action == 'labeled' && github.event.label.name != 'full-build') && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
