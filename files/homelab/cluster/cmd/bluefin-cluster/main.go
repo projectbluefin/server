@@ -193,7 +193,7 @@ func controlPlanePassphrase(c conf.Config) (string, error) {
 		log.Warn("using the operator-chosen join passphrase from " + passKey + "; a generated one is stronger")
 		return p, ops.WriteFile(passFile, []byte(p+"\n"), 0o600)
 	}
-	if data, err := os.ReadFile(passFile); err == nil {
+	if data, err := os.ReadFile(filepath.Join(ops.Root, passFile)); err == nil {
 		return passphrase.Normalize(string(data))
 	}
 	p, bits, err := passphrase.Generate(passphrase.DefaultWords)
@@ -274,10 +274,16 @@ func serve(ctx context.Context) error {
 	return err
 }
 
-// publish advertises the join service; the TXT record carries no secrets.
-func publish(cluster, runtime, port string) error {
-	body := fmt.Sprintf("# bluefin-cluster serve: the homelab join service (no secrets here).\n[Service]\nName=%%H\nType=%s\nPort=%s\nTxtText=v=1 cluster=%s runtime=%s\n",
+// dnssdBody is the join service's DNS-SD file; the TXT record carries no
+// secrets.
+func dnssdBody(cluster, runtime, port string) string {
+	return fmt.Sprintf("# bluefin-cluster serve: the homelab join service (no secrets here).\n[Service]\nName=%%H\nType=%s\nPort=%s\nTxtText=v=1 cluster=%s runtime=%s\n",
 		discover.ServiceType, port, cluster, runtime)
+}
+
+// publish advertises the join service.
+func publish(cluster, runtime, port string) error {
+	body := dnssdBody(cluster, runtime, port)
 	// Explicit modes: the unit's UMask=0077 would hide both from
 	// systemd-resolved, which runs as its own user.
 	dir := filepath.Dir(dnssdFile)
