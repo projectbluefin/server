@@ -57,6 +57,11 @@
       "prBodyNotes": [
         "Before merging, confirm the tag exists: `skopeo inspect docker://registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:<new commit>`. A master commit whose image pipeline failed or is still running has no tag."
       ]
+    },
+    {
+      "description": ".python-version is the minimum supported Python, kept equal to pyproject.toml's requires-python and ruff.toml's target-version and tied to the runners' system python3 (docs/skills/ci-tooling.md, \"Python lint\"). It is raised by hand, so the pyenv manager must not propose bumps.",
+      "matchManagers": ["pyenv"],
+      "enabled": false
     }
   ]
 }
