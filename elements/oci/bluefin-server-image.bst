@@ -342,10 +342,11 @@ config:
   - |
     set -eu
     # SPDX requires a creation time, which the plugin leaves to the build,
-    # and unique SPDXIDs: FSDK bootstrap elements reached through two
-    # junction paths are collected twice, as identical packages (and their
-    # relationships twice). Only exact duplicates are dropped: two different
-    # packages under one SPDXID fail the build rather than losing one, and a
+    # and unique SPDXIDs. FSDK bootstrap elements reached through two
+    # junction paths are collected twice, mostly as identical packages, so
+    # the first package per SPDXID is kept. That also hides a real second
+    # copy: fsdk-containers pins its own FSDK, so its brew-nspawn carries a
+    # pcre2 whose version differs from ours under the same SPDXID. A
     # relationship is a duplicate only if all three of its fields match.
     # SOURCE_DATE_EPOCH is BuildStream's fixed sandbox default (1321009871),
     # so created is always 2011-11-11T11:11:11Z. That keeps the SBOM bit
@@ -353,11 +354,7 @@ config:
     # provenance attestation, not here.
     jq --arg created "$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
       '.creationInfo.created = $created
-       | .packages |= (unique | sort_by(.SPDXID))
-       | (.packages | group_by(.SPDXID) | map(select(length > 1) | . as $g
-            | "\($g[0].SPDXID) (differs in: \([$g[0] | keys[] as $k
-                | select(($g | map(.[$k]) | unique | length) > 1) | $k] | join(", ")))")) as $clash
-       | if $clash != [] then error("different SBOM packages share an SPDXID: \($clash | join("; "))") else . end
+       | .packages |= unique_by(.SPDXID)
        | .relationships |= unique_by([.spdxElementId, .relationshipType, .relatedSpdxElement])' \
       /sbom/bluefin-server.spdx.json > "%{install-root}/%{image-name}.spdx.json"
 

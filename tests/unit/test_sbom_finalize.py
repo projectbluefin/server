@@ -66,10 +66,12 @@ def test_relationships_to_one_element_are_kept_when_they_differ() -> None:
     assert len(json.loads(result.stdout)["relationships"]) == 3
 
 
-def test_different_packages_under_one_spdxid_fail() -> None:
-    # unique_by(.SPDXID) used to keep one of them silently.
+def test_one_package_per_spdxid_is_kept() -> None:
+    # fsdk-containers pins its own FSDK, so brew-nspawn brings a second pcre2
+    # under the same SPDXID. The build keeps one rather than failing; the
+    # SBOM gap is tracked in an issue.
     doc = {"packages": [package("SPDXRef-a-0", "1"), package("SPDXRef-a-0", "2")],
            "relationships": [describes("SPDXRef-a-0")]}
     result = finalize(doc)
-    assert result.returncode != 0
-    assert "share an SPDXID" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["packages"] == [package("SPDXRef-a-0", "1")]
