@@ -354,8 +354,10 @@ config:
     jq --arg created "$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
       '.creationInfo.created = $created
        | .packages |= (unique | sort_by(.SPDXID))
-       | if (.packages | map(.SPDXID) | unique | length) != (.packages | length)
-         then error("different SBOM packages share an SPDXID") else . end
+       | (.packages | group_by(.SPDXID) | map(select(length > 1) | . as $g
+            | "\($g[0].SPDXID) (differs in: \([$g[0] | keys[] as $k
+                | select(($g | map(.[$k]) | unique | length) > 1) | $k] | join(", ")))")) as $clash
+       | if $clash != [] then error("different SBOM packages share an SPDXID: \($clash | join("; "))") else . end
        | .relationships |= unique_by([.spdxElementId, .relationshipType, .relatedSpdxElement])' \
       /sbom/bluefin-server.spdx.json > "%{install-root}/%{image-name}.spdx.json"
 
