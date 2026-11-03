@@ -8,7 +8,6 @@ devices (udev rule) before sysinstall starts; scripts/dogfood-installer.sh
 replays the install onto such disks in QEMU (DOGFOOD_TARGET).
 """
 
-from __future__ import annotations
 
 import os
 import re

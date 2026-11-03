@@ -8,7 +8,6 @@ matches cannot be opened. So the sshd drop-in is a real file that includes the
 sysext's settings by a path that matches nothing once the sysext is gone.
 """
 
-from __future__ import annotations
 
 import shutil
 import subprocess

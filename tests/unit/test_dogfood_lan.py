@@ -8,7 +8,6 @@ over TCP the way QEMU's stream netdev does (4-byte big-endian length, then
 the Ethernet frame).
 """
 
-from __future__ import annotations
 
 import os
 import shlex

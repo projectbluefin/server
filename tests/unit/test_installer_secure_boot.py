@@ -8,7 +8,6 @@ or allow one without Secure Boot. That it asks on the monitor is pinned with
 the installer's other screens in test_installer_console_path.py.
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

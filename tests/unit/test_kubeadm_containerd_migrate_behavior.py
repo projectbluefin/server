@@ -8,7 +8,6 @@ forever). The helper is idempotent: a config that already declares `imports`
 is left alone, no mtime change, so DaemonSet / kured watchers stay quiet.
 """
 
-from __future__ import annotations
 
 import os
 import re

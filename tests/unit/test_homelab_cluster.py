@@ -1,7 +1,6 @@
 """Contracts for the multi-node homelab: bluefin-cluster (files/homelab/cluster),
 its units in the homelab sysext, mDNS, and role gating."""
 
-from __future__ import annotations
 
 import hashlib
 import re

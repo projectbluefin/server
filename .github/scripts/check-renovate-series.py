@@ -23,7 +23,6 @@ junction's `track:` glob and asserts the matching `extractVersion` in
 renovate.json is anchored to the same one.
 """
 
-from __future__ import annotations
 
 import json
 import re

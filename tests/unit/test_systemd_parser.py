@@ -1,6 +1,5 @@
 """The systemd parsing helpers model systemd, so tests built on them mean something."""
 
-from __future__ import annotations
 
 from pathlib import Path
 

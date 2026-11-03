@@ -7,7 +7,6 @@ symlinks, like kmod's depmod), so the tests see what the real one would index
 without real ELF modules.
 """
 
-from __future__ import annotations
 
 import os
 import re

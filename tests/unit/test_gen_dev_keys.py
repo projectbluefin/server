@@ -5,7 +5,6 @@ openssl and gpg replaced by stubs that log their calls, so no key material is
 generated and a refusal can be told apart from a regeneration.
 """
 
-from __future__ import annotations
 
 import hashlib
 import os

@@ -7,7 +7,6 @@ off, the image element lays out the same files as before. The ESP steps run
 here with systemd-repart stubbed out, once per option value.
 """
 
-from __future__ import annotations
 
 import os
 import re
