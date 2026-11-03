@@ -12,8 +12,9 @@ description: |
     bluefin-server_<ver>.usr-verity.raw   dm-verity hash partition (sysupdate source)
     bluefin-server_<ver>.usrhash          dm-verity root hash, baked into the UKIs
 
-  Partition labels are bluefin_usr_<ver> / bluefin_usr_verity_<ver>: the
-  disk UKI finds its slot by label and sysupdate matches the same pattern.
+  Partition labels are bluefin_usr_<ver> / bluefin_usr_verity_<ver>:
+  sysupdate matches its slots by that pattern. The disk UKI does not use
+  them; it opens /usr by the partition UUIDs dm-verity derives from usrhash.
   GPT labels hold at most 36 characters, so keep them short.
 
 (@):

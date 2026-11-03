@@ -6,7 +6,8 @@ description: |
     bluefin-server-netboot_<ver>.efi  diskless: pulls bluefin-server_<ver>.raw into RAM
                                       (UEFI HTTP boot origin, or the import.pull
                                       credential), dm-verity /usr, tmpfs root
-    bluefin-server-<ver>.efi          installed: A/B usr slot found by partition label,
+    bluefin-server-<ver>.efi          installed: A/B usr slot found by the partition
+                                      UUIDs dm-verity derives from usrhash,
                                       persistent root found by gpt-auto
     bluefin-server-installer_<ver>.efi
                                       USB installer: usr from the installer medium's
@@ -101,10 +102,14 @@ variables:
   # The installer medium opens its own usr/verity by partition label, not by
   # the usrhash-derived UUIDs: those belong to installed usr slots, so an
   # existing install (or the disk being installed) is never picked up as the
-  # installer's /usr. The installer is offline: neither the initrd nor the
-  # booted stick may wait for network-online (netboot needs it, the
-  # installer never does; the userspace wait would fail after ~2 min and
-  # print over the sysinstall prompt).
+  # installer's /usr. The labels carry no version: with one,
+  # bluefin-installer-usr-verity_<ver> would pass GPT's 36-character limit.
+  # So attach one installer stick at a time: with two, by-partlabel points
+  # at either, and a stick of another version fails usrhash verification.
+  # The installer is offline: neither the initrd nor the booted stick may
+  # wait for network-online (netboot needs it, the installer never does; the
+  # userspace wait would fail after ~2 min and print over the sysinstall
+  # prompt).
   # tty0 comes last so /dev/console, where systemd-sysinstall.service draws
   # its interface, is the monitor. firstboot.keymap is a well-known
   # systemd-firstboot credential: with it set, firstboot does not ask for a

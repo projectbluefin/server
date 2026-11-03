@@ -150,8 +150,9 @@ already trust the image DB key; `scripts/dogfood-diskless.sh` with
 
 ```text
 firmware -> systemd-boot -> bluefin-server-<ver>.efi
-  -> /usr slot found by partition label (bluefin_usr_<ver>) and the
-     verity-derived UUIDs baked into the install-time repart.d
+  -> /usr slot found by the partition UUIDs dm-verity derives from usrhash=
+     (baked into the install-time repart.d); the bluefin_usr_<ver> label
+     is for sysupdate
   -> persistent xfs root found by systemd gpt-auto discovery
 ```
 
