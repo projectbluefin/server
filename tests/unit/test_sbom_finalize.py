@@ -7,8 +7,6 @@ relationship whose fields differ, or two different packages under one SPDXID,
 must never be merged away.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import shutil
