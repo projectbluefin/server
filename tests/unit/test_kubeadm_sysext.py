@@ -43,7 +43,7 @@ def test_versions_stay_on_the_cluster_nodes_series() -> None:
         "crictl-version": "1.35",
         "containerd-version": "2.1",
         "runc-version": "1.3",
-        "cni-plugins-version": "1.1",
+        "cni-plugins-version": "1.9",
     }
     assert pinned["pause-image"] == "registry.k8s.io/pause:3.10.1"
 
