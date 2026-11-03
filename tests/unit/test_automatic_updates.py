@@ -158,13 +158,18 @@ def test_reboot_skips_an_update_that_already_failed_its_tries() -> None:
     assert conds[0] == "/usr/libexec/bluefin-update-pending"
 
 
-def _run_interlock(tmp_path: Path, host_bin: Path, states: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _run_interlock(
+    tmp_path: Path, host_bin: Path, states: dict[str, str], substates: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     argv = shlex.split(values(INTERLOCK, "ExecCondition")[1])
     assert argv == ["/usr/bin/bluefin-host", "kube-interlock"], argv
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     fake = bindir / "systemctl"
-    lines = ["#!/bin/sh", '[ "$1" = is-active ] || exit 99', 'case "$2" in']
+    lines = ["#!/bin/sh", 'if [ "$1 $2 $3" = "show -P SubState" ]; then', '  case "$4" in']
+    for unit, sub in (substates or {}).items():
+        lines.append(f"    {unit}) echo {sub} ;;")
+    lines += ["  esac", "  exit 0", "fi", '[ "$1" = is-active ] || exit 99', 'case "$2" in']
     for unit, state in states.items():
         lines.append(f'  {unit}) echo {state}; [ {state} = active ]; exit $? ;;')
     lines += ["esac", "echo inactive", "exit 3"]
@@ -198,6 +203,14 @@ def test_reboot_stands_down_while_kubernetes_runs(tmp_path: Path, host_bin: Path
 
 def test_reboot_proceeds_when_kubernetes_is_stopped_or_failed(tmp_path: Path, host_bin: Path) -> None:
     result = _run_interlock(tmp_path, host_bin, {"kubelet.service": "failed", "k0sworker.service": "inactive"})
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("unit", ["kubelet.service", "k0sworker.service"])
+def test_reboot_proceeds_when_kubernetes_crash_loops(tmp_path: Path, host_bin: Path, unit: str) -> None:
+    # Waiting to restart (a kubeadm kubelet before `kubeadm join`, or a broken
+    # one): NotReady, so kured cannot reboot it and nothing needs draining.
+    result = _run_interlock(tmp_path, host_bin, {unit: "activating"}, {unit: "auto-restart"})
     assert result.returncode == 0, result.stdout + result.stderr
 
 
