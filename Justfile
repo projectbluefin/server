@@ -155,8 +155,8 @@ check-image DIR="dist/diskless" BASELINE="":
     set -euo pipefail
     args=(/src/{{DIR}})
     [ -n "{{BASELINE}}" ] && args+=(--baseline-usr "/src/{{BASELINE}}")
-    podman run --rm --security-opt label=disable -v "{{justfile_directory()}}:/src:ro" -w /src \
-        {{check_image_base}} sh -c 'dnf -yq install erofs-utils binutils cpio zstd python3 >/dev/null 2>&1 && python3 .github/scripts/check-image.py "$@"' -- "${args[@]}"
+    {{sudo_cmd}} podman run --rm --security-opt label=disable -v "{{justfile_directory()}}:/src:ro" -w /src \
+        {{check_image_base}} sh -c 'dnf -yq install erofs-utils binutils cpio zstd python3 >/dev/null && python3 .github/scripts/check-image.py "$@"' -- "${args[@]}"
 
 # Set the image version in include/image.yml; it must increase under
 # strverscmp() (CI uses YY.MM.<run number>).
@@ -186,32 +186,33 @@ dogfood-installer NEXT="":
     bash scripts/dogfood-installer.sh dist/diskless {{NEXT}}
 
 # REF=ghcr.io/<owner>/bluefin-server or <registry-host>:30500/bluefin-server
-# (PLAIN_HTTP=1); log in with podman login first. One layer per file.
-# Local rehearsal only: releases are published by scripts/publish-release.sh
-# from .github/workflows/build.yml, which also verifies the pushed manifest
-# against the local files. This recipe pushes the same artifact type,
-# annotations and layout, and nothing else.
+# (PLAIN_HTTP=1); log in with podman login first. One layer per file; latest
+# never moves back. Runs the release job's scripts/publish-release.sh verify
+# and oci: DIR must verify against its own sysupdate-keys/ and hold nothing
+# SHA256SUMS does not list (move dogfood logs out first), and the pushed
+# manifest is checked against DIR. oras comes from oras_image unless on PATH.
 # Publish an image set as an ORAS OCI artifact tagged <version> and latest.
 [group('diskless')]
 publish-oci REF DIR="dist/diskless" PLAIN_HTTP="0":
     #!/usr/bin/env bash
     set -euo pipefail
-    revision="$(git rev-parse HEAD)"
-    cd "{{DIR}}"
-    uki="$(ls bluefin-server-netboot_*.efi)"
+    uki="$(cd "{{DIR}}" && ls bluefin-server-netboot_*.efi)"
     ver="${uki#bluefin-server-netboot_}"; ver="${ver%.efi}"
-    mapfile -t files < <(find . -maxdepth 1 -type f -printf '%f\n' | sort)
     extra=()
     [ "{{PLAIN_HTTP}}" = 1 ] && extra+=(--plain-http)
-    auth="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/auth.json"
-    [ -f "${auth}" ] && extra+=(--registry-config /auth.json) && mounts=(-v "${auth}:/auth.json:ro") || mounts=()
-    podman run --rm --network=host --security-opt label=disable "${mounts[@]}" -v "$PWD:/w:ro" -w /w \
-        {{oras_image}} push "${extra[@]}" \
-        --artifact-type application/vnd.projectbluefin.server.release.v1 \
-        --annotation "org.opencontainers.image.version=${ver}" \
-        --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-projectbluefin/server}" \
-        --annotation "org.opencontainers.image.revision=${revision}" \
-        "{{REF}}:${ver},latest" "${files[@]}"
+    bash scripts/publish-release.sh verify "{{DIR}}" "${ver}" "{{DIR}}/sysupdate-keys/import-pubring.pgp"
+    if ! command -v oras >/dev/null; then
+        shim="$(mktemp -d)"
+        trap 'rm -rf "${shim}"' EXIT
+        auth="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/auth.json"
+        mounts=""
+        [ -f "${auth}" ] && mounts="-v $(printf %q "${auth}"):/auth/config.json:ro -e DOCKER_CONFIG=/auth"
+        printf '#!/bin/sh\nexec podman run --rm --network=host --security-opt label=disable %s -v "$PWD:$PWD:ro" -w "$PWD" %q "$@"\n' \
+            "${mounts}" "{{oras_image}}" > "${shim}/oras"
+        chmod +x "${shim}/oras"
+        PATH="${shim}:${PATH}"
+    fi
+    bash scripts/publish-release.sh oci "{{DIR}}" "${ver}" "{{REF}}" "${extra[@]}"
 
 # Boot dist/diskless/ in QEMU with Secure Boot, pulling /usr over HTTP.
 [group('diskless')]
