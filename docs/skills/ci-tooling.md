@@ -98,8 +98,8 @@ to `main`, each from a container image pinned by digest (`docker://` steps
 that Renovate's github-actions manager bumps). `.github/actionlint.yaml`
 declares hosted runner labels newer than actionlint's built-in list
 (`ubuntu-26.04`). Fix zizmor findings rather than silencing them; when one is
-accepted, ignore that rule for that location in `.github/zizmor.yml` with the
-reason next to it, never a whole audit. Locally:
+accepted, ignore that rule inline at that location with
+`# zizmor: ignore[<rule>]` plus the reason, never a whole audit. Locally:
 
 ```bash
 podman run --rm -v "$PWD":/repo:Z -w /repo docker.io/rhysd/actionlint:latest -no-color -oneline
