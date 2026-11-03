@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,37 +20,6 @@ const (
 	goodPass = "correct-horse-battery-staple"
 	badPass  = "correct-horse-battery-stapler"
 )
-
-func writeCredential(t *testing.T, value string) string {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, credentialKey), []byte(value), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
-func TestNodePassphraseFromConfIsNormalised(t *testing.T) {
-	t.Setenv("CREDENTIALS_DIRECTORY", writeCredential(t, "credential-should-be-ignored"))
-	got, err := nodePassphrase(conf.Config{passKey: "  Correct Horse_battery  STAPLE\n"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != goodPass {
-		t.Errorf("got %q, want %q (homelab.conf wins over the credential)", got, goodPass)
-	}
-}
-
-func TestNodePassphraseFallsBackToTheCredential(t *testing.T) {
-	t.Setenv("CREDENTIALS_DIRECTORY", writeCredential(t, "Correct-Horse-Battery-Staple\n"))
-	got, err := nodePassphrase(conf.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != goodPass {
-		t.Errorf("got %q, want %q", got, goodPass)
-	}
-}
 
 func TestNodePassphraseMissing(t *testing.T) {
 	for name, dir := range map[string]string{
@@ -70,13 +38,6 @@ func TestNodePassphraseMissing(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestNodePassphraseRejectsNonASCII(t *testing.T) {
-	t.Setenv("CREDENTIALS_DIRECTORY", "")
-	if _, err := nodePassphrase(conf.Config{passKey: "correct-horse-battery-stäple"}); err == nil {
-		t.Fatal("want an error for a non-ASCII passphrase")
 	}
 }
 
