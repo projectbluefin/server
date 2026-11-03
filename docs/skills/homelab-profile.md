@@ -14,7 +14,7 @@ sysexts, a cluster, the default homelab component set and, on a control
 plane, the homelab add-ons (Argo Workflows, a Kubernetes MCP server and the
 KubeStellar Console). Use a template
 on any node (network boot, an installed disk, a VM), or pick a Homelab
-entry in the USB installer's boot menu ([usb-installer.md](usb-installer.md)).
+entry in the USB installer's boot menu ([usb-installer-provisioning.md](usb-installer-provisioning.md)).
 
 ## When to Use
 
@@ -249,4 +249,4 @@ installer, which installs kubeadm only.
   the Console's Service (NetworkPolicy), and the login is on the console,
   not in the journal. Needs guest internet.
 - `just dogfood-homelab-installer`: the same from the USB installer's Homelab
-  entries, offline installs ([usb-installer.md](usb-installer.md)).
+  entries, offline installs ([usb-installer-provisioning.md](usb-installer-provisioning.md)).

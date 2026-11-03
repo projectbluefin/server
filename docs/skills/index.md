@@ -26,9 +26,12 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`architecture-roadmap.md`](architecture-roadmap.md) | Future architecture direction, long-lead design | Roadmap for systemd-native architecture work. |
 | [`booty-integration.md`](booty-integration.md) | HTTP boot, iPXE chainloading, per-node Ignition, kubeadm worker provisioning via Booty | How the Booty network boot server serves releases to nodes. |
 | [`bump-fsdk-version.md`](bump-fsdk-version.md) | Pinning or retagging the FSDK junction | Update the pinned FSDK release and derived tags. |
-| [`ci-tooling.md`](ci-tooling.md) | GitHub Actions, workflow SHA pinning, CI conventions | CI conventions and release pipeline rules. |
-| [`ddi-installer-build.md`](ddi-installer-build.md) | Building and dogfooding the image set | Local build, export, and QEMU dogfood workflow. |
-| [`ddi-installer.md`](ddi-installer.md) | Boot flow, diskless pull, `systemd-sysinstall`, A/B sysupdate | Boot, install, and update architecture. |
+| [`ci-conventions.md`](ci-conventions.md) | GitHub Actions conventions, workflow SHA pinning, environments and secrets | Org-wide workflow conventions and the per-job table. |
+| [`ci-tooling.md`](ci-tooling.md) | CI process, labels, build times and caches | Core process, label reference, build-time figures, cache layout. |
+| [`ddi-installer-build.md`](ddi-installer-build.md) | Building and exporting the image set | Local build, export, pruning, reproducibility, keys. |
+| [`ddi-installer-dogfood.md`](ddi-installer-dogfood.md) | Boot-testing the image set in QEMU | `just dogfood*`, `scripts/dogfood-*.sh`, the `DOGFOOD_*` variables. |
+| [`ddi-installer.md`](ddi-installer.md) | Boot flow, diskless pull, `systemd-sysinstall` | Boot, install, and update architecture. |
+| [`updates-operations.md`](updates-operations.md) | Update scheduling, health gate, rollback, reboot interlocks | Sysupdate features/components, reboot timers, `bluefin-boot-deadline`, kured/FleetLock interlocks, diskless update check. |
 | [`diskless-troubleshooting.md`](diskless-troubleshooting.md) | Diskless node reboot-loops, RAM sizing, keeping logs, writing Ignition configs | Failure summary, minimum RAM, failure modes, logs, supported Ignition subset. |
 | [`factory-integration.md`](factory-integration.md) | Lab integration, boot-test workflow, factory role | How Bluefin Server is consumed by the CI lab. |
 | [`gap-analysis-distros.md`](gap-analysis-distros.md) | Comparing Bluefin Server to other server OSes | Source-verified comparison to Ubuntu, Talos, Flatcar, FCOS. |
@@ -37,14 +40,18 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`k0s-sysext-ops.md`](k0s-sysext-ops.md) | Operating k0s on Bluefin Server | Runtime operation and troubleshooting for the k0s sysext. |
 | [`k0s-sysext.md`](k0s-sysext.md) | Building the k0s sysext | BuildStream element and publish steps for the k0s sysext. |
 | [`merge-queue.md`](merge-queue.md) | Adding, renaming or removing a gating CI job, the merge queue ruleset, a stuck merge group | Merge queue settings, required checks, and how Prow and bots enqueue. |
-| [`nvidia-sysext.md`](nvidia-sysext.md) | Adding, bumping, or debugging an NVIDIA driver (open kernel modules) or Container Toolkit (CDI) sysext | Flavours and adding one, open-modules-only (Turing+) policy, driver and toolkit bumps, CDI and GPU Operator values. |
+| [`nvidia-sysext.md`](nvidia-sysext.md) | Adding, bumping, or debugging an NVIDIA driver (open kernel modules) or Container Toolkit (CDI) sysext | Flavours and adding one, open-modules-only (Turing+) policy, driver and toolkit bumps. |
+| [`nvidia-sysext-ops.md`](nvidia-sysext-ops.md) | Running an NVIDIA GPU node | Choosing the sysexts, nouveau eviction, CDI and the `nvidia` runtime handler, GPU Operator values. |
 | [`secure-boot-keys.md`](secure-boot-keys.md) | Rotating signing keys, setting up CI secrets, debugging signature verification, shim and shim-review | Key inventory, `gen-dev-keys`, CI secrets, rotation, and the shim vendor certificate. |
 | [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
 | [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
 | [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and version matching. |
+| [`sysext-kernel-modules.md`](sysext-kernel-modules.md) | Kernel-module-carrying sysexts (OpenZFS, NVIDIA) | No `modules.*` index in a sysext; `bluefin-sysext-modules` builds the merged index and loads modules. |
 | [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md) | Image-based A/B updates and signed manifests | Release signing, `systemd-sysupdate`, and trust model. |
+| [`sysupdate-operations.md`](sysupdate-operations.md) | Operating sysupdate trust in the field | Update-health banner, checking status by hand, signing-key rotation. |
 | [`tpm2-credential-sealing.md`](tpm2-credential-sealing.md) | First-boot credentials, root/SSH node access, TPM2 sealing | Provisioning credentials, node access, and sealing with `systemd-creds`. |
-| [`usb-installer.md`](usb-installer.md) | The offline USB installer image, unattended installs, install-time provisioning | `bluefin-server-installer_<ver>.raw` boot flow, sysinstall drop-in, ESP credentials. |
+| [`usb-installer.md`](usb-installer.md) | The offline USB installer image and its prompts | `bluefin-server-installer_<ver>.raw` boot flow, sysinstall drop-in, Secure Boot check. |
+| [`usb-installer-provisioning.md`](usb-installer-provisioning.md) | Unattended installs and install-time provisioning from the stick | Homelab entries, Home Server credentials, ESP credentials, developer-mode sticks. |
 
 ## Standing facts
 

@@ -131,7 +131,7 @@ kernel). No other distribution's binaries ship in the image.
 ### Reboot coordination
 
 - **Resolved:** single-node and non-Kubernetes hosts reboot in the nightly `systemd-sysupdate-reboot.timer` window, held by `/run/reboot-lock` or `/etc/reboot-lock`; Kubernetes nodes stand down for Kured (lock files and interlock from #182).
-- **Resolved:** non-Kubernetes hosts that serve together take turns through a FleetLock server, as with Zincati: `bluefin-reboot-lock` (bash and curl, no daemon) takes a slot before every local reboot and `bluefin-reboot-lock-release.service` returns it after a good boot. Bluefin Server ships the client only; the lock manager is any FleetLock server, where Flatcar's `locksmithd` builds it in on etcd. See [ddi-installer.md](ddi-installer.md) "Updates".
+- **Resolved:** non-Kubernetes hosts that serve together take turns through a FleetLock server, as with Zincati: `bluefin-reboot-lock` (bash and curl, no daemon) takes a slot before every local reboot and `bluefin-reboot-lock-release.service` returns it after a good boot. Bluefin Server ships the client only; the lock manager is any FleetLock server, where Flatcar's `locksmithd` builds it in on etcd. See [updates-operations.md](updates-operations.md) "Updates".
 
 ## 5. Summary of Biggest Gaps
 

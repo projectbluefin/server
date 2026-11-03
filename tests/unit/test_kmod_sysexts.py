@@ -140,8 +140,8 @@ def test_the_nvidia_guard_only_refuses_a_second_flavour() -> None:
 
 
 def test_docs_state_the_rule_once_and_no_exclusivity() -> None:
-    skill = (ROOT / "docs" / "skills" / "systemd-sysext-extensions.md").read_text(encoding="utf-8")
-    assert "## Kernel-module sysexts" in skill
+    skill = (ROOT / "docs" / "skills" / "sysext-kernel-modules.md").read_text(encoding="utf-8")
+    assert "# Kernel-module sysexts" in skill
     assert "ships no `modules.*` index" in skill
     for path in [ROOT / "AGENTS.md", ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]:
         text = path.read_text(encoding="utf-8")
