@@ -311,3 +311,11 @@ def test_component_sysexts_are_staged_into_the_signed_image_set() -> None:
         assert f"/sysext/{name}/{name}-*.raw.zst" in image
         # Own version axis: publish-release.sh accepts any version of it.
         assert f'"{name}-[0-9][0-9A-Za-z.+-]*\\\\.raw\\\\.zst"' in publish
+
+
+def test_k0s_transfer_keeps_the_running_and_the_next_version_only():
+    """Each k0s image is over 150 MiB in /var/lib/k0s; the default of three
+    instances keeps two old ones. Two keep one to roll back to, like the host
+    sysexts."""
+    target = load_transfer(COMPONENTS["k0s"]["transfer"])["Target"]
+    assert target.get("InstancesMax") == "2"

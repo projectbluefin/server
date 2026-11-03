@@ -17,6 +17,12 @@ each metric's change too; growth by more than 5 % or 5 MiB gets a ::warning::
 annotation, never a failure. Releases publish the report next to the set,
 outside its signed SHA256SUMS: it is information, nothing trusts it.
 
+usr_raw and usr_verity_raw must fit their A/B slots on installed disks:
+filling more than 90 % of the SizeMaxBytes= of the usr or usr-verity
+partition in --repart-dir (default files/os/repart.d) is an ::error:: and
+exit status 1, after the report is written. sysupdate cannot grow a slot,
+so an image that outgrows it would never update an installed node.
+
 --render prints the table of a report, for publish-release.sh's release
 notes. Needs zstd on PATH for initrd_unpacked.
 """
@@ -53,6 +59,10 @@ SYSEXT = re.compile(r"(?P<name>.+?)[_-][0-9][^_]*\.raw\.zst")
 NOT_NUL = re.compile(rb"[^\x00]")
 GROWTH_RATIO = 0.05
 GROWTH_BYTES = 5 * 2**20
+SLOT_RATIO = 0.9
+SLOTS = {"usr_raw": "usr", "usr_verity_raw": "usr-verity"}
+REPART_DIR = Path(__file__).resolve().parents[2] / "files" / "os" / "repart.d"
+UNITS = {"": 1, "B": 1, "K": 2**10, "M": 2**20, "G": 2**30, "T": 2**40}
 
 
 def pe_sections(data: bytes) -> dict[str, tuple[int, int]]:
@@ -140,6 +150,19 @@ def baseline(report: Path | None, usr: Path | None) -> tuple[str | None, dict[st
     return version, metrics
 
 
+def slot_sizes(repart: Path) -> dict[str, int]:
+    """Partition type -> SizeMaxBytes= of the first repart.d file of that type."""
+    sizes: dict[str, int] = {}
+    for conf in sorted(repart.glob("*.conf")):
+        keys = dict(
+            line.split("=", 1) for line in conf.read_text(encoding="utf-8").splitlines() if "=" in line
+        )
+        match = re.fullmatch(r"([0-9]+)([BKMGT]?)", keys.get("SizeMaxBytes", "").strip())
+        if match and keys.get("Type", "").strip() not in sizes:
+            sizes[keys["Type"].strip()] = int(match[1]) * UNITS[match[2]]
+    return sizes
+
+
 def human(n: int) -> str:
     for unit, scale in (("GiB", 2**30), ("MiB", 2**20), ("KiB", 2**10)):
         if abs(n) >= scale:
@@ -196,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline-json", type=Path, help="the latest release's size report")
     parser.add_argument("--baseline-usr", type=Path, help="the latest release's *.usr.raw")
     parser.add_argument("--commit", help="the commit the set was built from (default: git HEAD)")
+    parser.add_argument("--repart-dir", type=Path, default=REPART_DIR, help="repart.d of the A/B slots")
     args = parser.parse_args(argv)
     if args.render is not None:
         sys.stdout.write(render(json.loads(args.render.read_text(encoding="utf-8"))))
@@ -226,7 +250,19 @@ def main(argv: list[str] | None = None) -> int:
             handle.write(summary)
     else:
         sys.stderr.write(summary)
-    return 0
+    slots = slot_sizes(args.repart_dir)
+    full = False
+    for key, kind in SLOTS.items():
+        if key in metrics and kind not in slots:
+            raise SystemExit(f"no {kind} partition with SizeMaxBytes= in {args.repart_dir}")
+        if key in metrics and metrics[key] > SLOT_RATIO * slots[kind]:
+            full = True
+            print(
+                f"::error title=Image outgrows its slot::{key} is {human(metrics[key])}, more than"
+                f" {SLOT_RATIO:.0%} of the {human(slots[kind])} {kind} partition in {args.repart_dir}",
+                file=sys.stderr,
+            )
+    return 1 if full else 0
 
 
 if __name__ == "__main__":
