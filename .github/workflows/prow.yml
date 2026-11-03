@@ -1,16 +1,16 @@
 # Prow: /commands on issues and pull requests, needs-kind, reviewers and approvers from
 # OWNERS, merging through the merge queue on lgtm + approved, and labels from the org config
 # at projectbluefin/.project/prow.yaml.
-# Upstream template: cncf/prow-github-actions v3.0.1 templates/workflow-templates/prow.yml.
+# Upstream template: cncf/prow-github-actions v3.5.0 templates/workflow-templates/prow.yml.
 # Deviations from the template (projectbluefin Actions security baseline):
 #   - permissions: {} at the top, write scopes granted per job
-#   - reusable workflow pinned to the v3.0.1 commit SHA
+#   - reusable workflow pinned to the v3.5.0 commit SHA
 #   - prow-commands limited to the commands whose labels exist in the org config
 #   - triage/priority and generic label commands require the canonical YAML roster
 #   - the prow job acts with PROW_TOKEN, a classic PAT (repo scope): a merge group enqueued
 #     with GITHUB_TOKEN starts no workflow, so it would never get its required checks
 #     (docs/skills/merge-queue.md); label-sync and authorize keep GITHUB_TOKEN
-# Docs: https://github.com/cncf/prow-github-actions/blob/v3.0.1/docs/installing.md
+# Docs: https://github.com/cncf/prow-github-actions/blob/v3.5.0/docs/installing.md
 name: Prow
 on:
   issues:
