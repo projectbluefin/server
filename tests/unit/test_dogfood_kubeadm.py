@@ -39,7 +39,7 @@ def test_probe_checks_the_paths_the_init_unit_uses() -> None:
 def test_every_asserted_probe_key_is_emitted() -> None:
     emitted = {m[1] for t in (TEXT, DISKLESS.read_text(encoding="utf-8")) for line in t.splitlines()
                if "echo" in line for m in re.finditer(r"(?:PROBE | )([a-z][a-z-]*)=", line)}
-    asserted = {m[1] for line in TEXT.splitlines() if line.startswith("grep")
+    asserted = {m[1] for line in TEXT.splitlines() if line.startswith(("grep", "check "))
                 for m in re.finditer(r"PROBE ([a-z][a-z-]*)=", line)}
     assert asserted and asserted <= emitted
 

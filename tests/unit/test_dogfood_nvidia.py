@@ -60,7 +60,7 @@ def probe_lines(text: str) -> tuple[list[str], list[str]]:
             continue
         if "echo" in line:
             emitting.append(line)
-        elif "grep" in line:
+        elif "grep" in line or line.startswith("check "):
             asserting.append(line)
     return emitting, asserting
 
@@ -89,6 +89,7 @@ def test_the_check_stops_at_the_first_failed_step() -> None:
 def test_every_asserted_probe_key_is_one_the_probe_emits() -> None:
     # A grep for a key nothing prints can only ever fail, and a key that is
     # printed but never greped is an expectation somebody dropped.
+    assert len(asserted_keys()) > 10, asserted_keys()
     missing = asserted_keys() - emitted_keys()
     assert not missing, f"asserted but never printed: {sorted(missing)}"
 
