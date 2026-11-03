@@ -4,7 +4,7 @@ description: How Booty serves Bluefin Server releases to nodes. Load when workin
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-05"
+  last_updated: "2026-11-02"
 ---
 # Booty Integration
 
@@ -148,6 +148,25 @@ Then drop this section and the default's unit test. CI already builds the
 next update-test image set with the option off
 (`BST_FLAGS="-o ignition_allow_unsigned False"`) and proves its netboot UKI
 refuses an unsigned config; a local build can do the same.
+
+### Residual risks
+
+Signing does not close these; they are accepted, not planned work
+([#327](https://github.com/projectbluefin/server/issues/327)):
+
+- **`ignition.config.url` is not signature-checked.** The credential is
+  trusted (setting one already requires control of the node's ESP, SMBIOS or
+  UKI), but the config it names is fetched and applied as a `config.replace`
+  with no signature and no hash. Over plain `http://`, an on-path attacker
+  can substitute it. Serve it over `https://`, or pass the config inline as
+  `ignition.config`.
+- **A signed config is not bound to a node or a time.** Any config signed
+  with a key in `ignition-pubring.pgp` verifies on every node and stays valid
+  until that key leaves the keyring. Anyone who can answer a node's requests
+  can replay another node's signed config, or an older one, for example one
+  with an SSH key or a k0s token since revoked. Keep long-lived secrets out
+  of node configs, and rotate the config key (above) to retire every old
+  signature at once.
 
 ## Install to disk
 
