@@ -17,7 +17,8 @@
 # with a lease on the branch state it saw, and creates or edits the pull
 # request. GH_TOKEN authenticates `gh` and the push: checkouts do not persist
 # credentials, so the push passes it as a one-off header that never reaches
-# .git/config.
+# .git/config, through GIT_CONFIG_* in the push's environment rather than
+# `git -c` on its command line, which any process on the runner can read.
 #
 # No `|| true` on the queries: a failed `gh` or `git ls-remote` must stop the
 # run, not pass for "no pull request" or "no branch".
@@ -79,12 +80,16 @@ git checkout --quiet -B "${branch}"
 git -c user.name="github-actions[bot]" \
     -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
     commit --quiet -m "${title}"
-push_auth=()
-if [ -n "${GH_TOKEN:-}" ]; then
-    push_auth=(-c "http.${GITHUB_SERVER_URL:-https://github.com}/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)")
-fi
-git "${push_auth[@]}" push --quiet --force-with-lease="refs/heads/${branch}:${remote_head}" \
-    "${remote}" "HEAD:refs/heads/${branch}"
+(
+    if [ -n "${GH_TOKEN:-}" ]; then
+        export GIT_CONFIG_COUNT=1
+        export GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL:-https://github.com}/.extraheader"
+        GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)"
+        export GIT_CONFIG_VALUE_0
+    fi
+    git push --quiet --force-with-lease="refs/heads/${branch}:${remote_head}" \
+        "${remote}" "HEAD:refs/heads/${branch}"
+)
 
 if [ -n "${open}" ]; then
     gh pr edit "${open}" --title "${title}" --body-file "${body}"

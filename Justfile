@@ -3,15 +3,18 @@
 default:
     @just --list
 
-# Same bst2 container image FSDK/dakota CI uses -- pinned by commit-named tag.
-# Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3).
-export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44")
-export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6")
+# Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3) -- pinned by digest.
+export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:b414c09be79dd1f32529b55b096b6bb30435d82ee16fbdbbabf8985eb5f86db0")
+# oras for `just publish-oci` -- pinned by digest; track-binaries.py moves it with CI's setup-oras pins.
+export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6@sha256:9cfb578be975b762fd898b9d004243d8003aeb807a3e15b2ed212cdd1326c9eb")
+# Same bst2 container image FSDK/dakota CI uses. Its tag names the
+# freedesktop-sdk-docker-images commit it was built from; it is a mutable tag,
+# not a digest pin.
 export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:7bad9dd2eb087b7ed1e6362cccc5677870d9511f")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
-# butane (v2.27.0, built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
-export butane_image := env("BUTANE_IMAGE", "quay.io/coreos/butane:release@sha256:d264fba5a02ec7a5525b7cd4ab04090e8c70d0ee42a74a90a0e2f89633ae720c")
+# butane (built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
+export butane_image := env("BUTANE_IMAGE", "quay.io/coreos/butane:v2.27.0@sha256:d264fba5a02ec7a5525b7cd4ab04090e8c70d0ee42a74a90a0e2f89633ae720c")
 
 # Prefix for podman calls: empty when rootless podman works, "sudo" otherwise.
 sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } else { "sudo" }

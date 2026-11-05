@@ -9,7 +9,9 @@ title that was turned down; and stop, without pushing, when `gh` fails.
 """
 
 
+import base64
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -205,3 +207,32 @@ def test_the_token_is_used_for_the_push_but_never_stored(repo: Path, env: dict[s
     assert remote_branch(repo) != ""
     assert "ghs_secret_value" not in (repo / ".git" / "config").read_text()
     assert "ghs_secret_value" not in result.stdout + result.stderr
+
+
+def test_the_token_header_reaches_the_push_through_the_environment_not_argv(
+    repo: Path, env: dict[str, str], tmp_path: Path
+) -> None:
+    # A command line is world-readable in /proc; the environment is not.
+    real_git = shutil.which("git")
+    assert real_git
+    (tmp_path / "bin" / "git").write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$LOG/git-argv"\n'
+        'case "$1" in push) printf "%s=%s\\n" "$GIT_CONFIG_KEY_0" "$GIT_CONFIG_VALUE_0" >> "$LOG/git-push-env" ;; esac\n'
+        f'exec {real_git} "$@"\n'
+    )
+    (tmp_path / "bin" / "git").chmod(0o755)
+    env["GH_TOKEN"] = "ghs_secret_value"
+    env["GITHUB_SERVER_URL"] = "https://github.example"
+    (repo / "pin.txt").write_text("1.1\n")
+
+    result = propose(repo, env)
+
+    assert result.returncode == 0, result.stderr
+    header = base64.b64encode(b"x-access-token:ghs_secret_value").decode()
+    assert (Path(env["LOG"]) / "git-push-env").read_text() == (
+        f"http.https://github.example/.extraheader=AUTHORIZATION: basic {header}\n"
+    )
+    argv = (Path(env["LOG"]) / "git-argv").read_text()
+    assert "push" in argv
+    assert header not in argv and "ghs_secret_value" not in argv

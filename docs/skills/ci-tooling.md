@@ -67,11 +67,11 @@ Workflows install Python packages with
 `pip install <name>`. The file pins the whole resolved set with `==`, and
 Renovate's `pip_requirements` manager proposes the bumps.
 
-The Justfile's `bst2_image` is tagged with the freedesktop-sdk-docker-images
-commit it was built from. The docker datasource cannot order those tags, so a
-Renovate `git-refs` manager follows that repository's default branch and moves
-the tag (a tag, not a digest pin). A failed upstream build leaves it unpublished
-and no CI job pulls it, so a package rule keeps these bumps from automerging.
+The Justfile's other tool images are pinned `tag@sha256:`, bumped by a Renovate
+`docker` regex manager (ORAS digest only: `track-binaries.py` owns its tag).
+`bst2_image` is a mutable tag named for the freedesktop-sdk-docker-images commit
+it was built from, which a `git-refs` manager moves; no CI job pulls it, so a
+package rule holds those bumps (git-refs has no timestamps to age-gate).
 
 ### Python lint
 
@@ -166,8 +166,8 @@ rootless `podman info` works and `sudo` otherwise.
   mint that token only right before the push and PR step, after every step
   that runs repository or upstream code, narrowed with
   `permission-contents: write` and `permission-pull-requests: write`, and
-  push with a one-off `http.<server>/.extraheader`; the checkout keeps no
-  credentials.
+  push with a one-off `http.<server>/.extraheader` in `GIT_CONFIG_*` (not
+  argv); the checkout keeps no credentials.
 - Every `actions/checkout` sets `persist-credentials: false`; no job pushes
   with the checkout's token.
 
