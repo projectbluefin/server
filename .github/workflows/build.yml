@@ -875,7 +875,7 @@ jobs:
       contents: read
     services:
       registry:
-        image: docker.io/library/registry:3.1.2@sha256:79c026787b4607fb4633d415966cf7c059c1f46f92f597c346eb23f818fe4a3d
+        image: docker.io/library/registry:3.1.2@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c
         ports:
           - 5000:5000
     env:
