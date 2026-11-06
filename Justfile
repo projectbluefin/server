@@ -4,7 +4,7 @@ default:
     @just --list
 
 # Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3) -- pinned by digest.
-export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:d86cfa65ed3ac64009cb7039eea74657365733819806a41fec0510aa1fccc314")
+export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:b3e011d47e686a89781495c9a87bc80349af742965e5d51e79cd51711982e4a2")
 # oras for `just publish-oci` -- pinned by digest; track-binaries.py moves it with CI's setup-oras pins.
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6@sha256:9cfb578be975b762fd898b9d004243d8003aeb807a3e15b2ed212cdd1326c9eb")
 # Same bst2 container image FSDK/dakota CI uses. Its tag names the
