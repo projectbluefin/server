@@ -216,9 +216,10 @@ tell a human or a policy engine which commit and workflow run produced it.
   `image-check` writes after the build (see `ci-tooling.md`), is published
   unlisted: information for humans that no signature covers and no transfer
   matches, so `verify` only checks that it reports this version.
-  `release` creates the GitHub Release at the built commit. `oci`
-  pushes the ORAS artifact, then checks the registry manifest layer by layer
-  against the local files. Neither moves `latest` backwards: `release`
+  `oci` pushes the ORAS artifact, then checks the registry manifest layer
+  by layer against the local files. `release` then creates the GitHub
+  Release at the built commit, last because a tag is never re-created: a
+  failed run can be retried, re-pushing the same files. Neither moves `latest` backwards: `release`
   passes `--latest` only when no published release sorts above the version
   (`sort -V`, which orders `YY.MM.<run>` as `strverscmp()` does) and
   `--latest=false` otherwise, and `oci` tags `latest` only when the version
@@ -226,8 +227,8 @@ tell a human or a policy engine which commit and workflow run produced it.
   is not newer. Re-running an older release leaves both where they are. On main the `release` job verifies against the
   committed `files/os/sysupdate-keys/import-pubring.gpg`. On pull requests
   `release-dry-run` verifies against the throwaway keyring the build
-  exported in `sysupdate-keys/`, prints the `gh release create` command, and
-  pushes to a local registry and pulls the artifact back.
+  exported in `sysupdate-keys/`, pushes to a local registry and pulls the
+  artifact back, then prints the `gh release create` command.
 - **Attestations.** The `release` job runs `actions/attest` four times:
   provenance and SBOM for every published file (subjects are the verified
   checksums), and provenance and SBOM for the OCI artifact digest with

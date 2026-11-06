@@ -79,10 +79,30 @@ def test_changes_job_runs_the_base_revision_classifier():
         ".github/workflows/lint-actions.yml",
         ".github/actionlint.yaml",
         ".github/requirements-ci.txt",
+        # Trackers, Prow and the scheduled e2e/reproducibility runs: none of
+        # them feeds the image build or the boot test.
+        ".github/workflows/track-binaries.yml",
+        ".github/workflows/e2e-opt-in.yml",
+        ".github/workflows/prow.yml",
+        ".github/workflows/reproducibility.yml",
+        ".github/scripts/track-binaries.py",
+        ".github/scripts/propose-pr.sh",
+        ".github/scripts/tracking-issue.sh",
+        "OWNERS",
     ],
 )
 def test_docs_and_unit_test_changes_skip(path):
     assert not image_build_needed.needs_build(path)
+
+
+@pytest.mark.parametrize("path", sorted(image_build_needed.SKIP_FILES))
+def test_skip_files_exist(path):
+    assert (ROOT / path).is_file(), f"{path} moved; update SKIP_FILES"
+
+
+@pytest.mark.parametrize("prefix", image_build_needed.BUILD_PREFIXES + image_build_needed.SKIP_PREFIXES)
+def test_prefixes_name_tracked_directories(prefix):
+    assert any(p.startswith(prefix) for p in tracked_files()), f"no tracked file under {prefix}"
 
 
 @pytest.mark.parametrize(
