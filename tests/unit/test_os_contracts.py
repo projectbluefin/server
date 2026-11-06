@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _systemd import SystemdFile
 from conftest import HOST_HELPERS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -90,3 +91,61 @@ def test_no_base_image_preset_enables_zfs() -> None:
     # The ZFS sysext's own 50-zfs.preset enables its units; a preset in a
     # sysext does nothing until the admin runs `systemctl preset`.
     assert not enable_lines(BASE_PRESETS, "zfs")
+
+
+# Oneshots multi-user.target wants that must run again when started again.
+RERUN_ON_PURPOSE = {
+    # bluefin-sysext-fetch starts it again after a retry merged more sysexts.
+    "bluefin-sysext-activate.service",
+    # systemd-sysupdate.service's OnSuccess=/OnFailure= refresh the banners.
+    "bluefin-update-status.service",
+}
+
+
+def multi_user_oneshots() -> list[Path]:
+    return [
+        path
+        for path in sorted((ROOT / "files").rglob("*.service"))
+        if SystemdFile(path).value("Service", "Type") == "oneshot"
+        and "multi-user.target" in SystemdFile(path).words("Install", "WantedBy")
+    ]
+
+
+def test_the_multi_user_oneshots_are_found() -> None:
+    names = [path.name for path in multi_user_oneshots()]
+    assert RERUN_ON_PURPOSE <= set(names)
+    assert "k0s-first-boot.service" in names
+
+
+@pytest.mark.parametrize("path", multi_user_oneshots(), ids=lambda path: path.name)
+def test_multi_user_oneshots_run_once_per_boot(path: Path) -> None:
+    # bluefin-sysext-activate.service re-requests multi-user.target after
+    # sysexts merge, which starts every wanted unit that is inactive again.
+    remain = SystemdFile(path).value("Service", "RemainAfterExit")
+    if path.name in RERUN_ON_PURPOSE:
+        assert remain is None, f"{path.name} must stay restartable"
+    else:
+        assert remain == "yes", f"{path.name} needs RemainAfterExit=yes or it runs twice per boot"
+
+
+def release_fields(path: Path) -> dict[str, str]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return dict(line.split("=", 1) for line in lines if "=" in line)
+
+
+# Every first-party extension-release names its extension by the file's stem
+# (versioned images append _<version> to the image name, not to NAME=).
+@pytest.mark.parametrize(
+    "path",
+    sorted(p for p in (ROOT / "files").rglob("extension-release.*") if "@" not in p.read_text(encoding="utf-8")),
+    ids=lambda path: path.name,
+)
+def test_extension_release_name_is_its_stem(path: Path) -> None:
+    name = release_fields(path).get("NAME")
+    assert name in (None, path.name.removeprefix("extension-release."))
+
+
+@pytest.mark.parametrize("stem", ["homebrew-integration", "tailscale"])
+def test_extension_release_names_itself(stem: str) -> None:
+    (path,) = (ROOT / "files").rglob(f"extension-release.{stem}")
+    assert release_fields(path)["NAME"] == stem

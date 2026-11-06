@@ -12,6 +12,10 @@ RequiresMountsFor=/var/lib/k0s
 
 [Service]
 Type=oneshot
+# Once per boot: bluefin-sysext-activate.service re-requests
+# multi-user.target, which would otherwise refresh the sysexts again under
+# a running k0s and repeat the enable --now.
+RemainAfterExit=yes
 StateDirectory=k0s
 Restart=on-failure
 RestartSec=30s
