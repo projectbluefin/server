@@ -15,7 +15,7 @@ This audit tracks the gap between the current tree and a first public/usable MVP
 
 | Check | Status | Evidence |
 |---|---|---|
-| Element graph resolves | ✅ | `just validate` succeeds for the image set and all three sysexts |
+| Element graph resolves | ✅ | `just validate` checks the image set and shipped sysext element graphs |
 | Release workflow lint | ✅ | `actionlint .github/workflows/build.yml` clean |
 | Release path exists | ✅ | `.github/workflows/build.yml` signs `SHA256SUMS` in-element (`oci/bluefin-server-image.bst`, with a `gpgv` proof against the shipped keyring) and publishes immutable `v<image-version>` GitHub Releases plus the OCI artifact `ghcr.io/<owner>/bluefin-server:<ver>,latest` |
 | Automated boot test | ✅ | `boot-test` job in `build.yml` runs `scripts/ci/boot-test.sh` (the diskless/install/installer buckets wrap `scripts/dogfood-*.sh`) whenever the `changes` job's `image` output is true: pushes to main, the nightly schedule, merge groups that touch the image set, and PRs labeled `full-build` or changing the FSDK junction (most PRs run only `validate`). Locally `just dogfood-check` / `just dogfood-install`. UEFI HTTP boot verified with Secure Boot (`DOGFOOD_BOOT=http`), and tampered DDI / unsigned manifest both refused (`DOGFOOD_TAMPER=raw\|sums`) |
