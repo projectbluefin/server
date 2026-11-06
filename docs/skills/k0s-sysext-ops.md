@@ -4,7 +4,7 @@ description: Operator runbook for the k0s systemd-sysext on Bluefin Server — p
 metadata:
   type: how-to
   status: stable
-  last_updated: "2026-10-02"
+  last_updated: "2026-10-30"
   context7-sources:
     - /systemd/systemd
 ---
@@ -49,6 +49,24 @@ rollbacks) across the cluster (see "Updates" in
 A node with a join token at `/etc/k0s/token` becomes a worker. The token can be
 written by Booty via Ignition at provisioning time; `k0sworker.service` will
 start automatically on the next boot when the token is present.
+
+## Updating k0s
+
+k0s has its own version axis (`include/k0s.yml`) and nothing updates it
+automatically: `systemd-sysupdate.timer` updates only the host transfers in
+`sysupdate.d/`, and `k0s-first-boot-fetch.service` runs only while
+`/var/lib/k0s/k0s.raw` is missing. A fetch takes the k0s of the latest
+release, so a node added or updated later can run a newer k0s than the rest
+of the cluster. Kubernetes allows a kubelet up to three minors older than
+the API server, never newer, and upgrades a control plane one minor at a
+time: update controllers first, then workers, and join a new worker only
+when the controllers run the same k0s or newer.
+
+```bash
+systemd-sysupdate --component=k0s list     # installed and available versions
+systemd-sysupdate --component=k0s update   # stages k0s-<ver>.raw, repoints k0s.raw
+systemctl reboot                           # k0s-first-boot.service merges it
+```
 
 ## Verifying
 
