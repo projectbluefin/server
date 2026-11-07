@@ -15,10 +15,12 @@ on:
     - cron: "30 5 * * *"
   workflow_dispatch:
 
-# Pull requests cancel superseded runs. Pushes to main queue instead: a run
-# on main ends in a release, and cancelling it would skip that version. The
-# nightly build and labels other than full-build get groups of their own, so
-# they neither delay a release nor cancel a pull request's full build.
+# Pull requests cancel superseded runs. Pushes to main never cancel the
+# running release, but GitHub keeps only one pending run per group: a newer
+# push replaces the pending one, whose version is never published (the newer
+# run ships its content). The nightly build and labels other than full-build
+# get groups of their own, so they neither delay a release nor cancel a pull
+# request's full build.
 concurrency:
   group: build-${{ github.event_name == 'schedule' && 'nightly' || (github.event.action == 'labeled' && github.event.label.name != 'full-build') && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -816,13 +818,6 @@ jobs:
           subject-checksums: ${{ steps.verify.outputs.subjects }}
           sbom-path: dist/diskless/bluefin-server_${{ env.VERSION }}.spdx.json
 
-      - name: Create GitHub Release
-        if: steps.taggable.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: bash scripts/publish-release.sh release dist/diskless "${VERSION}"
-
       # setup-oras v2.0.1's built-in release table stops at ORAS 1.3.3, so pin
       # the release the Justfile's oras_image names, by URL and checksum.
       - name: Set up oras
@@ -861,11 +856,21 @@ jobs:
           sbom-path: dist/diskless/bluefin-server_${{ env.VERSION }}.spdx.json
           push-to-registry: true
 
+      # Last: the tag is created once and never again, so everything that can
+      # fail runs before it. A failed run re-pushes the same files to the
+      # registry on retry; a GitHub Release created first would refuse the retry.
+      - name: Create GitHub Release
+        if: steps.taggable.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/publish-release.sh release dist/diskless "${VERSION}"
+
   # Rehearses `release` on every pull request and merge group that builds, with the same
   # scripts/publish-release.sh commands: verifies the release set against the
-  # keyring the build trusted (a throwaway key on pull requests), renders the
-  # gh release command without running it, and pushes the OCI artifact to a
-  # local registry and pulls it back. No secrets, read-only token.
+  # keyring the build trusted (a throwaway key on pull requests), pushes the
+  # OCI artifact to a local registry and pulls it back, then renders the gh
+  # release command without running it. No secrets, read-only token.
   release-dry-run:
     if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.build.result == 'success' }}
     needs: [build, image-check]
@@ -908,13 +913,6 @@ jobs:
       - name: Verify the release set
         run: bash scripts/publish-release.sh verify dist/diskless "${VERSION}" dist/diskless/sysupdate-keys/import-pubring.pgp
 
-      # Reads the published releases to decide --latest, like `release`.
-      - name: Render the GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: bash scripts/publish-release.sh release dist/diskless "${VERSION}" --dry-run
-
       # setup-oras v2.0.1's built-in release table stops at ORAS 1.3.3, so pin
       # the release the Justfile's oras_image names, by URL and checksum.
       - name: Set up oras
@@ -926,13 +924,22 @@ jobs:
       - name: Push the OCI artifact to a local registry and pull it back
         run: bash scripts/publish-release.sh oci dist/diskless "${VERSION}" localhost:5000/bluefin-server --plain-http --pull-back
 
+      # Reads the published releases to decide --latest, like `release`.
+      - name: Render the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/publish-release.sh release dist/diskless "${VERSION}" --dry-run
+
   # Nightly failures block nothing, so nobody sees them unless this says so:
   # one open "Nightly build failing" issue gets a comment per failed nightly
   # run and is closed by the next one that passes. Schedule events only (so
   # the scheduled main checkout); the job holds nothing but issues: write and
   # runs only .github/scripts/tracking-issue.sh, shared with the trackers.
+  # A failed boot-test-preflight skips build and everything after it, so a
+  # skipped job fails the nightly too (a nightly always builds the image).
   nightly-status:
-    needs: [changes, build, boot-test-result, image-check]
+    needs: [changes, boot-test-preflight, build, boot-test-result, image-check]
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -950,6 +957,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (needs.changes.outputs.image == 'true' && contains(needs.*.result, 'skipped')) }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash .github/scripts/tracking-issue.sh "Nightly build failing" "The nightly build of main" "a later nightly build"
