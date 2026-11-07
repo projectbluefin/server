@@ -193,7 +193,7 @@ func controlPlanePassphrase(c conf.Config) (string, error) {
 		log.Warn("using the operator-chosen join passphrase from " + passKey + "; a generated one is stronger")
 		return p, ops.WriteFile(passFile, []byte(p+"\n"), 0o600)
 	}
-	if data, err := os.ReadFile(passFile); err == nil {
+	if data, err := os.ReadFile(filepath.Join(ops.Root, passFile)); err == nil {
 		return passphrase.Normalize(string(data))
 	}
 	p, bits, err := passphrase.Generate(passphrase.DefaultWords)
@@ -274,10 +274,16 @@ func serve(ctx context.Context) error {
 	return err
 }
 
-// publish advertises the join service; the TXT record carries no secrets.
-func publish(cluster, runtime, port string) error {
-	body := fmt.Sprintf("# bluefin-cluster serve: the homelab join service (no secrets here).\n[Service]\nName=%%H\nType=%s\nPort=%s\nTxtText=v=1 cluster=%s runtime=%s\n",
+// dnssdBody is the join service's DNS-SD file; the TXT record carries no
+// secrets.
+func dnssdBody(cluster, runtime, port string) string {
+	return fmt.Sprintf("# bluefin-cluster serve: the homelab join service (no secrets here).\n[Service]\nName=%%H\nType=%s\nPort=%s\nTxtText=v=1 cluster=%s runtime=%s\n",
 		discover.ServiceType, port, cluster, runtime)
+}
+
+// publish advertises the join service.
+func publish(cluster, runtime, port string) error {
+	body := dnssdBody(cluster, runtime, port)
 	// Explicit modes: the unit's UMask=0077 would hide both from
 	// systemd-resolved, which runs as its own user.
 	dir := filepath.Dir(dnssdFile)
@@ -329,9 +335,14 @@ func nodePassphrase(c conf.Config) (string, error) {
 	return passphrase.Normalize(raw)
 }
 
+// joined is true once this node is in a cluster: the marker, or the kubelet
+// kubeconfig kubeadm join or the k0s worker writes after bootstrapping. A
+// k0s join token alone is no evidence: Join writes it before it starts
+// k0s-first-boot.service, so a failed start, or a token that expired before
+// k0sworker used it, would otherwise pass for a join and stop retrying.
 func joined() bool {
-	for _, p := range []string{joinedMarker, ops.KubeadmKubelet, ops.K0sTokenFile} {
-		if _, err := os.Stat(p); err == nil {
+	for _, p := range []string{joinedMarker, ops.KubeadmKubelet, ops.K0sKubelet} {
+		if _, err := os.Stat(filepath.Join(ops.Root, p)); err == nil {
 			return true
 		}
 	}
@@ -438,17 +449,30 @@ func attempt(ctx context.Context, cl *join.Client, manual string) (join.Payload,
 			return join.Payload{}, fmt.Errorf("no %s control plane advertised %s on the local network yet", cl.Runtime, discover.ServiceType)
 		}
 	}
+	return tryCandidates(ctx, cl.Join, cands)
+}
+
+// tryCandidates asks each candidate in turn. One that cannot prove the
+// passphrase (an impostor, or another cluster's control plane) is skipped
+// rather than ending the round: its other addresses would only spend guesses
+// on the same answer, and stopping would let whichever instance is listed
+// first hide the real control plane for good. Only the guess budget, shared
+// by every candidate, ends the round early.
+func tryCandidates(ctx context.Context, joinAt func(context.Context, netip.AddrPort) (join.Payload, error), cands []discover.Candidate) (join.Payload, error) {
 	var errs []error
 	for _, cand := range cands {
 		for _, addr := range cand.Addrs {
-			p, err := cl.Join(ctx, addr)
+			p, err := joinAt(ctx, addr)
 			if err == nil {
 				return p, nil
 			}
 			errs = append(errs, fmt.Errorf("%s (%s): %w", cand.Name, addr, err))
 			var be *join.ErrBudget
-			if errors.As(err, &be) || errors.Is(err, join.ErrNotProven) {
+			if errors.As(err, &be) {
 				return join.Payload{}, errors.Join(errs...)
+			}
+			if errors.Is(err, join.ErrNotProven) {
+				break
 			}
 		}
 	}

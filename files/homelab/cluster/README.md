@@ -111,7 +111,10 @@ and the `admin.conf` server (`<cp>.local:6443`). The node writes a
 `kubeadm join --config`; a failed join is reset and retried with a fresh
 token. k0s: `k0s token create --role=worker --expiry=15m0s` (embeds the CA
 and server); the node writes `/etc/k0s/token` (0600) and starts
-`k0s-first-boot.service`, which starts `k0sworker`.
+`k0s-first-boot.service`, which starts `k0sworker`. A restarted `join`
+counts the node as joined only by the marker or a bootstrapped kubelet
+kubeconfig (`/etc/kubernetes/kubelet.conf`, `/var/lib/k0s/kubelet.conf`),
+never by the token alone.
 
 **Rate limits.** Server: every PAKE run is charged before `Exchange`, under
 one lock with the limit check, to the source (IPv4 address, or IPv6 /64)
@@ -136,7 +139,9 @@ runs a rogue client or a rogue control plane; no access to either host.
   2^17.4 per year against 2^51.7 for a generated passphrase). It never
   receives sealed data or causes a mint without tagC.
 - Rogue control plane: one guess per node attempt, bounded by the node's
-  budget however many instances it advertises; the node never sends tagC
+  budget however many instances it advertises (the node skips a candidate
+  that cannot prove the passphrase and tries the next, so a rogue instance
+  listed first cannot hide the real one); the node never sends tagC
   unless tagS verified, so it cannot be steered to a cluster that does not
   know the passphrase. A spoofed `<cp>.local` cannot impersonate the API
   server: kubeadm pins the CA by hash; k0s's token carries the CA.
