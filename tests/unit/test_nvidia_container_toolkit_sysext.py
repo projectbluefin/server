@@ -205,4 +205,4 @@ def test_justfile_validates_builds_and_exports_the_sysext() -> None:
     validate = next(line for line in justfile.splitlines() if "just bst show --deps all" in line)
     assert "oci/nvidia-container-toolkit-sysext.bst" in validate
     assert "just bst build oci/nvidia-container-toolkit-sysext.bst" in justfile
-    assert "just bst artifact checkout oci/nvidia-container-toolkit-sysext.bst" in justfile
+    assert "just _export-sysext-element nvidia-container-toolkit nvidia-container-toolkit-" in justfile
