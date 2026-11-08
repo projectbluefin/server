@@ -60,16 +60,13 @@ config:
     mkdir -p "$vendor"
     mv ruby "$vendor/%{homebrew-portable-ruby-version}"
     ln -s "%{homebrew-portable-ruby-version}" "$vendor/current"
-    # A local repository so `brew update` can fetch and reset. The commit is
-    # synthetic but fixed, so the archive is reproducible.
-    export GIT_AUTHOR_NAME=bluefin GIT_AUTHOR_EMAIL=bluefin@localhost
-    export GIT_COMMITTER_NAME=bluefin GIT_COMMITTER_EMAIL=bluefin@localhost
-    export GIT_AUTHOR_DATE="2026-01-01T00:00:00Z" GIT_COMMITTER_DATE="2026-01-01T00:00:00Z"
-    git -C "$repo" init -q -b main
+    # The git_repo source stages a real checkout at the release commit, so
+    # `brew update` can fetch and reset: only point it at the upstream
+    # remote on a named branch.
+    git -C "$repo" checkout -q -B main
+    git -C "$repo" remote remove origin 2>/dev/null || true
     git -C "$repo" remote add origin https://github.com/Homebrew/brew
-    git -C "$repo" add -A
-    git -C "$repo" -c core.fileMode=true commit -q -m "Homebrew %{homebrew-version}"
-    git -C "$repo" tag "%{homebrew-version}"
+    git -C "$repo" tag -f "%{homebrew-version}" HEAD
     mkdir -p "%{install-root}%{datadir}/homebrew"
     tar --sort=name --mtime=@1767225600 --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime \
