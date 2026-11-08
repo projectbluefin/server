@@ -22,7 +22,7 @@ ARCHIVE = "/usr/share/homebrew/brew.tar.zst"
 def test_seed_unit_is_a_stamped_oneshot() -> None:
     unit = SystemdFile(HOMEBREW / "bluefin-homebrew-seed.service")
     assert unit.value("Service", "Type") == "oneshot"
-    assert unit.value("Service", "RemainAfterExit") == "yes"
+    assert unit.value("Service", "RemainAfterExit") is None
     assert unit.value("Service", "ExecStart") == "/usr/libexec/bluefin-homebrew-seed"
     assert f"!{STAMP}" in unit.values("Unit", "ConditionPathExists")
     assert ARCHIVE in unit.values("Unit", "ConditionPathExists")

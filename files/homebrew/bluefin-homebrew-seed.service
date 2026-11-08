@@ -7,7 +7,6 @@ After=local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
 
 [Service]
 Type=oneshot
-RemainAfterExit=yes
 ExecStart=/usr/libexec/bluefin-homebrew-seed
 
 [Install]
