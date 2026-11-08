@@ -7,7 +7,7 @@ Bluefin Server is an image-based Linux server OS composed from freedesktop-sdk (
 - a netboot ESP image with signed systemd-boot and Secure Boot key enrollment payloads
 - an offline USB installer `bluefin-server-installer_<ver>.raw` (usr + usr-verity + ESP with systemd-boot, the installer UKI, the disk UKI and `repart.d`) that boots into `systemd-sysinstall`; its Homelab boot entries also install a homelab template and the kubeadm + homelab sysexts from the stick
 - the homelab Ignition templates `homelab-{,k0s-}{control-plane,node}.{bu,ign}` (`homelab/homelab-templates.bst`)
-- optional opt-in `systemd-sysext` images: `oci/k0s-sysext.bst` (controller, or worker when `/etc/k0s/token` exists), `oci/kubeadm-sysext.bst` (kubeadm worker: kubelet, containerd), `oci/homelab-sysext.bst` and its add-ons `oci/argo-workflows-sysext.bst`, `oci/mcp-sysext.bst`, `oci/kubestellar-sysext.bst` (KubeStellar Console), `oci/zfs-sysext.bst`, `oci/nvidia-open-595-sysext.bst` (NVIDIA open kernel modules), `oci/nvidia-container-toolkit-sysext.bst` (CDI; own version axis like k0s), `oci/nspawn-org-sysext.bst` (nspawn.org CLI), and `oci/tailscale-sysext.bst` (Tailscale VPN daemon and CLI)
+- optional opt-in `systemd-sysext` images: `oci/k0s-sysext.bst` (controller, or worker when `/etc/k0s/token` exists), `oci/kubeadm-sysext.bst` (kubeadm worker: kubelet, containerd), `oci/homelab-sysext.bst` and its add-ons `oci/argo-workflows-sysext.bst`, `oci/mcp-sysext.bst`, `oci/kubestellar-sysext.bst` (KubeStellar Console), `oci/zfs-sysext.bst`, `oci/nvidia-open-595-sysext.bst` (NVIDIA open kernel modules), `oci/nvidia-container-toolkit-sysext.bst` (CDI; own version axis like k0s), `oci/nspawn-org-sysext.bst` (nspawn.org CLI), `oci/tailscale-sysext.bst` (Tailscale VPN daemon and CLI), `oci/netbird-sysext.bst` (NetBird VPN daemon and CLI), `runtimes/podman-sysext.bst` and `runtimes/docker-sysext.bst` (rootless host engines), `oci/homebrew-integration-sysext.bst` (host bridge for Homebrew), plus the `homebrew/image.bst` immutable Homebrew system container and the Home Server profile templates `home-server{,-cluster}.bu` (`homebrew/templates.bst`)
 - an SPDX 2.3 SBOM `bluefin-server_<ver>.spdx.json` (`oci/bluefin-server-sbom.bst`)
 - a `SHA256SUMS` over the whole set, signed in-element (`SHA256SUMS.gpg`); nodes verify it against the image keyring (see the sysupdate verification skill). CI adds one unlisted, informational file to the release: `bluefin-server_<ver>.size.json`
 
@@ -59,7 +59,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | `just dogfood` / `just dogfood-check` | Boot `dist/diskless/` diskless in QEMU with Secure Boot (interactive / headless probe). |
 | `just dogfood-install [<next-dir> [<broken-dir>]]` | QEMU end-to-end: diskless boot, install to disk, boot it, A/B update to `<next-dir>`, then roll back from a broken `<broken-dir>` (`DOGFOOD_SYSEXT=nvidia` or `zfs,nvidia` follows the NVIDIA sysexts instead of, or with, ZFS). |
 | `just publish-oci REF [DIR] [PLAIN_HTTP]` | Push `dist/diskless/` as an ORAS OCI artifact tagged `<version>,latest` (one layer per file). Local rehearsal; CI publishes via `scripts/publish-release.sh`. |
-| `just build-sysext` / `just export-sysext` | Build and export the k0s and KubeStellar `systemd-sysext` images. |
+| `just build-sysext` / `just export-sysext` | Build and export the k0s `systemd-sysext` image (KubeStellar ships with the homelab add-ons: `just export-homelab-sysext`). |
 | `just build-zfs-sysext` / `just export-zfs-sysext` | Build and export the OpenZFS `systemd-sysext`. |
 | `just build-nvidia-sysext` / `just export-nvidia-sysext` | Build and export an NVIDIA open-kernel-module `systemd-sysext` (`FLAVOUR=nvidia-open-595`). |
 | `just dogfood-nvidia` | Install `dist/diskless/` in QEMU, merge its NVIDIA sysext and probe it (no GPU). |
@@ -77,6 +77,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | Build or run the kubeadm worker sysext | [`docs/skills/kubeadm-sysext.md`](docs/skills/kubeadm-sysext.md) |
 | Homelab Ignition templates, the installer's Homelab entries | [`docs/skills/homelab-profile.md`](docs/skills/homelab-profile.md) |
 | Build or ship the k0s sysext | [`docs/skills/k0s-sysext.md`](docs/skills/k0s-sysext.md), [`docs/skills/k0s-sysext-ops.md`](docs/skills/k0s-sysext-ops.md) |
+| NVIDIA driver / Container Toolkit sysexts | [`docs/skills/nvidia-sysext.md`](docs/skills/nvidia-sysext.md) |
 | Update the FSDK pin / versioning | [`docs/skills/bump-fsdk-version.md`](docs/skills/bump-fsdk-version.md) |
 | CI workflows, action SHA pinning | [`docs/skills/ci-tooling.md`](docs/skills/ci-tooling.md) |
 | Merge queue, required checks, adding or renaming a gating CI job | [`docs/skills/merge-queue.md`](docs/skills/merge-queue.md) |

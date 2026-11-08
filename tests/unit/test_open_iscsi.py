@@ -1,6 +1,5 @@
 """Contracts for the open-iscsi initiator shipped in the base image."""
 
-from __future__ import annotations
 
 from pathlib import Path
 

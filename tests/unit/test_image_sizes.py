@@ -1,7 +1,6 @@
 """Unit coverage for scripts/ci/image-sizes.py, the size report image-check
 writes for every build and releases publish next to the set."""
 
-from __future__ import annotations
 
 import importlib.util
 import json

@@ -195,7 +195,11 @@ tell a human or a policy engine which commit and workflow run produced it.
   plugin (`output-type: spdx`) over the payload of the release set: the /usr
   and initrd stacks, the kernel, and the k0s, KubeStellar, kubeadm and
   OpenZFS sysext payloads. It lists one SPDX package per source (name,
-  version, download URL, source kind). Build-only elements such as the
+  version, download URL, source kind), but the list is de-duplicated by
+  SPDX ID, so a package built from two sources is shown only once. That
+  can hide a real second copy: fsdk-containers pins its own FSDK, so its
+  pcre2 has a different version from ours yet shares the same SPDX ID, and
+  the first copy wins (#599). Build-only elements such as the
   signing keys are not runtime dependencies of that payload and never
   appear. SPDX requires a `creationInfo.created`, which the plugin leaves to
   the build, so the image element stamps it from `SOURCE_DATE_EPOCH`. The
@@ -206,9 +210,9 @@ tell a human or a policy engine which commit and workflow run produced it.
   set was built. The SBOM ships as `bluefin-server_<ver>.spdx.json`, listed
   in `SHA256SUMS`, so the GPG signature covers it too. No transfer matches
   it, so nodes never download it.
-- **Publishing.** In CI, `scripts/publish-release.sh` is the only publish
-  path (`just publish-oci` pushes to a local or personal registry for
-  rehearsal and runs none of the script's checks).
+- **Publishing.** `scripts/publish-release.sh` is the only publish path
+  (`just publish-oci` runs its `verify` and `oci` against a local or
+  personal registry).
   `verify` checks what nodes will check (`gpgv` against the keyring, every
   `SHA256SUMS` entry present and matching), plus: every published file is
   listed, every file name carries the release version, and the SBOM is valid

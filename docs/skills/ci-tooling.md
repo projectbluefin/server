@@ -67,22 +67,22 @@ Workflows install Python packages with
 `pip install <name>`. The file pins the whole resolved set with `==`, and
 Renovate's `pip_requirements` manager proposes the bumps.
 
-The Justfile's `bst2_image` is tagged with the freedesktop-sdk-docker-images
-commit it was built from. The docker datasource cannot order those tags, so a
-Renovate `git-refs` manager follows that repository's default branch (every
-merge there publishes a tag for its commit) and moves the tag; it stays a tag,
-not a digest pin.
+The Justfile's other tool images are pinned `tag@sha256:`, bumped by a Renovate
+`docker` regex manager (ORAS digest only: `track-binaries.py` owns its tag).
+`bst2_image` is a mutable tag named for the freedesktop-sdk-docker-images commit
+it was built from, which a `git-refs` manager moves; no CI job pulls it, so a
+package rule holds those bumps (git-refs has no timestamps to age-gate).
 
 ### Python lint
 
-`just lint-python`, which the `unit` job runs before the tests, runs ruff over
-every Python file (`ruff.toml`: the E, F, W, I, UP and B rules, each disabled
-rule with its reason) and mypy over `scripts/` and `.github/scripts/`
-(`mypy.ini`: every function there is annotated). ruff's `target-version` is the
-oldest interpreter that runs these files — today the runners' system python3, 3.14 — not the `setup-python` version the workflows install; raise it only when every caller runs that version or newer. Locally, install
-the pinned tools into a virtualenv with
-`python3 -m pip install -r .github/requirements-ci.txt`, run
-`just lint-python`, and let `python3 -m ruff check --fix` apply the safe fixes.
+`just lint-python` runs ruff on every Python file (`ruff.toml`: E, F, W, I, UP,
+B; disabled rules are explained) and mypy on annotated functions in `scripts/`
+and `.github/scripts/` (`mypy.ini`); the `unit` job runs it before tests. The
+`pyproject.toml`'s `requires-python` and `.python-version` set 3.14; ruff's
+`target-version` matches the runners' system Python, the oldest CI runtime, not
+`setup-python`; raise it only when every caller supports it. Lint locally with
+`python3 -m pip install -r .github/requirements-ci.txt` in a virtualenv, then
+`just lint-python`; `python3 -m ruff check --fix` applies safe fixes.
 
 The pytest half of `just test-unit` runs in parallel (`-n auto`, pytest-xdist)
 and measures coverage of the repo's Python (`.coveragerc`: `scripts/`,
@@ -98,8 +98,8 @@ to `main`, each from a container image pinned by digest (`docker://` steps
 that Renovate's github-actions manager bumps). `.github/actionlint.yaml`
 declares hosted runner labels newer than actionlint's built-in list
 (`ubuntu-26.04`). Fix zizmor findings rather than silencing them; when one is
-accepted, ignore that rule for that location in `.github/zizmor.yml` with the
-reason next to it, never a whole audit. Locally:
+accepted, ignore that rule inline at that location with
+`# zizmor: ignore[<rule>]` plus the reason, never a whole audit. Locally:
 
 ```bash
 podman run --rm -v "$PWD":/repo:Z -w /repo docker.io/rhysd/actionlint:latest -no-color -oneline
@@ -166,8 +166,8 @@ rootless `podman info` works and `sudo` otherwise.
   mint that token only right before the push and PR step, after every step
   that runs repository or upstream code, narrowed with
   `permission-contents: write` and `permission-pull-requests: write`, and
-  push with a one-off `http.<server>/.extraheader`; the checkout keeps no
-  credentials.
+  push with a one-off `http.<server>/.extraheader` in `GIT_CONFIG_*` (not
+  argv); the checkout keeps no credentials.
 - Every `actions/checkout` sets `persist-credentials: false`; no job pushes
   with the checkout's token.
 
@@ -237,7 +237,7 @@ use: remove only this repository from their repository access.
 | `authorize` | `prow.yml` | `issue_comment` | Calls `projectbluefin/.project`'s reusable `prow-authorize.yml` (pinned by SHA) to look the commenter up in the org's `maintainers.yaml` roster; its `triage` output unlocks `/triage`, `/priority` and `/label` for the `prow` job. A failed lookup blocks the comment's commands. `contents: read`. |
 | `prow` | `prow.yml` | `issues`, `issue_comment`, `pull_request_target`, `pull_request_review`, `check_suite`, `schedule` (hourly) | Runs `cncf/prow-github-actions` v3.0.1 (pinned by SHA): `/` commands from the `prow-commands` allowlist, `needs-kind` on issues, reviewers and approvers from `OWNERS`, and merging through the merge queue once a PR has `lgtm` + `approved` (the hourly schedule is a backstop). `pull_request_target` is safe because nothing checks out or runs PR code. Write scopes granted per job. |
 | `label-sync` | `prow.yml` | `workflow_dispatch`, `push` of a repository `.github/prow.yaml` (none exists) | Same reusable workflow with `jobs: label-sync`: syncs repository labels from the org config at `projectbluefin/.project/prow.yaml`. Run by hand after every change to that config. |
-| `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token (`trackers` environment, `propose` only), minted after the apply step and narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
+| `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, Tailscale, NetBird, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token (`trackers` environment, `propose` only), minted after the apply step and narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
 Both trackers commit, push and open or update their pull request through
 `.github/scripts/propose-pr.sh`. It pushes nothing when the paths already

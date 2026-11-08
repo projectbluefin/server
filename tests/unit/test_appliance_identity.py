@@ -1,7 +1,6 @@
 """Appliance identity in the base OS: a unique default hostname, mDNS on the
 wired links, and the interactive bash prompt (#82, #83)."""
 
-from __future__ import annotations
 
 import os
 import shutil

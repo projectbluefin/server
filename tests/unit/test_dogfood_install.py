@@ -15,7 +15,6 @@ the argument handling that runs before QEMU is ever started, without booting
 anything.
 """
 
-from __future__ import annotations
 
 import os
 import re

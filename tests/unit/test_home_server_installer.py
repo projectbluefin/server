@@ -1,6 +1,5 @@
 """Native Home Server installer arguments, private credentials and boot profiles."""
 
-from __future__ import annotations
 
 import os
 import shlex

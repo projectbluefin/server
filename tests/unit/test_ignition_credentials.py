@@ -14,7 +14,6 @@ Runs against local HTTP and HTTPS servers and throwaway GnuPG keys; no
 files/boot-keys are needed.
 """
 
-from __future__ import annotations
 
 import functools
 import os
@@ -96,8 +95,9 @@ def keys(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    """Serves a directory; FAIL maps a request path to an HTTP status, or to
-    "drop" to close the connection without a response."""
+    """Serves a directory; FAIL maps a request path (or "METHOD path", for one
+    method only) to an HTTP status, or to "drop" to close the connection
+    without a response."""
 
     FAIL: dict[str, int | str] = {}
 
@@ -105,7 +105,7 @@ class Handler(SimpleHTTPRequestHandler):
         pass
 
     def _override(self) -> bool:
-        action = self.FAIL.get(self.path)
+        action = self.FAIL.get(f"{self.command} {self.path}", self.FAIL.get(self.path))
         if action is None:
             return False
         if action == "drop":
@@ -317,6 +317,45 @@ def test_an_unsigned_config_is_staged_verbatim_with_the_opt_out(tmp_path: Path, 
     assert rc == 0, log
     assert contents == CONFIG
     assert "UNAUTHENTICATED" in log
+
+
+@needs_tools
+@pytest.mark.parametrize("failure", [500, 503, 403, 405])
+def test_a_config_lookup_that_fails_is_not_a_missing_config(tmp_path: Path, origin, keys, failure) -> None:
+    # Only a 404 means "no config here". A boot server that errors (or one
+    # that refuses the method, 405) must not bring the node up unconfigured.
+    url, srv, fail = origin
+    _publish(srv, sign_key=keys["config"])
+    fail["/bluefin-node.ign"] = failure
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["config-ring"])
+    assert rc == 1, log
+    assert contents is None
+    assert f"returned HTTP {failure}" in log
+    assert "nothing to apply" not in log
+
+
+@needs_tools
+@pytest.mark.slow
+def test_a_config_lookup_that_times_out_is_not_a_missing_config(tmp_path: Path, origin, keys) -> None:
+    url, srv, fail = origin
+    _publish(srv, sign_key=keys["config"])
+    fail["/bluefin-node.ign"] = "drop"
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, creds=ALLOW, keyring=keys["config-ring"])
+    assert rc == 1, log
+    assert contents is None
+    assert "curl exit" in log
+    assert "nothing to apply" not in log
+
+
+@needs_tools
+def test_a_server_that_refuses_head_still_serves_a_signed_config(tmp_path: Path, origin, keys) -> None:
+    # The lookup is a GET: a boot server that answers HEAD with 405 works.
+    url, srv, fail = origin
+    _publish(srv, sign_key=keys["config"])
+    fail["HEAD /bluefin-node.ign"] = 405
+    rc, log, contents = run(tmp_path, origin_url=url + UKI, keyring=keys["config-ring"])
+    assert rc == 0, log
+    assert contents == CONFIG
 
 
 @needs_tools

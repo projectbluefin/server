@@ -17,7 +17,6 @@ FSDK point release:
   --fix         set installer-version to it, then check (track-junctions.yml)
 """
 
-from __future__ import annotations
 
 import argparse
 import re

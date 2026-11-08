@@ -1,0 +1,5 @@
+# Single source of truth for the NetBird version axis.
+variables:
+  netbird-version: "0.81.5"
+  netbird-x86-64-sha256: "e08f9ea3f6d9e55bf1aa776b08c25146afdc45657f602ed02c1a4ae666b9d775"
+  netbird-arm64-sha256: "7770879deef78d041d5ae55d4216016ce74c6a21d3493c95554bd8530530eb4e"

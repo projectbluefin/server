@@ -60,21 +60,25 @@ EOF
 
 echo "==> 2/3 download ${name} into /var/lib/extensions"
 DOGFOOD_SERVE_EXTRA="${state}/serve" run "${dir}" "${state}/fetch.probe" | tee "${state}/2-fetch.log"
-grep -q "PROBE fetched=.*${name}.raw" "${state}/2-fetch.log"
+grep -q "PROBE fetched=.*${name}.raw" "${state}/2-fetch.log" || { echo "FAIL: ${name}.raw was not downloaded (${state}/2-fetch.log)" >&2; exit 1; }
 
 echo "==> 3/3 boot with ${name} merged"
 run "${dir}" "${state}/nvidia.probe" | tee "${state}/3-nvidia.log"
 log="${state}/3-nvidia.log"
-grep -q "PROBE sysext=.*${name}" "${log}"
-grep -q "PROBE release=NAME=${flavour} ID=bluefin-server EXTENSION_RELOAD_MANAGER=1 VERSION_ID=${ver} ARCHITECTURE=x86-64 " "${log}"
-grep -q "PROBE guard=active ldconfig-unit=active" "${log}"
-grep -q "PROBE load-unit=exec-condition inactive" "${log}"
-grep -q "PROBE nodes-unit=no persistenced=no" "${log}"
-grep -q "PROBE sig=sha512 sha512 sha512 sha512 " "${log}"
-grep -q "PROBE nouveau-blacklisted=1" "${log}"
-grep -q "PROBE modprobe=1 modprobe: ERROR: could not insert 'nvidia': No such device" "${log}"
-grep -q "PROBE no-gpu=1" "${log}"
-grep -q "PROBE sig-rejected=0" "${log}"
-grep -q "PROBE libcuda=1" "${log}"
-grep -q "PROBE failed=0" "${log}"
+# Report every expectation that does not hold, not only the first.
+rc=0
+check() { grep -q "$@" "${log}" || { echo "FAIL: no match in ${log}: ${*: -1}" >&2; rc=1; }; }
+check "PROBE sysext=.*${name}"
+check "PROBE release=NAME=${flavour} ID=bluefin-server EXTENSION_RELOAD_MANAGER=1 VERSION_ID=${ver} ARCHITECTURE=x86-64 "
+check "PROBE guard=active ldconfig-unit=active"
+check "PROBE load-unit=exec-condition inactive"
+check "PROBE nodes-unit=no persistenced=no"
+check "PROBE sig=sha512 sha512 sha512 sha512 "
+check "PROBE nouveau-blacklisted=1"
+check "PROBE modprobe=1 modprobe: ERROR: could not insert 'nvidia': No such device"
+check "PROBE no-gpu=1"
+check "PROBE sig-rejected=0"
+check "PROBE libcuda=1"
+check "PROBE failed=0"
+[ "${rc}" = 0 ] || exit 1
 echo "PASS: ${name} merged on a disk install; the driver loads signed and finds no GPU, libcuda is in the linker cache, no unit failed"

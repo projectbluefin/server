@@ -1,6 +1,5 @@
 """Every workflow installs the same `just`, so CI never runs two versions at once."""
 
-from __future__ import annotations
 
 from pathlib import Path
 

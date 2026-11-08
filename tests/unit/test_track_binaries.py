@@ -36,7 +36,7 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-OLD = {name: sha(name.encode()) for name in ("kubelet", "kubeadm", "kubectl", "crictl", "containerd", "runc", "cni", "k0s", "oras")}
+OLD = {name: sha(name.encode()) for name in ("kubelet", "kubeadm", "kubectl", "crictl", "containerd", "runc", "cni", "k0s", "oras", "oras-image")}
 
 FILES = {
     "include/aliases.yml": "aliases:\n  github: https://github.com/\n  k8s_dl: https://dl.k8s.io/\n",
@@ -112,7 +112,7 @@ config:
   install-commands:
     - install -D -m 0755 k0s-%{{k0s-upstream-tag}}-amd64 "%{{install-root}}/usr/bin/k0s"
 """,
-    "Justfile": 'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4")\n',
+    "Justfile": f'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4@sha256:{OLD["oras-image"]}")\n',
     ".github/workflows/build.yml": f"""jobs:
   release:
     steps:
@@ -337,14 +337,32 @@ def test_apply_k0s_moves_both_atoms_and_downloads_the_escaped_tag(repo, upstream
     assert url in [r.full_url for r in upstream.requests]
 
 
-def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstream, tmp_path):
+ORAS_TOKEN = "https://ghcr.io/token?scope=repository%3Aoras-project%2Foras%3Apull&service=ghcr.io"
+ORAS_INDEX = "https://ghcr.io/v2/oras-project/oras/manifests/v1.3.5"
+
+
+def oras_image(upstream, media_type="application/vnd.oci.image.index.v1+json") -> str:
+    """Serve ghcr.io's anonymous token and the v1.3.5 index; return the index digest."""
+    upstream.files[ORAS_TOKEN] = json.dumps({"token": "anonymous-pull"}).encode()
+    upstream.files[ORAS_INDEX] = json.dumps({"schemaVersion": 2, "mediaType": media_type, "manifests": []}).encode()
+    return sha(upstream.files[ORAS_INDEX])
+
+
+def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstream, tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
     url = "https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz"
     new = upstream.asset(url, url.rsplit("/", 1)[0] + "/oras_1.3.5_checksums.txt")
+    digest = oras_image(upstream)
     body = tmp_path / "body.md"
 
     assert track.main(["apply", "oras", "--version", "1.3.5", "--summary", str(body)], root=repo) == 0
 
-    assert "ghcr.io/oras-project/oras:v1.3.5" in (repo / "Justfile").read_text()
+    assert f"ghcr.io/oras-project/oras:v1.3.5@sha256:{digest}\"" in (repo / "Justfile").read_text()
+    assert OLD["oras-image"] not in (repo / "Justfile").read_text()
+    # The registry gets its own anonymous pull token, never the GitHub one.
+    auth = {r.full_url: r.get_header("Authorization") for r in upstream.requests if "ghcr.io" in r.full_url}
+    assert auth == {ORAS_TOKEN: None, ORAS_INDEX: "Bearer anonymous-pull"}
+    assert f"`{digest}` (was `{OLD['oras-image']}`)" in body.read_text()
     workflow = (repo / ".github/workflows/build.yml").read_text()
     assert workflow.count(f"url: {url}") == 2
     assert workflow.count(f"checksum: {new}") == 2
@@ -352,8 +370,22 @@ def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstre
     assert "`.github/workflows/build.yml:4: # pin 1.3.4 (matching the Justfile's oras_image) by URL and checksum.`" in body.read_text()
 
 
+def test_oras_image_that_is_not_an_index_writes_nothing(repo, upstream):
+    url = "https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz"
+    upstream.asset(url, url.rsplit("/", 1)[0] + "/oras_1.3.5_checksums.txt")
+    oras_image(upstream, media_type="application/vnd.oci.image.manifest.v1+json")
+    before = snapshot(repo)
+
+    with pytest.raises(track.TrackError, match="not a multi-arch index"):
+        track.apply(repo, "oras", "1.3.5")
+
+    assert snapshot(repo) == before
+
+
 def test_oras_pins_that_disagree_are_refused(repo, upstream):
-    (repo / "Justfile").write_text('export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.3")\n')
+    (repo / "Justfile").write_text(
+        f'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.3@sha256:{OLD["oras-image"]}")\n'
+    )
     with pytest.raises(track.TrackError, match=r"ORAS pins disagree \(\.github/workflows/build\.yml: 1\.3\.4, Justfile: 1\.3\.3\)"):
         track.apply(repo, "oras", "1.3.5")
 
@@ -1012,3 +1044,288 @@ def test_real_iana_etc_element_pins_its_tarball_in_the_element():
     assert (pin.path, pin.key) == (IANA_ELEMENT, "ref")
     assert pin.url == iana_url(version)
     assert pin.sums == iana_url(version) + ".sha256"
+
+
+TS_REPO = "tailscale/tailscale"
+TS_PKGS = "https://pkgs.tailscale.com/stable/"
+TS_INCLUDE = "include/tailscale.yml"
+TS_ELEMENT = "elements/runtimes/tailscale-bin.bst"
+TS_OLD = {arch: sha(f"tailscale-1.104.2-{arch}".encode()) for arch in ("amd64", "arm64")}
+TS_FILES = {
+    "include/aliases.yml": FILES["include/aliases.yml"] + f"  tailscale_pkgs: {TS_PKGS}\n",
+    TS_INCLUDE: f"""# Single source of truth for the Tailscale version axis.
+variables:
+  tailscale-version: "1.104.2"
+  tailscale-x86-64-sha256: "{TS_OLD['amd64']}"
+  tailscale-arm64-sha256: "{TS_OLD['arm64']}"
+""",
+    TS_ELEMENT: """kind: manual
+
+(@):
+- include/arch.yml
+- include/tailscale.yml
+
+sources:
+- kind: tar
+  url: tailscale_pkgs:tailscale_%{tailscale-version}_amd64.tgz
+  ref: "%{tailscale-x86-64-sha256}"
+  base-dir: "tailscale_%{tailscale-version}_amd64"
+  directory: dist
+
+(?):
+- arch == "aarch64":
+    sources:
+    - kind: tar
+      url: tailscale_pkgs:tailscale_%{tailscale-version}_arm64.tgz
+      ref: "%{tailscale-arm64-sha256}"
+      base-dir: "tailscale_%{tailscale-version}_arm64"
+      directory: dist
+""",
+}
+
+
+def ts_url(version: str, arch: str) -> str:
+    return f"{TS_PKGS}tailscale_{version}_{arch}.tgz"
+
+
+def ts_release(upstream: Upstream, version: str, *, sums: bool = True) -> dict[str, str]:
+    """Serve both tarballs of `version` with pkgs.tailscale.com's bare-digest .sha256 files."""
+    pins = {}
+    for arch in ("amd64", "arm64"):
+        pins[arch] = upstream.asset(ts_url(version, arch))
+        if sums:
+            upstream.files[ts_url(version, arch) + ".sha256"] = pins[arch].encode()
+    return pins
+
+
+@pytest.fixture
+def tailscale(repo, upstream, monkeypatch):
+    for path, text in TS_FILES.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(track, "COMPONENTS", {"tailscale": track.COMPONENTS["tailscale"]})
+    return upstream
+
+
+def test_tailscale_proposes_the_newest_stable_release_of_its_series(repo, tailscale):
+    # Tailscale tags releases on GitHub without assets; the tarballs live on pkgs.tailscale.com.
+    tailscale.releases(TS_REPO, [
+        release("v1.106.0"),
+        release("v1.105.20", prerelease=True),
+        release("v1.104.4"),
+        release("v1.104.3", draft=True),
+        release("v1.104.2"),
+        release("v1.104.1"),
+    ])
+    assert newest("tailscale", repo) == "1.104.4"
+
+
+def test_tailscale_apply_moves_the_version_and_both_include_atoms(repo, tailscale, tmp_path, capsys):
+    tailscale.releases(TS_REPO, [release("v1.104.4"), release("v1.104.2")])
+    new = ts_release(tailscale, "1.104.4")
+    before = snapshot(repo, TS_FILES)
+    body = tmp_path / "body.md"
+
+    assert track.main(["apply", "tailscale", "--summary", str(body)], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        TS_INCLUDE: [
+            ('  tailscale-version: "1.104.2"', '  tailscale-version: "1.104.4"'),
+            (f'  tailscale-x86-64-sha256: "{TS_OLD["amd64"]}"', f'  tailscale-x86-64-sha256: "{new["amd64"]}"'),
+            (f'  tailscale-arm64-sha256: "{TS_OLD["arm64"]}"', f'  tailscale-arm64-sha256: "{new["arm64"]}"'),
+        ],
+    }
+    assert capsys.readouterr().out.split() == [TS_INCLUDE]
+    text = body.read_text()
+    assert "Patch release of **tailscale** in the pinned `1.104` series: `1.104.2` → `1.104.4`." in text
+    assert f"https://github.com/{TS_REPO}/releases/tag/v1.104.4" in text
+    for arch in ("amd64", "arm64"):
+        assert f"- {ts_url('1.104.4', arch)}.sha256" in text
+
+
+def test_tailscale_missing_arm64_checksum_writes_nothing(repo, tailscale, capsys):
+    tailscale.releases(TS_REPO, [release("v1.104.4")])
+    ts_release(tailscale, "1.104.4")
+    del tailscale.files[ts_url("1.104.4", "arm64") + ".sha256"]
+    before = snapshot(repo, TS_FILES)
+
+    assert track.main(["apply", "tailscale"], root=repo) == 1
+
+    assert snapshot(repo, TS_FILES) == before
+    assert f"{ts_url('1.104.4', 'arm64')}.sha256: HTTP 404" in capsys.readouterr().err
+
+
+def test_tailscale_tampered_tarball_writes_nothing(repo, tailscale, capsys):
+    tailscale.releases(TS_REPO, [release("v1.104.4")])
+    ts_release(tailscale, "1.104.4")
+    tailscale.files[ts_url("1.104.4", "amd64")] = b"tampered"
+    before = snapshot(repo, TS_FILES)
+
+    assert track.main(["apply", "tailscale"], root=repo) == 1
+
+    assert snapshot(repo, TS_FILES) == before
+    assert f"{ts_url('1.104.4', 'amd64')} hashes to {sha(b'tampered')}" in capsys.readouterr().err
+
+
+def test_real_tailscale_element_pins_the_include_atoms():
+    tree = track.Tree(ROOT)
+    component = track.COMPONENTS["tailscale"]
+    version = component.current(tree)
+    pins = {pin.key: pin for pin in component.pins(tree)}
+    assert set(pins) == {"tailscale-x86-64-sha256", "tailscale-arm64-sha256"}
+    for arch, key in (("amd64", "tailscale-x86-64-sha256"), ("arm64", "tailscale-arm64-sha256")):
+        assert (pins[key].path, pins[key].url) == (TS_INCLUDE, ts_url(version, arch))
+        assert pins[key].sums == ts_url(version, arch) + ".sha256"
+        assert f'"%{{{key}}}"' in tree[TS_ELEMENT]
+
+
+NB_REPO = "netbirdio/netbird"
+NB_INCLUDE = "include/netbird.yml"
+NB_ELEMENT = "elements/runtimes/netbird-bin.bst"
+NB_OLD = {arch: sha(f"netbird-0.81.3-{arch}".encode()) for arch in ("amd64", "arm64")}
+NB_FILES = {
+    NB_INCLUDE: f"""# Single source of truth for the NetBird version axis.
+variables:
+  netbird-version: "0.81.3"
+  netbird-x86-64-sha256: "{NB_OLD['amd64']}"
+  netbird-arm64-sha256: "{NB_OLD['arm64']}"
+""",
+    NB_ELEMENT: """kind: manual
+
+(@):
+- include/arch.yml
+- include/netbird.yml
+
+sources:
+- kind: tar
+  url: github:netbirdio/netbird/releases/download/v%{netbird-version}/netbird_%{netbird-version}_linux_amd64.tar.gz
+  ref: "%{netbird-x86-64-sha256}"
+  directory: dist
+  base-dir: ""
+
+(?):
+- arch == "aarch64":
+    sources:
+    - kind: tar
+      url: github:netbirdio/netbird/releases/download/v%{netbird-version}/netbird_%{netbird-version}_linux_arm64.tar.gz
+      ref: "%{netbird-arm64-sha256}"
+      directory: dist
+      base-dir: ""
+""",
+}
+
+
+def nb_url(version: str, arch: str) -> str:
+    return f"https://github.com/{NB_REPO}/releases/download/v{version}/netbird_{version}_linux_{arch}.tar.gz"
+
+
+def nb_sums_url(version: str) -> str:
+    return f"https://github.com/{NB_REPO}/releases/download/v{version}/netbird_{version}_checksums.txt"
+
+
+def nb_release(version: str, *, prerelease: bool = False, draft: bool = False) -> dict:
+    """A GitHub release of NetBird with both Linux tarballs and the checksums file attached."""
+    return release(f"v{version}", f"netbird_{version}_linux_amd64.tar.gz", f"netbird_{version}_linux_arm64.tar.gz",
+                   f"netbird_{version}_checksums.txt", prerelease=prerelease, draft=draft)
+
+
+def nb_serve(upstream: Upstream, version: str) -> dict[str, str]:
+    """Serve both tarballs of `version` plus one sha256sum-format checksums file listing every asset."""
+    pins = {}
+    lines = []
+    for arch in ("amd64", "arm64"):
+        pins[arch] = upstream.asset(nb_url(version, arch))
+        lines.append(f"{pins[arch]}  netbird_{version}_linux_{arch}.tar.gz")
+    # Upstream's file also lists the other tools of the release (nblink, the migrate helpers).
+    lines.insert(0, f"{sha(b'nblink')}  nblink_{version}_linux_amd64.tar.gz")
+    upstream.files[nb_sums_url(version)] = ("\n".join(lines) + "\n").encode()
+    return pins
+
+
+@pytest.fixture
+def netbird(repo, upstream, monkeypatch):
+    for path, text in NB_FILES.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(track, "COMPONENTS", {"netbird": track.COMPONENTS["netbird"]})
+    return upstream
+
+
+def test_netbird_proposes_the_newest_stable_release_of_its_series(repo, netbird):
+    netbird.releases(NB_REPO, [
+        nb_release("0.82.0"),
+        nb_release("0.81.6", prerelease=True),
+        nb_release("0.81.5"),
+        nb_release("0.81.4", draft=True),
+        nb_release("0.81.3"),
+        nb_release("0.81.2"),
+    ])
+    assert newest("netbird", repo) == "0.81.5"
+
+
+def test_netbird_release_without_its_assets_does_not_count(repo, netbird):
+    # A release can be published while its assets are still uploading.
+    netbird.releases(NB_REPO, [
+        release("v0.81.5", "netbird_0.81.5_linux_amd64.tar.gz", "netbird_0.81.5_checksums.txt"),
+        nb_release("0.81.4"),
+        nb_release("0.81.3"),
+    ])
+    assert newest("netbird", repo) == "0.81.4"
+
+
+def test_netbird_apply_moves_the_version_and_both_include_atoms(repo, netbird, tmp_path, capsys):
+    netbird.releases(NB_REPO, [nb_release("0.81.5"), nb_release("0.81.3")])
+    new = nb_serve(netbird, "0.81.5")
+    before = snapshot(repo, NB_FILES)
+    body = tmp_path / "body.md"
+
+    assert track.main(["apply", "netbird", "--summary", str(body)], root=repo) == 0
+
+    assert changed_lines(before, repo) == {
+        NB_INCLUDE: [
+            ('  netbird-version: "0.81.3"', '  netbird-version: "0.81.5"'),
+            (f'  netbird-x86-64-sha256: "{NB_OLD["amd64"]}"', f'  netbird-x86-64-sha256: "{new["amd64"]}"'),
+            (f'  netbird-arm64-sha256: "{NB_OLD["arm64"]}"', f'  netbird-arm64-sha256: "{new["arm64"]}"'),
+        ],
+    }
+    assert capsys.readouterr().out.split() == [NB_INCLUDE]
+    text = body.read_text()
+    assert "Patch release of **netbird** in the pinned `0.81` series: `0.81.3` → `0.81.5`." in text
+    assert f"https://github.com/{NB_REPO}/releases/tag/v0.81.5" in text
+    assert f"- {nb_sums_url('0.81.5')}" in text
+
+
+def test_netbird_missing_checksums_file_writes_nothing(repo, netbird, capsys):
+    netbird.releases(NB_REPO, [nb_release("0.81.5")])
+    nb_serve(netbird, "0.81.5")
+    del netbird.files[nb_sums_url("0.81.5")]
+    before = snapshot(repo, NB_FILES)
+
+    assert track.main(["apply", "netbird"], root=repo) == 1
+
+    assert snapshot(repo, NB_FILES) == before
+    assert f"{nb_sums_url('0.81.5')}: HTTP 404" in capsys.readouterr().err
+
+
+def test_netbird_tampered_tarball_writes_nothing(repo, netbird, capsys):
+    netbird.releases(NB_REPO, [nb_release("0.81.5")])
+    nb_serve(netbird, "0.81.5")
+    netbird.files[nb_url("0.81.5", "arm64")] = b"tampered"
+    before = snapshot(repo, NB_FILES)
+
+    assert track.main(["apply", "netbird"], root=repo) == 1
+
+    assert snapshot(repo, NB_FILES) == before
+    assert f"{nb_url('0.81.5', 'arm64')} hashes to {sha(b'tampered')}" in capsys.readouterr().err
+
+
+def test_real_netbird_element_pins_the_include_atoms():
+    tree = track.Tree(ROOT)
+    component = track.COMPONENTS["netbird"]
+    version = component.current(tree)
+    pins = {pin.key: pin for pin in component.pins(tree)}
+    assert set(pins) == {"netbird-x86-64-sha256", "netbird-arm64-sha256"}
+    for arch, key in (("amd64", "netbird-x86-64-sha256"), ("arm64", "netbird-arm64-sha256")):
+        assert (pins[key].path, pins[key].url) == (NB_INCLUDE, nb_url(version, arch))
+        assert pins[key].sums == nb_sums_url(version)
+        assert f'"%{{{key}}}"' in tree[NB_ELEMENT]

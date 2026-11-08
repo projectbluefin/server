@@ -3,15 +3,18 @@
 default:
     @just --list
 
-# Same bst2 container image FSDK/dakota CI uses -- pinned by commit-named tag.
-# Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3).
-export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44")
-export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6")
-export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:0fadcdcabdb66c7b6cd3721072fd41abe38f5c10")
+# Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3) -- pinned by digest.
+export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:b3e011d47e686a89781495c9a87bc80349af742965e5d51e79cd51711982e4a2")
+# oras for `just publish-oci` -- pinned by digest; track-binaries.py moves it with CI's setup-oras pins.
+export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6@sha256:9cfb578be975b762fd898b9d004243d8003aeb807a3e15b2ed212cdd1326c9eb")
+# Same bst2 container image FSDK/dakota CI uses. Its tag names the
+# freedesktop-sdk-docker-images commit it was built from; it is a mutable tag,
+# not a digest pin.
+export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:bfe040b083407483ef58685bfc2b7e2a2b91afdc")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
-# butane (v2.27.0, built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
-export butane_image := env("BUTANE_IMAGE", "quay.io/coreos/butane:release@sha256:d264fba5a02ec7a5525b7cd4ab04090e8c70d0ee42a74a90a0e2f89633ae720c")
+# butane (built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
+export butane_image := env("BUTANE_IMAGE", "quay.io/coreos/butane:v2.28.0@sha256:143e7efd568e46e6f2bcb6f4250d01b0b49227232cc21a7150f8d39e577b9ea5")
 
 # Prefix for podman calls: empty when rootless podman works, "sudo" otherwise.
 sudo_cmd := if `podman info >/dev/null 2>&1 && echo 1 || echo 0` == "1" { "" } else { "sudo" }
@@ -38,6 +41,20 @@ bst *ARGS:
     resolv_args=()
     if [ -s /run/systemd/resolve/resolv.conf ]; then
         resolv_args=(-v /run/systemd/resolve/resolv.conf:/etc/resolv.conf:ro)
+    fi
+    # Fail fast with a clear message when the bst2 tag was never published (a
+    # failed upstream build leaves it 'manifest unknown') instead of letting
+    # podman fail deep inside a build. Skip the pull when the image is already
+    # cached locally.
+    if ! {{sudo_cmd}} podman image exists "${bst2_image}" >/dev/null 2>&1; then
+        if ! pull_err=$({{sudo_cmd}} podman pull --quiet "${bst2_image}" 2>&1); then
+            echo "ERROR: could not pull bst2 image '${bst2_image}'." >&2
+            printf '%s\n' "$pull_err" | sed 's/^/    /' >&2 || true
+            echo "    The tag was likely never published by the FSDK build pipeline" >&2
+            echo "    (a failed upstream build leaves it 'manifest unknown')." >&2
+            echo "    Wait for the tag to be published, or set BST2_IMAGE to a known-good tag." >&2
+            exit 1
+        fi
     fi
     # shellcheck disable=SC2086
     {{sudo_cmd}} podman run --rm \
@@ -141,8 +158,8 @@ check-image DIR="dist/diskless" BASELINE="":
     set -euo pipefail
     args=(/src/{{DIR}})
     [ -n "{{BASELINE}}" ] && args+=(--baseline-usr "/src/{{BASELINE}}")
-    podman run --rm --security-opt label=disable -v "{{justfile_directory()}}:/src:ro" -w /src \
-        {{check_image_base}} sh -c 'dnf -yq install erofs-utils binutils cpio zstd python3 >/dev/null 2>&1 && python3 .github/scripts/check-image.py "$@"' -- "${args[@]}"
+    {{sudo_cmd}} podman run --rm --security-opt label=disable -v "{{justfile_directory()}}:/src:ro" -w /src \
+        {{check_image_base}} sh -c 'dnf -yq install erofs-utils binutils cpio zstd python3 >/dev/null && python3 .github/scripts/check-image.py "$@"' -- "${args[@]}"
 
 # Set the image version in include/image.yml; it must increase under
 # strverscmp() (CI uses YY.MM.<run number>).
@@ -172,32 +189,33 @@ dogfood-installer NEXT="":
     bash scripts/dogfood-installer.sh dist/diskless {{NEXT}}
 
 # REF=ghcr.io/<owner>/bluefin-server or <registry-host>:30500/bluefin-server
-# (PLAIN_HTTP=1); log in with podman login first. One layer per file.
-# Local rehearsal only: releases are published by scripts/publish-release.sh
-# from .github/workflows/build.yml, which also verifies the pushed manifest
-# against the local files. This recipe pushes the same artifact type,
-# annotations and layout, and nothing else.
+# (PLAIN_HTTP=1); log in with podman login first. One layer per file; latest
+# never moves back. Runs the release job's scripts/publish-release.sh verify
+# and oci: DIR must verify against its own sysupdate-keys/ and hold nothing
+# SHA256SUMS does not list (move dogfood logs out first), and the pushed
+# manifest is checked against DIR. oras comes from oras_image unless on PATH.
 # Publish an image set as an ORAS OCI artifact tagged <version> and latest.
 [group('diskless')]
 publish-oci REF DIR="dist/diskless" PLAIN_HTTP="0":
     #!/usr/bin/env bash
     set -euo pipefail
-    revision="$(git rev-parse HEAD)"
-    cd "{{DIR}}"
-    uki="$(ls bluefin-server-netboot_*.efi)"
+    uki="$(cd "{{DIR}}" && ls bluefin-server-netboot_*.efi)"
     ver="${uki#bluefin-server-netboot_}"; ver="${ver%.efi}"
-    mapfile -t files < <(find . -maxdepth 1 -type f -printf '%f\n' | sort)
     extra=()
     [ "{{PLAIN_HTTP}}" = 1 ] && extra+=(--plain-http)
-    auth="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/auth.json"
-    [ -f "${auth}" ] && extra+=(--registry-config /auth.json) && mounts=(-v "${auth}:/auth.json:ro") || mounts=()
-    podman run --rm --network=host --security-opt label=disable "${mounts[@]}" -v "$PWD:/w:ro" -w /w \
-        {{oras_image}} push "${extra[@]}" \
-        --artifact-type application/vnd.projectbluefin.server.release.v1 \
-        --annotation "org.opencontainers.image.version=${ver}" \
-        --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-projectbluefin/server}" \
-        --annotation "org.opencontainers.image.revision=${revision}" \
-        "{{REF}}:${ver},latest" "${files[@]}"
+    bash scripts/publish-release.sh verify "{{DIR}}" "${ver}" "{{DIR}}/sysupdate-keys/import-pubring.pgp"
+    if ! command -v oras >/dev/null; then
+        shim="$(mktemp -d)"
+        trap 'rm -rf "${shim}"' EXIT
+        auth="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/auth.json"
+        mounts=""
+        [ -f "${auth}" ] && mounts="-v $(printf %q "${auth}"):/auth/config.json:ro -e DOCKER_CONFIG=/auth"
+        printf '#!/bin/sh\nexec podman run --rm --network=host --security-opt label=disable %s -v "$PWD:$PWD:ro" -w "$PWD" %q "$@"\n' \
+            "${mounts}" "{{oras_image}}" > "${shim}/oras"
+        chmod +x "${shim}/oras"
+        PATH="${shim}:${PATH}"
+    fi
+    bash scripts/publish-release.sh oci "{{DIR}}" "${ver}" "{{REF}}" "${extra[@]}"
 
 # Boot dist/diskless/ in QEMU with Secure Boot, pulling /usr over HTTP.
 [group('diskless')]
@@ -352,6 +370,22 @@ export-tailscale-sysext: build-tailscale-sysext
     grep 'raw.zst$' dist/tailscale-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
     rm -rf dist/tailscale-checkout
     @echo "==> wrote tailscale sysext:" && ls -lh dist/sysext/
+
+# Build the NetBird systemd-sysext (locked to one image version).
+[group('sysext')]
+build-netbird-sysext:
+    just bst build oci/netbird-sysext.bst
+
+# Export the NetBird sysext + SHA256SUMS to dist/sysext/.
+[group('sysext')]
+export-netbird-sysext: build-netbird-sysext
+    rm -rf dist/netbird-checkout
+    mkdir -p dist/sysext
+    just bst artifact checkout oci/netbird-sysext.bst --directory /src/dist/netbird-checkout
+    cp dist/netbird-checkout/netbird_*.raw.zst dist/sysext/
+    grep 'raw.zst$' dist/netbird-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
+    rm -rf dist/netbird-checkout
+    @echo "==> wrote netbird sysext:" && ls -lh dist/sysext/
 
 # Set up KubeStellar kc-agent for the user in ONE command.
 [group('test')]

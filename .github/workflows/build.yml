@@ -139,7 +139,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: just@1.59.0
 
@@ -179,7 +179,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: just@1.59.0
 
@@ -219,7 +219,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: just@1.59.0
 
@@ -294,7 +294,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: just@1.59.0
 
@@ -875,7 +875,7 @@ jobs:
       contents: read
     services:
       registry:
-        image: docker.io/library/registry:3.1.2@sha256:d4032d4cc323c1731c707931ecada07a53076eac38e3b61ae57533f170f2c6c3
+        image: docker.io/library/registry:3.1.2@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c
         ports:
           - 5000:5000
     env:

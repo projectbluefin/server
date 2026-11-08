@@ -25,7 +25,6 @@ after changing a pin (needs network and podman):
     python3 scripts/render-homelab-manifests.py
 """
 
-from __future__ import annotations
 
 import argparse
 import hashlib

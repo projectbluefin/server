@@ -55,6 +55,8 @@ build-depends:
 - runtimes/nspawn-org-bin.bst
 - oci/tailscale-sysext.bst
 - runtimes/tailscale-bin.bst
+- oci/netbird-sysext.bst
+- runtimes/netbird-bin.bst
 
 config:
   path: /bluefin-server.spdx.json

@@ -21,7 +21,6 @@ outside its signed SHA256SUMS: it is information, nothing trusts it.
 notes. Needs zstd on PATH for initrd_unpacked.
 """
 
-from __future__ import annotations
 
 import argparse
 import json

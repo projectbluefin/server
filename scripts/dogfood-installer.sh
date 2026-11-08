@@ -214,6 +214,15 @@ fail() {
     [ -z "${qemu_pid:-}" ] || kill "${qemu_pid}" 2>/dev/null || true
     exit 1
 }
+# Never leave a guest or the release server behind, whatever ends the script
+# (fail, set -e, an early PASS, a signal): an orphaned QEMU keeps its disks
+# and port. Only kill PIDs that are set; `kill 0` signals the process group.
+# shellcheck disable=SC2329 # the EXIT trap below runs it
+cleanup() {
+    local pid
+    for pid in ${qemu_pid:-} ${http_pid:-}; do kill "${pid}" 2>/dev/null || true; done
+}
+trap cleanup EXIT
 
 # put_fs <start MiB> <size MiB> <mkfs command...>: make a filesystem in a
 # scratch file and write it into the target at that offset.
@@ -536,10 +545,16 @@ ExecStart=
 ExecStart=${exec_start} ${install_args} ${target_dev}
 ExecStopPost=/bin/bash -c 'exec >/dev/ttyS1 2>&1; echo "PROBE sysinstall=\$\${SERVICE_RESULT} \$\${EXIT_STATUS}"; udevadm settle -t 10 || true; echo "PROBE installed-slot-b=\$\$(lsblk -rno PARTLABEL ${target_dev} | grep -cx _empty) installed-parts=\$\$(lsblk -rno TYPE ${target_dev} | grep -cx part)"; lsblk -o NAME,PARTLABEL,FSTYPE,SIZE ${target_dev} | sed "s/^/PROBE-LOG installed /"'
 EOF
+# The mirror opens the journal only after journald flushed it to /var: a
+# `journalctl -f` started while /var/log/journal does not exist yet never
+# watches it, and once the flush drops the runtime journal in /run it shows
+# nothing more, while still running (#550). -b replays the whole boot, so
+# starting a little later loses nothing.
 cat > "${state}/journal.service" <<'EOF'
 [Unit]
 Description=Dogfood journal mirror on ttyS2
 DefaultDependencies=no
+After=systemd-journal-flush.service
 [Service]
 ExecStart=journalctl -b -f --no-pager -o short-monotonic
 StandardOutput=tty
@@ -1055,7 +1070,6 @@ if [ -n "${next_ver}" ]; then
     gpg --batch --quiet --detach-sign --output "${www}/foreign/SHA256SUMS.gpg" "${next}/SHA256SUMS"
     (cd "${www}" && exec python3 -m http.server --bind 127.0.0.1 "${port}" >"${state}/http.log" 2>&1) &
     http_pid=$!
-    trap 'kill "${http_pid}" 2>/dev/null || true' EXIT
 fi
 
 checks="an unreachable and a foreign-signed source, then ${next_ver}"

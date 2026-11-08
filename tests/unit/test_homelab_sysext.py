@@ -1,7 +1,6 @@
 """Contracts for the homelab sysext: vendored manifests, the applier unit and
 the render script's pins (scripts/render-homelab-manifests.py)."""
 
-from __future__ import annotations
 
 import base64
 import configparser

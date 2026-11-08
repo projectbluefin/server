@@ -4,7 +4,7 @@ description: How Booty serves Bluefin Server releases to nodes. Load when workin
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-05"
+  last_updated: "2026-11-02"
 ---
 # Booty Integration
 
@@ -46,10 +46,12 @@ with `zfs`), and a k0s token. The image-locked extensions land in
 NVIDIA rules are in the Booty README's
 [NVIDIA GPU hosts](https://github.com/jeefy/booty#nvidia-gpu-hosts).
 
-A node with no `ignition.config` / `ignition.config.url` credential HEADs
-`bluefin-node.ign` next to its boot origin. Nothing there means nothing to
-apply. If it is there, `bluefin-ignition-credentials` in the initrd applies it
-only if it is signed:
+A node with no `ignition.config` / `ignition.config.url` credential fetches
+`bluefin-node.ign` next to its boot origin. Only an HTTP 404 means nothing to
+apply; any other error or status (a 5xx, a 403, a 405, a timeout) fails the
+boot, so a flaky boot server never brings a node up unconfigured. If it is
+there, `bluefin-ignition-credentials` in the initrd applies it only if it is
+signed:
 
 - It fetches `bluefin-node.ign.gpg` from the same directory and verifies it
   with `gpgv` against the Ignition config keyring
@@ -148,6 +150,25 @@ Then drop this section and the default's unit test. CI already builds the
 next update-test image set with the option off
 (`BST_FLAGS="-o ignition_allow_unsigned False"`) and proves its netboot UKI
 refuses an unsigned config; a local build can do the same.
+
+### Residual risks
+
+Signing does not close these; they are accepted, not planned work
+([#327](https://github.com/projectbluefin/server/issues/327)):
+
+- **`ignition.config.url` is not signature-checked.** The credential is
+  trusted (setting one already requires control of the node's ESP, SMBIOS or
+  UKI), but the config it names is fetched and applied as a `config.replace`
+  with no signature and no hash. Over plain `http://`, an on-path attacker
+  can substitute it. Serve it over `https://`, or pass the config inline as
+  `ignition.config`.
+- **A signed config is not bound to a node or a time.** Any config signed
+  with a key in `ignition-pubring.pgp` verifies on every node and stays valid
+  until that key leaves the keyring. Anyone who can answer a node's requests
+  can replay another node's signed config, or an older one, for example one
+  with an SSH key or a k0s token since revoked. Keep long-lived secrets out
+  of node configs, and rotate the config key (above) to retire every old
+  signature at once.
 
 ## Install to disk
 

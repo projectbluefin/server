@@ -36,6 +36,8 @@ description: |
     nvidia-open-595_<ver>.raw.zst          opt-in sysexts locked to this image version
     podman_<ver>.raw.zst, docker_<ver>.raw.zst
                                            opt-in rootless host engine sysexts
+    nspawn-org_<ver>.raw.zst, tailscale_<ver>.raw.zst, netbird_<ver>.raw.zst
+                                           opt-in CLI/VPN sysexts
     home-server.bu, home-server-cluster.bu  Home installer profiles; the cluster
                                            variant reuses the Homelab defaults
     k0s-<k0s-ver>.raw.zst                  opt-in k0s sysext (own version axis)
@@ -124,6 +126,9 @@ build-depends:
 - filename: oci/tailscale-sysext.bst
   config:
     location: /sysext/tailscale
+- filename: oci/netbird-sysext.bst
+  config:
+    location: /sysext/netbird
 
 variables:
   image-name: bluefin-server_%{image-version}
@@ -271,7 +276,8 @@ config:
       /sysext/podman/podman_%{image-version}.raw.zst \
       /sysext/docker/docker_%{image-version}.raw.zst \
       /sysext/nspawn-org/nspawn-org_%{image-version}.raw.zst \
-      /sysext/tailscale/tailscale_%{image-version}.raw.zst
+      /sysext/tailscale/tailscale_%{image-version}.raw.zst \
+      /sysext/netbird/netbird_%{image-version}.raw.zst
     (cd "${extensions}" && sha256sum --binary *.raw.zst > SHA256SUMS)
     # FAT metadata/slack plus room for both installed UKIs and updates.
     payload="$(du -sb "${extensions}")"
@@ -317,14 +323,19 @@ config:
     cp /sysext/podman/podman_%{image-version}.raw.zst \
        /sysext/docker/docker_%{image-version}.raw.zst \
        /sysext/nspawn-org/nspawn-org_%{image-version}.raw.zst \
-       /sysext/tailscale/tailscale_%{image-version}.raw.zst "%{install-root}/"
+       /sysext/tailscale/tailscale_%{image-version}.raw.zst \
+       /sysext/netbird/netbird_%{image-version}.raw.zst "%{install-root}/"
     install -m644 -t "%{install-root}" /homebrew-templates/home-server*.bu
 
   - |
     set -eu
     # SPDX requires a creation time, which the plugin leaves to the build,
-    # and unique SPDXIDs: FSDK bootstrap elements reached through two
-    # junction paths are collected twice, as identical packages.
+    # and unique SPDXIDs. FSDK bootstrap elements reached through two
+    # junction paths are collected twice, mostly as identical packages, so
+    # the first package per SPDXID is kept. That also hides a real second
+    # copy: fsdk-containers pins its own FSDK, so its brew-nspawn carries a
+    # pcre2 whose version differs from ours under the same SPDXID. A
+    # relationship is a duplicate only if all three of its fields match.
     # SOURCE_DATE_EPOCH is BuildStream's fixed sandbox default (1321009871),
     # so created is always 2011-11-11T11:11:11Z. That keeps the SBOM bit
     # identical across rebuilds; the real build time lives in the SLSA
@@ -332,7 +343,7 @@ config:
     jq --arg created "$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
       '.creationInfo.created = $created
        | .packages |= unique_by(.SPDXID)
-       | .relationships |= unique_by(.relatedSpdxElement)' \
+       | .relationships |= unique_by([.spdxElementId, .relationshipType, .relatedSpdxElement])' \
       /sbom/bluefin-server.spdx.json > "%{install-root}/%{image-name}.spdx.json"
 
   - |

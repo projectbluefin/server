@@ -46,9 +46,9 @@ GPT partition label with room to spare):
 
 A release publishes this directory as-is (GitHub Release `v<ver>` plus an ORAS
 OCI artifact); see the `release` job in [ci-tooling.md](ci-tooling.md).
-`just publish-oci REF [DIR] [PLAIN_HTTP]` pushes the same artifact locally, as
-a rehearsal; CI publishes through `scripts/publish-release.sh`, which also
-verifies the pushed manifest against the local files.
+`just publish-oci REF [DIR] [PLAIN_HTTP]` pushes the same artifact to a local
+or personal registry through the same `scripts/publish-release.sh` `verify`
+and `oci` commands, which also check the pushed manifest against the files.
 
 The /usr image itself is built by `oci/bluefin-server-usr.bst` with an offline
 `systemd-repart`: an erofs partition (`bluefin_usr_<ver>`) plus its dm-verity
@@ -150,8 +150,9 @@ already trust the image DB key; `scripts/dogfood-diskless.sh` with
 
 ```text
 firmware -> systemd-boot -> bluefin-server-<ver>.efi
-  -> /usr slot found by partition label (bluefin_usr_<ver>) and the
-     verity-derived UUIDs baked into the install-time repart.d
+  -> /usr slot found by the partition UUIDs dm-verity derives from usrhash=
+     (baked into the install-time repart.d); the bluefin_usr_<ver> label
+     is for sysupdate
   -> persistent xfs root found by systemd gpt-auto discovery
 ```
 
@@ -285,9 +286,10 @@ only when a newer version than the booted one is installed.
     workloads, so it touches `/run/reboot-required` and kured cordons, drains
     and reboots it within its cluster lock, as for an update. Each try then
     costs a drain, and without kured the node stays on the unblessed image
-    until someone reboots it. When the Kubernetes unit itself is stopped or
-    failed the node is `NotReady`, has nothing to drain and cannot run kured,
-    so it reboots directly.
+    until someone reboots it. When the Kubernetes unit itself is stopped,
+    failed or crash-looping (`Restart=always` keeps it `activating` in the
+    `auto-restart` sub-state, never `failed`) the node is `NotReady`, has
+    nothing to drain and cannot run kured, so it reboots directly.
   - *Operator hold*: `/run/reboot-lock` or `/etc/reboot-lock` stops the
     reboot and the kured flag, like the nightly reboot below. With a fleet
     reboot lock configured the reboot also waits for a slot (below).
@@ -308,7 +310,8 @@ only when a newer version than the booted one is installed.
   - the newest installed version already failed its boot tries
     (`bluefin-update-pending`, above);
   - `kubelet.service`, `k0scontroller.service` or `k0sworker.service` is
-    running, the Kubernetes interlock also proposed in #182. Kubernetes nodes
+    running (not crash-looping, as above), the Kubernetes interlock also
+    proposed in #182. Kubernetes nodes
     reboot through [kured](https://kured.dev/) (cordon, drain, one node at a
     time): `systemd-sysupdate.service.d/20-kured.conf` touches
     `/run/reboot-required` after each run once `bluefin-update-pending` reports

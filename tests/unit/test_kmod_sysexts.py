@@ -12,7 +12,6 @@ load running then finds no module (zfs-load-module.service failed that way
 in the boot test's A/B update, racing nvidia-container-toolkit-activate).
 """
 
-from __future__ import annotations
 
 import re
 from pathlib import Path

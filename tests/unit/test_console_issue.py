@@ -1,6 +1,5 @@
 """Tests for the console issue banner."""
 
-from __future__ import annotations
 
 from pathlib import Path
 

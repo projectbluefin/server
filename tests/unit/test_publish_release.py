@@ -1,7 +1,6 @@
 """Behavior of scripts/publish-release.sh, the one publish path build.yml runs
 on main (release) and on pull requests (release-dry-run)."""
 
-from __future__ import annotations
 
 import hashlib
 import json
@@ -50,6 +49,7 @@ def release_files(version: str) -> list[str]:
         f"docker_{version}.raw.zst",
         f"nspawn-org_{version}.raw.zst",
         f"tailscale_{version}.raw.zst",
+        f"netbird_{version}.raw.zst",
         "home-server.bu",
         "home-server-cluster.bu",
         f"nvidia-open-595_{version}.raw.zst",

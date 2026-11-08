@@ -134,10 +134,16 @@ ExecStart=
 ExecStart=${exec_start} --confirm=no ${target_dev}
 ExecStopPost=/bin/bash -c 'exec >/dev/ttyS1 2>&1; echo "PROBE sysinstall=\$\${SERVICE_RESULT} \$\${EXIT_STATUS} homelab-install=\$\$(systemctl show -P Result bluefin-homelab-install.service)"; cat /run/bluefin-homelab-install/sysinstall.env | sed "s/^/PROBE-LOG env /"; udevadm settle -t 10 || true; mkdir -p /run/t; mount -o ro ${target_dev}-part1 /run/t && { echo "PROBE esp-seed=\$\$(echo \$\$(ls /run/t/bluefin/extensions)) "; echo "PROBE esp-creds=\$\$(echo \$\$(ls /run/t/*/ | grep "cred\$\$")) "; cat /run/t/loader/entries/*.conf | sed "s/^/PROBE-LOG entry /"; umount /run/t; }'
 EOF
+# The mirror opens the journal only after journald flushed it to /var: a
+# `journalctl -f` started while /var/log/journal does not exist yet never
+# watches it, and once the flush drops the runtime journal in /run it shows
+# nothing more, while still running (#550). -b replays the whole boot, so
+# starting a little later loses nothing.
 cat > "${state}/journal.service" <<'EOF'
 [Unit]
 Description=Dogfood journal mirror on ttyS2
 DefaultDependencies=no
+After=systemd-journal-flush.service
 [Service]
 ExecStart=journalctl -b -f --no-pager -o short-monotonic
 StandardOutput=tty
@@ -242,8 +248,11 @@ install() {
     stick="$(stick_for "${role}")"
     cp "${vars_tmpl}" "${state}/${role}-vars.fd"
     truncate -s 16G "${target}"
+    # The stick is a USB mass-storage device, as on hardware, so the installer
+    # initrd's USB path (xhci, usb-storage, sd) is what finds its partitions.
     # shellcheck disable=SC2054 # commas belong to the QEMU options
-    local stick_args=(-drive "if=none,id=stick,format=raw,file=${stick}" -device virtio-blk-pci,drive=stick,serial=bluefin-installer)
+    local stick_args=(-drive "if=none,id=stick,format=raw,file=${stick}"
+                      -device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,serial=bluefin-installer,bootindex=0)
     MEM=4096 vm "${role}-1-enroll" "${role}" "${stick_args[@]}" -nic none
     # OVMF sometimes hangs in the reset after enrolling: systemd-boot's
     # message on the firmware console ends the boot instead.
