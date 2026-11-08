@@ -54,9 +54,9 @@ def test_profile_snippet_only_runs_for_seed_owner(tmp_path: Path) -> None:
     snippet = (HOMEBREW / "90-bluefin-homebrew.sh").read_text()
     assert 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' in snippet
     assert '[ "$(id -u)" -ne 0 ]' in snippet
-    assert '[ -r /var/lib/bluefin-homebrew/seed-owner ]' in snippet
-    assert '[ "$(id -u)" = "$(cut -d: -f1 /var/lib/bluefin-homebrew/seed-owner)" ]' in snippet
-    assert "[ -x /home/linuxbrew/.linuxbrew/bin/brew ]" in snippet
+    assert '[ -x /home/linuxbrew/.linuxbrew/bin/brew ]' in snippet
+    assert 'stat -Lc \'%u\' /home/linuxbrew/.linuxbrew' in snippet
+    assert 'cut -d: -f1 /var/lib/bluefin-homebrew/seed-owner' in snippet
     assert "CONTAINER_HOST=" in snippet
     assert "DOCKER_HOST=" in snippet
     # Absent prefix / root: sourcing is a silent no-op.
@@ -127,6 +127,23 @@ def test_profile_snippet_behavior_matrix(tmp_path: Path) -> None:
     assert code == 0
     assert "CONTAINER=tcp://custom:1234" in out
     assert "DOCKER=tcp://custom:5678" in out
+
+    # Case 6: Preserved prefix without seed-owner falls back to prefix owner (uid 1000)
+    (state / "seed-owner").unlink()
+    code, out = run_case("1000", False)
+    assert code == 0
+    assert "BREW=1" in out
+    assert "CONTAINER=unix:///run/user/1000/bluefin-podman/api.sock" in out
+
+    # Case 7: Preserved prefix without seed-owner blocks other user (uid 1001)
+    code, out = run_case("1001", False)
+    assert code == 0
+    assert out == "BREW=0 CONTAINER=none DOCKER=none"
+
+    # Case 8: Preserved prefix without seed-owner blocks root (uid 0)
+    code, out = run_case("0", False)
+    assert code == 0
+    assert out == "BREW=0 CONTAINER=none DOCKER=none"
 
 def test_element_pins_every_artifact() -> None:
     pins = yaml.safe_load((ROOT / "include/homebrew.yml").read_text())["variables"]

@@ -1,9 +1,12 @@
 # shellcheck shell=sh
 # Put Homebrew on PATH once the seed has been extracted.
 if [ "$(id -u)" -ne 0 ] &&
-    [ -r /var/lib/bluefin-homebrew/seed-owner ] &&
-    [ "$(id -u)" = "$(cut -d: -f1 /var/lib/bluefin-homebrew/seed-owner)" ] &&
-    [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+    [ -x /home/linuxbrew/.linuxbrew/bin/brew ] &&
+    [ "$(id -u)" = "$(if [ -r /var/lib/bluefin-homebrew/seed-owner ]; then
+        cut -d: -f1 /var/lib/bluefin-homebrew/seed-owner
+    else
+        stat -Lc '%u' /home/linuxbrew/.linuxbrew 2>/dev/null
+    fi)" ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
     bluefin_docker_backend=podman
     if systemctl --user is-active --quiet bluefin-docker.service; then

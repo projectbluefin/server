@@ -26,7 +26,14 @@ archive to `/home/linuxbrew/.linuxbrew`, owned by the first regular user
 such user exists, never overwrites an existing prefix and is offline.
 
 `/home/linuxbrew` is a tmpfiles link to `/var/home/linuxbrew`, so packages persist.
-`/etc/profile.d/90-bluefin-homebrew.sh` runs `brew shellenv` once brew exists.
+`/etc/profile.d/90-bluefin-homebrew.sh` runs `brew shellenv` only for the
+non-root owner recorded in `/var/lib/bluefin-homebrew/seed-owner`, or the
+existing prefix's filesystem owner when that record is absent. Root and other
+users do not receive automatic Brew setup.
+For that owner, unset or empty `CONTAINER_HOST` defaults to the Bluefin Podman
+socket. Unset or empty `DOCKER_HOST` defaults to the Bluefin Docker socket when
+its user service is active, otherwise the Bluefin Podman socket. Nonempty
+explicit values are preserved.
 The base carries git, curl, file, zstd, tar, xz and gzip, and no compiler.
 
 ## Home Server profile
