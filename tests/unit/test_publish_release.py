@@ -45,8 +45,6 @@ def release_files(version: str) -> list[str]:
         f"homelab_{version}.raw.zst",
         f"argo-workflows_{version}.raw.zst",
         f"mcp_{version}.raw.zst",
-        f"homebrew_{version}.raw.zst",
-        f"homebrew-integration_{version}.raw.zst",
         f"podman_{version}.raw.zst",
         f"docker_{version}.raw.zst",
         f"nspawn-org_{version}.raw.zst",

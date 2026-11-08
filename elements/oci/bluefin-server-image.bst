@@ -36,10 +36,6 @@ description: |
     nvidia-open-595_<ver>.raw.zst          opt-in sysexts locked to this image version
     podman_<ver>.raw.zst, docker_<ver>.raw.zst
                                            opt-in rootless host engine sysexts
-    homebrew_<ver>.raw.zst                 immutable Homebrew system container;
-                                           writable packages persist separately
-    homebrew-integration_<ver>.raw.zst     opt-in host bridge and Python runtime
-                                           sysext, locked to this image version
     nspawn-org_<ver>.raw.zst, tailscale_<ver>.raw.zst, netbird_<ver>.raw.zst
                                            opt-in CLI/VPN sysexts
     home-server.bu, home-server-cluster.bu  Home installer profiles; the cluster
@@ -115,12 +111,6 @@ build-depends:
 - filename: homelab/homelab-templates.bst
   config:
     location: /homelab-templates
-- filename: homebrew/image.bst
-  config:
-    location: /homebrew-machine
-- filename: oci/homebrew-integration-sysext.bst
-  config:
-    location: /sysext/homebrew-integration
 - filename: homebrew/templates.bst
   config:
     location: /homebrew-templates
@@ -283,8 +273,6 @@ config:
       /sysext/argo-workflows/argo-workflows_%{image-version}.raw.zst \
       /sysext/mcp/mcp_%{image-version}.raw.zst \
       /sysext/kubestellar/kubestellar_%{image-version}.raw.zst \
-      /homebrew-machine/homebrew_%{image-version}.raw.zst \
-      /sysext/homebrew-integration/homebrew-integration_%{image-version}.raw.zst \
       /sysext/podman/podman_%{image-version}.raw.zst \
       /sysext/docker/docker_%{image-version}.raw.zst \
       /sysext/nspawn-org/nspawn-org_%{image-version}.raw.zst \
@@ -300,8 +288,8 @@ config:
     mkdir -p "${hl}/repart.d/10-esp.conf.d"
     printf '[Partition]\nCopyFiles=/run/bluefin/installer/bluefin/extensions:/bluefin/extensions\nSizeMinBytes=%sM\nSizeMaxBytes=%sM\n' "${target_mib}" "${target_mib}" \
       > "${hl}/repart.d/10-esp.conf.d/50-bluefin-homelab.conf"
-    # Root is deferred to first boot; seed the machine and optional layers
-    # together on the ESP for the existing native sysupdate importer.
+    # Root is deferred to first boot; seed the optional layers on the ESP for
+    # the existing native sysupdate importer. Homebrew is in the base /usr.
     hs="${esp}/bluefin/home-server"
     install -Dm644 -t "${hs}" /homebrew-templates/home-server*.bu
     mkdir -p "${hs}/repart.d/10-esp.conf.d"
@@ -332,9 +320,7 @@ config:
        /sysext/nvidia-open-595/nvidia-open-595_%{image-version}.raw.zst \
        /sysext/nvidia-container-toolkit/nvidia-container-toolkit-*.raw.zst "%{install-root}/"
     install -m644 -t "%{install-root}" /homelab-templates/*.bu /homelab-templates/*.ign
-    cp /homebrew-machine/homebrew_%{image-version}.raw.zst \
-       /sysext/homebrew-integration/homebrew-integration_%{image-version}.raw.zst \
-       /sysext/podman/podman_%{image-version}.raw.zst \
+    cp /sysext/podman/podman_%{image-version}.raw.zst \
        /sysext/docker/docker_%{image-version}.raw.zst \
        /sysext/nspawn-org/nspawn-org_%{image-version}.raw.zst \
        /sysext/tailscale/tailscale_%{image-version}.raw.zst \
