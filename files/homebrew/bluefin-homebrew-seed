@@ -28,7 +28,15 @@ fi
 
 [[ -f $archive ]] || fail "seed archive $archive is missing"
 
-owner=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print $3 ":" $4 }' | sort -t: -k1,1n | head -n1)
+lowest_uid=60000
+owner=""
+while IFS=: read -r _ _ uid gid _ || [[ -n "$uid" ]]; do
+    if [[ $uid =~ ^[0-9]+$ && $gid =~ ^[0-9]+$ ]] && (( uid >= 1000 && uid < lowest_uid )); then
+        lowest_uid=$uid
+        owner="$uid:$gid"
+    fi
+done < <(getent passwd)
+
 if [[ -z $owner ]]; then
     printf 'bluefin-homebrew-seed: no regular user yet, deferring\n'
     exit 0

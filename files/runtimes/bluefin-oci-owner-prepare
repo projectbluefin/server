@@ -5,9 +5,17 @@ source "${BASH_SOURCE[0]%/*}/bluefin-oci-features"
 feature_selection
 # The owner is the first regular account (UID 1000-59999), as for the Homebrew
 # seed. Without one there is nothing to prepare yet; a later boot retries.
-entry=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print; exit }' || true)
-[[ -n $entry ]] || { printf '%s: no regular account yet, nothing to prepare\n' "${0##*/}" >&2; exit 0; }
-IFS=: read -r owner _ uid _ <<< "$entry"
+lowest_uid=60000
+owner=""
+uid=""
+while IFS=: read -r acc _ u _ || [[ -n "$acc" ]]; do
+    if [[ $u =~ ^[0-9]+$ ]] && (( u >= 1000 && u < lowest_uid )); then
+        lowest_uid=$u
+        owner="$acc"
+        uid="$u"
+    fi
+done < <(getent passwd)
+[[ -n $owner ]] || { printf '%s: no regular account yet, nothing to prepare\n' "${0##*/}" >&2; exit 0; }
 [[ $owner =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$ ]] || fail 'invalid owner account name'
 
 if [[ $podman == true || $docker == true ]]; then
