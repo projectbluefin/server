@@ -1,8 +1,8 @@
-# Upstream containerd v2.1.5 containerd.service, adapted to a sysext:
-# binaries in /usr/bin, and host setup that must hold after the sysext is
-# merged (systemd-sysext.service is not ordered against systemd-tmpfiles-setup,
-# systemd-modules-load or systemd-sysctl, so their boot-time runs may not see
-# this extension's drop-ins).
+# Upstream containerd's containerd.service (version: include/kubeadm.yml),
+# adapted to a sysext: binaries in /usr/bin, and host setup that must hold
+# after the sysext is merged (systemd-sysext.service is not ordered against
+# systemd-tmpfiles-setup, systemd-modules-load or systemd-sysctl, so their
+# boot-time runs may not see this extension's drop-ins).
 [Unit]
 Description=containerd container runtime
 Documentation=https://containerd.io
