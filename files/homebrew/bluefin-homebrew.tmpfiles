@@ -4,4 +4,4 @@ d /var/home 0755 root root -
 d /var/home/linuxbrew 0755 root root -
 L /home/linuxbrew - - - - /var/home/linuxbrew
 # A link, not a copy, so installed nodes (which keep /etc) follow image updates.
-L /etc/profile.d/90-bluefin-homebrew.sh - - - - ../../usr/lib/bluefin/profile.d/90-bluefin-homebrew.sh
+L+ /etc/profile.d/90-bluefin-homebrew.sh - - - - ../../usr/lib/bluefin/profile.d/90-bluefin-homebrew.sh

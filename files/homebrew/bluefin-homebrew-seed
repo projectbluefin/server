@@ -42,4 +42,6 @@ tar --zstd -xf "$archive" -C "$staging" --no-same-owner
 chown -R "$owner" "$staging/.linuxbrew"
 mv -T "$staging/.linuxbrew" "$prefix"
 chown "$owner" "$parent"
+install -d -m0755 "${stamp%/*}"
+printf '%s\n' "$owner" > "${stamp%/*}/seed-owner"
 mark
