@@ -47,18 +47,86 @@ def test_tmpfiles_links_home_linuxbrew_to_var() -> None:
              if line and not line.startswith("#")]
     assert ["L", "/home/linuxbrew", "-", "-", "-", "-", "/var/home/linuxbrew"] in rules
     assert ["d", "/var/home/linuxbrew", "0755", "root", "root", "-"] in rules
-    assert any(rule[:2] == ["L", "/etc/profile.d/90-bluefin-homebrew.sh"] for rule in rules)
+    assert any(rule[:2] == ["L+", "/etc/profile.d/90-bluefin-homebrew.sh"] for rule in rules)
 
 
-def test_profile_snippet_evals_shellenv_only_when_brew_exists(tmp_path: Path) -> None:
+def test_profile_snippet_only_runs_for_seed_owner(tmp_path: Path) -> None:
     snippet = (HOMEBREW / "90-bluefin-homebrew.sh").read_text()
     assert 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' in snippet
+    assert '[ "$(id -u)" -ne 0 ]' in snippet
+    assert '[ -r /var/lib/bluefin-homebrew/seed-owner ]' in snippet
+    assert '[ "$(id -u)" = "$(cut -d: -f1 /var/lib/bluefin-homebrew/seed-owner)" ]' in snippet
     assert "[ -x /home/linuxbrew/.linuxbrew/bin/brew ]" in snippet
-    # Absent prefix: sourcing is a silent no-op.
+    assert "CONTAINER_HOST=" in snippet
+    assert "DOCKER_HOST=" in snippet
+    # Absent prefix / root: sourcing is a silent no-op.
     result = subprocess.run(["sh", "-c", f". {HOMEBREW / '90-bluefin-homebrew.sh'}; echo ok"],
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0 and result.stdout == "ok\n"
 
+
+def test_profile_snippet_behavior_matrix(tmp_path: Path) -> None:
+    script_text = (HOMEBREW / "90-bluefin-homebrew.sh").read_text()
+    state = tmp_path / "var/lib/bluefin-homebrew"
+    state.mkdir(parents=True)
+    (state / "seed-owner").write_text("1000:1000\n")
+    prefix_bin = tmp_path / "home/linuxbrew/.linuxbrew/bin"
+    prefix_bin.mkdir(parents=True)
+    brew = prefix_bin / "brew"
+    brew.write_text("#!/bin/sh\necho 'export BREW_SHELLENV=1'")
+    brew.chmod(0o755)
+
+    # Script tested with mocked paths
+    test_script = tmp_path / "test-profile.sh"
+    test_script.write_text(
+        script_text.replace("/var/lib/bluefin-homebrew", str(state))
+                   .replace("/home/linuxbrew/.linuxbrew", str(tmp_path / "home/linuxbrew/.linuxbrew"))
+    )
+
+    def run_case(uid: str, is_active: bool, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
+        env = os.environ.copy()
+        if extra_env:
+            env.update(extra_env)
+        env["MOCK_UID"] = uid
+        env["MOCK_DOCKER_ACTIVE"] = "1" if is_active else "0"
+        cmd = (
+            f'id() {{ echo "$MOCK_UID"; }}; '
+            f'systemctl() {{ [ "$MOCK_DOCKER_ACTIVE" = "1" ]; }}; '
+            f'. {test_script}; '
+            'echo "BREW=${BREW_SHELLENV:-0} CONTAINER=${CONTAINER_HOST:-none} DOCKER=${DOCKER_HOST:-none}"'
+        )
+        res = subprocess.run(["sh", "-c", cmd], env=env, capture_output=True, text=True, check=False)
+        return res.returncode, res.stdout.strip()
+
+    # Case 1: Root login (uid 0) must never invoke brew or export container variables
+    code, out = run_case("0", False)
+    assert code == 0
+    assert out == "BREW=0 CONTAINER=none DOCKER=none"
+
+    # Case 2: Other nonroot user (uid 1001 != 1000) must never invoke brew
+    code, out = run_case("1001", False)
+    assert code == 0
+    assert out == "BREW=0 CONTAINER=none DOCKER=none"
+
+    # Case 3: Seed owner (uid 1000) with default podman backend
+    code, out = run_case("1000", False)
+    assert code == 0
+    assert "BREW=1" in out
+    assert "CONTAINER=unix:///run/user/1000/bluefin-podman/api.sock" in out
+    assert "DOCKER=unix:///run/user/1000/bluefin-podman/api.sock" in out
+
+    # Case 4: Seed owner (uid 1000) with docker active
+    code, out = run_case("1000", True)
+    assert code == 0
+    assert "BREW=1" in out
+    assert "CONTAINER=unix:///run/user/1000/bluefin-podman/api.sock" in out
+    assert "DOCKER=unix:///run/user/1000/bluefin-docker/api.sock" in out
+
+    # Case 5: Explicit CONTAINER_HOST / DOCKER_HOST overrides preserved
+    code, out = run_case("1000", False, {"CONTAINER_HOST": "tcp://custom:1234", "DOCKER_HOST": "tcp://custom:5678"})
+    assert code == 0
+    assert "CONTAINER=tcp://custom:1234" in out
+    assert "DOCKER=tcp://custom:5678" in out
 
 def test_element_pins_every_artifact() -> None:
     pins = yaml.safe_load((ROOT / "include/homebrew.yml").read_text())["variables"]
@@ -121,6 +189,7 @@ def test_extracts_once_and_chowns_to_the_first_regular_user(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
     assert (box.parent / ".linuxbrew/Homebrew/bin/brew").is_file()
     assert box.stamp.exists()
+    assert (box.stamp.parent / "seed-owner").read_text() == "1000:1000\n"
     assert "-R 1000:1000 " in box.chowns()[0]
     assert box.chowns()[1].startswith("1000:1000 ")
     assert not [p for p in box.parent.iterdir() if p.name.startswith(".seed.")]
