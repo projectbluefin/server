@@ -53,8 +53,6 @@ KNOWN_BROKEN = {
     "/usr/lib/systemd/system/quotaon-root.service runs missing /usr/bin/quotaon",
     # Only started when swtpm is installed (systemd-tpm2-swtpm finds none).
     "/usr/lib/systemd/system/systemd-tpm2-swtpm.service runs missing swtpm_ioctl",
-    # tpm2-tools' tpm2_id is not in FSDK; the rule only adds udev properties.
-    "/usr/lib/udev/rules.d/60-tpm2-id.rules runs missing tpm2_id",
     # Only for TI am65-cpsw-nuss switchdev NICs (iproute2 has no devlink here).
     "/usr/lib/udev/rules.d/81-net-bridge.rules runs missing /usr/sbin/devlink",
     # NVIDIA's GLX and EGL-GBM display libraries; the headless image has no
