@@ -8,8 +8,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from _systemd import SystemdFile
-
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / "files/homebrew/templates/home-server.bu"
 SELECTOR = ROOT / "files/runtimes/bluefin-oci-features"
