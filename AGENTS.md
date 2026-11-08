@@ -84,6 +84,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | Secure Boot / module / signing key inventory, rotation, CI secrets | [`docs/skills/secure-boot-keys.md`](docs/skills/secure-boot-keys.md) |
 | Node access (root / SSH) and credential sealing with TPM2 | [`docs/skills/tpm2-credential-sealing.md`](docs/skills/tpm2-credential-sealing.md) |
 | System containers (`machinectl`) | [`docs/skills/system-containers.md`](docs/skills/system-containers.md) |
+| Homebrew in the base image | [`docs/skills/homebrew-seed.md`](docs/skills/homebrew-seed.md) |
 | Cut bloat / avoid over-engineering | [`docs/skills/avoid-over-engineering.md`](docs/skills/avoid-over-engineering.md) |
 | Add or refactor skills | [`docs/skills/skill-improvement.md`](docs/skills/skill-improvement.md) |
 

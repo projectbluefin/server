@@ -114,8 +114,6 @@ expected_patterns() {
         "homelab_${v}\\.raw\\.zst" \
         "argo-workflows_${v}\\.raw\\.zst" \
         "mcp_${v}\\.raw\\.zst" \
-        "homebrew_${v}\\.raw\\.zst" \
-        "homebrew-integration_${v}\\.raw\\.zst" \
         "podman_${v}\\.raw\\.zst" \
         "docker_${v}\\.raw\\.zst" \
         "nspawn-org_${v}\\.raw\\.zst" \
@@ -309,7 +307,6 @@ In the names below, \`<ver>\` is \`${ver}\` and \`<uuid>\` identifies a partitio
 | \`zfs_<ver>.raw.zst\` | Optional OpenZFS extension. |
 | \`nvidia-open-595_<ver>.raw.zst\`, \`nvidia-container-toolkit-<toolkit-version>.raw.zst\` | Optional NVIDIA open kernel modules and Container Toolkit extensions. |
 | \`homelab-*.bu\`, \`homelab-*.ign\` | Editable Butane YAML and rendered Ignition JSON provisioning templates for control-plane/node roles, with kubeadm or k0s. Customise before use. |
-| \`homebrew_<ver>.raw.zst\`, \`homebrew-integration_<ver>.raw.zst\` | Homebrew system container and optional host-integration extension; installed packages persist separately from the immutable runtime. |
 | \`podman_<ver>.raw.zst\`, \`docker_<ver>.raw.zst\` | Rootless host engine extensions; Home Server selects Podman by default. |
 | \`home-server*.bu\` | Home installer profiles, with an optional existing Homelab cluster. |
 | \`bluefin-server_<ver>.spdx.json\` | SPDX software bill of materials (SBOM), listing the image's components. |

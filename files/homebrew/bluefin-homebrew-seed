@@ -1,0 +1,45 @@
+#!/bin/bash
+# Extract the Homebrew seed archive into the fixed prefix, once.
+#
+# The prefix must be /home/linuxbrew/.linuxbrew for bottles to relocate. The
+# archive (see elements/homebrew/seed.bst) holds a single top-level
+# .linuxbrew directory. This script never overwrites an existing prefix, is
+# offline, and defers (exits 0 without a stamp) until a regular user
+# (UID 1000-59999) exists, whom it makes the owner. bluefin-homebrew-seed.path
+# runs it again when /etc/passwd changes.
+set -euo pipefail
+umask 022
+
+archive=${BLUEFIN_HOMEBREW_SEED_ARCHIVE:-/usr/share/homebrew/brew.tar.zst}
+parent=${BLUEFIN_HOMEBREW_PARENT:-/home/linuxbrew}
+stamp=${BLUEFIN_HOMEBREW_STAMP:-/var/lib/bluefin-homebrew/seeded}
+prefix=$parent/.linuxbrew
+
+fail() { printf 'bluefin-homebrew-seed: %s\n' "$*" >&2; exit 1; }
+mark() { install -d -m0755 "${stamp%/*}"; : > "$stamp"; }
+
+[[ ! -e $stamp ]] || exit 0
+
+# An existing prefix is the user's: keep it, and stop looking at it.
+if [[ -e $prefix || -L $prefix ]]; then
+    mark
+    exit 0
+fi
+
+[[ -f $archive ]] || fail "seed archive $archive is missing"
+
+owner=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print $3 ":" $4 }' | sort -t: -k1,1n | head -n1)
+if [[ -z $owner ]]; then
+    printf 'bluefin-homebrew-seed: no regular user yet, deferring\n'
+    exit 0
+fi
+
+install -d -m0755 "$parent"
+staging=$(mktemp -d "$parent/.seed.XXXXXX")
+trap 'rm -rf "$staging"' EXIT
+tar --zstd -xf "$archive" -C "$staging" --no-same-owner
+[[ -d $staging/.linuxbrew/Homebrew ]] || fail "seed archive has no .linuxbrew/Homebrew"
+chown -R "$owner" "$staging/.linuxbrew"
+mv -T "$staging/.linuxbrew" "$prefix"
+chown "$owner" "$parent"
+mark

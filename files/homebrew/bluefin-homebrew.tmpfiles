@@ -1,17 +1,7 @@
-d /var/lib/bluefin-homebrew 0755 root root -
-d /var/lib/bluefin-homebrew/commands 0755 root root -
-d /etc/bluefin-homebrew 0755 root root -
-d /etc/profile.d 0755 root root -
-d /etc/sudoers.d 0750 root root -
-# These links outlive the sysext in a persistent /etc and then dangle, which
-# is harmless: sudo skips sudoers.d entries it cannot stat as regular files,
-# and /etc/profile sources only readable profile.d scripts.
-L+ /etc/profile.d/90-bluefin-homebrew.sh - - - - /usr/lib/bluefin-homebrew/90-bluefin-homebrew.sh
-L+ /etc/sudoers.d/bluefin-homebrew - - - - /usr/lib/bluefin-homebrew/bluefin-homebrew.sudoers
-d /etc/ssh/sshd_config.d 0755 root root -
-# sshd exits when a file its Include glob matches cannot be opened, so a
-# dangling link here would keep it from starting. This real file only
-# includes the settings, and sshd ignores an Include of a missing path.
-# Earlier images linked 90-bluefin-homebrew.conf; r removes it at boot.
-r /etc/ssh/sshd_config.d/90-bluefin-homebrew.conf
-f+ /etc/ssh/sshd_config.d/90-bluefin-homebrew-sysext.conf 0644 root root - Include /usr/lib/bluefin-homebrew/sshd.conf
+# Homebrew's bottles need the prefix /home/linuxbrew/.linuxbrew. Keep it on the
+# writable /var; an existing /home/linuxbrew is left alone.
+d /var/home 0755 root root -
+d /var/home/linuxbrew 0755 root root -
+L /home/linuxbrew - - - - /var/home/linuxbrew
+# A link, not a copy, so installed nodes (which keep /etc) follow image updates.
+L /etc/profile.d/90-bluefin-homebrew.sh - - - - ../../usr/lib/bluefin/profile.d/90-bluefin-homebrew.sh

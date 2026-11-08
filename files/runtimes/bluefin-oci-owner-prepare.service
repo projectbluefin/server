@@ -1,9 +1,7 @@
 [Unit]
-Description=Prepare selected owner's rootless host OCI engines
-Requires=bluefin-homebrew-prepare.service
-After=bluefin-homebrew-prepare.service bluefin-sysext-fetch.service bluefin-oci-features.service
-Before=bluefin-homebrew.service
-ConditionPathExists=/var/lib/bluefin-homebrew/owner
+Description=Prepare the first regular user's rootless host OCI engines
+After=bluefin-sysext-fetch.service bluefin-oci-features.service
+Wants=bluefin-sysext-fetch.service
 
 [Service]
 Type=oneshot
@@ -12,3 +10,6 @@ ImportCredential=bluefin.homebrew.podman
 ImportCredential=bluefin.homebrew.docker
 ExecStart=/usr/libexec/bluefin-oci-owner-prepare
 RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

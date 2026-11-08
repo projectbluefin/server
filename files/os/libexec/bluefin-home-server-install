@@ -1,7 +1,8 @@
 #!/usr/bin/bash
 # Prepare stock sysinstall arguments for the signed Home Server UKI profile.
-# Prepared machine and sysext payloads travel through the existing ESP seed.
+# Prepared sysext payloads travel through the existing ESP seed.
 # This helper never installs an OS, creates a user, or erases a disk.
+# Homebrew itself is part of the base image (docs/skills/homebrew-seed.md).
 # Runtime files are private: sysinstall encrypts the selected credentials
 # alongside the installed disk UKI. The existing Homelab argument variable
 # remains independent. BLUEFIN_INSTALLER_HOME_SERVER overrides the stick path
@@ -63,13 +64,6 @@ fi
 [ -s "${src}/home-server.bu" ] || die "${src}/home-server.bu is missing from the installer"
 [[ -d "${src}/repart.d/10-esp.conf.d" ]] || die "${src}/repart.d/10-esp.conf.d is missing from the installer"
 
-owner="$(credential bluefin.homebrew.owner)"
-if [ -f "${creds}/bluefin.homebrew.owner" ]; then
-    owner_valid "${owner}" || die "bluefin.homebrew.owner must name a nonroot account (1-31 lowercase characters)"
-elif [ "${unattended}" = true ]; then
-    die "unattended Home Server installation requires bluefin.homebrew.owner"
-fi
-
 # Validate supplied options before asking anything, and never log their values
 # or any account/password/key credential contents.
 options=(podman docker cluster)
@@ -84,21 +78,9 @@ for option in "${options[@]}"; do
     values+=("${value}")
 done
 
-if [ "${unattended}" = true ]; then
-    [ -s "${creds}/passwd.hashed-password.${owner}" ] || die "unattended Home Server installation requires private passwd.hashed-password.${owner} provisioning"
-else
-    printf '\nBluefin Home Server\n\nHomebrew is included and ready at the first owner login.\n'
-    printf 'Choose a nonroot owner account, or press Enter to create it on first boot.\n'
-    printf 'An existing account must be privately provisioned; no password or SSH key is stored in the image.\n'
-    if [ ! -f "${creds}/bluefin.homebrew.owner" ]; then
-        while :; do
-            printf '\nOwner account [create on first boot], or q to cancel: '
-            IFS= read -r owner || cancel
-            case "${owner}" in q|Q|quit|cancel) cancel ;; '') break ;; esac
-            owner_valid "${owner}" && break
-            printf 'Use a nonroot account name (1-31 lowercase letters, digits, underscores or hyphens).\n'
-        done
-    fi
+if [ "${unattended}" != true ]; then
+    printf '\nBluefin Home Server\n\nHomebrew is included in the base image.\n'
+    printf 'Homebrew is seeded for the first regular user; accounts and keys are provisioned privately.\n'
     labels=('Podman host engine' 'Docker host engine' 'existing Homelab/KubeStellar cluster (full federation stays off)')
     for i in "${!options[@]}"; do
         [ ! -f "${creds}/bluefin.homebrew.${options[i]}" ] || continue
@@ -130,10 +112,6 @@ for i in "${!options[@]}"; do
     printf '%s' "${values[i]}" > "${out}/${option}"
     args+=("--load-credential=bluefin.homebrew.${option}:${out}/${option}")
 done
-if [ -n "${owner}" ]; then
-    printf '%s' "${owner}" > "${out}/owner"
-    args+=("--load-credential=bluefin.homebrew.owner:${out}/owner")
-fi
 
 # Account provisioning comes from private boot credentials, never a shipped
 # template. Forward only account/key inputs, not installer unit overrides.

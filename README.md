@@ -50,7 +50,7 @@ This is lazy mode, which includes `brew` for that lazy Ubuntu Server vibe. This 
 
 | Boot Menu Option | Best For | Included Software | First Boot Login |
 |---|---|---|---|
-| **Bluefin Home Server** | Standalone personal server running containers and tools | Base OS + Podman (default) + Homebrew inside an isolated nspawn system container. Root stays locked. | Prompts on the local console to create a regular user account and password (or accepts an SSH key via credential). |
+| **Bluefin Home Server** | Standalone personal server running containers and tools | Base OS + Podman (default) + Homebrew (seeded at first boot). | Prompts on the local console for a root password (or accepts credentials). |
 
 ## Downloads
 

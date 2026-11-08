@@ -98,7 +98,6 @@ usr/lib/*-linux-gnu/pkgconfig
 # initrd).
 usr/bin/routel
 
-# libxml2's Python bindings; the base has no Python, and the Homebrew
-# integration sysext's Python closure does not include libxml2.
+# libxml2's Python bindings; the base has no Python.
 usr/lib/python3*/site-packages/*libxml2*
 usr/lib/python3*/site-packages/__pycache__/*libxml2*

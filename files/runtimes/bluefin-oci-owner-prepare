@@ -3,15 +3,11 @@
 [[ $# == 0 ]] || { printf 'usage: bluefin-oci-owner-prepare\n' >&2; exit 1; }
 source "${BASH_SOURCE[0]%/*}/bluefin-oci-features"
 feature_selection
-ownerfile=/var/lib/bluefin-homebrew/owner
-[[ $(stat -c %u "$ownerfile") == 0 && ! -L "$ownerfile" ]] || fail 'owner record must be root-owned and not a symlink'
-mode=$(stat -c %a "$ownerfile")
-(( (8#$mode & 0022) == 0 )) || fail 'owner record must not be group/world writable'
-IFS=: read -r uid gid < "$ownerfile"
-[[ $uid =~ ^[0-9]+$ && $gid =~ ^[0-9]+$ && $uid != 0 ]] || fail 'owner record must contain non-root UID:GID'
-entry=$(getent passwd "$uid") || fail 'owner account does not exist'
-IFS=: read -r owner _ account_uid account_gid _ _ _ <<< "$entry"
-[[ $account_uid == "$uid" && $account_gid == "$gid" ]] || fail 'owner identity changed'
+# The owner is the first regular account (UID 1000-59999), as for the Homebrew
+# seed. Without one there is nothing to prepare yet; a later boot retries.
+entry=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print; exit }' || true)
+[[ -n $entry ]] || { printf '%s: no regular account yet, nothing to prepare\n' "${0##*/}" >&2; exit 0; }
+IFS=: read -r owner _ uid _ <<< "$entry"
 [[ $owner =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$ ]] || fail 'invalid owner account name'
 
 if [[ $podman == true || $docker == true ]]; then
@@ -76,13 +72,6 @@ if [[ $podman == true || $docker == true ]]; then
     systemctl start "user@$uid.service"
 fi
 
-# Never root-chown/chmod below a user-owned runtime directory: endpoint paths
-# could otherwise race into privileged host paths. Dispatcher pins these dirs;
-# the user manager maintains them with RuntimeDirectoryPreserve=yes.
-for engine in podman docker; do
-    dir="/run/user/$uid/bluefin-$engine"
-    [[ -d "$dir" && ! -L "$dir" && $(stat -c %u "$dir") == "$uid" && $(stat -c %a "$dir") == 700 ]] || fail "$engine owner endpoint directory is missing or not private"
-done
 if [[ $podman == true ]]; then
     [[ -x /usr/lib/bluefin/podman/podman ]] || fail 'selected Podman sysext is not merged'
     # C entries populate absent targets, never replace operator configuration.
@@ -104,29 +93,3 @@ if systemctl is-active --quiet "user@$uid.service"; then
         fi
     done
 fi
-
-# The dispatcher binds this root-owned directory read-only at the same guest
-# path and parses assignments (never sources it), preserving caller overrides.
-configdir=/etc/bluefin-homebrew
-[[ ! -L $configdir ]] || fail 'runtime environment directory must not be a symlink'
-if [[ ! -d $configdir ]]; then
-    install -d -m0755 "$configdir"
-fi
-[[ $(stat -c %u "$configdir") == 0 ]] || fail 'runtime environment directory must be root-owned'
-mode=$(stat -c %a "$configdir")
-(( (8#$mode & 0022) == 0 )) || fail 'runtime environment directory must not be group/world writable'
-envfile="$configdir/runtime.$uid.env"
-managed='# Managed by bluefin-oci-owner-prepare'
-if [[ -e $envfile || -L $envfile ]]; then
-    [[ ! -L $envfile && $(stat -c %u "$envfile") == 0 ]] || fail 'runtime environment must be root-owned and not a symlink'
-    mode=$(stat -c %a "$envfile")
-    (( (8#$mode & 0022) == 0 )) || fail 'runtime environment must not be group/world writable'
-    IFS= read -r firstline < "$envfile"
-    # Preserve deliberately supplied operator configuration at the same path.
-    [[ $firstline == "$managed" ]] || exit 0
-fi
-docker_backend=podman
-[[ $docker != true ]] || docker_backend=docker
-(umask 022; printf '%s\nDOCKER_HOST=unix:///run/bluefin-engines/%s/%s/api.sock\nCONTAINER_HOST=unix:///run/bluefin-engines/%s/podman/api.sock\n' "$managed" "$uid" "$docker_backend" "$uid" > "$envfile.new")
-chown root:root "$envfile.new"
-mv -f "$envfile.new" "$envfile"

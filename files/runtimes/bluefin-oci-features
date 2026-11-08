@@ -1,7 +1,7 @@
 #!/bin/bash
 # Canonical Home Server selection: sourced by owner setup, provisioned before fetch.
 set -euo pipefail
-state=${BLUEFIN_OCI_STATE_FILE:-/var/lib/bluefin-homebrew/runtimes.state}
+state=${BLUEFIN_OCI_STATE_FILE:-/var/lib/bluefin-oci/runtimes.state}
 has_selection=false
 podman=false
 docker=false

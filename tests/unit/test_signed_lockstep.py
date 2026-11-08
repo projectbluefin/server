@@ -99,11 +99,9 @@ def test_version_locked_sysexts_are_optional_features(name: str, transfer: str |
     t = ini(SYSUPDATE / transfer)
     assert name in t["Transfer"]["Features"].split()
     assert t["Transfer"]["ProtectVersion"] == "%A"
-    machine = transfer == "40-homebrew.transfer"
-    asset = "homebrew-integration" if transfer == "39-homebrew-integration.transfer" else name
-    assert t["Target"]["Path"] == ("/var/lib/machines" if machine else "/var/lib/extensions")
-    assert t["Target"]["MatchPattern"] == f"{asset}_@v.raw"
-    assert t["Source"]["MatchPattern"] == f"{asset}_@v.raw.zst"
+    assert t["Target"]["Path"] == "/var/lib/extensions"
+    assert t["Target"]["MatchPattern"] == f"{name}_@v.raw"
+    assert t["Source"]["MatchPattern"] == f"{name}_@v.raw.zst"
 
 
 @pytest.mark.parametrize("name", _feature_names())

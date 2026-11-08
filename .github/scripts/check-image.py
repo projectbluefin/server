@@ -359,13 +359,10 @@ def main(argv: list[str] | None = None) -> int:
             extract_erofs(raw, root)
             raw.unlink()
             name = sysext.name.removesuffix(".raw.zst")
-            # A machine is self-contained, not a sysext layered over host /usr.
-            machine = sysext.name.startswith("homebrew_")
-            layers = [root] if machine else [root, usr_root]
+            layers = [root, usr_root]
             errors += check_libraries(name, layers, root)
             errors += check_programs(name, layers, root)
-            relation = "standalone machine" if machine else "checked over /usr"
-            report.append(f"{sysext.name}: {du(root) / 2**20:.0f} MiB unpacked, {relation}")
+            report.append(f"{sysext.name}: {du(root) / 2**20:.0f} MiB unpacked, checked over /usr")
 
         if args.baseline_usr:
             base_root = work / "baseline"

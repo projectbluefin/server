@@ -13,7 +13,7 @@ from _systemd import SystemdFile
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / "files/homebrew/templates/home-server.bu"
 SELECTOR = ROOT / "files/runtimes/bluefin-oci-features"
-RENDERER = ROOT / "files/homebrew-image/compose-profile.py"
+RENDERER = ROOT / "files/homebrew/compose-profile.py"
 CLUSTER_TEMPLATE = ROOT / "files/homelab/templates/homelab-control-plane.bu"
 
 
@@ -22,14 +22,11 @@ def template_credentials(tmp_path: Path, profile: str = "home-server.bu") -> Pat
     source = tmp_path / "profile-source"
     source.mkdir()
     shutil.copyfile(TEMPLATE, source / "home-server.bu")
-    shutil.copyfile(SELECTOR, source / "bluefin-oci-features")
     published = tmp_path / "published"
     subprocess.run([sys.executable, RENDERER, source / "home-server.bu", CLUSTER_TEMPLATE,
                     published], check=True)
     home = yaml.safe_load((published / profile).read_text())
-    bootstrap = next(entry for entry in home["storage"]["files"]
-                     if entry["path"] == "/etc/bluefin-homebrew/bootstrap/bluefin-oci-features")
-    (tmp_path / "bootstrap").write_text(bootstrap["contents"]["inline"])
+    shutil.copyfile(SELECTOR, tmp_path / "bootstrap")
     units = {unit["name"]: unit for unit in home["systemd"]["units"]}
     defaults = [line.removeprefix("SetCredential=")
                 for dropin in units["bluefin-oci-features.service"]["dropins"]
@@ -112,24 +109,9 @@ def test_operator_feature_disable_is_not_reenabled_or_recorded_as_running(
 
 
 @pytest.mark.parametrize("profile", ["home-server.bu", "home-server-cluster.bu"])
-def test_default_formulae_install_once_as_owner_through_brew(tmp_path: Path, profile: str) -> None:
+def test_profile_has_no_homebrew_machine_or_bridge(tmp_path: Path, profile: str) -> None:
     template_credentials(tmp_path, profile)
-    home = yaml.safe_load((tmp_path / "published" / profile).read_text())
-    unit = next(unit for unit in home["systemd"]["units"]
-                if unit["name"] == "bluefin-homebrew-default-formulae.service")
-    path = tmp_path / unit["name"]
-    path.write_text(unit["contents"])
-    service = SystemdFile(path)
-    stamp = "/var/lib/bluefin-homebrew/default-formulae"
-    assert service.values("Unit", "ConditionPathExists") == [f"!{stamp}"]
-    assert service.commands("ExecStartPost") == [["/usr/bin/touch", stamp]]
-    # Run the real command line with a fake setpriv to see the owner drop.
-    (bin_dir := tmp_path / "bin").mkdir()
-    (bin_dir / "setpriv").write_text('#!/bin/sh\necho "$@"\n')
-    (bin_dir / "setpriv").chmod(0o755)
-    (tmp_path / "owner").write_text("1000:1001\n")
-    [[shell, flag, script]] = service.commands()
-    script = script.replace("/var/lib/bluefin-homebrew/owner", str(tmp_path / "owner"))
-    result = subprocess.run([shell, flag, script], env=os.environ | {"PATH": f"{bin_dir}:/usr/bin:/bin"},
-                            text=True, capture_output=True, check=True)
-    assert result.stdout == "--reuid=1000 --regid=1001 --init-groups -- /usr/bin/brew install tmux neovim\n"
+    text = (tmp_path / "published" / profile).read_text()
+    for gone in (".nspawn", "machinectl", "sudo", "bluefin-homebrew.service",
+                 "default-formulae", "homebrew.feature", "/var/lib/machines"):
+        assert gone not in text

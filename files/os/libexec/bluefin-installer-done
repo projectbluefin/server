@@ -46,9 +46,8 @@ printf '%s\n' "" "${product} is installed." "" \
     "Remove the USB stick when the screen goes blank." ""
 if [ "${home_server}" = true ]; then
     printf '%s\n' \
-        "On first boot, create the nonroot owner unless it was privately provisioned." \
-        "Log in as that owner; Homebrew is ready in its system container." \
-        "SSH accepts public keys only. The root account stays locked." ""
+        "On its first start the installed system asks here for a new root" \
+        "password. Homebrew is seeded for the first regular user." ""
 else
     printf '%s\n' "On its first start the installed system asks here for a new root" \
         "password; then log in as root with it." ""
