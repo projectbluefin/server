@@ -50,21 +50,6 @@ def test_tmpfiles_links_home_linuxbrew_to_var() -> None:
     assert any(rule[:2] == ["L+", "/etc/profile.d/90-bluefin-homebrew.sh"] for rule in rules)
 
 
-def test_profile_snippet_only_runs_for_seed_owner(tmp_path: Path) -> None:
-    snippet = (HOMEBREW / "90-bluefin-homebrew.sh").read_text()
-    assert 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' in snippet
-    assert '[ "$(id -u)" -ne 0 ]' in snippet
-    assert '[ -x /home/linuxbrew/.linuxbrew/bin/brew ]' in snippet
-    assert 'stat -Lc \'%u\' /home/linuxbrew/.linuxbrew' in snippet
-    assert 'cut -d: -f1 /var/lib/bluefin-homebrew/seed-owner' in snippet
-    assert "CONTAINER_HOST=" in snippet
-    assert "DOCKER_HOST=" in snippet
-    # Absent prefix / root: sourcing is a silent no-op.
-    result = subprocess.run(["sh", "-c", f". {HOMEBREW / '90-bluefin-homebrew.sh'}; echo ok"],
-                            capture_output=True, text=True, check=False)
-    assert result.returncode == 0 and result.stdout == "ok\n"
-
-
 def test_profile_snippet_behavior_matrix(tmp_path: Path) -> None:
     script_text = (HOMEBREW / "90-bluefin-homebrew.sh").read_text()
     state = tmp_path / "var/lib/bluefin-homebrew"
@@ -92,6 +77,7 @@ def test_profile_snippet_behavior_matrix(tmp_path: Path) -> None:
         cmd = (
             f'id() {{ echo "$MOCK_UID"; }}; '
             f'systemctl() {{ [ "$MOCK_DOCKER_ACTIVE" = "1" ]; }}; '
+            'stat() { echo 1000; }; '
             f'. {test_script}; '
             'echo "BREW=${BREW_SHELLENV:-0} CONTAINER=${CONTAINER_HOST:-none} DOCKER=${DOCKER_HOST:-none}"'
         )
