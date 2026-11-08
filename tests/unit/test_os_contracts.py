@@ -143,7 +143,7 @@ def release_fields(path: Path) -> dict[str, str]:
 )
 def test_extension_release_name_is_its_stem(path: Path) -> None:
     name = release_fields(path).get("NAME")
-    assert name in (None, path.name.removeprefix("extension-release."))
+    assert name == path.name.removeprefix("extension-release.")
 
 
 @pytest.mark.parametrize("stem", ["homebrew-integration", "tailscale", "netbird"])

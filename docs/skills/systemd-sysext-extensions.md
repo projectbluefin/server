@@ -47,6 +47,9 @@ The base OS `/usr/lib/os-release` identifies as `ID=bluefin-server` with
 sysext merges when its `extension-release` metadata matches the host `ID=` (or
 uses `ID=_any`) and, when it pins `VERSION_ID=`, the host version.
 
+Every first-party extension declares `NAME=` matching its unversioned image
+name; versioned image filenames do not change that identity.
+
 The first-party extensions make opposite choices:
 
 - **k0s** (`files/k0s/sysext/extension-release.k0s`) uses `ID=_any` and does
