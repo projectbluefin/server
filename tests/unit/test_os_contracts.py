@@ -146,7 +146,7 @@ def test_extension_release_name_is_its_stem(path: Path) -> None:
     assert name in (None, path.name.removeprefix("extension-release."))
 
 
-@pytest.mark.parametrize("stem", ["homebrew-integration", "tailscale"])
+@pytest.mark.parametrize("stem", ["homebrew-integration", "tailscale", "netbird"])
 def test_extension_release_names_itself(stem: str) -> None:
     (path,) = (ROOT / "files").rglob(f"extension-release.{stem}")
     assert release_fields(path)["NAME"] == stem
