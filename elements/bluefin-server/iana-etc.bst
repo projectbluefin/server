@@ -16,14 +16,14 @@ build-depends:
 
 variables:
   # Mic92/iana-etc release tag (YYYYMMDD): the date of the IANA snapshot.
-  iana-etc-version: "20261027"
+  iana-etc-version: "20261106"
   # Text files only.
   strip-binaries: ''
 
 sources:
 - kind: tar
   url: github:Mic92/iana-etc/releases/download/%{iana-etc-version}/iana-etc-%{iana-etc-version}.tar.gz
-  ref: 48981d07ab61179305abb9aa47ddbc50c7f0005ab0a4e08afd203fffad698873
+  ref: 933a46404c521996e94d2374af5d9dfface321c522b6ee710f180326d45a60df
 
 config:
   install-commands:
