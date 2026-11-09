@@ -51,6 +51,21 @@
 #   target without trying to boot it.
 #   Every install also checks the "installed" screen, and every first boot
 #   the serial console's login banner (hostname and IP address).
+#   DOGFOOD_INSTALL=diskless-console (no <next>, blank target, Secure Boot on,
+#   minimal profile) installs from a diskless boot instead of the stick, the
+#   way a person at the monitor of a netbooted node does (#450). <dir> then
+#   needs the netboot ESP and the OS DDI, which a local HTTP server serves:
+#   1. enroll the Secure Boot keys from the netboot ESP
+#   2. boot it diskless with the target and a second disk; root's password,
+#      random for this run, reaches the node only hashed (the
+#      passwd.hashed-password.root credential; masked in the CI log), and
+#      the image keeps root locked otherwise. Log in as root at tty1, type
+#      the commands "From a diskless node" in docs/skills/ddi-installer.md,
+#      and answer systemd-sysinstall's questions: the target by its number
+#      in the disk list, erase, register in the firmware, and "yes" after
+#      the summary; then power off. The target must hold exactly the ESP and
+#      usr slot A (+ verity), and the other disk stay blank
+#   3. boot the target on its own, as step 3 above
 #   <next> is an image set with a higher version signed by the same key (dev
 #   keys locally, as in CI), or "release": the transfers stay on the image's
 #   own source (GitHub Releases) and the newest release must be found, staged
@@ -72,8 +87,11 @@
 # hanging.
 #
 # Usage: dogfood-installer.sh <dir with bluefin-server-installer_<ver>.raw> [<next dir>|release]
+#        (DOGFOOD_INSTALL=diskless-console: <dir> with bluefin-server-netboot_<ver>.esp.raw
+#        and bluefin-server_<ver>.raw)
 # Environment:
-#   DOGFOOD_PORT=<port>        HTTP port serving <next> (default 8765)
+#   DOGFOOD_PORT=<port>        HTTP port serving <next>, or <dir> to the diskless
+#                              boot of DOGFOOD_INSTALL=diskless-console (default 8765)
 #   DOGFOOD_STATE=<dir>        logs, target disk and UEFI vars (default dist/dogfood-installer)
 #   DOGFOOD_TARGET_DISK=<file> target disk image, recreated (default <state>/target.raw)
 #   DOGFOOD_TARGET=<kind>      what the target holds before the install:
@@ -90,8 +108,9 @@
 #   DOGFOOD_SYSINSTALL_CRED=0  do not pass the unattended drop-in credential
 #   DOGFOOD_SECURE_BOOT=<mode> enforcing (default: the keys from step 1) or
 #                              off (firmware without Secure Boot)
-#   DOGFOOD_INSTALL=<mode>     unattended (default: the drop-in credential) or
-#                              console (typed at the monitor, see above)
+#   DOGFOOD_INSTALL=<mode>     unattended (default: the drop-in credential),
+#                              console (typed at the monitor, see above) or
+#                              diskless-console (from a diskless boot, see above)
 #   DOGFOOD_CONSOLE_NOISE=0|1  concurrent error noise (default 0; console only)
 #   DOGFOOD_CONSOLE_FAILURE=.. none (default) or kernel (console only): a wrong
 #                              guest kernel payload path, before any disk write
@@ -134,7 +153,9 @@ case "${install_mode}" in
     unattended) ;;
     console) [ -z "${next}" ] && [ "${target_kind}" != prior-install ] && [ "${secure_boot}" = enforcing ] \
         || { echo "ERROR: DOGFOOD_INSTALL=console does not combine with <next>, prior-install or DOGFOOD_SECURE_BOOT=off" >&2; exit 1; } ;;
-    *) echo "ERROR: DOGFOOD_INSTALL must be unattended or console, not '${install_mode}'" >&2; exit 1 ;;
+    diskless-console) [ -z "${next}" ] && [ "${target_kind}" = blank ] && [ "${secure_boot}" = enforcing ] \
+        || { echo "ERROR: DOGFOOD_INSTALL=diskless-console needs a blank DOGFOOD_TARGET, Secure Boot and no <next>" >&2; exit 1; } ;;
+    *) echo "ERROR: DOGFOOD_INSTALL must be unattended, console or diskless-console, not '${install_mode}'" >&2; exit 1 ;;
 esac
 console_noise="${DOGFOOD_CONSOLE_NOISE:-0}"
 console_failure="${DOGFOOD_CONSOLE_FAILURE:-none}"
@@ -158,10 +179,13 @@ case "${profile}" in
     minimal|home-server) ;;
     *) echo "ERROR: DOGFOOD_PROFILE must be minimal or home-server" >&2; exit 1 ;;
 esac
+[ "${install_mode}" != diskless-console ] || [ "${profile}" = minimal ] \
+    || { echo "ERROR: DOGFOOD_INSTALL=diskless-console installs the minimal profile only" >&2; exit 1; }
 steps=4
 [ -z "${next}" ] || steps=6
 [ "${target_kind}" != prior-install ] || steps=6
 [ "${console_failure}" = none ] || steps=2
+[ "${install_mode}" != diskless-console ] || steps=3
 state="$(realpath -m "${DOGFOOD_STATE:-dist/dogfood-installer}")"
 # Never recreate proof state inside, or above, the exported source image set.
 [[ "${dir}/" != "${state}/"* ]] \
@@ -173,10 +197,18 @@ target_dev="${DOGFOOD_TARGET_DEV:-/dev/disk/by-id/virtio-${target_serial}}"
 install_args="${DOGFOOD_SYSINSTALL_ARGS:---confirm=no}"
 dropin_src="${here}/../files/os/systemd/system/systemd-sysinstall.service.d/10-bluefin-installer.conf"
 
-# shellcheck disable=SC2012 # release file names have no odd characters
-installer="$(ls "${dir}"/bluefin-server-installer_*.raw 2>/dev/null | tail -n1)" \
-    || { echo "ERROR: no bluefin-server-installer_<ver>.raw in ${dir}" >&2; exit 1; }
-ver="${installer##*/bluefin-server-installer_}"; ver="${ver%.raw}"
+if [ "${install_mode}" = diskless-console ]; then
+    # shellcheck disable=SC2012 # release file names have no odd characters
+    esp="$(ls "${dir}"/bluefin-server-netboot_*.esp.raw 2>/dev/null | tail -n1)" \
+        || { echo "ERROR: no bluefin-server-netboot_<ver>.esp.raw in ${dir}" >&2; exit 1; }
+    ver="${esp##*/bluefin-server-netboot_}"; ver="${ver%.esp.raw}"
+    [ -f "${dir}/bluefin-server_${ver}.raw" ] || { echo "ERROR: no bluefin-server_${ver}.raw in ${dir}" >&2; exit 1; }
+else
+    # shellcheck disable=SC2012 # release file names have no odd characters
+    installer="$(ls "${dir}"/bluefin-server-installer_*.raw 2>/dev/null | tail -n1)" \
+        || { echo "ERROR: no bluefin-server-installer_<ver>.raw in ${dir}" >&2; exit 1; }
+    ver="${installer##*/bluefin-server-installer_}"; ver="${ver%.raw}"
+fi
 
 # shellcheck source=scripts/dogfood-firmware.sh
 . "${here}/dogfood-firmware.sh"
@@ -203,11 +235,13 @@ cp "${vars_tmpl}" "${vars}"
 
 # Reuse the Homelab harness's stock systemd-boot profile selection. Only the
 # scratch stick changes; the signed UKI and release artifact remain intact.
-cp --reflink=auto "${installer}" "${state}/installer.raw"
-installer="${state}/installer.raw"
-esp_offset="$(sfdisk --json "${installer}" | python3 -c 'import json,sys; print(next(p["start"] for p in json.load(sys.stdin)["partitiontable"]["partitions"] if p.get("name") == "bluefin-installer") * 512)')"
-printf 'timeout 3\nconsole-mode keep\nsecure-boot-enroll if-safe\ndefault bluefin-server-installer_*@%s\n' "${profile}" > "${state}/loader.conf"
-mcopy -o -i "${installer}@@${esp_offset}" "${state}/loader.conf" ::/loader/loader.conf
+if [ "${install_mode}" != diskless-console ]; then
+    cp --reflink=auto "${installer}" "${state}/installer.raw"
+    installer="${state}/installer.raw"
+    esp_offset="$(sfdisk --json "${installer}" | python3 -c 'import json,sys; print(next(p["start"] for p in json.load(sys.stdin)["partitiontable"]["partitions"] if p.get("name") == "bluefin-installer") * 512)')"
+    printf 'timeout 3\nconsole-mode keep\nsecure-boot-enroll if-safe\ndefault bluefin-server-installer_*@%s\n' "${profile}" > "${state}/loader.conf"
+    mcopy -o -i "${installer}@@${esp_offset}" "${state}/loader.conf" ::/loader/loader.conf
+fi
 
 fail() {
     echo "FAIL: $* (logs: ${state})" >&2
@@ -268,12 +302,24 @@ qemu=(qemu-system-x86_64
     -drive if=pflash,format=raw,unit=1,file="${vars}"
     -display none -no-reboot
     )
-# snapshot=on keeps the release artifact untouched.
 # shellcheck disable=SC2054 # commas belong to the QEMU options
-stick=(-drive "if=none,id=stick,format=raw,snapshot=on,file=${installer}"
-       -device virtio-blk-pci,drive=stick,serial=bluefin-installer)
 disk=(-drive "if=none,id=target,format=raw,file=${target}"
       -device "virtio-blk-pci,drive=target,serial=${target_serial}")
+# The medium step 1 enrolls the Secure Boot keys from: the stick, or the
+# netboot ESP that diskless-console then boots, as the disk the firmware
+# boots first. snapshot=on keeps the release artifact untouched.
+if [ "${install_mode}" = diskless-console ]; then
+    medium_name="netboot ESP"
+    # shellcheck disable=SC2054 # commas belong to the QEMU options
+    medium=(-drive "if=none,id=esp,format=raw,snapshot=on,file=${esp}"
+            -device virtio-blk-pci,drive=esp,serial=bluefin-netboot,bootindex=1)
+else
+    medium_name="installer"
+    # shellcheck disable=SC2054 # commas belong to the QEMU options
+    stick=(-drive "if=none,id=stick,format=raw,snapshot=on,file=${installer}"
+           -device virtio-blk-pci,drive=stick,serial=bluefin-installer)
+    medium=("${stick[@]}")
+fi
 
 # boot_start <name> <qemu args...>: start QEMU in the background. Serial logs
 # land in ${state}/<name>.*.log; the monitor (what a person sees on tty1)
@@ -385,6 +431,21 @@ wait_prompt() {
 # last_screen <name>: the newest snapshot of the monitor.
 last_screen() { awk '/^=== screen /{buf=""; next} /^=== console .* noise=[0-9]+$/{last=buf; complete=1; next} {buf=buf $0 "\n"} END{printf "%s", complete ? last : buf}' "${state}/$1.screen.log"; }
 
+# wait_question <name> <text> [<seconds>]: wait until the newest snapshot of
+# the monitor shows <text>, however the console wrapped it: systemd-sysinstall
+# asks questions wider than the screen. Whitespace is ignored on both sides,
+# since a wrapped line loses its trailing blanks.
+wait_question() {
+    local want="${2//[[:space:]]/}" deadline=$(( $(date +%s) + ${3:-300} ))
+    while kill -0 "${qemu_pid}" 2>/dev/null && [ "$(date +%s)" -lt "${deadline}" ]; do
+        [[ "$(last_screen "$1" 2>/dev/null | tr -d '[:space:]')" == *"${want}"* ]] && return 0
+        sleep 1
+    done
+    kill "${qemu_pid}" 2>/dev/null || true
+    tail -n 30 "${state}/$1.screen.log" >&2 || true
+    fail "$1: the monitor never showed '$2'"
+}
+
 # Commit text and metadata together only when a full console trailer arrives.
 last_console_frame() {
     awk '/^=== screen /{buf=""; next} /^=== console .* noise=[0-9]+$/{last=$0 "\n" buf; complete=1; next} {buf=buf $0 "\n"} END{if (complete) printf "%s", last}' \
@@ -439,16 +500,37 @@ hold_console() {
         "${phase}" "${first_tick}" "${last_tick}" "${first_noise}" "${noise}" "${proof#=== console }" | tee -a "${state}/${name}.console-proof.log"
 }
 
-# type_keys <name> <text>: type <text> on the guest's keyboard through the
-# QEMU monitor (sendkey); a newline is Enter.
+# type_keys <name> <text>: type <text> on the guest's keyboard (US layout)
+# through the QEMU monitor (sendkey); a newline is Enter, \x15 is Ctrl-U
+# (systemd's prompts erase their preselected answer with it).
 type_keys() {
     python3 - "${state}/$1.mon" "$2" <<'PY'
 import socket, sys, time
-keys = {" ": "spc", "\n": "ret", "-": "minus", ".": "dot", "/": "slash", "=": "equal", ",": "comma"}
+keys = {" ": "spc", "\n": "ret", "\x15": "ctrl-u", "-": "minus", ".": "dot", "/": "slash", "=": "equal",
+        ",": "comma", ";": "semicolon", "'": "apostrophe", "`": "grave_accent", "\\": "backslash",
+        "[": "bracket_left", "]": "bracket_right"}
+shifted = {"!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+           "_": "minus", "+": "equal", ":": "semicolon", '"': "apostrophe", "~": "grave_accent", "|": "backslash",
+           "{": "bracket_left", "}": "bracket_right", "<": "comma", ">": "dot", "?": "slash"}
+
+
+def key(ch):
+    if ch in keys:
+        return keys[ch]
+    if ch in shifted:
+        return "shift-" + shifted[ch]
+    if ch.isascii() and ch.isupper():
+        return "shift-" + ch.lower()
+    if ch.isascii() and ch.isalnum():
+        return ch
+    sys.exit(f"type_keys: no key for {ch!r}")
+
+
+typed = [key(ch) for ch in sys.argv[2]]
 with socket.socket(socket.AF_UNIX) as s:
     s.connect(sys.argv[1])
-    for ch in sys.argv[2]:
-        s.sendall(f"sendkey {keys.get(ch, ch)}\n".encode())
+    for k in typed:
+        s.sendall(f"sendkey {k}\n".encode())
         time.sleep(0.15)
     time.sleep(0.5)
 PY
@@ -519,12 +601,12 @@ screen_creds=(
 if [ "${secure_boot}" = off ]; then
     echo "==> 1/${steps} firmware without Secure Boot (${code##*/}): nothing to enroll"
 else
-    echo "==> 1/${steps} enroll Secure Boot keys from the installer (${ver})"
+    echo "==> 1/${steps} enroll Secure Boot keys from the ${medium_name} (${ver})"
     # systemd-boot says "successfully enrolled" on the firmware console once
     # db, KEK and PK are written, then resets, which -no-reboot turns into an
     # exit; OVMF sometimes hangs in that reset instead, so the message ends
     # the boot. Enrolling takes seconds, not the per-boot timeout.
-    timeout_s=120 boot_start 1-enroll "${stick[@]}" -nic none
+    timeout_s=120 boot_start 1-enroll "${medium[@]}" -nic none
     timeout_s=120 boot_wait 1-enroll 'successfully enrolled' ttyS0
     grep -aq 'successfully enrolled' "${state}/1-enroll.ttyS0.log" || fail "key enrollment"
 fi
@@ -562,8 +644,9 @@ TTYPath=/dev/ttyS2
 EOF
 # Wanted by sysinit.target too: the console install has no sysinstall drop-in.
 printf '[Unit]\nWants=dogfood-journal.service\n' > "${state}/journal-wants.conf"
-install_creds=(-smbios "$(cred systemd.extra-unit.dogfood-journal.service "${state}/journal.service")"
+journal_creds=(-smbios "$(cred systemd.extra-unit.dogfood-journal.service "${state}/journal.service")"
     -smbios "$(cred systemd.unit-dropin.sysinit.target~dogfood-journal "${state}/journal-wants.conf")")
+install_creds=("${journal_creds[@]}")
 # systemd-firstboot prompts on the installer console first; answer it the
 # unattended way. sysinstall copies locale, keymap and timezone to the target.
 for kv in firstboot.locale=C.UTF-8 firstboot.keymap=us firstboot.timezone=UTC 'passwd.hashed-password.root=!*'; do
@@ -752,6 +835,93 @@ FAILURE
     check_done_screen "${name}"
 }
 
+# diskless_install_command: the commands "From a diskless node" in
+# docs/skills/ddi-installer.md, as a person at the console types them.
+diskless_install_command() {
+    awk '/^### From a diskless node$/ {s = 1; next}
+         b && /^```$/ {exit}
+         b {print; next}
+         s && /^#/ {exit}
+         s && /^```bash$/ {b = 1}' "${here}/../docs/skills/ddi-installer.md"
+}
+
+# diskless_console_install <name>: boot the netboot ESP diskless with the
+# target and a second disk, log in as root at tty1 with this run's password,
+# type the documented commands, answer systemd-sysinstall's questions (the
+# target by its number, erase, register in the firmware, yes), power off,
+# and check both disks from the host.
+diskless_console_install() {
+    local name="$1" decoy="${state}/decoy.raw" commands list n pw summary want parts c
+    commands="$(diskless_install_command)"
+    [[ "${commands}" == *systemd-sysinstall* ]] \
+        || fail "${name}: no systemd-sysinstall command under 'From a diskless node' in docs/skills/ddi-installer.md"
+    rm -f "${decoy}"
+    truncate -s 8G "${decoy}"
+    # Root's password for this run only. The node gets just its hash, the
+    # plain text stays in this shell (and is masked in the CI log), and the
+    # image's own root account stays locked.
+    pw="$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
+    [ "${GITHUB_ACTIONS:-}" != true ] || echo "::add-mask::${pw}"
+    (umask 077; printf '%s\n' "${pw}" | openssl passwd -6 -stdin | tr -d '\n' > "${state}/diskless-root.hash")
+    [ -s "${state}/diskless-root.hash" ] || fail "${name}: could not hash the root password"
+    printf 'raw,machine,verify=signature,blockdev:rootdisk:http://10.0.2.2:%s/bluefin-server_%s.raw\n' \
+        "${port}" "${ver}" > "${state}/import.pull"
+    (cd "${dir}" && exec python3 -m http.server --bind 127.0.0.1 "${port}" >"${state}/http.log" 2>&1) &
+    http_pid=$!
+    local boot_creds=(-smbios "$(cred import.pull "${state}/import.pull")"
+        -smbios "$(cred passwd.hashed-password.root "${state}/diskless-root.hash")"
+        "${journal_creds[@]}" "${screen_creds[@]}")
+    for c in firstboot.locale firstboot.keymap firstboot.timezone; do
+        boot_creds+=(-smbios "$(cred "${c}" "${state}/${c}")")
+    done
+    # The pull and the install share this boot's deadline.
+    timeout_s=$(( timeout_s * 2 )) boot_start "${name}" "${medium[@]}" "${disk[@]}" \
+        -drive "if=none,id=decoy,format=raw,file=${decoy}" -device virtio-blk-pci,drive=decoy,serial=bluefin-decoy \
+        -nic user,model=virtio-net-pci "${boot_creds[@]}"
+    # agetty reprints the banner when DHCP adds the address.
+    wait_screen "${name}" 'ssh root@[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' "${timeout_s}"
+    wait_prompt "${name}" ' login:$'
+    type_keys "${name}" $'root\n'
+    wait_prompt "${name}" 'Password:$' 60
+    type_keys "${name}" "${pw}"$'\n'
+    wait_prompt "${name}" '[#$]$' 60
+    printf '%s\n' "${commands}" | sed 's/^/    typed| /'
+    type_keys "${name}" "${commands}"$'\n'
+    # Each question preselects an answer; Ctrl-U clears it before typing.
+    wait_prompt "${name}" 'Please enter target disk device:( .*)?$' "${timeout_s}"
+    list="$(last_screen "${name}" | grep -E '^ *[0-9]+\) ')" || true
+    printf '%s\n' "${list}" | sed 's/^/    screen| /'
+    n="$(printf '%s\n' "${list}" | sed -n "s|^ *\([0-9][0-9]*\)) ${target_dev}\$|\1|p")"
+    [ -n "${n}" ] || fail "${name}: ${target_dev} is not in systemd-sysinstall's disk list"
+    printf '%s\n' "${list}" | grep -qE '\) /dev/disk/by-id/virtio-bluefin-decoy$' \
+        || fail "${name}: systemd-sysinstall's disk list does not show the other disk"
+    type_keys "${name}" $'\x15'"${n}"$'\n'
+    wait_question "${name}" "Please type 'keep' to install the OS in addition to what the disk already contains, or 'erase' to erase all data on the disk"
+    type_keys "${name}" $'\x15erase\n'
+    wait_question "${name}" "Type 'yes' to register OS installation in firmware variables of the local system, 'no' otherwise"
+    type_keys "${name}" $'\x15yes\n'
+    wait_question "${name}" "Please type 'yes' to confirm the choices above and begin the installation"
+    summary="$(last_screen "${name}" | tr -d '[:space:]')"
+    for want in "SelectedDisk:${target_dev}" EraseDisk:yes RegisterinFirmware:yes; do
+        [[ "${summary}" == *"${want}"* ]] || fail "${name}: systemd-sysinstall's summary lacks '${want}'"
+    done
+    last_screen "${name}" | sed '/^$/d' | sed 's/^/    screen| /'
+    type_keys "${name}" $'\x15yes\n'
+    wait_question "${name}" 'Installation succeeded.' "${timeout_s}"
+    wait_prompt "${name}" '[#$]$' 120
+    last_screen "${name}" | sed '/^$/d' | tail -n 8 | sed 's/^/    screen| /'
+    type_keys "${name}" $'poweroff\n'
+    boot_wait "${name}" ''
+    parts="$(sfdisk --json "${target}" 2>/dev/null | python3 -c 'import json, sys; p = json.load(sys.stdin)["partitiontable"]["partitions"]; print(len(p), sum(x.get("name") == "_empty" for x in p))')" \
+        || parts=none
+    [ "${parts}" = "3 0" ] \
+        || fail "${name}: expected the ESP and usr slot A (+ verity) on the target and no slot B yet, got partitions/empty: ${parts}"
+    sfdisk -l "${target}" | sed -n '/^Device/,$p' | sed 's/^/    target| /'
+    if sfdisk -d "${decoy}" >/dev/null 2>&1 || [ -n "$(blkid -p "${decoy}" 2>/dev/null)" ]; then
+        fail "${name}: systemd-sysinstall wrote to the other disk"
+    fi
+}
+
 if [ "${secure_boot}" = off ]; then
     # bluefin-installer-secure-boot.service, which sysinstall Requires=,
     # reports its result on ttyS1.
@@ -783,6 +953,9 @@ elif [ "${install_mode}" = console ]; then
         echo "PASS: attended sysinstall failed before disk writes; error visible, service journal retained, no reboot/halt or done unit (artifacts: ${state})"
         exit 0
     fi
+elif [ "${install_mode}" = diskless-console ]; then
+    echo "==> 2/${steps} diskless boot of the netboot ESP; systemd-sysinstall typed at tty1 onto a ${target_kind} disk"
+    diskless_console_install 2-install
 else
     echo "==> 2/${steps} offline install onto a ${target_kind} disk: ExecStart=${exec_start} ${install_args} ${target_dev}"
     run_install 2-install
@@ -1066,6 +1239,11 @@ fi
 check_disk_boot 3-first-boot 1 "${ver}" 2
 check_issue 3-first-boot
 banner_has 3-first-boot boot 'Last update check: never'
+
+if [ "${install_mode}" = diskless-console ]; then
+    echo "PASS: a diskless boot installed ${ver} at the console: root logged in at tty1 with this run's password, the documented systemd-sysinstall command listed the disks, took the target by its number, erase, firmware registration and 'yes', and left the other disk blank; the target booted from its own bluefin_usr_${ver} slot with slot B and the xfs root created on first boot and no failed units"
+    exit 0
+fi
 
 echo "==> 4/${steps} boot the target with the installer still attached"
 boot 4-with-installer 'PROBE failed=' "${disk[@]}" "${stick[@]}" -nic user,model=virtio-net-pci "${creds[@]}"
