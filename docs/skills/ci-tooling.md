@@ -300,27 +300,24 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
    Fedora's `edk2-ovmf` is pinned by Koji URL + SHA-256 in `scripts/ci/install-qemu-ovmf.sh`:
    Ubuntu 26.04's OVMF 2025.11 rejects PK enrollment and boots with Secure Boot off
    ([details](ddi-installer-build.md)). Bump by hand: Renovate cannot update the SHA-256.
-   - diskless netboot, no failed units; `tests/fixtures/nfs/netdb.probe`
-     must resolve `tcp` and `sunrpc`, reach the local portmapper (`rpcinfo`)
-     and get an NFSv3 mount past the protocol lookup (`DOGFOOD_EXPECT`);
-   - `DOGFOOD_TAMPER=raw` and `=sums`: the pull must refuse a corrupted DDI
-     (checksum) and that DDI with `SHA256SUMS` re-hashed to match it
-     (signature), and nothing may boot;
-   - Ignition from the `ignition.config` credential and from
-     `bluefin-node.ign` over UEFI HTTP boot, both with
-     `tests/fixtures/ignition/apply-marker.ign` (`DOGFOOD_EXPECT`); outside
-     releases also signed with the Ignition config key (applied), with the
-     image signing key or over other bytes (refused), and unsigned on the
-     `1.<run>.1` set, built with `ignition_allow_unsigned` off (refused;
-     see booty-integration.md);
+   - diskless netboot, no failed units; `tests/fixtures/nfs/netdb.probe` must resolve `tcp` and
+     `sunrpc`, reach the local portmapper (`rpcinfo`) and get an NFSv3 mount past the protocol
+     lookup (`DOGFOOD_EXPECT`);
+   - `DOGFOOD_TAMPER=raw` and `=sums`: the pull must refuse a corrupted DDI (checksum) and that
+     DDI with `SHA256SUMS` re-hashed to match it (signature), and nothing may boot;
+   - `DOGFOOD_FIRMWARE=foreign-keys`: firmware with vendor keys, not the Bluefin db
+     (`OVMF_VARS_FOREIGN`), refuses the netboot ESP's loader before systemd-boot runs (#450);
+   - Ignition from the `ignition.config` credential and from `bluefin-node.ign` over UEFI HTTP
+     boot, both with `tests/fixtures/ignition/apply-marker.ign` (`DOGFOOD_EXPECT`); outside
+     releases also signed with the Ignition config key (applied), with the image signing key or
+     over other bytes (refused), and unsigned on the `1.<run>.1` set, built with
+     `ignition_allow_unsigned` off (refused; see booty-integration.md);
    - releases: diskless boot, `systemd-sysinstall` to disk, boot the disk;
-   - every other build (the nightly build of `main`, `full-build` and FSDK
-     pull requests, dispatches): the same, then `systemd-sysupdate` A->B to
-     `1.<run>.1` and a boot-counted rollback from a corrupted `1.<run>.2`,
-     with the ZFS and NVIDIA sysexts merged (`DOGFOOD_SYSEXT=zfs,nvidia`;
-     versions: [ddi-installer-build.md](ddi-installer-build.md)). Releases
-     skip it: their extra sets would be release-signed versions nobody
-     publishes.
+   - every other build (the nightly build of `main`, `full-build` and FSDK pull requests,
+     dispatches): the same, then `systemd-sysupdate` A->B to `1.<run>.1` and a boot-counted
+     rollback from a corrupted `1.<run>.2`, with the ZFS and NVIDIA sysexts merged
+     (`DOGFOOD_SYSEXT=zfs,nvidia`; versions: [ddi-installer-build.md](ddi-installer-build.md)).
+     Releases skip it: their extra sets would be release-signed versions nobody publishes.
    - `scripts/dogfood-installer.sh`: offline unattended install onto a blank disk, then boot
      with and without the stick. Outside releases, update to `1.<run>.1`: unreachable and
      foreign-signed sources must fail `systemd-sysupdate.service` and appear on the login banner;
@@ -335,6 +332,9 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
      `boot-test-logs-installer` retains serial journals, screen snapshots and console proof, plus
      `installer-artifact-identity.txt`: the source commit and pre-boot SHA-256 of the installer,
      manifest and signature. Partial logs survive regressions; disks and credentials stay excluded.
+     `DOGFOOD_INSTALL=diskless-console` (#450) logs in at a diskless boot's tty1 with a per-run root
+     password (hashed, masked), types the "From a diskless node" commands of [ddi-installer.md](ddi-installer.md),
+     answers `systemd-sysinstall`'s disk, keep/erase, firmware and `yes` questions, boots the disk.
 5. **Version Derivation:** The release version is set per build with
    `just set-version`: `YY.MM.<run>` for releases, `0.<run>` for every other
    build so it can never sort above a release.

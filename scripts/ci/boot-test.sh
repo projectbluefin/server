@@ -56,6 +56,10 @@ bucket_diskless() {
         -- scripts/dogfood-diskless.sh dist/diskless --check
     scenario "Refuse an unsigned manifest" DOGFOOD_TAMPER=sums \
         -- scripts/dogfood-diskless.sh dist/diskless --check
+    # Firmware holding only someone else's Secure Boot keys refuses the
+    # boot loader before Bluefin runs (#450).
+    scenario "Refuse to boot on firmware with foreign Secure Boot keys" DOGFOOD_FIRMWARE=foreign-keys \
+        -- scripts/dogfood-diskless.sh dist/diskless --check
     scenario "Ignition config from a credential" \
         DOGFOOD_IGNITION=tests/fixtures/ignition/apply-marker.ign "${ignition_probe[@]}" \
         -- scripts/dogfood-diskless.sh dist/diskless --check
@@ -100,7 +104,8 @@ bucket_install() {
 # The offline USB installer onto a blank disk: outside releases also the
 # out-of-the-box update contract of a stick install (#310); the supervised
 # console path under concurrent noise, including a real prewrite failure
-# (#454); and the refusal without Secure Boot (#309).
+# (#454); the refusal without Secure Boot (#309); and the documented
+# install from a diskless node, typed at its console (#450).
 bucket_installer() {
     if [ "${release}" = true ]; then
         scenario "Install from the offline USB installer and boot it" \
@@ -118,6 +123,9 @@ bucket_installer() {
         -- scripts/dogfood-installer.sh dist/diskless
     scenario "Refuse to install from the USB installer without Secure Boot" \
         DOGFOOD_SECURE_BOOT=off DOGFOOD_STATE=dist/dogfood-installer-secure-boot-off \
+        -- scripts/dogfood-installer.sh dist/diskless
+    scenario "Install from a diskless boot at the console" \
+        DOGFOOD_INSTALL=diskless-console DOGFOOD_STATE=dist/dogfood-installer-diskless-console \
         -- scripts/dogfood-installer.sh dist/diskless
 }
 

@@ -24,6 +24,7 @@ host_tools=(
     sfdisk blkid mkswap          # (fdisk, util-linux) the foreign-gpt target disk
     mkfs.vfat mkfs.ext4          # (dosfstools, e2fsprogs) the same
     gpg                          # (gnupg) the foreign-signed update source
+    openssl                      # (openssl) hashes the diskless console's root password
     sha256sum base64 dd od truncate realpath mktemp awk
 )
 # Matched, but never run on the runner.
@@ -68,7 +69,7 @@ for tool in "${host_tools[@]}"; do
     command -v "${tool}" >/dev/null || error "${tool}: command not found (add its package to scripts/ci/install-qemu-ovmf.sh)"
 done
 
-for var in OVMF_CODE OVMF_CODE_INSECURE OVMF_VARS; do
+for var in OVMF_CODE OVMF_CODE_INSECURE OVMF_VARS OVMF_VARS_FOREIGN; do
     [ -s "${!var:-}" ] || error "${var} is not set to a firmware file (scripts/ci/install-qemu-ovmf.sh sets it)"
 done
 

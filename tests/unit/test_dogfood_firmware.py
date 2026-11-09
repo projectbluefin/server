@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 FIRMWARE = Path(__file__).resolve().parents[2] / "scripts" / "dogfood-firmware.sh"
-LOOKUPS = {"ovmf_code": "OVMF_CODE", "ovmf_code_insecure": "OVMF_CODE_INSECURE", "ovmf_vars": "OVMF_VARS"}
+LOOKUPS = {"ovmf_code": "OVMF_CODE", "ovmf_code_insecure": "OVMF_CODE_INSECURE", "ovmf_vars": "OVMF_VARS",
+           "ovmf_vars_foreign": "OVMF_VARS_FOREIGN"}
 
 
 def lookup(function: str, env: dict[str, str], root: Path) -> subprocess.CompletedProcess[str]:
@@ -38,6 +39,8 @@ def test_no_firmware_fails_and_names_the_variable(function: str, variable: str, 
     ("ovmf_code", "OVMF/OVMF_CODE_4M.secboot.fd", "edk2/x64/OVMF_CODE.secboot.4m.fd"),
     ("ovmf_code_insecure", "OVMF/OVMF_CODE_4M.fd", "edk2/x64/OVMF_CODE.4m.fd"),
     ("ovmf_vars", "OVMF/OVMF_VARS_4M.fd", "edk2/x64/OVMF_VARS.4m.fd"),
+    # Never a blank store: the foreign-keys check needs one in user mode.
+    ("ovmf_vars_foreign", "OVMF/OVMF_VARS_4M.ms.fd", "OVMF/OVMF_VARS_4M.fd"),
 ])
 def test_the_first_existing_candidate_is_chosen(function: str, first: str, second: str, tmp_path: Path) -> None:
     for name in (first, second):

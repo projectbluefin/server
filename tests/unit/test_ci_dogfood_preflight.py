@@ -56,7 +56,7 @@ def runner(tmp_path: Path, missing: str = "") -> dict[str, str]:
     kvm = tmp_path / "kvm"
     kvm.touch()
     return {"PATH": str(bindir), "OVMF_CODE": str(firmware), "OVMF_CODE_INSECURE": str(firmware),
-            "OVMF_VARS": str(firmware), "PREFLIGHT_KVM": str(kvm)}
+            "OVMF_VARS": str(firmware), "OVMF_VARS_FOREIGN": str(firmware), "PREFLIGHT_KVM": str(kvm)}
 
 
 def preflight(env: dict[str, str], script: Path = SCRIPT) -> subprocess.CompletedProcess[str]:
@@ -77,7 +77,7 @@ def test_a_missing_host_tool_fails(tmp_path: Path, tool: str) -> None:
     assert f"::error title=boot-test preflight::{tool}: command not found" in out.stdout
 
 
-@pytest.mark.parametrize("unset", ["OVMF_CODE", "OVMF_CODE_INSECURE", "OVMF_VARS", "PREFLIGHT_KVM"])
+@pytest.mark.parametrize("unset", ["OVMF_CODE", "OVMF_CODE_INSECURE", "OVMF_VARS", "OVMF_VARS_FOREIGN", "PREFLIGHT_KVM"])
 def test_missing_firmware_or_kvm_fails(tmp_path: Path, unset: str) -> None:
     env = runner(tmp_path)
     env[unset] = str(tmp_path / "absent")

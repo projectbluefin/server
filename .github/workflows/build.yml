@@ -553,7 +553,8 @@ jobs:
         # What each bucket's scenarios read, so it downloads only that:
         # `image` the image-set parts for dist/diskless (dogfood-diskless.sh
         # and dogfood-install.sh boot netboot, dogfood-installer.sh the
-        # installer); outside releases `next` the image-next parts for
+        # installer, or netboot with DOGFOOD_INSTALL=diskless-console);
+        # outside releases `next` the image-next parts for
         # dist/diskless-next, `broken` dist/diskless-broken and `sigs`
         # dist/ignition-sigs.
         include:
@@ -568,7 +569,7 @@ jobs:
             broken: true
             sigs: false
           - scenario: installer
-            image: image-set-{core,installer}
+            image: image-set-{core,netboot,installer}
             next: image-next-*
             broken: false
             sigs: false

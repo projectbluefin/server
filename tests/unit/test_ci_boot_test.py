@@ -85,7 +85,7 @@ def test_each_scenario_runs_once_and_its_fixtures_exist(release: bool) -> None:
                 for path in re.findall(r"\btests/fixtures/\S+", word):
                     assert (ROOT / path).is_file(), f"{name}: {path}"
     assert len(names) == len(set(names))
-    assert len(names) == (12 if release else 16)
+    assert len(names) == (14 if release else 18)
 
 
 @pytest.mark.parametrize("release", [False, True], ids=["pull-request", "release"])
@@ -114,8 +114,15 @@ def test_console_evidence_is_retained_on_success_and_failure(tmp_path: Path) -> 
         ))
     evidence.add("dist/dogfood-installer-console-failure/2-install.failure.screen.txt")
     evidence.add("dist/dogfood-installer-console/3-disk.login-screen.log")
+    evidence.update(f"dist/dogfood-installer-diskless-console/{name}" for name in (
+        "2-install.screen.log", "2-install.ttyS2.log", "3-first-boot.ttyS1.log",
+    ))
     private = {f"dist/dogfood-installer-console-failure/{name}" for name in (
         "target.raw", "decoy.raw", "OVMF_VARS.fd", "password", "screen.sh",
+    )}
+    # The diskless console run's root password hash and the credentials it boots with.
+    private |= {f"dist/dogfood-installer-diskless-console/{name}" for name in (
+        "diskless-root.hash", "passwd.hashed-password.root", "import.pull", "target.raw", "decoy.raw",
     )}
     for path in evidence | private:
         target = tmp_path / path
