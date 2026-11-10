@@ -21,6 +21,7 @@ SCRIPT = ROOT / "files" / "os" / "libexec" / "bluefin-installer-secure-boot"
 DROPIN = ROOT / "files" / "os" / "systemd" / "system" / "systemd-sysinstall.service.d" / "10-bluefin-installer.conf"
 CREDS_ELEMENT = ROOT / "elements" / "bluefin-server" / "os-creds-prov.bst"
 IMAGE = ROOT / "elements" / "oci" / "bluefin-server-image.bst"
+EFI_KEYS = ROOT / "elements" / "bluefin-server" / "keys" / "efi-keys.bst"
 NAME = "bluefin-installer-secure-boot.service"
 
 
@@ -86,3 +87,15 @@ def test_the_check_mutes_noisy_console_messages():
     assert mute.value("Service", "ExecStart") == "/usr/bin/systemd-mute-console"
     assert "shutdown.target" in mute.words("Unit", "Conflicts")
     assert "shutdown.target" in mute.words("Unit", "Before")
+
+
+def test_the_enrollment_payloads_are_signed_with_write_not_append_attributes():
+    # systemd-boot writes loader/keys/auto/*.auth as replace writes (0x27). A
+    # signed append flag (0x67) makes the firmware hash the 0x27 data while the
+    # signature covers 0x67, so the digest mismatches and the enroll is refused
+    # (#612). Every sbvarsign here must therefore pin --attributes 0x27.
+    text = EFI_KEYS.read_text(encoding="utf-8")
+    signing = [line for line in text.splitlines() if "sbvarsign" in line and "--output" in line]
+    assert len(signing) == 3
+    for line in signing:
+        assert "--attributes 0x27" in line, line
