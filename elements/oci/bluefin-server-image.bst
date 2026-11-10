@@ -352,6 +352,11 @@ config:
     # pcre2 (FSDK 26.08.2) under our ID (FSDK 26.08.3) even though the image
     # carries both. A relationship is a duplicate only if all three of its
     # fields match.
+    # collect_manifest emits a DESCRIBES from the document to each package, but
+    # re-keying the second copy changes its SPDXID, so the old link points at a
+    # package that no longer exists. Rebuild a document->package DESCRIBES for
+    # every package that survives the collapse (after re-keying) so both copies
+    # stay reachable from the document; unique_by then drops the duplicates.
     # SOURCE_DATE_EPOCH is BuildStream's fixed sandbox default (1321009871),
     # so created is always 2011-11-11T11:11:11Z. That keeps the SBOM bit
     # identical across rebuilds; the real build time lives in the SLSA
@@ -372,6 +377,11 @@ config:
                                                   | .SPDXID = ($first.SPDXID + "-" + ($entry.key | tostring))))
                                end)
                        | flatten)
+       | .relationships += [.SPDXID as $document
+                            | .packages[]
+                            | {spdxElementId: $document,
+                               relationshipType: "DESCRIBES",
+                               relatedSpdxElement: .SPDXID}]
        | .relationships |= unique_by([.spdxElementId, .relationshipType, .relatedSpdxElement])' \
       /sbom/bluefin-server.spdx.json > "%{install-root}/%{image-name}.spdx.json"
 

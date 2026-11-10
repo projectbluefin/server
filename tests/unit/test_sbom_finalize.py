@@ -7,6 +7,9 @@ junction paths come out twice. The step collapses copies that are identical
 version, such as fsdk-containers' pcre2 built under our SPDXID) to a fresh
 SPDXID so the SBOM lists the real second copy instead of hiding it. A
 relationship is a duplicate only if all three of its fields match.
+collect_manifest also emits a DESCRIBES from the document to each package;
+re-keying a copy changes its SPDXID, so the step rebuilds a document->package
+DESCRIBES for every package that survives the collapse and dedupes them.
 """
 
 import json
@@ -47,8 +50,9 @@ def describes(spdxid: str, kind: str = "DESCRIBES", source: str = "SPDXRef-DOCUM
 
 def test_identical_packages_and_relationships_collapse() -> None:
     a, b = package("SPDXRef-a-0"), package("SPDXRef-b-0")
-    doc = {"packages": [b, a, b], "relationships": [describes("SPDXRef-b-0"), describes("SPDXRef-a-0"),
-                                                    describes("SPDXRef-b-0")]}
+    doc = {"SPDXID": "SPDXRef-DOCUMENT", "packages": [b, a, b],
+           "relationships": [describes("SPDXRef-a-0"), describes("SPDXRef-b-0"),
+                             describes("SPDXRef-a-0")]}
     result = finalize(doc)
     assert result.returncode == 0, result.stderr
     out = json.loads(result.stdout)
@@ -61,9 +65,16 @@ def test_relationships_to_one_element_are_kept_when_they_differ() -> None:
     # unique_by(.relatedSpdxElement) used to keep only one of these.
     rels = [describes("SPDXRef-a-0"), describes("SPDXRef-a-0", kind="CONTAINS"),
             describes("SPDXRef-a-0", source="SPDXRef-b-0")]
-    result = finalize({"packages": [package("SPDXRef-a-0"), package("SPDXRef-b-0")], "relationships": rels})
+    result = finalize({"SPDXID": "SPDXRef-DOCUMENT", "packages": [package("SPDXRef-a-0"), package("SPDXRef-b-0")],
+                       "relationships": rels})
     assert result.returncode == 0, result.stderr
-    assert len(json.loads(result.stdout)["relationships"]) == 3
+    rels_out = json.loads(result.stdout)["relationships"]
+    # The three distinct relationship types/sources to a are still kept...
+    assert describes("SPDXRef-a-0") in rels_out
+    assert describes("SPDXRef-a-0", kind="CONTAINS") in rels_out
+    assert describes("SPDXRef-a-0", source="SPDXRef-b-0") in rels_out
+    # ...and the rebuilt document->package DESCRIBES for the surviving package.
+    assert describes("SPDXRef-b-0") in rels_out
 
 
 def test_second_copy_under_shared_spdxid_is_kept_rekeyed() -> None:
@@ -71,7 +82,7 @@ def test_second_copy_under_shared_spdxid_is_kept_rekeyed() -> None:
     # (a different version) under our SPDXID. The build keeps both copies now:
     # the first under the base ID, the second re-keyed so the SBOM lists the
     # real second copy instead of hiding it. Tracked in projectbluefin/server#599.
-    doc = {"packages": [package("SPDXRef-a-0", "1"), package("SPDXRef-a-0", "2")],
+    doc = {"SPDXID": "SPDXRef-DOCUMENT", "packages": [package("SPDXRef-a-0", "1"), package("SPDXRef-a-0", "2")],
            "relationships": [describes("SPDXRef-a-0")]}
     result = finalize(doc)
     assert result.returncode == 0, result.stderr
@@ -80,12 +91,17 @@ def test_second_copy_under_shared_spdxid_is_kept_rekeyed() -> None:
                     "versionInfo": "1", "filesAnalyzed": False},
                    {"SPDXID": "SPDXRef-a-0-0", "name": "SPDXRef-a-0",
                     "versionInfo": "2", "filesAnalyzed": False}]
+    # The re-keyed second copy keeps its document->package DESCRIBES, so tools
+    # that follow those links see both copies instead of only the first.
+    rels_out = json.loads(result.stdout)["relationships"]
+    assert describes("SPDXRef-a-0") in rels_out
+    assert describes("SPDXRef-a-0-0") in rels_out
 
 
 def test_identical_copies_collapse_to_one() -> None:
     # Most FSDK bootstrap copies are identical across the two junctions; they
     # must still collapse so the SBOM does not balloon with duplicates.
-    doc = {"packages": [package("SPDXRef-a-0", "1"), package("SPDXRef-a-0", "1"),
+    doc = {"SPDXID": "SPDXRef-DOCUMENT", "packages": [package("SPDXRef-a-0", "1"), package("SPDXRef-a-0", "1"),
                         package("SPDXRef-b-0", "3")],
            "relationships": [describes("SPDXRef-a-0"), describes("SPDXRef-b-0")]}
     result = finalize(doc)
