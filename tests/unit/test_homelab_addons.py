@@ -153,6 +153,16 @@ def test_placeholders_are_applier_inputs_and_stay_strings() -> None:
     assert re.search(r"\[DOMAIN\]=home\.arpa", APPLIER.read_text()), "RFC 8375's home network domain"
 
 
+def test_component_placeholders_are_applier_inputs() -> None:
+    # The addons net above, for the components' own manifests: a placeholder
+    # the applier cannot fill leaves the literal text behind, so the file is
+    # skipped, on every run.
+    used = set()
+    for path in (HOMELAB / "manifests").rglob("*.yaml"):
+        used |= set(re.findall(r"\$\{HOMELAB_([A-Z0-9_]+)\}", path.read_text()))
+    assert used <= applier_inputs()
+
+
 HSTS = [
     {"type": "ResponseHeaderModifier",
      "responseHeaderModifier": {"set": [
@@ -198,6 +208,19 @@ def test_each_ui_is_routed_through_the_homelab_gateway(directory, namespace, hos
     assert svc["spec"].get("type", "ClusterIP") == "ClusterIP", "exposed through the Gateway only"
     gateway = HOMELAB / "manifests" / "40-envoy-gateway" / "20-gateway.yaml"
     assert any(d["kind"] == "Gateway" and d["metadata"]["name"] == "homelab" for d in docs(gateway))
+
+
+def test_the_gateway_certificate_issuer_is_configurable() -> None:
+    # HOMELAB_GATEWAY_ISSUER (default homelab-ca, set by the applier) picks
+    # the issuer; the kind is fixed, so the value must name a ClusterIssuer.
+    [certificate] = [d for d in docs(HOMELAB / "manifests" / "45-cert-manager" / "23-gateway-cert.yaml")
+                     if d["kind"] == "Certificate"]
+    assert certificate["spec"]["secretName"] == "homelab-tls"
+    assert certificate["spec"]["issuerRef"] == {"name": "${HOMELAB_GATEWAY_ISSUER}", "kind": "ClusterIssuer"}
+    # Configurable, not just spelled: the applier must know the input, and
+    # unset it renders homelab-ca, as before the key existed.
+    assert "GATEWAY_ISSUER" in applier_inputs()
+    assert re.search(r"\[GATEWAY_ISSUER\]=homelab-ca", APPLIER.read_text())
 
 
 def container(directory: str, kind: str, name: str) -> dict:
