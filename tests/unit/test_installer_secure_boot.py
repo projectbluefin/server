@@ -93,9 +93,10 @@ def test_the_enrollment_payloads_are_signed_with_write_not_append_attributes():
     # systemd-boot writes loader/keys/auto/*.auth as replace writes (0x27). A
     # signed append flag (0x67) makes the firmware hash the 0x27 data while the
     # signature covers 0x67, so the digest mismatches and the enroll is refused
-    # (#612). Every sbvarsign here must therefore pin --attributes 0x27.
+    # (#612). Explicit symbolic attributes omit APPEND_WRITE; sbvarsign
+    # always includes TIME_BASED_AUTHENTICATED_WRITE_ACCESS, giving 0x27.
     text = EFI_KEYS.read_text(encoding="utf-8")
     signing = [line for line in text.splitlines() if "sbvarsign" in line and "--output" in line]
     assert len(signing) == 3
     for line in signing:
-        assert "--attributes 0x27" in line, line
+        assert "--attrs NON_VOLATILE,BOOTSERVICE_ACCESS,RUNTIME_ACCESS" in line, line
