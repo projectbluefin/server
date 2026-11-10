@@ -25,11 +25,9 @@ def test_export_sysext_does_not_emit_legacy_k3s_alias() -> None:
 
     assert body, "the export-sysext recipe is missing, so this check would pass vacuously"
 
-    # k0s now delegates to the shared helper; its NAME argument still names the
-    # k0s element (oci/k0s-sysext.bst), so the k0s export is not lost.
-    call = _helper_call(body)
-    assert call, "export-sysext must delegate to _export-sysext-element"
-    assert call[0] == "k0s", "export-sysext must still export the k0s element"
+    # k0s no longer delegates: its recipe inlines the checkout and copies
+    # oci/k0s-sysext.bst's artifact, so the export is preserved by the body.
+    assert any("oci/k0s-sysext.bst" in line for line in body), "export-sysext no longer exports k0s"
 
     assert not [line for line in body if "k3s" in line]
 
@@ -41,16 +39,17 @@ def sysext_image_name(element: str) -> str:
     return match.group(1).replace("%{image-version}", "")
 
 
-# Every export-*-sysext recipe except export-homelab-sysext (which loops over
-# several elements) delegates to the shared _export-sysext-element helper.
+# The five single-element add-on exports delegate to the shared helper.
+# k0s behavior changes remain separate; homelab exports several elements.
 def _sysext_export_recipes() -> list[str]:
     names = []
     for line in JUSTFILE.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not re.match(r"^export-", stripped) or ":" not in line:
             continue
-        name = stripped.split(":", 1)[0].strip()
-        if name.endswith("-sysext") and name != "export-homelab-sysext":
+        name = stripped.split(":", 1)[0].split()[0]
+        if (name.endswith("-sysext")
+                and name not in {"export-sysext", "export-homelab-sysext"}):
             names.append(name)
     return names
 
@@ -86,6 +85,9 @@ def _helper_call(body: list[str]) -> tuple[str, str] | None:
 def test_single_element_recipes_call_the_shared_helper() -> None:
     recipes = _sysext_export_recipes()
     assert recipes, "no export-*-sysext recipes found"
+    # The parser splits the FLAVOUR= assignment off the header, so the NVIDIA
+    # recipe is discovered rather than silently skipped (regression for #649).
+    assert "export-nvidia-sysext" in recipes, "NVIDIA export dropped from discovery"
 
     for name in recipes:
         header = _recipe_header(name)

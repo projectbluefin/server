@@ -118,14 +118,18 @@ lint-python:
 build-sysext:
     just bst build oci/k0s-sysext.bst
 
-# Export the k0s systemd-sysext image + SHA256SUMS to dist/sysext/. Delegates to
-# _export-sysext-element, which appends (mkdir -p) instead of wiping dist/sysext,
-# so the k0s export no longer deletes the other add-on exports (#638).
+# Export the k0s systemd-sysext image + SHA256SUMS to dist/sysext/.
 # The artifact checkout also emits an uncompressed .raw; only the
 # versioned .raw.zst release asset and its SHA256SUMS are published.
 [group('sysext')]
 export-sysext: build-sysext
-    just _export-sysext-element "k0s" "k0s-"
+    rm -rf dist/sysext dist/sysext-checkout
+    mkdir -p dist/sysext-checkout dist/sysext
+    just bst artifact checkout oci/k0s-sysext.bst --directory /src/dist/sysext-checkout
+    cp dist/sysext-checkout/k0s-*.raw.zst dist/sysext/
+    cp dist/sysext-checkout/SHA256SUMS dist/sysext/
+    rm -rf dist/sysext-checkout
+    @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
 
 # -- Diskless /usr image + signed boot chain ----------------------------------
 
@@ -234,8 +238,7 @@ dogfood-mdns:
 # PREFIX is that element's sysext-image name, so <PREFIX>*.raw.zst matches the
 # built artifact. Every export-*-sysext recipe calls this instead of re-writing
 # the checkout, copy, and SHA256SUMS steps by hand, so a new add-on cannot drift
-# its glob the way the zfs glob did (#306). It appends to dist/sysext/ instead of
-# wiping it, so the k0s export-sysext no longer deletes the other add-on exports (#638).
+# its glob the way the zfs glob did (#306).
 [group('sysext')]
 _export-sysext-element NAME PREFIX:
     rm -rf dist/{{NAME}}-checkout
