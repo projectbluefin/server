@@ -12,9 +12,13 @@ never exits, without booting anything.
 """
 
 
+import os
 import re
 import shlex
+import socket
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -103,3 +107,75 @@ def test_the_journal_mirror_opens_after_the_flush(script: str) -> None:
     lines = unit[1].splitlines()
     assert "ExecStart=journalctl -b -f --no-pager -o short-monotonic" in lines
     assert "After=systemd-journal-flush.service" in lines
+
+
+class _FakeMonitor:
+    """A stand-in QEMU monitor: a Unix socket that accepts and drains the
+    sendkeys type_keys types on, so the script never blocks sending. Under
+    console noise type_keys widens its per-key gap, so typing the whole
+    string takes longer (#600)."""
+
+    def __init__(self, path: Path) -> None:
+        if path.exists():
+            path.unlink()
+        self._srv = socket.socket(socket.AF_UNIX)
+        self._srv.bind(str(path))
+        self._srv.listen(1)
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+
+    def __enter__(self) -> "_FakeMonitor":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        try:
+            self._srv.close()
+        except OSError:
+            pass
+
+    def _serve(self) -> None:
+        try:
+            conn, _ = self._srv.accept()
+        except OSError:
+            return
+        while conn.recv(4096):
+            pass
+        conn.close()
+
+
+def type_keys_elapsed(tmp_path: Path, text: str, console_noise: str) -> float:
+    """Seconds type_keys takes to type <text>; the noise-widened gap is
+    roughly twice the quiet one over the same string."""
+    with _FakeMonitor(tmp_path / "t.mon"):
+        script = (
+            "set -euo pipefail\n"
+            f'state="{tmp_path}"\n'
+            + function("type_keys")
+            + 'console_noise="$TK_NOISE"\n'
+            + 'type_keys "t" "$TK_TEXT"\n'
+        )
+        env = os.environ.copy()
+        env["TK_TEXT"] = text
+        env["TK_NOISE"] = console_noise
+        env.pop("COVERAGE_PROCESS_CONFIG", None)
+        start = time.monotonic()
+        result = subprocess.run(
+            ["bash", "-c", script, "type_keys"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        elapsed = time.monotonic() - start
+    assert result.returncode == 0, result.stderr
+    return elapsed
+
+
+def test_type_keys_widens_its_gap_under_console_noise(tmp_path: Path) -> None:
+    text = "1234567890\n"
+    quiet = type_keys_elapsed(tmp_path, text, "0")
+    noisy = type_keys_elapsed(tmp_path, text, "1")
+    # Eleven keys at 0.15s vs 0.35s are about 2.2s apart; this separates the
+    # two without depending on per-key scheduling jitter.
+    assert quiet < 3.0, f"quiet gap unexpectedly large: {quiet:.2f}s"
+    assert noisy > 3.5, f"noise gap unexpectedly small: {noisy:.2f}s"
