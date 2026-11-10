@@ -344,19 +344,44 @@ config:
   - |
     set -eu
     # SPDX requires a creation time, which the plugin leaves to the build,
-    # and unique SPDXIDs. FSDK bootstrap elements reached through two
-    # junction paths are collected twice, mostly as identical packages, so
-    # the first package per SPDXID is kept. That also hides a real second
-    # copy: fsdk-containers pins its own FSDK, so its brew-nspawn carries a
-    # pcre2 whose version differs from ours under the same SPDXID. A
-    # relationship is a duplicate only if all three of its fields match.
+    # and unique SPDXIDs. FSDK bootstrap elements reached through two junction
+    # paths are collected twice. Copies that are identical (same version)
+    # collapse to one; copies that genuinely differ are re-keyed to a fresh
+    # SPDXID so every real copy survives in the SBOM instead of being hidden.
+    # Without the re-key the first copy per ID wins, which hides fsdk-containers'
+    # pcre2 (FSDK 26.08.2) under our ID (FSDK 26.08.3) even though the image
+    # carries both. A relationship is a duplicate only if all three of its
+    # fields match.
+    # collect_manifest emits a DESCRIBES from the document to each package, but
+    # re-keying the second copy changes its SPDXID, so the old link points at a
+    # package that no longer exists. Rebuild a document->package DESCRIBES for
+    # every package that survives the collapse (after re-keying) so both copies
+    # stay reachable from the document; unique_by then drops the duplicates.
     # SOURCE_DATE_EPOCH is BuildStream's fixed sandbox default (1321009871),
     # so created is always 2011-11-11T11:11:11Z. That keeps the SBOM bit
     # identical across rebuilds; the real build time lives in the SLSA
     # provenance attestation, not here.
     jq --arg created "$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
       '.creationInfo.created = $created
-       | .packages |= unique_by(.SPDXID)
+       | .packages |= (group_by(.SPDXID)
+                       | map(. as $grp
+                             | ($grp | unique_by(.versionInfo)) as $distinct
+                             | ($distinct | length) as $m
+                             | if $m == 1 then $distinct[0]
+                               else ($distinct[0]) as $first
+                                    | [ $first ]
+                                      + ( $distinct[1:]
+                                          | to_entries
+                                          | map(. as $entry
+                                                | .value
+                                                  | .SPDXID = ($first.SPDXID + "-" + ($entry.key | tostring))))
+                               end)
+                       | flatten)
+       | .relationships += [.SPDXID as $document
+                            | .packages[]
+                            | {spdxElementId: $document,
+                               relationshipType: "DESCRIBES",
+                               relatedSpdxElement: .SPDXID}]
        | .relationships |= unique_by([.spdxElementId, .relationshipType, .relatedSpdxElement])' \
       /sbom/bluefin-server.spdx.json > "%{install-root}/%{image-name}.spdx.json"
 

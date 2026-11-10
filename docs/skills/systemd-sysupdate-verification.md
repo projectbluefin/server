@@ -195,12 +195,13 @@ tell a human or a policy engine which commit and workflow run produced it.
   plugin (`output-type: spdx`) over the payload of the release set: the /usr
   and initrd stacks, the kernel, and the k0s, KubeStellar, kubeadm and
   OpenZFS sysext payloads. It lists one SPDX package per source (name,
-  version, download URL, source kind), but the list is de-duplicated by
-  SPDX ID, so a package built from two sources is shown only once. That
-  can hide a real second copy: fsdk-containers pins its own FSDK, so its
-  pcre2 has a different version from ours yet shares the same SPDX ID, and
-  the first copy wins (#599). Build-only elements such as the
-  signing keys are not runtime dependencies of that payload and never
+  version, download URL, source kind), and de-duplicates the list. FSDK
+  bootstrap elements are reached through two junction paths, so identical
+  copies collapse to one. Copies that genuinely differ are given a fresh
+  SPDX ID instead of being hidden, so the SBOM lists every real copy:
+  fsdk-containers pins its own FSDK, so its pcre2 has a different version
+  from ours and appears under its own ID (#599). Build-only elements such as
+  the signing keys are not runtime dependencies of that payload and never
   appear. SPDX requires a `creationInfo.created`, which the plugin leaves to
   the build, so the image element stamps it from `SOURCE_DATE_EPOCH`. The
   build runs in a BuildStream sandbox that fixes `SOURCE_DATE_EPOCH` to
