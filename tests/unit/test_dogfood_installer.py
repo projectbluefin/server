@@ -123,7 +123,7 @@ class _FakeMonitor:
         self._srv.listen(1)
         self._thread = threading.Thread(target=self._serve, daemon=True)
 
-    def __enter__(self) -> "_FakeMonitor":
+    def __enter__(self) -> _FakeMonitor:
         self._thread.start()
         return self
 
