@@ -118,18 +118,14 @@ lint-python:
 build-sysext:
     just bst build oci/k0s-sysext.bst
 
-# Export the k0s systemd-sysext image + SHA256SUMS to dist/sysext/.
+# Export the k0s systemd-sysext image + SHA256SUMS to dist/sysext/. Delegates to
+# _export-sysext-element, which appends (mkdir -p) instead of wiping dist/sysext,
+# so the k0s export no longer deletes the other add-on exports (#638).
 # The artifact checkout also emits an uncompressed .raw; only the
 # versioned .raw.zst release asset and its SHA256SUMS are published.
 [group('sysext')]
 export-sysext: build-sysext
-    rm -rf dist/sysext dist/sysext-checkout
-    mkdir -p dist/sysext-checkout dist/sysext
-    just bst artifact checkout oci/k0s-sysext.bst --directory /src/dist/sysext-checkout
-    cp dist/sysext-checkout/k0s-*.raw.zst dist/sysext/
-    cp dist/sysext-checkout/SHA256SUMS dist/sysext/
-    rm -rf dist/sysext-checkout
-    @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element "k0s" "k0s-"
 
 # -- Diskless /usr image + signed boot chain ----------------------------------
 
@@ -233,6 +229,23 @@ dogfood-check:
 dogfood-mdns:
     bash scripts/dogfood-mdns.sh dist/diskless
 
+# Shared body for the single opt-in sysext export recipes. NAME is the element
+# base (the element is oci/<NAME>-sysext.bst) and also names the echo line;
+# PREFIX is that element's sysext-image name, so <PREFIX>*.raw.zst matches the
+# built artifact. Every export-*-sysext recipe calls this instead of re-writing
+# the checkout, copy, and SHA256SUMS steps by hand, so a new add-on cannot drift
+# its glob the way the zfs glob did (#306). It appends to dist/sysext/ instead of
+# wiping it, so the k0s export-sysext no longer deletes the other add-on exports (#638).
+[group('sysext')]
+_export-sysext-element NAME PREFIX:
+    rm -rf dist/{{NAME}}-checkout
+    mkdir -p dist/sysext
+    just bst artifact checkout oci/{{NAME}}-sysext.bst --directory /src/dist/{{NAME}}-checkout
+    cp dist/{{NAME}}-checkout/{{PREFIX}}*.raw.zst dist/sysext/
+    grep 'raw.zst$' dist/{{NAME}}-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
+    rm -rf dist/{{NAME}}-checkout
+    @echo "==> wrote {{NAME}} sysext:" && ls -lh dist/sysext/
+
 # Build the OpenZFS systemd-sysext (locked to one image version).
 [group('sysext')]
 build-zfs-sysext: gen-dev-keys
@@ -241,13 +254,7 @@ build-zfs-sysext: gen-dev-keys
 # Export the OpenZFS sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-zfs-sysext: build-zfs-sysext
-    rm -rf dist/zfs-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/zfs-sysext.bst --directory /src/dist/zfs-checkout
-    cp dist/zfs-checkout/zfs_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/zfs-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/zfs-checkout
-    @echo "==> wrote zfs sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element "zfs" "zfs_"
 
 # Build the homelab sysext (component manifests + bluefin-homelab-apply) and
 # its add-on sysexts (Argo Workflows, MCP server, KubeStellar).
@@ -302,13 +309,7 @@ build-nvidia-sysext FLAVOUR="nvidia-open-595": gen-dev-keys
 # Export an NVIDIA driver sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-nvidia-sysext FLAVOUR="nvidia-open-595": (build-nvidia-sysext FLAVOUR)
-    rm -rf dist/{{FLAVOUR}}-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/{{FLAVOUR}}-sysext.bst --directory /src/dist/{{FLAVOUR}}-checkout
-    cp dist/{{FLAVOUR}}-checkout/{{FLAVOUR}}_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/{{FLAVOUR}}-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/{{FLAVOUR}}-checkout
-    @echo "==> wrote {{FLAVOUR}} sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element "{{FLAVOUR}}" "{{FLAVOUR}}_"
 
 # Install dist/diskless/ in QEMU, merge its NVIDIA sysext and probe it (no GPU).
 [group('sysext')]
@@ -347,13 +348,7 @@ build-nvidia-container-toolkit-sysext:
 # Export the NVIDIA Container Toolkit sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-nvidia-container-toolkit-sysext: build-nvidia-container-toolkit-sysext
-    rm -rf dist/nvidia-ctk-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/nvidia-container-toolkit-sysext.bst --directory /src/dist/nvidia-ctk-checkout
-    cp dist/nvidia-ctk-checkout/nvidia-container-toolkit-*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/nvidia-ctk-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/nvidia-ctk-checkout
-    @echo "==> wrote nvidia-container-toolkit sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element "nvidia-container-toolkit" "nvidia-container-toolkit-"
 
 # Build the Tailscale systemd-sysext (locked to one image version).
 [group('sysext')]
@@ -363,13 +358,7 @@ build-tailscale-sysext:
 # Export the Tailscale sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-tailscale-sysext: build-tailscale-sysext
-    rm -rf dist/tailscale-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/tailscale-sysext.bst --directory /src/dist/tailscale-checkout
-    cp dist/tailscale-checkout/tailscale_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/tailscale-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/tailscale-checkout
-    @echo "==> wrote tailscale sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element "tailscale" "tailscale_"
 
 # Build the NetBird systemd-sysext (locked to one image version).
 [group('sysext')]
@@ -379,13 +368,7 @@ build-netbird-sysext:
 # Export the NetBird sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-netbird-sysext: build-netbird-sysext
-    rm -rf dist/netbird-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/netbird-sysext.bst --directory /src/dist/netbird-checkout
-    cp dist/netbird-checkout/netbird_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/netbird-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/netbird-checkout
-    @echo "==> wrote netbird sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element "netbird" "netbird_"
 
 # Set up KubeStellar kc-agent for the user in ONE command.
 [group('test')]
