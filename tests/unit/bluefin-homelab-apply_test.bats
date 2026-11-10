@@ -215,6 +215,29 @@ EOF
     ! ls "${APPLIED}"/*-23-gateway-cert.yaml
 }
 
+@test "the Gateway certificate issuer defaults to homelab-ca and accepts a dotted name" {
+    kubeadm_node
+    run_applier
+    [ "$status" -eq 0 ]
+    grep -q 'name: "homelab-ca"' "${APPLIED}"/*-23-gateway-cert.yaml
+    rm -f "${APPLIED}"/*
+    run_applier HOMELAB_GATEWAY_ISSUER=letsencrypt.example.com
+    [ "$status" -eq 0 ]
+    grep -q 'name: "letsencrypt.example.com"' "${APPLIED}"/*-23-gateway-cert.yaml
+}
+
+@test "an invalid Gateway certificate issuer warns and skips the certificate" {
+    kubeadm_node
+    for issuer in Bad_Name a..b -x; do
+        rm -f "${APPLIED}"/*
+        run_applier HOMELAB_GATEWAY_ISSUER="${issuer}"
+        [ "$status" -eq 0 ]
+        [[ "$output" == *"ignoring HOMELAB_GATEWAY_ISSUER=${issuer}: does not match"* ]]
+        [[ "$output" == *"cert-manager: skipping 23-gateway-cert.yaml: HOMELAB_GATEWAY_ISSUER not set in /etc/bluefin/homelab.conf"* ]]
+        ! ls "${APPLIED}"/*-23-gateway-cert.yaml
+    done
+}
+
 @test "configured inputs are validated and substituted" {
     kubeadm_node
     run_applier HOMELAB_METALLB_ADDRESSES="192.0.2.240-192.0.2.250, 198.51.100.0/28" \
