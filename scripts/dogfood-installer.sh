@@ -440,16 +440,20 @@ hold_console() {
 }
 
 # type_keys <name> <text>: type <text> on the guest's keyboard through the
-# QEMU monitor (sendkey); a newline is Enter.
+# QEMU monitor (sendkey); a newline is Enter. Widen the per-key gap while
+# console noise is active: the injected errors can make the guest miss a
+# scancode, and a 16-character password typed at the default gap lost one
+# keystroke under noise, so the two password prompts did not match (#600).
 type_keys() {
-    python3 - "${state}/$1.mon" "$2" <<'PY'
+    python3 - "${state}/$1.mon" "$2" "${console_noise:-0}" <<'PY'
 import socket, sys, time
 keys = {" ": "spc", "\n": "ret", "-": "minus", ".": "dot", "/": "slash", "=": "equal", ",": "comma"}
+gap = 0.35 if sys.argv[3] == "1" else 0.15
 with socket.socket(socket.AF_UNIX) as s:
     s.connect(sys.argv[1])
     for ch in sys.argv[2]:
         s.sendall(f"sendkey {keys.get(ch, ch)}\n".encode())
-        time.sleep(0.15)
+        time.sleep(gap)
     time.sleep(0.5)
 PY
 }
