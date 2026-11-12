@@ -10,7 +10,7 @@ export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6@sha256:
 # Same bst2 container image FSDK/dakota CI uses. Its tag names the
 # freedesktop-sdk-docker-images commit it was built from; it is a mutable tag,
 # not a digest pin.
-export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:bfe040b083407483ef58685bfc2b7e2a2b91afdc")
+export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:155158de1084c629c4cd1d36624a179c6ab2bb99")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
 # butane (built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
