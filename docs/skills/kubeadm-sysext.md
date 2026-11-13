@@ -87,8 +87,9 @@ but never newer. Patch releases change neither constraint.
   `imports` glob on a config that pre-dates drop-in glob support, see
   [Migration](#migration)),
   `modprobe overlay br_netfilter`, then `systemd-sysctl 90-kubeadm.conf`
-  (`ip_forward`, `bridge-nf-call-ip{,6}tables`). kubeadm needs containerd
-  running, so these hold before any preflight.
+  (`ip_forward`, `bridge-nf-call-ip{,6}tables`, and raised `fs.inotify`
+  instance and watch limits, since pods share root's per-user budget).
+  kubeadm needs containerd running, so these hold before any preflight.
 - containerd root is `/var/lib/containerd` (`RequiresMountsFor=` orders it after
   a per-node mount), `SystemdCgroup = true`, sandbox `registry.k8s.io/pause:3.10.1`,
   registry `config_path = /etc/containerd/certs.d`.
