@@ -1,6 +1,7 @@
-"""Every workflow installs the same `just`, so CI never runs two versions at once."""
+"""Contracts for action pins and the shared `just` version in workflows."""
 
 
+import re
 from pathlib import Path
 
 import yaml
@@ -23,3 +24,20 @@ def test_just_is_pinned_identically_everywhere() -> None:
     installs = just_installs()
     assert len(installs) >= 6, installs
     assert len({(uses, tool) for _, uses, tool in installs}) == 1, installs
+
+
+def test_action_version_comments_name_exact_releases() -> None:
+    annotations = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "uses:" not in line or "docker://" in line:
+                continue
+            match = re.search(r"#\s*(v[0-9][0-9A-Za-z.-]*)\s*$", line)
+            if match:
+                annotations.append((path.name, line_number, match.group(1)))
+                assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", match.group(1)), (
+                    path.name,
+                    line_number,
+                    match.group(1),
+                )
+    assert annotations

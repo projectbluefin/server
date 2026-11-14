@@ -27,18 +27,18 @@ metadata:
 ### Action pins — always use SHA, never mutable tags
 
 Every `uses:` line must reference a full commit SHA. Never use `@v2` or `@main`.
+Use an exact release comment (`vX.Y.Z`), not a moving major tag, so Renovate can update the SHA and zizmor can verify it.
 
 ```yaml
 # correct (see build.yml for the current pinned SHA)
-- uses: taiki-e/install-action@<full-commit-sha> # v2
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.3
 
 # wrong — mutable tag, supply-chain risk
 - uses: taiki-e/install-action@v2
 ```
 
-Check `.github/workflows/build.yml` (and sibling repos such as
-`projectbluefin/dakota` and `projectbluefin/common`) for the current pinned SHA
-before adding an action.
+Check `.github/workflows/build.yml` and sibling repos `projectbluefin/dakota`
+and `projectbluefin/common` for the current pinned SHA before adding an action.
 
 ### Installing `just` — taiki-e/install-action, not snap/cargo/apt
 
@@ -48,7 +48,7 @@ Pin the tool version too, not only the action SHA. Without `@<version>`,
 a binary chosen by an upstream release rather than by a commit in this repo.
 
 ```yaml
-- uses: taiki-e/install-action@<full-commit-sha> # v2 — see build.yml for the current pin
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.3 — see build.yml for the current pin
   with:
     tool: just@<version> # the version every other call site uses
 ```
@@ -476,7 +476,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 
 ## Verification
 
-- [ ] Every `uses:` line has a full 40-character SHA and a `# vX` comment.
+- [ ] Every action `uses:` line has a full 40-character SHA and exact `# vX.Y.Z` release comment.
 - [ ] Every `install-action` `tool:` names an explicit version (`just@<version>`).
 - [ ] actionlint and zizmor (see [Workflow linting](#workflow-linting)) report
       nothing.
