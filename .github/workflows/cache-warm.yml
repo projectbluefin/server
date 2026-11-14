@@ -1,0 +1,95 @@
+name: Warm BuildStream cache
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A seed must not occupy build.yml's serialized release queue.
+# Finish the current warming run; GitHub keeps only the latest pending one.
+concurrency:
+  group: cache-warm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  kernel-cache:
+    if: github.ref == 'refs/heads/main'
+    # CASD_CLIENT_KEY lives in this environment, which only main may use.
+    environment: bst-cache
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just@1.59.0
+
+      - name: Set up runner disk space
+        run: bash scripts/ci-runner-disk.sh
+
+      - name: Build and push the kernel cache unless it exists
+        id: seed
+        continue-on-error: true
+        env:
+          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
+          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
+        run: bash scripts/kernel-cache.sh seed release
+
+      # continue-on-error turns the job green; say so, or a cache that never
+      # seeds goes unnoticed while every build compiles the kernel.
+      - name: Report a failed seed
+        if: steps.seed.outcome == 'failure'
+        run: |
+          msg="The kernel cache seed failed; this release builds the kernel itself. See the step above."
+          echo "::warning title=Kernel cache not seeded::${msg}"
+          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
+
+  kernel-cache-dev:
+    if: github.ref == 'refs/heads/main'
+    # CASD_CLIENT_KEY lives in this environment, which only main may use.
+    environment: bst-cache
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just@1.59.0
+
+      - name: Set up runner disk space
+        run: bash scripts/ci-runner-disk.sh
+
+      - name: Build and push the dev kernel cache unless it exists
+        id: seed
+        continue-on-error: true
+        env:
+          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
+          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
+        run: bash scripts/kernel-cache.sh seed dev
+
+      # continue-on-error turns the job green; say so, or a cache that never
+      # seeds goes unnoticed while every build compiles the kernel.
+      - name: Report a failed seed
+        if: steps.seed.outcome == 'failure'
+        run: |
+          msg="The dev kernel cache seed failed; pull requests and the nightly build compile the kernel until a release seeds it. See the step above."
+          echo "::warning title=Kernel cache not seeded::${msg}"
+          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
+

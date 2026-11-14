@@ -12,6 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = yaml.safe_load((ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8"))
+CACHE_JOBS = yaml.safe_load((ROOT / ".github" / "workflows" / "cache-warm.yml").read_text(encoding="utf-8"))["jobs"]
 JOBS = WORKFLOW["jobs"]
 RELEASE = JOBS["release"]
 DRY_RUN = JOBS["release-dry-run"]
@@ -81,11 +82,12 @@ def test_signing_secrets_only_reach_main_only_environments() -> None:
     for secret in ("BOOT_KEYS_TARBALL", "SYSUPDATE_SIGNING_KEY"):
         assert install["env"][secret] == f"${{{{ needs.changes.outputs.release == 'true' && secrets.{secret} || '' }}}}"
     for seeder in ("kernel-cache", "kernel-cache-dev"):
-        assert JOBS[seeder]["environment"] == "bst-cache"
-    for name, job in JOBS.items():
-        if name not in ("build", "kernel-cache", "kernel-cache-dev"):
-            assert "secrets." not in json.dumps(job), name
-            assert "environment" not in job, name
+        assert CACHE_JOBS[seeder]["environment"] == "bst-cache"
+    for jobs in (JOBS, CACHE_JOBS):
+        for name, job in jobs.items():
+            if name not in ("build", "kernel-cache", "kernel-cache-dev"):
+                assert "secrets." not in json.dumps(job), name
+                assert "environment" not in job, name
 
 
 def test_tracker_app_key_only_reaches_the_trackers_environment() -> None:
@@ -143,9 +145,7 @@ def test_boot_test_uploads_every_harness_log_directory() -> None:
 
 
 def test_release_publishes_only_a_built_and_boot_tested_set() -> None:
-    # Explicit results instead of !failure(): a failed kernel-cache must not
-    # block the release, and a skipped or failed build, boot-test or
-    # image-check must.
+    # A skipped or failed build, boot-test or image-check must block publication.
     cond = RELEASE["if"]
     assert "!failure()" not in cond
     for part in (
@@ -181,22 +181,14 @@ def test_boot_test_result_is_the_one_gate_of_every_bucket() -> None:
 
 @pytest.mark.parametrize("seeder", ["kernel-cache", "kernel-cache-dev"])
 def test_a_failed_kernel_cache_seed_is_reported(seeder: str) -> None:
-    seed = next(s for s in JOBS[seeder]["steps"] if s.get("id") == "seed")
+    seed = next(s for s in CACHE_JOBS[seeder]["steps"] if s.get("id") == "seed")
     assert seed["continue-on-error"] is True
-    report = next(s for s in JOBS[seeder]["steps"] if s.get("if") == "steps.seed.outcome == 'failure'")
+    report = next(s for s in CACHE_JOBS[seeder]["steps"] if s.get("if") == "steps.seed.outcome == 'failure'")
     assert "::warning" in report["run"] and "GITHUB_STEP_SUMMARY" in report["run"]
 
 
 def test_release_uses_the_job_token_only() -> None:
     assert "secrets." not in json.dumps(RELEASE)
-
-
-def test_jobs_after_build_run_when_kernel_cache_is_skipped() -> None:
-    # kernel-cache only runs for release builds; without an explicit check of
-    # build's result, a skipped kernel-cache skips every job downstream of build.
-    for name in ("boot-test", "boot-test-result", "release-dry-run"):
-        cond = JOBS[name].get("if", "")
-        assert "!cancelled()" in cond and "needs.build.result == 'success'" in cond, name
 
 
 def test_release_publishes_nothing_once_the_commit_cannot_be_tagged() -> None:
