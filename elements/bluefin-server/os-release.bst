@@ -34,3 +34,11 @@ config:
     HOME_URL="https://github.com/projectbluefin/server"
     BUG_REPORT_URL="https://github.com/projectbluefin/server/issues"
     EOF
+  - |
+    # PID 1 uses this file's mtime as its clock floor, not the SDK's 2011 epoch.
+    v='%{installer-version}'
+    month="${v#*.}"
+    epoch="%{install-root}/usr/lib/clock-epoch"
+    date -u -d "20${v%%.*}-${month%%.*}-01" +%s > "${epoch}"
+    touch -d "@$(cat "${epoch}")" "${epoch}"
+    chmod 0644 "${epoch}"
