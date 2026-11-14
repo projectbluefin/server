@@ -36,7 +36,7 @@
 # directory's import is pushed with the kernel).
 set -euo pipefail
 
-ELEMENTS=(freedesktop-sdk.bst:components/linux.bst freedesktop-sdk.bst:components/go.bst)
+ELEMENTS=(freedesktop-sdk.bst:components/linux.bst freedesktop-sdk.bst:components/go.bst fsdk-containers.bst:oci/brew-nspawn.bst)
 KEYS_ELEMENT=bluefin-server/keys/boot-keys.bst
 PUSH_URL=https://cache.projectbluefin.io:11002
 
