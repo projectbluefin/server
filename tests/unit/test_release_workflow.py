@@ -182,9 +182,7 @@ def test_boot_test_result_is_the_one_gate_of_every_bucket() -> None:
 @pytest.mark.parametrize("seeder", ["kernel-cache", "kernel-cache-dev"])
 def test_a_failed_kernel_cache_seed_is_reported(seeder: str) -> None:
     seed = next(s for s in CACHE_JOBS[seeder]["steps"] if s.get("id") == "seed")
-    assert seed["continue-on-error"] is True
-    report = next(s for s in CACHE_JOBS[seeder]["steps"] if s.get("if") == "steps.seed.outcome == 'failure'")
-    assert "::warning" in report["run"] and "GITHUB_STEP_SUMMARY" in report["run"]
+    assert seed.get("continue-on-error", False) is False
 
 
 def test_release_uses_the_job_token_only() -> None:

@@ -39,20 +39,10 @@ jobs:
 
       - name: Build and push the kernel cache unless it exists
         id: seed
-        continue-on-error: true
         env:
           CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
           CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
         run: bash scripts/kernel-cache.sh seed release
-
-      # continue-on-error turns the job green; say so, or a cache that never
-      # seeds goes unnoticed while every build compiles the kernel.
-      - name: Report a failed seed
-        if: steps.seed.outcome == 'failure'
-        run: |
-          msg="The kernel cache seed failed; this release builds the kernel itself. See the step above."
-          echo "::warning title=Kernel cache not seeded::${msg}"
-          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
 
   kernel-cache-dev:
     if: github.ref == 'refs/heads/main'
@@ -78,18 +68,8 @@ jobs:
 
       - name: Build and push the dev kernel cache unless it exists
         id: seed
-        continue-on-error: true
         env:
           CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
           CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
         run: bash scripts/kernel-cache.sh seed dev
-
-      # continue-on-error turns the job green; say so, or a cache that never
-      # seeds goes unnoticed while every build compiles the kernel.
-      - name: Report a failed seed
-        if: steps.seed.outcome == 'failure'
-        run: |
-          msg="The dev kernel cache seed failed; pull requests and the nightly build compile the kernel until a release seeds it. See the step above."
-          echo "::warning title=Kernel cache not seeded::${msg}"
-          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
 

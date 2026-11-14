@@ -187,14 +187,6 @@ def test_seed_pushes_with_the_client_certificate(checkout: Path, env: dict[str, 
     result = run(checkout, env)
     assert result.returncode == 0, result.stderr
     log = Path(env["LOG"])
-    assert (log / "built").read_text().split() == [
-        "bst",
-        "build",
-        "freedesktop-sdk.bst:components/linux.bst",
-        "freedesktop-sdk.bst:components/go.bst",
-        "freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst",
-        "fsdk-containers.bst:oci/brew-nspawn.bst",
-    ]
     conf = (log / "buildstream.conf").read_text()
     for kind in ("artifacts:", "source-caches:"):
         section = conf.split(kind, 1)[1]

@@ -411,9 +411,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   With no signing secrets and that one certificate staged as the only file of
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
   directory's import is pushed with the kernel), each builds FSDK's kernel,
-  Go and `bootstrap/build/gcc-stage2.bst`, plus the Brew machine. BuildStream
-  pulls or rebuilds payloads, then `bst artifact push --deps all` replicates
-  upstream artifacts into `cache.projectbluefin.io:11002`; metadata never skips seeding.
+  Go and `bootstrap/build/gcc-stage2.bst`, plus the Brew machine.
+  `bst build --deps all` materializes their whole key-free closure; cached
+  targets otherwise leave build-only dependencies uncached. Then
+  `bst artifact push --deps all` replicates upstream artifacts into
+  `cache.projectbluefin.io:11002`; metadata never skips seeding.
   The push endpoint takes mTLS: its client certificate is the repository variable
   `CASD_CLIENT_CERT` and its key the `bst-cache` environment secret
   `CASD_CLIENT_KEY`, given to that step only and written to a gitignored `.casd.*/` directory that the script
@@ -431,8 +433,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds,
   and the job holds no signing secret. A content grep is no guard here: FSDK
   sources (Go's TLS test data and others) carry 307 PEM private keys.
-  The seed step is `continue-on-error`; failures are posted as a warning and
-  step summary, without preventing an independently verified release.
+  The independent warming workflow fails visibly on seed errors; its result
+  does not gate image building or publication.
   The former kernel/Go-only seed took 44 min and 15 GB on 16+ CPUs.
   Kernel, Go, GCC, Brew or their dependency changes reseed the affected targets.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports

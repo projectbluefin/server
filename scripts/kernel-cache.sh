@@ -129,8 +129,9 @@ seed() {
         echo "kernel-cache: cannot reach ${PUSH_URL}; refusing to build without pushing" >&2
         exit 1
     fi
-    just bst build "${ELEMENTS[@]}"
-    # Builds need not push dependencies pulled from upstream caches.
+    # Cached targets can leave build-only dependencies uncached; push --deps
+    # all requires those artifacts too, including the certificate import.
+    just bst build --deps all "${ELEMENTS[@]}"
     just bst artifact push --deps all "${ELEMENTS[@]}"
     echo "kernel-cache: ${variant}: pushed ${ELEMENTS[*]} to ${PUSH_URL}"
 }
