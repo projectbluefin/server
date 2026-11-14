@@ -347,6 +347,8 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
 
 ## Build time and caches
 
+The Brew machine shares the server's SDK junction, not a second bootstrap.
+
 The canonical build-time figures; other files link here instead of
 restating them:
 
@@ -395,7 +397,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
   A skipped job reports as passing, so its required check does not hold it.
 - **Kernel cache in the project CAS, key-free by construction.** Two jobs,
-  on releases only, run `scripts/kernel-cache.sh seed`, one per module
+  on every push to `main` (`release=true`), run `scripts/kernel-cache.sh seed`, one per module
   certificate the kernel can trust (it is part of the kernel's cache key):
   - `kernel-cache` runs `seed release` with the committed release certificate
     (`files/release-keys/linux-module-cert.crt`); `build` waits for it.
@@ -406,11 +408,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 
   With no signing secrets and that one certificate staged as the only file of
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
-  directory's import is pushed with the kernel), each builds FSDK's
-  `components/linux.bst` and `components/go.bst` with a BuildStream config
-  that pushes artifacts and sources to `cache.projectbluefin.io:11002`,
-  unless `bst artifact show` reports both `available` on a remote. The push
-  endpoint takes mTLS: the client certificate is the repository variable
+  directory's import is pushed with the kernel), each builds FSDK's kernel,
+  Go and `bootstrap/build/gcc-stage2.bst`, plus the Brew machine. BuildStream
+  pulls or rebuilds payloads, then `bst artifact push --deps all` replicates
+  upstream artifacts into `cache.projectbluefin.io:11002`; metadata never skips seeding.
+  The push endpoint takes mTLS: its client certificate is the repository variable
   `CASD_CLIENT_CERT` and its key the `bst-cache` environment secret
   `CASD_CLIENT_KEY`, given to that step only and written to a gitignored `.casd.*/` directory that the script
   removes on exit. The CAS trusts that certificate in its list of client
@@ -429,9 +431,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   sources (Go's TLS test data and others) carry 307 PEM private keys. The
   seed step is `continue-on-error`, so a failed seed only costs time; the
   next step then posts a warning and a step summary line.
-  Measured in the lab: the seed build takes 44 min on 16+ CPUs and fills
-  15 GB. Only a kernel or Go change (FSDK bump, a kernel config patch such as
-  `0006` or `0007`, module certificate) reseeds.
+  The former kernel/Go-only seed took 44 min and 15 GB on 16+ CPUs.
+  Kernel, Go, GCC, Brew or their dependency changes reseed the affected targets.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
@@ -439,17 +440,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   and the `nvidia-open-*-signed.bst` elements
   build-depend on it, so a release build's own cache must never be saved or
   pushed anywhere a pull request can read.
-- **Most pull requests build the image only in the merge queue.** The full
-  build costs up to 2 h (figures above), most of it FSDK's kernel, so a pull
-  request builds before the queue only with the `full-build` label or when it
-  changes `elements/freedesktop-sdk.bst` or `patches/`; the rest run
-  `validate`, and the merge queue builds and boot-tests every merge group
-  that can change the image set before it reaches `main`. When a pull
-  request, a merge group or the nightly build does build, it pulls the kernel that `kernel-cache-dev` seeded: `just
-  gen-dev-keys` always stages the same public dev module certificate, so
-  the dev kernel's cache key is the same on every run. It compiles the
-  kernel (1 h 43 min) only until the next release after a kernel change
-  seeds it.
+- **Most pull requests build the image only in the merge queue.** Before
+  the queue, only `full-build`, SDK junction and patch changes build; the
+  rest run `validate`. Every image-changing merge group builds and boots.
+  Dev builds reuse the public module certificate, so their kernel keys
+  match `kernel-cache-dev`; after a kernel change it stays cold until seeded.
 - **No `actions/cache`.** A full build's cache holds `boot-keys.bst`, and
   pull requests can restore caches saved on `main`; the key-free kernel
   cache lives in the project CAS instead.
