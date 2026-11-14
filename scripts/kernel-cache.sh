@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Key-free BuildStream cache of FSDK's kernel (and Go), in the project CAS.
+# Key-free BuildStream cache of FSDK's kernel, Go and the Brew machine.
 #
 #   CASD_CLIENT_CERT=<pem> CASD_CLIENT_KEY=<pem> kernel-cache.sh seed release|dev
 #
@@ -36,7 +36,7 @@
 # directory's import is pushed with the kernel).
 set -euo pipefail
 
-ELEMENTS=(freedesktop-sdk.bst:components/linux.bst freedesktop-sdk.bst:components/go.bst)
+ELEMENTS=(freedesktop-sdk.bst:components/linux.bst freedesktop-sdk.bst:components/go.bst fsdk-containers.bst:oci/brew-nspawn.bst)
 KEYS_ELEMENT=bluefin-server/keys/boot-keys.bst
 PUSH_URL=https://cache.projectbluefin.io:11002
 
