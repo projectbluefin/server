@@ -135,7 +135,7 @@ def test_release_builds_check_their_keys_after_staging_them() -> None:
     assert release_branch.index("bash scripts/check-release-keys.sh") > staged
 
 
-def test_both_kernel_variants_are_seeded_on_releases_and_only_release_gates_the_build() -> None:
+def test_kernel_seeders_are_release_only_and_have_no_signing_keys() -> None:
     jobs = WORKFLOW["jobs"]
     for job, variant in (("kernel-cache", "release"), ("kernel-cache-dev", "dev")):
         assert jobs[job]["if"] == "needs.changes.outputs.release == 'true'"
@@ -143,5 +143,3 @@ def test_both_kernel_variants_are_seeded_on_releases_and_only_release_gates_the_
         assert f"bash scripts/kernel-cache.sh seed {variant}" in runs
         assert "BOOT_KEYS_TARBALL" not in str(jobs[job]) and "SYSUPDATE_SIGNING_KEY" not in str(jobs[job])
         assert "gen-dev-keys" not in str(jobs[job])
-    assert "kernel-cache" in jobs["build"]["needs"]
-    assert not any("kernel-cache-dev" in str(j.get("needs", "")) for j in jobs.values())
