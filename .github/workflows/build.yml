@@ -152,15 +152,15 @@ jobs:
   # FSDK's kernel is most of a cold build
   # (docs/skills/ci-tooling.md#build-time-and-caches), and no upstream cache
   # holds it (our module certificate and kernel config patches change its
-  # key). These jobs build it (and Go) with no signing secrets, each against
-  # one committed module certificate, and push the key-free artifacts to the
-  # project CAS unless a remote already holds them; every build pulls them
-  # through project.conf (scripts/kernel-cache.sh):
+  # key). These jobs warm the key-free kernel/Go/GCC/Brew closure, each against
+  # one committed module certificate, and push it to the project CAS via
+  # scripts/kernel-cache.sh:
   #  - kernel-cache: the release certificate, for release builds;
   #  - kernel-cache-dev: the public INSECURE dev certificate that
   #    `just gen-dev-keys` uses (files/dev-keys/), for pull requests, the
-  #    nightly build and local builds. No job needs it, so it never delays
-  #    a release.
+  #    nightly build and local builds.
+  # Neither job gates image builds or releases. Cold runs can duplicate
+  # compilation while seeding fills the cache instead of waiting on it.
   # The cache only saves time: a failed seed must not hold back the release,
   # which checks build's and boot-test-result's own results.
   kernel-cache:
@@ -269,9 +269,9 @@ jobs:
         run: bash scripts/ci/dogfood-preflight.sh
 
   build:
-    needs: [changes, kernel-cache, boot-test-preflight]
-    # Runs when kernel-cache is skipped (non-release builds) or failed: the
-    # cache only saves time. A failed preflight stops it.
+    needs: [changes, boot-test-preflight]
+    # Cache warming is advisory, never a release startup dependency.
+    # A failed boot-test preflight still stops the image build.
     if: ${{ !cancelled() && needs.changes.outputs.image == 'true' && needs.boot-test-preflight.result == 'success' }}
     # The signing secrets live in the `release` environment, which only main
     # may use. Every other build runs with no environment (an empty name):

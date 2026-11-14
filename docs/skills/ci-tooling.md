@@ -400,11 +400,12 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   on every push to `main` (`release=true`), run `scripts/kernel-cache.sh seed`, one per module
   certificate the kernel can trust (it is part of the kernel's cache key):
   - `kernel-cache` runs `seed release` with the committed release certificate
-    (`files/release-keys/linux-module-cert.crt`); `build` waits for it.
+    (`files/release-keys/linux-module-cert.crt`).
   - `kernel-cache-dev` runs `seed dev` with the public INSECURE dev
     certificate (`files/dev-keys/INSECURE-dev-module-key.crt`) that
-    `just gen-dev-keys` uses for every non-release build. No job waits for
-    it, so it never delays a release.
+    `just gen-dev-keys` uses for every non-release build.
+  Neither job gates image building or publication. Cold runs may duplicate
+  compilation while warming instead of waiting on a four-hour seed timeout.
 
   With no signing secrets and that one certificate staged as the only file of
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
@@ -428,9 +429,9 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   The CAS is publicly readable: `seed` refuses if
   `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds,
   and the job holds no signing secret. A content grep is no guard here: FSDK
-  sources (Go's TLS test data and others) carry 307 PEM private keys. The
-  seed step is `continue-on-error`, so a failed seed only costs time; the
-  next step then posts a warning and a step summary line.
+  sources (Go's TLS test data and others) carry 307 PEM private keys.
+  The seed step is `continue-on-error`; failures are posted as a warning and
+  step summary, without preventing an independently verified release.
   The former kernel/Go-only seed took 44 min and 15 GB on 16+ CPUs.
   Kernel, Go, GCC, Brew or their dependency changes reseed the affected targets.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
