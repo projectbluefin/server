@@ -348,7 +348,6 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
 ## Build time and caches
 
 The Brew machine shares the server's SDK junction, not a second bootstrap.
-Land cache-key fixes before queueing dependent updates; hold pre-fix entries.
 
 The canonical build-time figures; other files link here instead of
 restating them:
@@ -398,7 +397,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
   A skipped job reports as passing, so its required check does not hold it.
 - **Kernel cache in the project CAS, key-free by construction.** Two jobs,
-  on releases only, run `scripts/kernel-cache.sh seed`, one per module
+  on every push to `main` (`release=true`), run `scripts/kernel-cache.sh seed`, one per module
   certificate the kernel can trust (it is part of the kernel's cache key):
   - `kernel-cache` runs `seed release` with the committed release certificate
     (`files/release-keys/linux-module-cert.crt`); `build` waits for it.
@@ -409,11 +408,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 
   With no signing secrets and that one certificate staged as the only file of
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
-  directory's import is pushed with the kernel), each builds FSDK's kernel
-  and Go plus `fsdk-containers.bst:oci/brew-nspawn.bst`. The BuildStream config
-  pushes artifacts and sources to `cache.projectbluefin.io:11002`, unless
-  `bst artifact show` reports every target `available` on a remote. The push
-  endpoint takes mTLS: the client certificate is the repository variable
+  directory's import is pushed with the kernel), each builds FSDK's kernel,
+  Go and `bootstrap/build/gcc-stage2.bst`, plus the Brew machine. BuildStream
+  pulls usable payloads or rebuilds missing ones, then pushes artifacts and
+  sources to `cache.projectbluefin.io:11002`; metadata alone never skips seeding.
+  The push endpoint takes mTLS: its client certificate is the repository variable
   `CASD_CLIENT_CERT` and its key the `bst-cache` environment secret
   `CASD_CLIENT_KEY`, given to that step only and written to a gitignored `.casd.*/` directory that the script
   removes on exit. The CAS trusts that certificate in its list of client
@@ -433,7 +432,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   seed step is `continue-on-error`, so a failed seed only costs time; the
   next step then posts a warning and a step summary line.
   The former kernel/Go-only seed took 44 min and 15 GB on 16+ CPUs.
-  Kernel, Go, Brew or their dependency changes reseed the affected targets.
+  Kernel, Go, GCC, Brew or their dependency changes reseed the affected targets.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,

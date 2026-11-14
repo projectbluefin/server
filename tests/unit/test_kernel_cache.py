@@ -2,9 +2,9 @@
 
 The CAS is publicly readable, so `seed` must refuse whenever the graph it
 builds reaches the element that stages private keys, before it writes the
-client credentials anywhere; it must build nothing when a remote already holds
-every element; and the push config it hands BuildStream must authenticate
-with the client certificate and leave no credential behind. `just` is stubbed.
+client credentials anywhere; remote metadata alone must not count as a successful
+seed; and the push config it hands BuildStream must authenticate with the
+client certificate and leave no credential behind. `just` is stubbed.
 
 Each variant stages exactly one committed certificate as the only file of
 files/boot-keys/modules/ (whose import is pushed with the kernel): release
@@ -36,7 +36,8 @@ case "$*" in
     conf="${BST_FLAGS##*--config /src/}"
     cp "$conf" "$LOG/buildstream.conf"
     cp "$(dirname "$conf")/client.key" "$LOG/client.key"
-    ls -ld "$(dirname "$conf")" > "$LOG/auth-dir" ;;
+    ls -ld "$(dirname "$conf")" > "$LOG/auth-dir"
+    exit "${BUILD_STATUS:-0}" ;;
 esac
 """
 
@@ -65,7 +66,12 @@ def env(tmp_path: Path) -> dict[str, str]:
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "LOG": str(tmp_path / "log"),
         "GRAPH": "freedesktop-sdk.bst:components/linux.bst bluefin-server/keys/linux-module-cert.bst",
-        "STATES": "  not cached freedesktop-sdk.bst:components/linux.bst\n   available freedesktop-sdk.bst:components/go.bst\n   available fsdk-containers.bst:oci/brew-nspawn.bst",
+        "STATES": (
+            "  not cached freedesktop-sdk.bst:components/linux.bst\n"
+            "   available freedesktop-sdk.bst:components/go.bst\n"
+            "   available freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst\n"
+            "   available fsdk-containers.bst:oci/brew-nspawn.bst"
+        ),
         "CASD_CLIENT_CERT": "-----BEGIN CERTIFICATE-----\ncert\n-----END CERTIFICATE-----",
         "CASD_CLIENT_KEY": "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----",
         "BST_FLAGS": "",
@@ -141,12 +147,12 @@ def test_seed_refuses_to_build_when_the_push_remote_is_unreachable(checkout: Pat
     assert not leftovers(checkout)
 
 
-def test_seed_skips_elements_a_remote_already_holds(checkout: Path, env: dict[str, str]) -> None:
+def test_seed_does_not_accept_metadata_when_payload_build_fails(checkout: Path, env: dict[str, str]) -> None:
     env["STATES"] = env["STATES"].replace("not cached", " available")
+    env["BUILD_STATUS"] = "19"
     result = run(checkout, env)
-    assert result.returncode == 0
-    assert "already on a remote" in result.stdout
-    assert not (Path(env["LOG"]) / "built").exists()
+    assert result.returncode == 19
+    assert "pushed" not in result.stdout
     assert not leftovers(checkout)
 
 
@@ -161,6 +167,7 @@ def test_seed_builds_when_only_brew_is_missing(checkout: Path, env: dict[str, st
     env["STATES"] = (
         "   available freedesktop-sdk.bst:components/linux.bst\n"
         "   available freedesktop-sdk.bst:components/go.bst\n"
+        "   available freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst\n"
         "  not cached fsdk-containers.bst:oci/brew-nspawn.bst"
     )
     assert run(checkout, env).returncode == 0
@@ -176,6 +183,7 @@ def test_seed_pushes_with_the_client_certificate(checkout: Path, env: dict[str, 
         "build",
         "freedesktop-sdk.bst:components/linux.bst",
         "freedesktop-sdk.bst:components/go.bst",
+        "freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst",
         "fsdk-containers.bst:oci/brew-nspawn.bst",
     ]
     conf = (log / "buildstream.conf").read_text()

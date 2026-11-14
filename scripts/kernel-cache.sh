@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Key-free BuildStream cache of FSDK's kernel, Go and the Brew machine.
+# Key-free BuildStream cache of FSDK's kernel, Go, GCC and the Brew machine.
 #
 #   CASD_CLIENT_CERT=<pem> CASD_CLIENT_KEY=<pem> kernel-cache.sh seed release|dev
 #
@@ -24,9 +24,8 @@
 # sources to the CAS's mTLS endpoint; every build reads them back through the
 # anonymous remote that patches/freedesktop-sdk/0001 adds to the junction's
 # project.conf (the top-level project.conf remote does not reach junction
-# elements such as the kernel). It builds nothing when a remote already
-# holds every element (`available`; an element only cached locally still goes
-# through `bst build`, which pushes it).
+# elements such as the kernel). `available` only proves remote metadata exists;
+# `bst build` must check the payload, pull or rebuild it, and push the result.
 #
 # The CAS is publicly readable. What `seed` pushes is key-free by
 # construction: the seed job holds no signing secrets, `seed` refuses to
@@ -36,7 +35,12 @@
 # directory's import is pushed with the kernel).
 set -euo pipefail
 
-ELEMENTS=(freedesktop-sdk.bst:components/linux.bst freedesktop-sdk.bst:components/go.bst fsdk-containers.bst:oci/brew-nspawn.bst)
+ELEMENTS=(
+    freedesktop-sdk.bst:components/linux.bst
+    freedesktop-sdk.bst:components/go.bst
+    freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst
+    fsdk-containers.bst:oci/brew-nspawn.bst
+)
 KEYS_ELEMENT=bluefin-server/keys/boot-keys.bst
 PUSH_URL=https://cache.projectbluefin.io:11002
 
@@ -95,7 +99,7 @@ stage_cert() {
 auth=""
 
 seed() {
-    local variant="$1" graph states available
+    local variant="$1" graph states
     : "${CASD_CLIENT_CERT:?kernel-cache: CASD_CLIENT_CERT is not set}"
     : "${CASD_CLIENT_KEY:?kernel-cache: CASD_CLIENT_KEY is not set}"
     stage_cert "${variant}"
@@ -124,11 +128,6 @@ seed() {
         grep -F "Failed to initialize remote ${PUSH_URL}" <<< "${states}" >&2
         echo "kernel-cache: cannot reach ${PUSH_URL}; refusing to build without pushing" >&2
         exit 1
-    fi
-    available="$(grep -cE '^ *available ' <<< "${states}" || true)"
-    if [ "${available}" -eq "${#ELEMENTS[@]}" ]; then
-        echo "kernel-cache: ${variant}: ${ELEMENTS[*]} already on a remote"
-        return 0
     fi
     just bst build "${ELEMENTS[@]}"
     echo "kernel-cache: ${variant}: pushed ${ELEMENTS[*]} to ${PUSH_URL}"
