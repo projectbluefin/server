@@ -26,11 +26,12 @@ SCRIPT = ROOT / "scripts" / "kernel-cache.sh"
 # would read it from /src (the checkout).
 JUST = """#!/bin/sh
 case "$*" in
-  *"--deps all"*)
+  "bst show --deps all"*)
     printf '%s\\n' $GRAPH
     i=0; while [ "$i" -lt "${GRAPH_TAIL:-0}" ]; do echo "freedesktop-sdk.bst:components/filler-$i.bst"; i=$((i + 1)); done
     exit "${GRAPH_STATUS:-0}" ;;
   "bst artifact show"*) printf '%s\\n' "$STATES"; [ -z "$UNREACHABLE" ] || echo "$UNREACHABLE" >&2 ;;
+  "bst artifact push"*) exit "${PUSH_STATUS:-0}" ;;
   "bst build"*)
     echo "$*" >> "$LOG/built"
     conf="${BST_FLAGS##*--config /src/}"
@@ -152,6 +153,14 @@ def test_seed_does_not_accept_metadata_when_payload_build_fails(checkout: Path, 
     env["BUILD_STATUS"] = "19"
     result = run(checkout, env)
     assert result.returncode == 19
+    assert "pushed" not in result.stdout
+    assert not leftovers(checkout)
+
+
+def test_seed_does_not_report_success_when_replication_fails(checkout: Path, env: dict[str, str]) -> None:
+    env["PUSH_STATUS"] = "23"
+    result = run(checkout, env)
+    assert result.returncode == 23
     assert "pushed" not in result.stdout
     assert not leftovers(checkout)
 

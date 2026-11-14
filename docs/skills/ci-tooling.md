@@ -410,8 +410,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
   directory's import is pushed with the kernel), each builds FSDK's kernel,
   Go and `bootstrap/build/gcc-stage2.bst`, plus the Brew machine. BuildStream
-  pulls usable payloads or rebuilds missing ones, then pushes artifacts and
-  sources to `cache.projectbluefin.io:11002`; metadata alone never skips seeding.
+  pulls or rebuilds payloads, then `bst artifact push --deps all` replicates
+  upstream artifacts into `cache.projectbluefin.io:11002`; metadata never skips seeding.
   The push endpoint takes mTLS: its client certificate is the repository variable
   `CASD_CLIENT_CERT` and its key the `bst-cache` environment secret
   `CASD_CLIENT_KEY`, given to that step only and written to a gitignored `.casd.*/` directory that the script

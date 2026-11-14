@@ -130,6 +130,8 @@ seed() {
         exit 1
     fi
     just bst build "${ELEMENTS[@]}"
+    # Builds need not push dependencies pulled from upstream caches.
+    just bst artifact push --deps all "${ELEMENTS[@]}"
     echo "kernel-cache: ${variant}: pushed ${ELEMENTS[*]} to ${PUSH_URL}"
 }
 
