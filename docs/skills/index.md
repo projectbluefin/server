@@ -41,6 +41,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 | [`secure-boot-keys.md`](secure-boot-keys.md) | Rotating signing keys, setting up CI secrets, debugging signature verification, shim and shim-review | Key inventory, `gen-dev-keys`, CI secrets, rotation, and the shim vendor certificate. |
 | [`skill-improvement.md`](skill-improvement.md) | Adding, splitting, or refactoring skills | Meta-skill that owns the documentation loop. |
 | [`system-containers.md`](system-containers.md) | Running `systemd-nspawn` toolboxes | System container operation with `machinectl`. |
+| [`homebrew-seed.md`](homebrew-seed.md) | Homebrew in the base image | Seed archive, pins, first-boot extraction. |
 | [`systemd-sysext-extensions.md`](systemd-sysext-extensions.md) | Optional layers via `systemd-sysext` / `systemd-confext` | Extension identity, loading, and version matching. |
 | [`systemd-sysupdate-verification.md`](systemd-sysupdate-verification.md) | Image-based A/B updates and signed manifests | Release signing, `systemd-sysupdate`, and trust model. |
 | [`tpm2-credential-sealing.md`](tpm2-credential-sealing.md) | First-boot credentials, root/SSH node access, TPM2 sealing | Provisioning credentials, node access, and sealing with `systemd-creds`. |

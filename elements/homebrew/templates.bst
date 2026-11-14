@@ -1,6 +1,6 @@
 kind: manual
 description: |
-  Home Server installer profiles. The optional cluster variant composes the
+  Home Server installer profiles (Homebrew itself is in the base image). The optional cluster variant composes the
   canonical Home and existing Homelab control-plane templates offline.
 
 build-depends:
@@ -16,10 +16,7 @@ sources:
   path: files/homelab/templates/homelab-control-plane.bu
   directory: cluster
 - kind: local
-  path: files/homebrew-image/compose-profile.py
-- kind: local
-  path: files/runtimes/bluefin-oci-features
-  directory: home
+  path: files/homebrew/compose-profile.py
 
 variables:
   strip-binaries: ""

@@ -47,17 +47,10 @@ payloads, and a `SHA256SUMS` over all of it with its detached signature
 `SHA256SUMS.gpg` (signed in-element by `oci/bluefin-server-image.bst`). See
 [ddi-installer.md](ddi-installer.md) for what each artifact is.
 
-Home Server builds `homebrew/image.bst` through `fsdk-containers.bst`; the
-producer exports its independently pinned Brew machine, not host binaries.
-Keep the host and producer FSDK junctions explicitly duplicated in `project.conf`:
-their filesystems are packaged separately. Share the identical community-plugin
-junction through the consumer override; recheck its pins before changing that
-mapping. Text-only manual elements use `strip-binaries: ""`, matching
-`os-creds-prov.bst`, rather than adding a binary-stripping toolchain.
-The separate `oci/homebrew-integration-sysext.bst` supplies the optional host
-bridge and Python closure, not base `/usr`. Its version-locked asset and the
-machine asset are signed together; the `homebrew` feature stages both.
-Use a merged `fsdk-containers` main SHA before shipping this consumer.
+Homebrew is in the base image: `homebrew/seed.bst` (pins in `include/homebrew.yml`)
+ships the seed archive; see [homebrew-seed.md](homebrew-seed.md). Text-only manual
+elements use `strip-binaries: ""`, matching `os-creds-prov.bst`.
+
 
 
 To publish the set as an OCI artifact (one layer per file, tags `<version>`

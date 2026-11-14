@@ -32,7 +32,7 @@ SET = {
     f"bluefin-server-installer_{VERSION}.raw": ("installer_raw", 2048 * MiB),
     f"zfs_{VERSION}.raw.zst": ("zfs_sysext_raw_zst", 3 * MiB),
     f"nvidia-open-595_{VERSION}.raw.zst": ("nvidia_open_595_sysext_raw_zst", 180 * MiB),
-    f"homebrew-integration_{VERSION}.raw.zst": ("homebrew_integration_sysext_raw_zst", 4096),
+    f"podman_{VERSION}.raw.zst": ("podman_sysext_raw_zst", 4096),
     "k0s-1.36.4-k0s.0.raw.zst": ("k0s_sysext_raw_zst", 70 * MiB),
     "nvidia-container-toolkit-1.20.1.raw.zst": ("nvidia_container_toolkit_sysext_raw_zst", 9 * MiB),
     f"bluefin-server_{VERSION}.spdx.json": (None, 100),
@@ -105,7 +105,7 @@ def test_report_measures_each_release_file_and_sysext(tmp_path: Path, capsys, su
     table = summary.read_text()
     assert table.startswith(f"### Image sizes of {VERSION}\n\n| File or section | Size |\n| --- | ---: |\n")
     assert "| `installer_raw` | 2.0 GiB |\n" in table
-    assert "| `homebrew_integration_sysext_raw_zst` | 4.0 KiB |\n" in table
+    assert "| `podman_sysext_raw_zst` | 4.0 KiB |\n" in table
     assert "Change since" not in table and "Bold" not in table
 
 
@@ -115,7 +115,7 @@ def test_growth_over_five_percent_or_five_mib_warns(tmp_path: Path, capsys, summ
     old.write_text(json.dumps({"image_version": "26.10.6", "metrics": {
         "usr_raw": 190 * MiB,  # +10 MiB, +5.3 %
         "os_ddi_raw": 894 * MiB,  # +6 MiB, +0.7 %
-        "homebrew_integration_sysext_raw_zst": 3900,  # +196 B, +5.0 %
+        "podman_sysext_raw_zst": 3900,  # +196 B, +5.0 %
         "installer_raw": 2044 * MiB,  # +4 MiB, +0.2 %
         "netboot_uki": 81 * MiB,
         "zfs_sysext_raw_zst": 3 * MiB,
@@ -126,13 +126,13 @@ def test_growth_over_five_percent_or_five_mib_warns(tmp_path: Path, capsys, summ
     assert report["delta"] == {
         "usr_raw": 10 * MiB,
         "os_ddi_raw": 6 * MiB,
-        "homebrew_integration_sysext_raw_zst": 196,
+        "podman_sysext_raw_zst": 196,
         "installer_raw": 4 * MiB,
         "netboot_uki": -MiB,
         "zfs_sysext_raw_zst": 0,
     }
     warned = [line.split("::")[2].split()[0] for line in err.splitlines() if line.startswith("::warning")]
-    assert warned == ["homebrew_integration_sysext_raw_zst", "os_ddi_raw", "usr_raw"]
+    assert warned == ["os_ddi_raw", "podman_sysext_raw_zst", "usr_raw"]
     assert "::warning title=Image size grew::usr_raw grew by +10.0 MiB (+5.3%) since 26.10.6, to 200.0 MiB\n" in err
     table = summary.read_text()
     assert "| File or section | Size | Change since 26.10.6 |\n| --- | ---: | ---: |\n" in table

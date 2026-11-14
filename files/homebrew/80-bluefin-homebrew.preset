@@ -1,1 +1,2 @@
-disable bluefin-homebrew*
+enable bluefin-homebrew-seed.service
+enable bluefin-homebrew-seed.path

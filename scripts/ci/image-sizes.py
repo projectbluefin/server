@@ -6,7 +6,7 @@ $GITHUB_STEP_SUMMARY (stderr when unset). Every metric is a size in bytes:
 
 * os_ddi_raw, usr_raw, usr_verity_raw, disk_uki, netboot_uki,
   netboot_esp_raw, installer_raw: the release files of those kinds;
-* <name>_sysext_raw_zst: each *.raw.zst (the homebrew machine image too);
+* <name>_sysext_raw_zst: each *.raw.zst;
 * uki_linux_section, uki_initrd_section: the disk UKI's PE sections, and
   initrd_unpacked: the size of the files in that initrd.
 

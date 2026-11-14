@@ -4,7 +4,7 @@ description: CI workflow conventions for Bluefin Server. Use when writing or edi
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-17"
+  last_updated: "2026-11-08"
   context7-sources:
     - /websites/github_en_actions
     - /websites/cli_github_manual
@@ -89,7 +89,7 @@ and measures coverage of the repo's Python (`.coveragerc`: `scripts/`,
 `.github/scripts/`, `files/`) into `term-missing:skip-covered`; the `unit`
 job appends the same report as markdown to the step summary. `fail_under` in `.coveragerc` is a ratchet (the measured total, rounded down): raise it as coverage grows, never lower it to pass.
 importlib-by-path loads are measured, and so are `python3` subprocesses (`patch = subprocess`) unless a test hands them a fresh `env=`.
-`pytest.ini` registers two markers: `-m "not slow"` skips the slow tests; `root` tests (real ownership changes, privilege drops) skip unprivileged, and the `unit` job's last step runs them with `sudo ... pytest -m root`, where in CI they fail if not root (`tests/unit/conftest.py`).
+`pytest.ini` registers two markers: `-m "not slow"` skips the slow tests; `root` tests (real ownership changes, privilege drops) skip unprivileged, and the `unit` job's last step runs them with `sudo ... pytest -m root`, where in CI they fail if not root (`tests/unit/conftest.py`). Tests using synthetic logins must mock prefix-owner UIDs too; never assume the runner's real UID matches the fixture.
 
 ### Workflow linting
 
