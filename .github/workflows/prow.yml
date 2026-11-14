@@ -74,21 +74,6 @@ jobs:
       prow-commands: /kind /area /hold /lgtm /approve /assign /unassign /cc /uncc /close /reopen /retest /test /ok-to-test /help /good-first-issue /check-required-labels ${{ needs.authorize.outputs.triage == 'true' && '/triage /priority /label' || '' }}
     secrets:
       token: ${{ secrets.PROW_TOKEN }}
-
-  transfer:
-    needs: authorize
-    if: needs.authorize.outputs.triage == 'true' && github.event_name == 'issue_comment'
-    permissions:
-      issues: write
-    uses: projectbluefin/.project/.github/workflows/prow-transfer.yml@b081ded6f69f4cf9d04085639bda93d8355de0ef
-    with:
-      authorized: ${{ needs.authorize.outputs.triage }}
-      # Pin the executed parser to the same reviewed commit as this workflow.
-      app-ref: b081ded6f69f4cf9d04085639bda93d8355de0ef
-    secrets:
-      MERGERAPTOR_APP_ID: ${{ secrets.MERGERAPTOR_APP_ID }}
-      MERGERAPTOR_PRIVATE_KEY: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
-
   label-sync:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '23 3 * * 0')
     permissions:
