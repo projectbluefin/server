@@ -65,7 +65,7 @@ def env(tmp_path: Path) -> dict[str, str]:
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "LOG": str(tmp_path / "log"),
         "GRAPH": "freedesktop-sdk.bst:components/linux.bst bluefin-server/keys/linux-module-cert.bst",
-        "STATES": "  not cached freedesktop-sdk.bst:components/linux.bst\n   available freedesktop-sdk.bst:components/go.bst",
+        "STATES": "  not cached freedesktop-sdk.bst:components/linux.bst\n   available freedesktop-sdk.bst:components/go.bst\n   available fsdk-containers.bst:oci/brew-nspawn.bst",
         "CASD_CLIENT_CERT": "-----BEGIN CERTIFICATE-----\ncert\n-----END CERTIFICATE-----",
         "CASD_CLIENT_KEY": "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----",
         "BST_FLAGS": "",
@@ -166,6 +166,7 @@ def test_seed_pushes_with_the_client_certificate(checkout: Path, env: dict[str, 
         "build",
         "freedesktop-sdk.bst:components/linux.bst",
         "freedesktop-sdk.bst:components/go.bst",
+        "fsdk-containers.bst:oci/brew-nspawn.bst",
     ]
     conf = (log / "buildstream.conf").read_text()
     for kind in ("artifacts:", "source-caches:"):
