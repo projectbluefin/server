@@ -141,8 +141,11 @@ def test_kernel_seeders_are_release_only_and_have_no_signing_keys() -> None:
     assert set(triggers) == {"push", "workflow_dispatch"}
     assert triggers["push"] == {"branches": ["main"]}
     jobs = workflow["jobs"]
-    for job, variant in (("kernel-cache", "release"), ("kernel-cache-dev", "dev")):
-        assert jobs[job]["if"] == "github.ref == 'refs/heads/main'"
+    assert jobs["sdk-cache"]["if"] == "github.ref == 'refs/heads/main'"
+    assert jobs["kernel-cache"]["if"] == "${{ !cancelled() && github.ref == 'refs/heads/main' }}"
+    assert jobs["kernel-cache"]["needs"] == "sdk-cache"
+    assert jobs["kernel-cache"]["strategy"] == {"fail-fast": False, "matrix": {"variant": ["release", "dev"]}}
+    for job, variant in (("sdk-cache", "shared"), ("kernel-cache", "${{ matrix.variant }}")):
         runs = [s.get("run", "") for s in jobs[job]["steps"]]
         assert f"bash scripts/kernel-cache.sh seed {variant}" in runs
         assert "BOOT_KEYS_TARBALL" not in str(jobs[job]) and "SYSUPDATE_SIGNING_KEY" not in str(jobs[job])

@@ -81,11 +81,11 @@ def test_signing_secrets_only_reach_main_only_environments() -> None:
     install = next(s for s in build["steps"] if s.get("name") == "Install signing keys")
     for secret in ("BOOT_KEYS_TARBALL", "SYSUPDATE_SIGNING_KEY"):
         assert install["env"][secret] == f"${{{{ needs.changes.outputs.release == 'true' && secrets.{secret} || '' }}}}"
-    for seeder in ("kernel-cache", "kernel-cache-dev"):
+    for seeder in ("sdk-cache", "kernel-cache"):
         assert CACHE_JOBS[seeder]["environment"] == "bst-cache"
     for jobs in (JOBS, CACHE_JOBS):
         for name, job in jobs.items():
-            if name not in ("build", "kernel-cache", "kernel-cache-dev"):
+            if name not in ("build", "sdk-cache", "kernel-cache"):
                 assert "secrets." not in json.dumps(job), name
                 assert "environment" not in job, name
 
@@ -179,7 +179,7 @@ def test_boot_test_result_is_the_one_gate_of_every_bucket() -> None:
             assert "boot-test" not in job.get("needs", []), f"{name} must gate on boot-test-result"
 
 
-@pytest.mark.parametrize("seeder", ["kernel-cache", "kernel-cache-dev"])
+@pytest.mark.parametrize("seeder", ["sdk-cache", "kernel-cache"])
 def test_a_failed_kernel_cache_seed_is_reported(seeder: str) -> None:
     seed = next(s for s in CACHE_JOBS[seeder]["steps"] if s.get("id") == "seed")
     assert seed.get("continue-on-error", False) is False
