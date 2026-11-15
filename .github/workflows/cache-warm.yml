@@ -19,8 +19,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     # CASD_CLIENT_KEY lives in this environment, which only main may use.
     environment: bst-cache
-    # Existing organization runner: 8 CPUs, 32 GB RAM, 300 GB storage.
-    runs-on: Testing
+    runs-on: ubuntu-26.04
     timeout-minutes: 240
     permissions:
       contents: read

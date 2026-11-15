@@ -399,7 +399,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   A skipped job reports as passing, so its required check does not hold it.
 - **Key-free build cache in the project CAS.** `cache-warm.yml` runs on pushes
   to `main` or a main-only dispatch. `sdk-cache` runs `seed shared` on the
-  existing 8-CPU/32-GB organization runner. Its outputs are certificate-independent;
+  standard `ubuntu-26.04` runner. Its outputs are certificate-independent;
   Ruby and systemd are explicit targets so cached Brew does not bypass them.
 
   Then `kernel-cache` runs release/dev variants in parallel with independent
