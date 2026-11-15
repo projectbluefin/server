@@ -27,18 +27,18 @@ metadata:
 ### Action pins — always use SHA, never mutable tags
 
 Every `uses:` line must reference a full commit SHA. Never use `@v2` or `@main`.
+Use an exact release comment (`vX.Y.Z`), not a moving major tag, so Renovate can update the SHA and zizmor can verify it.
 
 ```yaml
 # correct (see build.yml for the current pinned SHA)
-- uses: taiki-e/install-action@<full-commit-sha> # v2
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.3
 
 # wrong — mutable tag, supply-chain risk
 - uses: taiki-e/install-action@v2
 ```
 
-Check `.github/workflows/build.yml` (and sibling repos such as
-`projectbluefin/dakota` and `projectbluefin/common`) for the current pinned SHA
-before adding an action.
+Check `.github/workflows/build.yml` and sibling repos `projectbluefin/dakota`
+and `projectbluefin/common` for the current pinned SHA before adding an action.
 
 ### Installing `just` — taiki-e/install-action, not snap/cargo/apt
 
@@ -48,7 +48,7 @@ Pin the tool version too, not only the action SHA. Without `@<version>`,
 a binary chosen by an upstream release rather than by a commit in this repo.
 
 ```yaml
-- uses: taiki-e/install-action@<full-commit-sha> # v2 — see build.yml for the current pin
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.3 — see build.yml for the current pin
   with:
     tool: just@<version> # the version every other call site uses
 ```
@@ -235,8 +235,8 @@ use: remove only this repository from their repository access.
 | `unit`, `go` | `unit-tests.yml` | every `pull_request`, `merge_group`, `push/main` | `unit` runs `just lint-python` (see [Python lint](#python-lint)), then the pytest and BATS suites, then the `root`-marked tests under `sudo`; `go` runs `gofmt -l`, `go vet` and `go test -race` for each Go module in the repository (a matrix; `tests/unit/test_ci_workflows.py` fails if a `go.mod` is missing from it). No `paths:` filter, so both can be required checks. Read-only token. |
 | `actionlint`, `zizmor` | `lint-actions.yml` | every `pull_request`, `merge_group`, `push/main` | Lint the workflows (see [Workflow linting](#workflow-linting)). Read-only token; zizmor uses it for its online audits. |
 | `authorize` | `prow.yml` | `issue_comment` | Calls `projectbluefin/.project`'s reusable `prow-authorize.yml` (pinned by SHA) to look the commenter up in the org's `maintainers.yaml` roster; its `triage` output unlocks `/triage`, `/priority` and `/label` for the `prow` job. A failed lookup blocks the comment's commands. `contents: read`. |
-| `prow` | `prow.yml` | `issues`, `issue_comment`, `pull_request_target`, `pull_request_review`, `check_suite`, `schedule` (hourly) | Runs `cncf/prow-github-actions` v3.0.1 (pinned by SHA): `/` commands from the `prow-commands` allowlist, `needs-kind` on issues, reviewers and approvers from `OWNERS`, and merging through the merge queue once a PR has `lgtm` + `approved` (the hourly schedule is a backstop). `pull_request_target` is safe because nothing checks out or runs PR code. Write scopes granted per job. |
-| `label-sync` | `prow.yml` | `workflow_dispatch`, `push` of a repository `.github/prow.yaml` (none exists) | Same reusable workflow with `jobs: label-sync`: syncs repository labels from the org config at `projectbluefin/.project/prow.yaml`. Run by hand after every change to that config. |
+| `prow` | `prow.yml` | `issues`, `issue_comment`, `pull_request_target`, `pull_request_review`, `check_suite`, four-hour `schedule` at :23 | Runs `cncf/prow-github-actions` v3.5.0: `lgtm` on events, `sweep lgtm` on reconciliation, `/` commands, `needs-kind`, `OWNERS` reviewers/approvers, merge queue gating. Keeps `PROW_TOKEN`. |
+| `label-sync` | `prow.yml` | Sunday 03:23 UTC `schedule`, `workflow_dispatch`, `push` of `.github/prow.yaml` | Same reusable workflow with `jobs: label-sync`: syncs labels from org config weekly or on demand. Never runs on reconciliation cron. |
 | `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, Tailscale, NetBird, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token (`trackers` environment, `propose` only), minted after the apply step and narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
 Both trackers commit, push and open or update their pull request through
@@ -471,7 +471,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
 
 ## Verification
 
-- [ ] Every `uses:` line has a full 40-character SHA and a `# vX` comment.
+- [ ] Every action `uses:` line has a full 40-character SHA and exact `# vX.Y.Z` release comment.
 - [ ] Every `install-action` `tool:` names an explicit version (`just@<version>`).
 - [ ] actionlint and zizmor (see [Workflow linting](#workflow-linting)) report
       nothing.
