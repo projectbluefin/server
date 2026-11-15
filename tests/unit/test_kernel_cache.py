@@ -12,6 +12,7 @@ the release certificate, which must not be the dev one; dev the public
 INSECURE dev certificate, never its private key.
 """
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -187,14 +188,19 @@ def test_seed_pushes_with_the_client_certificate(checkout: Path, env: dict[str, 
     result = run(checkout, env)
     assert result.returncode == 0, result.stderr
     log = Path(env["LOG"])
-    assert (log / "built").read_text().split() == [
-        "bst",
-        "build",
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--deps")
+    parser.add_argument("elements", nargs="+")
+    build = parser.parse_args((log / "built").read_text().split()[2:])
+    assert build.deps == "all"
+    assert set(build.elements) == {
         "freedesktop-sdk.bst:components/linux.bst",
         "freedesktop-sdk.bst:components/go.bst",
         "freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst",
         "fsdk-containers.bst:oci/brew-nspawn.bst",
-    ]
+        "zfs/openzfs.bst",
+        "nvidia/nvidia-open-595.bst",
+    }
     conf = (log / "buildstream.conf").read_text()
     for kind in ("artifacts:", "source-caches:"):
         section = conf.split(kind, 1)[1]

@@ -183,7 +183,7 @@ one of these environments is refused before its first step.
 | Environment | Secrets | Jobs |
 |---|---|---|
 | `release` | `BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY` | `build`, only when `changes` says `release=true` |
-| `bst-cache` | `CASD_CLIENT_KEY` (`CASD_CLIENT_CERT` is a repository variable) | `kernel-cache`, `kernel-cache-dev` (releases only) |
+| `bst-cache` | `CASD_CLIENT_KEY` (`CASD_CLIENT_CERT` is a repository variable) | `kernel-cache`, `kernel-cache-dev` in `cache-warm.yml` (main only) |
 | `trackers` | `MERGERAPTOR_APP_ID`, `MERGERAPTOR_PRIVATE_KEY` | `track-junctions`, `track-binaries`' `propose` |
 
 `build` serves releases and every other build, so it names the environment
@@ -222,6 +222,7 @@ use: remove only this repository from their repository access.
 | `validate` | `build.yml` | `pull_request`, `merge_group` | `just validate` with throwaway keys: resolves every shipped element graph and runs the version-invariant checks, in minutes. Read-only token. |
 | `boot-test-preflight` | `build.yml` | when `changes` says `image=true` | Installs the boot test's tools with the same `scripts/ci/install-qemu-ovmf.sh` as `boot-test`, then runs `scripts/ci/dogfood-preflight.sh`: every host tool the dogfood scripts `boot-test` runs must be on the `PATH`, the OVMF files present and `/dev/kvm` read-writable. Each name its tool pattern matches in those scripts must be listed there, as a host tool or as one the runner never runs, so a new tool fails this job until it is. About a minute; `build` waits for it, so a missing tool (#486: `mcopy`) fails before the build instead of after it. Read-only token. |
 | `build` | `build.yml` | when `changes` says `image=true` | Resolves the element graph, sets `image-version`, and runs the full BuildStream compile of the image set (OS DDI, signed UKIs, netboot ESP, k0s/KubeStellar/kubeadm/OpenZFS/NVIDIA sysext assets), which also writes and signs the combined `SHA256SUMS` inside `oci/bluefin-server-image.bst`. For releases it runs in the `release` environment and installs its `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets; both are required there. Other builds use no environment. Every other build uses throwaway keys and also exports two higher-versioned sets (`1.<run>.1`, `1.<run>.2`) for the update test. It uploads each set in parts by what its consumers read: `dist/diskless/` as `image-set-netboot` (OS DDI, netboot UKI and ESP), `-installer`, `-sysupdate` (usr, usr-verity, disk UKI) and `-sysexts` (`*.raw.zst`), plus the catch-all `image-set-core` that excludes exactly what the others include, so no file is ever dropped; `1.<run>.1` as `image-next-boot` (catch-all) and `image-next-update` (sysupdate sources and sysexts); `1.<run>.2` as `image-broken`; the Ignition test signatures as `ignition-sigs`. The update sets leave out the installer. `image-check`, `release` and `release-dry-run` merge every `image-set-*` part back into `dist/diskless/`; `tests/unit/test_ci_image_artifacts.py` keeps the split exhaustive. Read-only token. |
+| `kernel-cache`, `kernel-cache-dev` | `cache-warm.yml` | `push/main`, `workflow_dispatch` on main | Warms the key-free kernel/Go/GCC/Brew closure in the project CAS. Separate workflow and concurrency group: never occupies the serialized release queue. Read-only token; mTLS credentials in `bst-cache` only. |
 | `boot-test` | `build.yml` | after `build` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4), with the harness checked out at the commit `build` built. A `fail-fast: false` matrix over the buckets of `scripts/ci/boot-test.sh`, one runner each, so its checks are `boot-test (<bucket>)`; each bucket downloads only the `build` artifacts its scenarios read, as listed in its matrix entry. Each bucket's wall time, passed or failed, is a notice and a row of its step summary. On failure each bucket uploads its logs as `boot-test-logs-<bucket>`. Read-only token. |
 | `boot-test-result` | `build.yml` | after `boot-test`, when `build` succeeded | The one result of every `boot-test` bucket: fails unless `boot-test` succeeded. `release` and `nightly-status` gate on it, and it is skipped like `boot-test` when nothing was built, so it is the boot test's required check. No checkout, `permissions: {}`. |
 | `image-check` | `build.yml` | after `build` | Runs `.github/scripts/check-image.py` on the built image set: no missing libraries, required dlopen libraries, or unit/udev programs in `/usr`, the disk UKI's initrd, or the sysexts (resolved over `/usr`); the step summary diffs `/usr` paths against the latest release. Then `scripts/ci/image-sizes.py` tables the size of every file, the disk UKI's `.linux` and `.initrd` and the unpacked initrd against the latest release's `bluefin-server_<ver>.size.json` (or its `*.usr.raw` alone), with a `::warning::` for each that grew by more than 5 % or 5 MiB (never a failure), and uploads this set's report as the `image-size` artifact that `release` and `release-dry-run` publish with the set, unsigned (see "Publishing" in `systemd-sysupdate-verification.md`). `release` needs it. Read-only token. |
@@ -396,22 +397,26 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   (`elements/`, `files/`, `include/`, `patches/`, `plugins/`, `scripts/`,
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
   A skipped job reports as passing, so its required check does not hold it.
-- **Kernel cache in the project CAS, key-free by construction.** Two jobs,
-  on every push to `main` (`release=true`), run `scripts/kernel-cache.sh seed`, one per module
-  certificate the kernel can trust (it is part of the kernel's cache key):
+- **Key-free build cache in the project CAS.** Two jobs in `cache-warm.yml`
+  run on pushes to `main` or a manual dispatch on `main`:
   - `kernel-cache` runs `seed release` with the committed release certificate
-    (`files/release-keys/linux-module-cert.crt`); `build` waits for it.
+    (`files/release-keys/linux-module-cert.crt`).
   - `kernel-cache-dev` runs `seed dev` with the public INSECURE dev
     certificate (`files/dev-keys/INSECURE-dev-module-key.crt`) that
-    `just gen-dev-keys` uses for every non-release build. No job waits for
-    it, so it never delays a release.
+    `just gen-dev-keys` uses for every non-release build.
+  Separate `cache-warm-*` concurrency keeps a slow seed out of the release
+  workflow and its queue; removing only `build.needs` is insufficient.
+  Cold image builds may compile concurrently with warming.
 
   With no signing secrets and that one certificate staged as the only file of
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
   directory's import is pushed with the kernel), each builds FSDK's kernel,
-  Go and `bootstrap/build/gcc-stage2.bst`, plus the Brew machine. BuildStream
-  pulls or rebuilds payloads, then `bst artifact push --deps all` replicates
-  upstream artifacts into `cache.projectbluefin.io:11002`; metadata never skips seeding.
+  Go, GCC stage 2, Brew and unsigned ZFS/NVIDIA outputs. Their full closure
+  includes Ruby and systemd's base build, but excludes module-signing stages.
+  `bst build --deps all` materializes their whole key-free closure; cached
+  targets otherwise leave build-only dependencies uncached. Then
+  `bst artifact push --deps all` replicates upstream artifacts into
+  `cache.projectbluefin.io:11002`; metadata never skips seeding.
   The push endpoint takes mTLS: its client certificate is the repository variable
   `CASD_CLIENT_CERT` and its key the `bst-cache` environment secret
   `CASD_CLIENT_KEY`, given to that step only and written to a gitignored `.casd.*/` directory that the script
@@ -428,11 +433,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   The CAS is publicly readable: `seed` refuses if
   `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds,
   and the job holds no signing secret. A content grep is no guard here: FSDK
-  sources (Go's TLS test data and others) carry 307 PEM private keys. The
-  seed step is `continue-on-error`, so a failed seed only costs time; the
-  next step then posts a warning and a step summary line.
+  sources (Go's TLS test data and others) carry 307 PEM private keys.
+  The independent warming workflow fails visibly on seed errors; its result
+  does not gate image building or publication.
   The former kernel/Go-only seed took 44 min and 15 GB on 16+ CPUs.
-  Kernel, Go, GCC, Brew or their dependency changes reseed the affected targets.
+  Changes to these targets or their dependencies reseed the affected artifacts.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,

@@ -149,100 +149,6 @@ jobs:
       - name: Validate Element Graph
         run: just validate
 
-  # FSDK's kernel is most of a cold build
-  # (docs/skills/ci-tooling.md#build-time-and-caches), and no upstream cache
-  # holds it (our module certificate and kernel config patches change its
-  # key). These jobs build it (and Go) with no signing secrets, each against
-  # one committed module certificate, and push the key-free artifacts to the
-  # project CAS unless a remote already holds them; every build pulls them
-  # through project.conf (scripts/kernel-cache.sh):
-  #  - kernel-cache: the release certificate, for release builds;
-  #  - kernel-cache-dev: the public INSECURE dev certificate that
-  #    `just gen-dev-keys` uses (files/dev-keys/), for pull requests, the
-  #    nightly build and local builds. No job needs it, so it never delays
-  #    a release.
-  # The cache only saves time: a failed seed must not hold back the release,
-  # which checks build's and boot-test-result's own results.
-  kernel-cache:
-    needs: changes
-    if: needs.changes.outputs.release == 'true'
-    # CASD_CLIENT_KEY lives in this environment, which only main may use.
-    environment: bst-cache
-    runs-on: ubuntu-26.04
-    timeout-minutes: 240
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up just
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
-        with:
-          tool: just@1.59.0
-
-      - name: Set up runner disk space
-        run: bash scripts/ci-runner-disk.sh
-
-      - name: Build and push the kernel cache unless it exists
-        id: seed
-        continue-on-error: true
-        env:
-          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
-          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
-        run: bash scripts/kernel-cache.sh seed release
-
-      # continue-on-error turns the job green; say so, or a cache that never
-      # seeds goes unnoticed while every build compiles the kernel.
-      - name: Report a failed seed
-        if: steps.seed.outcome == 'failure'
-        run: |
-          msg="The kernel cache seed failed; this release builds the kernel itself. See the step above."
-          echo "::warning title=Kernel cache not seeded::${msg}"
-          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
-
-  kernel-cache-dev:
-    needs: changes
-    if: needs.changes.outputs.release == 'true'
-    # CASD_CLIENT_KEY lives in this environment, which only main may use.
-    environment: bst-cache
-    runs-on: ubuntu-26.04
-    timeout-minutes: 240
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up just
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
-        with:
-          tool: just@1.59.0
-
-      - name: Set up runner disk space
-        run: bash scripts/ci-runner-disk.sh
-
-      - name: Build and push the dev kernel cache unless it exists
-        id: seed
-        continue-on-error: true
-        env:
-          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
-          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
-        run: bash scripts/kernel-cache.sh seed dev
-
-      # continue-on-error turns the job green; say so, or a cache that never
-      # seeds goes unnoticed while every build compiles the kernel.
-      - name: Report a failed seed
-        if: steps.seed.outcome == 'failure'
-        run: |
-          msg="The dev kernel cache seed failed; pull requests and the nightly build compile the kernel until a release seeds it. See the step above."
-          echo "::warning title=Kernel cache not seeded::${msg}"
-          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
-
   # Installs what the boot test runs and checks every host tool its dogfood
   # scripts call is there (scripts/ci/dogfood-preflight.sh), in about a
   # minute, so a missing one fails before the build instead of after it.
@@ -269,9 +175,9 @@ jobs:
         run: bash scripts/ci/dogfood-preflight.sh
 
   build:
-    needs: [changes, kernel-cache, boot-test-preflight]
-    # Runs when kernel-cache is skipped (non-release builds) or failed: the
-    # cache only saves time. A failed preflight stops it.
+    needs: [changes, boot-test-preflight]
+    # Cache warming is advisory, never a release startup dependency.
+    # A failed boot-test preflight still stops the image build.
     if: ${{ !cancelled() && needs.changes.outputs.image == 'true' && needs.boot-test-preflight.result == 'success' }}
     # The signing secrets live in the `release` environment, which only main
     # may use. Every other build runs with no environment (an empty name):
@@ -539,9 +445,6 @@ jobs:
   # parallel, one runner each; boot-test-result is their one gate.
   boot-test:
     needs: [changes, build]
-    # build needs kernel-cache, which is skipped outside release builds; a
-    # skipped job anywhere upstream skips this one unless it checks build's
-    # own result.
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 60
@@ -754,9 +657,7 @@ jobs:
   # command is scripts/publish-release.sh, which release-dry-run rehearses on
   # each pull request that builds.
   release:
-    # Explicit results, not !failure(): a failed kernel-cache (only a cache)
-    # must not hold back a release, and nothing but a built, boot-tested and
-    # image-checked set may publish.
+    # Publish only a built, boot-tested and image-checked set.
     if: ${{ !cancelled() && needs.changes.outputs.release == 'true' && needs.build.result == 'success' && needs.boot-test-result.result == 'success' && needs.image-check.result == 'success' }}
     needs: [changes, build, boot-test-result, image-check]
     runs-on: ubuntu-26.04

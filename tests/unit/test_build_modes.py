@@ -97,12 +97,6 @@ def test_signing_secrets_and_publishing_are_release_only() -> None:
         for step in job.get("steps", []):
             for key, value in (step.get("env") or {}).items():
                 if "secrets." in str(value) and "GITHUB_TOKEN" not in str(value):
-                    if name in ("kernel-cache", "kernel-cache-dev"):
-                        # The CAS push key, in a job that only runs for
-                        # releases (test_dev_module_key.py) and holds no
-                        # signing secret.
-                        assert (key, value) == ("CASD_CLIENT_KEY", "${{ secrets.CASD_CLIENT_KEY }}")
-                        continue
                     assert name == "build", (name, key)
                     assert str(value).startswith("${{ needs.changes.outputs.release == 'true' && secrets."), key
     assert "needs.changes.outputs.release == 'true'" in JOBS["release"]["if"]
