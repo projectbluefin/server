@@ -32,7 +32,7 @@ case "$*" in
     i=0; while [ "$i" -lt "${GRAPH_TAIL:-0}" ]; do echo "freedesktop-sdk.bst:components/filler-$i.bst"; i=$((i + 1)); done
     exit "${GRAPH_STATUS:-0}" ;;
   "bst artifact show"*) printf '%s\\n' "$STATES"; [ -z "$UNREACHABLE" ] || echo "$UNREACHABLE" >&2 ;;
-  "bst artifact push"*) exit "${PUSH_STATUS:-0}" ;;
+  "bst artifact push"*) echo "$*" > "$LOG/pushed"; exit "${PUSH_STATUS:-0}" ;;
   "bst build"*)
     echo "$*" >> "$LOG/built"
     conf="${BST_FLAGS##*--config /src/}"
@@ -97,13 +97,23 @@ def leftovers(checkout: Path) -> list[Path]:
     return list(checkout.glob(".casd.*"))
 
 
-def test_seed_refuses_a_graph_that_reaches_the_keys(checkout: Path, env: dict[str, str]) -> None:
+@pytest.mark.parametrize("variant", ["shared", "release", "dev"])
+def test_seed_refuses_a_graph_that_reaches_the_keys(checkout: Path, env: dict[str, str], variant: str) -> None:
     env["GRAPH"] += " bluefin-server/keys/boot-keys.bst"
-    result = run(checkout, env)
+    result = run(checkout, env, variant)
     assert result.returncode != 0
-    assert "refusing to publish" in result.stderr
+    assert "bluefin-server/keys/boot-keys.bst" in result.stderr
     assert not (Path(env["LOG"]) / "built").exists()
     assert not leftovers(checkout)
+
+
+def test_shared_seed_refuses_a_certificate_dependent_graph(checkout: Path, env: dict[str, str]) -> None:
+    result = run(checkout, env, "shared")
+    assert result.returncode != 0
+    assert "shared outputs depend on the variant certificate" in result.stderr
+    assert not (Path(env["LOG"]) / "built").exists()
+    assert not leftovers(checkout)
+    assert not staged(checkout)
 
 
 def test_seed_refuses_the_keys_early_in_a_long_graph(checkout: Path, env: dict[str, str]) -> None:
@@ -173,34 +183,42 @@ def test_seed_builds_elements_only_cached_locally(checkout: Path, env: dict[str,
     assert (Path(env["LOG"]) / "built").exists()
 
 
-def test_seed_builds_when_only_brew_is_missing(checkout: Path, env: dict[str, str]) -> None:
-    env["STATES"] = (
-        "   available freedesktop-sdk.bst:components/linux.bst\n"
-        "   available freedesktop-sdk.bst:components/go.bst\n"
-        "   available freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst\n"
-        "  not cached fsdk-containers.bst:oci/brew-nspawn.bst"
-    )
-    assert run(checkout, env).returncode == 0
-    assert (Path(env["LOG"]) / "built").exists()
-
-
-def test_seed_pushes_with_the_client_certificate(checkout: Path, env: dict[str, str]) -> None:
-    result = run(checkout, env)
+@pytest.mark.parametrize(
+    ("variant", "targets"),
+    [
+        ("release", {
+            "freedesktop-sdk.bst:components/linux.bst",
+            "zfs/openzfs.bst",
+            "nvidia/nvidia-open-595.bst",
+        }),
+        ("shared", {
+            "freedesktop-sdk.bst:components/go.bst",
+            "freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst",
+            "fsdk-containers.bst:oci/brew-nspawn.bst",
+            "freedesktop-sdk.bst:components/ruby.bst",
+            "freedesktop-sdk.bst:components/_private/systemd-base.bst",
+        }),
+    ],
+)
+def test_seed_pushes_with_the_client_certificate(
+    checkout: Path, env: dict[str, str], variant: str, targets: set[str]
+) -> None:
+    if variant == "shared":
+        env["GRAPH"] = "freedesktop-sdk/components/go.bst"
+    result = run(checkout, env, variant)
     assert result.returncode == 0, result.stderr
     log = Path(env["LOG"])
     parser = argparse.ArgumentParser()
     parser.add_argument("--deps")
     parser.add_argument("elements", nargs="+")
     build = parser.parse_args((log / "built").read_text().split()[2:])
-    assert build.deps == "all"
-    assert set(build.elements) == {
-        "freedesktop-sdk.bst:components/linux.bst",
-        "freedesktop-sdk.bst:components/go.bst",
-        "freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst",
-        "fsdk-containers.bst:oci/brew-nspawn.bst",
-        "zfs/openzfs.bst",
-        "nvidia/nvidia-open-595.bst",
-    }
+    assert build.deps is None, "normal builds must reuse cached parents, not reconstruct bootstrap ancestors"
+    assert set(build.elements) == targets
+    push = parser.parse_args((log / "pushed").read_text().split()[3:])
+    assert push.deps == "none", "selected publication must not require absent build-only ancestors"
+    assert set(push.elements) == targets
+    if variant == "shared":
+        assert not staged(checkout)
     conf = (log / "buildstream.conf").read_text()
     for kind in ("artifacts:", "source-caches:"):
         section = conf.split(kind, 1)[1]
