@@ -87,6 +87,10 @@ layout (it re-indents every list in elements/k0s/k0s-bin.bst). BuildStream
 still checks each ref against the bytes when the pull request's build fetches
 the sources.
 
+A request that fails with a server error (5xx) or a dropped connection is
+retried RETRIES times before the component fails, so one upstream hiccup does
+not fail the run; a 4xx fails at once.
+
 Stdlib only. GITHUB_TOKEN or GH_TOKEN, if set, is sent to api.github.com only.
 """
 
@@ -98,6 +102,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -110,6 +115,10 @@ from typing import NamedTuple
 ROOT = Path(__file__).resolve().parents[2]
 TIMEOUT = 60
 MAX_RELEASE_PAGES = 20
+# A server error (5xx) or a dropped connection is retried this many times,
+# waiting RETRY_DELAY seconds longer before each try, before the request fails.
+RETRIES = 2
+RETRY_DELAY = 10
 
 URL_LINE_RE = re.compile(r"^\s*(?:-\s+)?url:\s*(?P<url>\S+)\s*$")
 VARIABLE_RE = re.compile(r'^\s+(?P<name>[A-Za-z][\w-]*):\s*"(?P<value>[^"]*)"', re.MULTILINE)
@@ -134,12 +143,18 @@ def _open(url: str, method: str = "GET", extra: dict[str, str] | None = None) ->
             # Never on downloads: release assets redirect to object storage,
             # which must not see the token.
             headers["Authorization"] = f"Bearer {token}"
-    try:
-        return urllib.request.urlopen(urllib.request.Request(url, headers=headers, method=method), timeout=TIMEOUT)
-    except urllib.error.HTTPError as err:
-        raise (NotFound if err.code == 404 else TrackError)(f"{method} {url}: HTTP {err.code}") from None
-    except urllib.error.URLError as err:
-        raise TrackError(f"{method} {url}: {err.reason}") from None
+    for attempt in range(RETRIES + 1):
+        try:
+            return urllib.request.urlopen(urllib.request.Request(url, headers=headers, method=method), timeout=TIMEOUT)
+        except urllib.error.HTTPError as err:
+            error: TrackError = (NotFound if err.code == 404 else TrackError)(f"{method} {url}: HTTP {err.code}")
+            transient = err.code >= 500
+        except urllib.error.URLError as err:
+            error, transient = TrackError(f"{method} {url}: {err.reason}"), True
+        if not transient or attempt == RETRIES:
+            raise error from None
+        time.sleep(RETRY_DELAY * (attempt + 1))
+    raise AssertionError("unreachable")
 
 
 def _get(url: str) -> bytes:
