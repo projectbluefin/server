@@ -39,7 +39,6 @@ ELEMENTS=(
     freedesktop-sdk.bst:components/linux.bst
     freedesktop-sdk.bst:components/go.bst
     freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst
-    freedesktop-sdk.bst:components/systemd-base.bst
     fsdk-containers.bst:oci/brew-nspawn.bst
     zfs/openzfs.bst
     nvidia/nvidia-open-595.bst

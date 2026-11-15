@@ -411,8 +411,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   With no signing secrets and that one certificate staged as the only file of
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
   directory's import is pushed with the kernel), each builds FSDK's kernel,
-  Go, GCC stage 2, systemd-base, Brew and unsigned ZFS/NVIDIA compiler outputs.
-  Signing stages stay excluded; rotating signing keys does not rebuild modules.
+  Go, GCC stage 2, Brew and unsigned ZFS/NVIDIA outputs. Their full closure
+  includes Ruby and systemd's base build, but excludes module-signing stages.
   `bst build --deps all` materializes their whole key-free closure; cached
   targets otherwise leave build-only dependencies uncached. Then
   `bst artifact push --deps all` replicates upstream artifacts into
