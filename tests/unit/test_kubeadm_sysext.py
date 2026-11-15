@@ -169,7 +169,7 @@ def test_host_modules_and_sysctls() -> None:
     for key in ("net.ipv4.ip_forward", "net.bridge.bridge-nf-call-iptables", "net.bridge.bridge-nf-call-ip6tables"):
         assert f"{key} = 1" in sysctl
     assert "fs.inotify.max_user_instances = 8192" in sysctl
-    assert "fs.inotify.max_user_watches = 524288" in sysctl
+    assert "fs.inotify.max_user_watches = 1048576" in sysctl
 
 
 def test_kubelet_units_follow_kubeadm() -> None:
