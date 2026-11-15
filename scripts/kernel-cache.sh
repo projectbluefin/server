@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Key-free BuildStream cache of FSDK's kernel, Go, GCC and the Brew machine.
+# Key-free BuildStream cache of the SDK, Brew and unsigned ZFS/NVIDIA builds.
 #
 #   CASD_CLIENT_CERT=<pem> CASD_CLIENT_KEY=<pem> kernel-cache.sh seed release|dev
 #
@@ -40,6 +40,8 @@ ELEMENTS=(
     freedesktop-sdk.bst:components/go.bst
     freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst
     fsdk-containers.bst:oci/brew-nspawn.bst
+    zfs/openzfs.bst
+    nvidia/nvidia-open-595.bst
 )
 KEYS_ELEMENT=bluefin-server/keys/boot-keys.bst
 PUSH_URL=https://cache.projectbluefin.io:11002

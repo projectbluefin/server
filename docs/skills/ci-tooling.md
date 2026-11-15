@@ -397,7 +397,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   (`elements/`, `files/`, `include/`, `patches/`, `plugins/`, `scripts/`,
   `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
   A skipped job reports as passing, so its required check does not hold it.
-- **Key-free kernel cache in the project CAS.** Two jobs in `cache-warm.yml`
+- **Key-free build cache in the project CAS.** Two jobs in `cache-warm.yml`
   run on pushes to `main` or a manual dispatch on `main`:
   - `kernel-cache` runs `seed release` with the committed release certificate
     (`files/release-keys/linux-module-cert.crt`).
@@ -411,7 +411,8 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   With no signing secrets and that one certificate staged as the only file of
   `files/boot-keys/modules/` (`seed` refuses anything else there: that
   directory's import is pushed with the kernel), each builds FSDK's kernel,
-  Go and `bootstrap/build/gcc-stage2.bst`, plus the Brew machine.
+  Go, GCC stage 2, Brew and unsigned ZFS/NVIDIA compiler outputs. Signing stages
+  stay excluded; rotating signing keys does not rebuild those modules.
   `bst build --deps all` materializes their whole key-free closure; cached
   targets otherwise leave build-only dependencies uncached. Then
   `bst artifact push --deps all` replicates upstream artifacts into
@@ -436,7 +437,7 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   The independent warming workflow fails visibly on seed errors; its result
   does not gate image building or publication.
   The former kernel/Go-only seed took 44 min and 15 GB on 16+ CPUs.
-  Kernel, Go, GCC, Brew or their dependency changes reseed the affected targets.
+  Changes to these targets or their dependencies reseed the affected artifacts.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
