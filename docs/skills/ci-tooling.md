@@ -26,19 +26,19 @@ metadata:
 
 ### Action pins — always use SHA, never mutable tags
 
-Every `uses:` line must reference a full commit SHA. Never use `@v2` or `@main`.
+Every `uses:` line must reference a full commit SHA, with its exact release tag
+in the comment (not a moving major tag). The online workflow audit checks both.
 
 ```yaml
 # correct (see build.yml for the current pinned SHA)
-- uses: taiki-e/install-action@<full-commit-sha> # v2
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.1
 
 # wrong — mutable tag, supply-chain risk
 - uses: taiki-e/install-action@v2
 ```
 
-Check `.github/workflows/build.yml` (and sibling repos such as
-`projectbluefin/dakota` and `projectbluefin/common`) for the current pinned SHA
-before adding an action.
+Check `.github/workflows/build.yml` (and sibling repos `projectbluefin/dakota`
+and `projectbluefin/common`) for the current pinned SHA before adding an action.
 
 ### Installing `just` — taiki-e/install-action, not snap/cargo/apt
 
@@ -48,7 +48,7 @@ Pin the tool version too, not only the action SHA. Without `@<version>`,
 a binary chosen by an upstream release rather than by a commit in this repo.
 
 ```yaml
-- uses: taiki-e/install-action@<full-commit-sha> # v2 — see build.yml for the current pin
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.1 — see build.yml for the current pin
   with:
     tool: just@<version> # the version every other call site uses
 ```
