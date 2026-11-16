@@ -28,8 +28,6 @@ GITHUB_ACTIONS_APP_ID = 15368
 
 # Jobs of the gating workflows that are not required checks, and why.
 EXEMPT = {
-    ("build.yml", "kernel-cache"): "releases only; a cache, never a gate",
-    ("build.yml", "kernel-cache-dev"): "releases only; a cache, never a gate",
     ("build.yml", "boot-test"): "a matrix; boot-test-result is its one result",
     ("build.yml", "release"): "pushes to main only",
     ("build.yml", "nightly-status"): "schedule only",
