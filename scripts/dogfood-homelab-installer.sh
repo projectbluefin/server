@@ -248,8 +248,11 @@ install() {
     stick="$(stick_for "${role}")"
     cp "${vars_tmpl}" "${state}/${role}-vars.fd"
     truncate -s 16G "${target}"
+    # The stick is a USB mass-storage device, as on hardware, so the installer
+    # initrd's USB path (xhci, usb-storage, sd) is what finds its partitions.
     # shellcheck disable=SC2054 # commas belong to the QEMU options
-    local stick_args=(-drive "if=none,id=stick,format=raw,file=${stick}" -device virtio-blk-pci,drive=stick,serial=bluefin-installer)
+    local stick_args=(-drive "if=none,id=stick,format=raw,file=${stick}"
+                      -device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,serial=bluefin-installer,bootindex=0)
     MEM=4096 vm "${role}-1-enroll" "${role}" "${stick_args[@]}" -nic none
     # OVMF sometimes hangs in the reset after enrolling: systemd-boot's
     # message on the firmware console ends the boot instead.

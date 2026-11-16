@@ -9,7 +9,6 @@ so an operator can `modprobe` the one that matches the platform without
 rebuilding the kernel.
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

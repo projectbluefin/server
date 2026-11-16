@@ -26,19 +26,19 @@ metadata:
 
 ### Action pins — always use SHA, never mutable tags
 
-Every `uses:` line must reference a full commit SHA. Never use `@v2` or `@main`.
+Every `uses:` line must reference a full commit SHA, with its exact release tag
+in the comment (not a moving major tag). The online workflow audit checks both.
 
 ```yaml
 # correct (see build.yml for the current pinned SHA)
-- uses: taiki-e/install-action@<full-commit-sha> # v2
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.1
 
 # wrong — mutable tag, supply-chain risk
 - uses: taiki-e/install-action@v2
 ```
 
-Check `.github/workflows/build.yml` (and sibling repos such as
-`projectbluefin/dakota` and `projectbluefin/common`) for the current pinned SHA
-before adding an action.
+Check `.github/workflows/build.yml` (and sibling repos `projectbluefin/dakota`
+and `projectbluefin/common`) for the current pinned SHA before adding an action.
 
 ### Installing `just` — taiki-e/install-action, not snap/cargo/apt
 
@@ -48,7 +48,7 @@ Pin the tool version too, not only the action SHA. Without `@<version>`,
 a binary chosen by an upstream release rather than by a commit in this repo.
 
 ```yaml
-- uses: taiki-e/install-action@<full-commit-sha> # v2 — see build.yml for the current pin
+- uses: taiki-e/install-action@<full-commit-sha> # v2.90.1 — see build.yml for the current pin
   with:
     tool: just@<version> # the version every other call site uses
 ```
@@ -67,11 +67,11 @@ Workflows install Python packages with
 `pip install <name>`. The file pins the whole resolved set with `==`, and
 Renovate's `pip_requirements` manager proposes the bumps.
 
-The Justfile's `bst2_image` is tagged with the freedesktop-sdk-docker-images
-commit it was built from. The docker datasource cannot order those tags, so a
-Renovate `git-refs` manager follows that repository's default branch and moves
-the tag (a tag, not a digest pin). A failed upstream build leaves it unpublished
-and no CI job pulls it, so a package rule keeps these bumps from automerging.
+The Justfile's other tool images are pinned `tag@sha256:`, bumped by a Renovate
+`docker` regex manager (ORAS digest only: `track-binaries.py` owns its tag).
+`bst2_image` is a mutable tag named for the freedesktop-sdk-docker-images commit
+it was built from, which a `git-refs` manager moves; no CI job pulls it, so a
+package rule holds those bumps (git-refs has no timestamps to age-gate).
 
 ### Python lint
 
@@ -98,8 +98,8 @@ to `main`, each from a container image pinned by digest (`docker://` steps
 that Renovate's github-actions manager bumps). `.github/actionlint.yaml`
 declares hosted runner labels newer than actionlint's built-in list
 (`ubuntu-26.04`). Fix zizmor findings rather than silencing them; when one is
-accepted, ignore that rule for that location in `.github/zizmor.yml` with the
-reason next to it, never a whole audit. Locally:
+accepted, ignore that rule inline at that location with
+`# zizmor: ignore[<rule>]` plus the reason, never a whole audit. Locally:
 
 ```bash
 podman run --rm -v "$PWD":/repo:Z -w /repo docker.io/rhysd/actionlint:latest -no-color -oneline
@@ -166,8 +166,8 @@ rootless `podman info` works and `sudo` otherwise.
   mint that token only right before the push and PR step, after every step
   that runs repository or upstream code, narrowed with
   `permission-contents: write` and `permission-pull-requests: write`, and
-  push with a one-off `http.<server>/.extraheader`; the checkout keeps no
-  credentials.
+  push with a one-off `http.<server>/.extraheader` in `GIT_CONFIG_*` (not
+  argv); the checkout keeps no credentials.
 - Every `actions/checkout` sets `persist-credentials: false`; no job pushes
   with the checkout's token.
 
@@ -183,7 +183,7 @@ one of these environments is refused before its first step.
 | Environment | Secrets | Jobs |
 |---|---|---|
 | `release` | `BOOT_KEYS_TARBALL`, `SYSUPDATE_SIGNING_KEY` | `build`, only when `changes` says `release=true` |
-| `bst-cache` | `CASD_CLIENT_KEY` (`CASD_CLIENT_CERT` is a repository variable) | `kernel-cache`, `kernel-cache-dev` (releases only) |
+| `bst-cache` | `CASD_CLIENT_KEY` (`CASD_CLIENT_CERT` is a repository variable) | `sdk-cache`, `kernel-cache` in `cache-warm.yml` (main only) |
 | `trackers` | `MERGERAPTOR_APP_ID`, `MERGERAPTOR_PRIVATE_KEY` | `track-junctions`, `track-binaries`' `propose` |
 
 `build` serves releases and every other build, so it names the environment
@@ -222,6 +222,7 @@ use: remove only this repository from their repository access.
 | `validate` | `build.yml` | `pull_request`, `merge_group` | `just validate` with throwaway keys: resolves every shipped element graph and runs the version-invariant checks, in minutes. Read-only token. |
 | `boot-test-preflight` | `build.yml` | when `changes` says `image=true` | Installs the boot test's tools with the same `scripts/ci/install-qemu-ovmf.sh` as `boot-test`, then runs `scripts/ci/dogfood-preflight.sh`: every host tool the dogfood scripts `boot-test` runs must be on the `PATH`, the OVMF files present and `/dev/kvm` read-writable. Each name its tool pattern matches in those scripts must be listed there, as a host tool or as one the runner never runs, so a new tool fails this job until it is. About a minute; `build` waits for it, so a missing tool (#486: `mcopy`) fails before the build instead of after it. Read-only token. |
 | `build` | `build.yml` | when `changes` says `image=true` | Resolves the element graph, sets `image-version`, and runs the full BuildStream compile of the image set (OS DDI, signed UKIs, netboot ESP, k0s/KubeStellar/kubeadm/OpenZFS/NVIDIA sysext assets), which also writes and signs the combined `SHA256SUMS` inside `oci/bluefin-server-image.bst`. For releases it runs in the `release` environment and installs its `BOOT_KEYS_TARBALL` and `SYSUPDATE_SIGNING_KEY` secrets; both are required there. Other builds use no environment. Every other build uses throwaway keys and also exports two higher-versioned sets (`1.<run>.1`, `1.<run>.2`) for the update test. It uploads each set in parts by what its consumers read: `dist/diskless/` as `image-set-netboot` (OS DDI, netboot UKI and ESP), `-installer`, `-sysupdate` (usr, usr-verity, disk UKI) and `-sysexts` (`*.raw.zst`), plus the catch-all `image-set-core` that excludes exactly what the others include, so no file is ever dropped; `1.<run>.1` as `image-next-boot` (catch-all) and `image-next-update` (sysupdate sources and sysexts); `1.<run>.2` as `image-broken`; the Ignition test signatures as `ignition-sigs`. The update sets leave out the installer. `image-check`, `release` and `release-dry-run` merge every `image-set-*` part back into `dist/diskless/`; `tests/unit/test_ci_image_artifacts.py` keeps the split exhaustive. Read-only token. |
+| `sdk-cache`, `kernel-cache` | `cache-warm.yml` | `push/main`, `workflow_dispatch` on main | Warms selected key-free SDK/Brew outputs once, then release/dev kernel and unsigned module variants in parallel. Separate workflow and concurrency group: never occupies the serialized release queue. Read-only token; mTLS credentials in `bst-cache` only. |
 | `boot-test` | `build.yml` | after `build` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4), with the harness checked out at the commit `build` built. A `fail-fast: false` matrix over the buckets of `scripts/ci/boot-test.sh`, one runner each, so its checks are `boot-test (<bucket>)`; each bucket downloads only the `build` artifacts its scenarios read, as listed in its matrix entry. Each bucket's wall time, passed or failed, is a notice and a row of its step summary. On failure each bucket uploads its logs as `boot-test-logs-<bucket>`. Read-only token. |
 | `boot-test-result` | `build.yml` | after `boot-test`, when `build` succeeded | The one result of every `boot-test` bucket: fails unless `boot-test` succeeded. `release` and `nightly-status` gate on it, and it is skipped like `boot-test` when nothing was built, so it is the boot test's required check. No checkout, `permissions: {}`. |
 | `image-check` | `build.yml` | after `build` | Runs `.github/scripts/check-image.py` on the built image set: no missing libraries, required dlopen libraries, or unit/udev programs in `/usr`, the disk UKI's initrd, or the sysexts (resolved over `/usr`); the step summary diffs `/usr` paths against the latest release. Then `scripts/ci/image-sizes.py` tables the size of every file, the disk UKI's `.linux` and `.initrd` and the unpacked initrd against the latest release's `bluefin-server_<ver>.size.json` (or its `*.usr.raw` alone), with a `::warning::` for each that grew by more than 5 % or 5 MiB (never a failure), and uploads this set's report as the `image-size` artifact that `release` and `release-dry-run` publish with the set, unsigned (see "Publishing" in `systemd-sysupdate-verification.md`). `release` needs it. Read-only token. |
@@ -347,6 +348,8 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
 
 ## Build time and caches
 
+The Brew machine shares the server's SDK junction, not a second bootstrap.
+
 The canonical build-time figures; other files link here instead of
 restating them:
 
@@ -394,23 +397,27 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   if any tracked build input (`elements/`, `files/`, `include/`, `patches/`,
   `scripts/`, `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
   A skipped job reports as passing, so its required check does not hold it.
-- **Kernel cache in the project CAS, key-free by construction.** Two jobs,
-  on releases only, run `scripts/kernel-cache.sh seed`, one per module
-  certificate the kernel can trust (it is part of the kernel's cache key):
-  - `kernel-cache` runs `seed release` with the committed release certificate
-    (`files/release-keys/linux-module-cert.crt`); `build` waits for it.
-  - `kernel-cache-dev` runs `seed dev` with the public INSECURE dev
-    certificate (`files/dev-keys/INSECURE-dev-module-key.crt`) that
-    `just gen-dev-keys` uses for every non-release build. No job waits for
-    it, so it never delays a release.
+- **Key-free build cache in the project CAS.** `cache-warm.yml` runs on pushes
+  to `main` or a main-only dispatch. `sdk-cache` runs `seed shared` on the
+  standard `ubuntu-26.04` runner. Its outputs are certificate-independent;
+  Ruby and systemd are explicit targets so cached Brew does not bypass them.
 
-  With no signing secrets and that one certificate staged as the only file of
-  `files/boot-keys/modules/` (`seed` refuses anything else there: that
-  directory's import is pushed with the kernel), each builds FSDK's
-  `components/linux.bst` and `components/go.bst` with a BuildStream config
-  that pushes artifacts and sources to `cache.projectbluefin.io:11002`,
-  unless `bst artifact show` reports both `available` on a remote. The push
-  endpoint takes mTLS: the client certificate is the repository variable
+  Then `kernel-cache` runs release/dev variants in parallel with independent
+  failures. Each stages only its committed public module certificate in
+  `files/boot-keys/modules/` and builds the kernel and unsigned ZFS/NVIDIA
+  outputs. The shared seed avoids duplicate compiler work; its failure stays
+  visible but does not suppress either kernel variant. Separate `cache-seed-*`
+  concurrency keeps warming out of the release queue without cancelling
+  legacy `cache-warm-*` runs. Cold image builds may compile concurrently.
+
+  Ordinary `bst build` reuses cached compiler parents instead of forcing
+  reconstruction of bootstrap ancestors. `bst artifact push --deps none`
+  copies every selected output to `cache.projectbluefin.io:11002`, including
+  those pulled from upstream; metadata alone never skips seeding. Dependencies
+  built along the way also push normally. This warms useful outputs, not a
+  complete historical SDK closure: `build --deps all` plus `push --deps all`
+  would reconstruct missing build-only tools just to mirror cached parents.
+  The push endpoint takes mTLS: its client certificate is the repository variable
   `CASD_CLIENT_CERT` and its key the `bst-cache` environment secret
   `CASD_CLIENT_KEY`, given to that step only and written to a gitignored `.casd.*/` directory that the script
   removes on exit. The CAS trusts that certificate in its list of client
@@ -424,14 +431,12 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   match, and run `scripts/check-release-keys.sh`, which fails the build if
   the module certificate or key is the dev pair; `seed release` runs it too.
   The CAS is publicly readable: `seed` refuses if
-  `bluefin-server/keys/boot-keys.bst` is anywhere in the graph it builds,
-  and the job holds no signing secret. A content grep is no guard here: FSDK
-  sources (Go's TLS test data and others) carry 307 PEM private keys. The
-  seed step is `continue-on-error`, so a failed seed only costs time; the
-  next step then posts a warning and a step summary line.
-  Measured in the lab: the seed build takes 44 min on 16+ CPUs and fills
-  15 GB. Only a kernel or Go change (FSDK bump, a kernel config patch such as
-  `0006` or `0007`, module certificate) reseeds.
+  `bluefin-server/keys/boot-keys.bst` is anywhere in its full dependency graph,
+  shared seeding also rejects the module certificate import, and no seed job
+  holds a signing secret. A content grep is no guard here: FSDK
+  sources (Go's TLS test data and others) carry 307 PEM private keys.
+  The independent warming workflow fails visibly on seed errors; its result
+  does not gate image building or publication.
 - **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
   `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
   and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
@@ -439,17 +444,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   and the `nvidia-open-*-signed.bst` elements
   build-depend on it, so a release build's own cache must never be saved or
   pushed anywhere a pull request can read.
-- **Most pull requests build the image only in the merge queue.** The full
-  build costs up to 2 h (figures above), most of it FSDK's kernel, so a pull
-  request builds before the queue only with the `full-build` label or when it
-  changes `elements/freedesktop-sdk.bst` or `patches/`; the rest run
-  `validate`, and the merge queue builds and boot-tests every merge group
-  that can change the image set before it reaches `main`. When a pull
-  request, a merge group or the nightly build does build, it pulls the kernel that `kernel-cache-dev` seeded: `just
-  gen-dev-keys` always stages the same public dev module certificate, so
-  the dev kernel's cache key is the same on every run. It compiles the
-  kernel (1 h 43 min) only until the next release after a kernel change
-  seeds it.
+- **Most pull requests build the image only in the merge queue.** Before
+  the queue, only `full-build`, SDK junction and patch changes build; the
+  rest run `validate`. Every image-changing merge group builds and boots.
+  Dev builds reuse the public module certificate, so their kernel keys
+  match `kernel-cache (dev)`; after a kernel change it stays cold until seeded.
 - **No `actions/cache`.** A full build's cache holds `boot-keys.bst`, and
   pull requests can restore caches saved on `main`; the key-free kernel
   cache lives in the project CAS instead.

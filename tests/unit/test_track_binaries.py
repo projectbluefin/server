@@ -36,7 +36,7 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-OLD = {name: sha(name.encode()) for name in ("kubelet", "kubeadm", "kubectl", "crictl", "containerd", "runc", "cni", "k0s", "oras")}
+OLD = {name: sha(name.encode()) for name in ("kubelet", "kubeadm", "kubectl", "crictl", "containerd", "runc", "cni", "k0s", "oras", "oras-image")}
 
 FILES = {
     "include/aliases.yml": "aliases:\n  github: https://github.com/\n  k8s_dl: https://dl.k8s.io/\n",
@@ -112,7 +112,7 @@ config:
   install-commands:
     - install -D -m 0755 k0s-%{{k0s-upstream-tag}}-amd64 "%{{install-root}}/usr/bin/k0s"
 """,
-    "Justfile": 'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4")\n',
+    "Justfile": f'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.4@sha256:{OLD["oras-image"]}")\n',
     ".github/workflows/build.yml": f"""jobs:
   release:
     steps:
@@ -137,15 +137,25 @@ config:
 
 
 class Upstream:
-    """Serves registered URLs; `status` forces an HTTP error, anything else is a 404."""
+    """Serves registered URLs; `status` forces an HTTP error, anything else is a 404.
+
+    `flaky` fails a URL with each listed status (0: a dropped connection) once,
+    in order, before serving it.
+    """
 
     def __init__(self):
         self.files: dict[str, bytes] = {}
         self.status: dict[str, int] = {}
+        self.flaky: dict[str, list[int]] = {}
         self.requests: list[urllib.request.Request] = []
 
     def urlopen(self, request, timeout=None):
         self.requests.append(request)
+        if self.flaky.get(request.full_url):
+            code = self.flaky[request.full_url].pop(0)
+            if not code:
+                raise urllib.error.URLError("Connection reset by peer")
+            raise urllib.error.HTTPError(request.full_url, code, "Error", Message(), None)
         if request.full_url in self.status:
             raise urllib.error.HTTPError(request.full_url, self.status[request.full_url], "Error", Message(), None)
         if request.full_url not in self.files:
@@ -181,6 +191,7 @@ CONTAINERD = "https://github.com/containerd/containerd/releases/download/v2.1.9/
 def upstream(monkeypatch):
     fake = Upstream()
     monkeypatch.setattr(urllib.request, "urlopen", fake.urlopen)
+    monkeypatch.setattr(track, "RETRY_DELAY", 0)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
     return fake
@@ -337,14 +348,32 @@ def test_apply_k0s_moves_both_atoms_and_downloads_the_escaped_tag(repo, upstream
     assert url in [r.full_url for r in upstream.requests]
 
 
-def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstream, tmp_path):
+ORAS_TOKEN = "https://ghcr.io/token?scope=repository%3Aoras-project%2Foras%3Apull&service=ghcr.io"
+ORAS_INDEX = "https://ghcr.io/v2/oras-project/oras/manifests/v1.3.5"
+
+
+def oras_image(upstream, media_type="application/vnd.oci.image.index.v1+json") -> str:
+    """Serve ghcr.io's anonymous token and the v1.3.5 index; return the index digest."""
+    upstream.files[ORAS_TOKEN] = json.dumps({"token": "anonymous-pull"}).encode()
+    upstream.files[ORAS_INDEX] = json.dumps({"schemaVersion": 2, "mediaType": media_type, "manifests": []}).encode()
+    return sha(upstream.files[ORAS_INDEX])
+
+
+def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstream, tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
     url = "https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz"
     new = upstream.asset(url, url.rsplit("/", 1)[0] + "/oras_1.3.5_checksums.txt")
+    digest = oras_image(upstream)
     body = tmp_path / "body.md"
 
     assert track.main(["apply", "oras", "--version", "1.3.5", "--summary", str(body)], root=repo) == 0
 
-    assert "ghcr.io/oras-project/oras:v1.3.5" in (repo / "Justfile").read_text()
+    assert f"ghcr.io/oras-project/oras:v1.3.5@sha256:{digest}\"" in (repo / "Justfile").read_text()
+    assert OLD["oras-image"] not in (repo / "Justfile").read_text()
+    # The registry gets its own anonymous pull token, never the GitHub one.
+    auth = {r.full_url: r.get_header("Authorization") for r in upstream.requests if "ghcr.io" in r.full_url}
+    assert auth == {ORAS_TOKEN: None, ORAS_INDEX: "Bearer anonymous-pull"}
+    assert f"`{digest}` (was `{OLD['oras-image']}`)" in body.read_text()
     workflow = (repo / ".github/workflows/build.yml").read_text()
     assert workflow.count(f"url: {url}") == 2
     assert workflow.count(f"checksum: {new}") == 2
@@ -352,8 +381,22 @@ def test_apply_oras_moves_the_justfile_tag_and_every_setup_oras_pin(repo, upstre
     assert "`.github/workflows/build.yml:4: # pin 1.3.4 (matching the Justfile's oras_image) by URL and checksum.`" in body.read_text()
 
 
+def test_oras_image_that_is_not_an_index_writes_nothing(repo, upstream):
+    url = "https://github.com/oras-project/oras/releases/download/v1.3.5/oras_1.3.5_linux_amd64.tar.gz"
+    upstream.asset(url, url.rsplit("/", 1)[0] + "/oras_1.3.5_checksums.txt")
+    oras_image(upstream, media_type="application/vnd.oci.image.manifest.v1+json")
+    before = snapshot(repo)
+
+    with pytest.raises(track.TrackError, match="not a multi-arch index"):
+        track.apply(repo, "oras", "1.3.5")
+
+    assert snapshot(repo) == before
+
+
 def test_oras_pins_that_disagree_are_refused(repo, upstream):
-    (repo / "Justfile").write_text('export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.3")\n')
+    (repo / "Justfile").write_text(
+        f'export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.3@sha256:{OLD["oras-image"]}")\n'
+    )
     with pytest.raises(track.TrackError, match=r"ORAS pins disagree \(\.github/workflows/build\.yml: 1\.3\.4, Justfile: 1\.3\.3\)"):
         track.apply(repo, "oras", "1.3.5")
 
@@ -427,6 +470,33 @@ def test_github_token_is_sent_to_the_api_and_never_to_downloads(repo, upstream, 
         CONTAINERD + ".sha256sum": None,
         CONTAINERD: None,
     }
+
+
+CONTAINERD_RELEASES = "https://api.github.com/repos/containerd/containerd/releases?per_page=100&page=1"
+
+
+def test_a_passing_server_error_or_dropped_connection_is_retried(repo, upstream):
+    upstream.releases("containerd/containerd", [containerd("2.1.9")])
+    upstream.flaky[CONTAINERD_RELEASES] = [502, 0]
+    upstream.asset(CONTAINERD, CONTAINERD + ".sha256sum")
+
+    track.apply(repo, "containerd")
+
+    assert [r.full_url for r in upstream.requests].count(CONTAINERD_RELEASES) == 3
+
+
+def test_a_lasting_server_error_fails_after_the_retries(repo, upstream):
+    upstream.status[CONTAINERD_RELEASES] = 502
+    with pytest.raises(track.TrackError, match="releases.*: HTTP 502"):
+        track.apply(repo, "containerd")
+    assert [r.full_url for r in upstream.requests].count(CONTAINERD_RELEASES) == track.RETRIES + 1
+
+
+def test_a_client_error_is_not_retried(repo, upstream):
+    upstream.status[CONTAINERD_RELEASES] = 403
+    with pytest.raises(track.TrackError, match="releases.*: HTTP 403"):
+        track.apply(repo, "containerd")
+    assert [r.full_url for r in upstream.requests].count(CONTAINERD_RELEASES) == 1
 
 
 ARM64_OLD = {name: sha(f"{name} arm64".encode()) for name in ("runc", "k0s")}

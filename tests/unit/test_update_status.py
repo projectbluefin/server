@@ -7,7 +7,6 @@ journalctl stub prints JOURNAL_ERR for -p err (the errors a run logged) and
 nothing otherwise, and the systemd-analyze stub compares versions with sort -V.
 """
 
-from __future__ import annotations
 
 import os
 import subprocess

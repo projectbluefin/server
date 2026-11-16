@@ -14,6 +14,7 @@ type node struct {
 	complete bool
 	failed   []string
 	units    map[string]string
+	subs     map[string]string
 	ukis     []string
 	lock     bool
 	fleet    int
@@ -70,6 +71,8 @@ func run(t *testing.T, n node) (h *hosttest.Host, code int, sentinel string) {
 				return s + "\n", 3
 			}
 			return "inactive\n", 3
+		case strings.HasPrefix(line, "systemctl show -P SubState "):
+			return n.subs[argv[4]] + "\n", 0
 		case line == "fleetlock acquire":
 			return "", n.fleet
 		case line == "systemctl --no-block reboot":
@@ -115,6 +118,9 @@ func TestDeadline(t *testing.T) {
 		{"complete", node{status: "indeterminate", complete: true}, 0, false, false, false, "<6>boot-complete.target reached; systemd-bless-boot handles the entry\n"},
 		{"operator lock", node{status: "indeterminate", lock: true}, 0, false, false, false, "etc-reboot-lock holds reboots, not rebooting\n"},
 		{"kubelet", node{status: "indeterminate", units: map[string]string{"kubelet.service": "active"}}, 0, false, true, false, "; kubelet.service is active: flagged "},
+		{"starting kubelet", node{status: "indeterminate", units: map[string]string{"kubelet.service": "activating"}, subs: map[string]string{"kubelet.service": "start"}}, 0, false, true, false, "; kubelet.service is activating: flagged "},
+		{"crash-looping kubelet", node{status: "indeterminate", units: map[string]string{"kubelet.service": "activating"}, subs: map[string]string{"kubelet.service": "auto-restart"}}, 0, true, false, true, "rebooting so systemd-boot falls back after the last try\n"},
+		{"crash-looping k0s", node{status: "indeterminate", units: map[string]string{"k0sworker.service": "activating"}, subs: map[string]string{"k0sworker.service": "auto-restart"}}, 0, true, false, true, ""},
 		{"failed kubelet", node{status: "indeterminate", units: map[string]string{"kubelet.service": "failed"}}, 0, true, false, true, ""},
 		{"last try with fallback", node{status: "dirty", ukis: []string{"bluefin-server-26.09.4+0-3.efi", "bluefin-server-26.09.3.efi"}}, 0, true, false, true, ""},
 		{"last try alone", node{status: "dirty", ukis: []string{"bluefin-server-26.09.4+0-3.efi", ".x.efi"}}, 0, false, false, false,

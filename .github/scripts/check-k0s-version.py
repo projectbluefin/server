@@ -26,7 +26,6 @@ drops back onto the OS release axis, and cross-checks that the derived asset
 filename still matches the sysupdate transfer's MatchPattern.
 """
 
-from __future__ import annotations
 
 import re
 import sys

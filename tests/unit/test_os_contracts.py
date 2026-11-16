@@ -6,7 +6,6 @@ where the units that run them live. Presets keep every opt-in feature off
 (AGENTS.md, hard rule 4).
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

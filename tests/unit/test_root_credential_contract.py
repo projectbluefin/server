@@ -13,7 +13,6 @@ file pins that contract:
 - the effective SSH policy never allows a password over the network.
 """
 
-from __future__ import annotations
 
 import re
 from pathlib import Path

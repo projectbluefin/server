@@ -7,7 +7,6 @@ run the init script against stub tools, and render the init config the way
 elements/oci/kubeadm-sysext.bst does.
 """
 
-from __future__ import annotations
 
 import ipaddress
 import os

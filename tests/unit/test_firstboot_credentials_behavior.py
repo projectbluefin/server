@@ -7,7 +7,6 @@ it against a scratch --root with credentials laid out the way
 ImportCredential= presents them.
 """
 
-from __future__ import annotations
 
 import os
 import subprocess

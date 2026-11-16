@@ -12,8 +12,9 @@ description: |
     bluefin-server_<ver>.usr-verity.raw   dm-verity hash partition (sysupdate source)
     bluefin-server_<ver>.usrhash          dm-verity root hash, baked into the UKIs
 
-  Partition labels are bluefin_usr_<ver> / bluefin_usr_verity_<ver>: the
-  disk UKI finds its slot by label and sysupdate matches the same pattern.
+  Partition labels are bluefin_usr_<ver> / bluefin_usr_verity_<ver>:
+  sysupdate matches its slots by that pattern. The disk UKI does not use
+  them; it opens /usr by the partition UUIDs dm-verity derives from usrhash.
   GPT labels hold at most 36 characters, so keep them short.
 
 (@):
@@ -210,6 +211,9 @@ config:
   - |
     set -eu
     cd "%{install-root}"
+    # Preserve PID 1's native clock floor through repart's reproducible clamp.
+    export SOURCE_DATE_EPOCH="$(cat /sysroot/usr/lib/clock-epoch)"
+    touch -d "@${SOURCE_DATE_EPOCH}" /sysroot/usr/lib/clock-epoch
     systemd-repart \
       --empty=create --size=auto --offline=yes --dry-run=no \
       --seed=6f1b0fe2-3c2a-4f2e-9f0a-b1e5e7a5e001 \

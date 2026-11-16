@@ -7,7 +7,6 @@ origin names a versioned file (a pinned node only logs it). Both run here agains
 throwaway GnuPG key; no files/boot-keys are needed.
 """
 
-from __future__ import annotations
 
 import configparser
 import functools

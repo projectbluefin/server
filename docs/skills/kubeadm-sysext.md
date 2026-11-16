@@ -87,8 +87,9 @@ but never newer. Patch releases change neither constraint.
   `imports` glob on a config that pre-dates drop-in glob support, see
   [Migration](#migration)),
   `modprobe overlay br_netfilter`, then `systemd-sysctl 90-kubeadm.conf`
-  (`ip_forward`, `bridge-nf-call-ip{,6}tables`). kubeadm needs containerd
-  running, so these hold before any preflight.
+  (`ip_forward`, `bridge-nf-call-ip{,6}tables`, and raised `fs.inotify`
+  instance and watch limits, since pods share root's per-user budget).
+  kubeadm needs containerd running, so these hold before any preflight.
 - containerd root is `/var/lib/containerd` (`RequiresMountsFor=` orders it after
   a per-node mount), `SystemdCgroup = true`, sandbox `registry.k8s.io/pause:3.10.1`,
   registry `config_path = /etc/containerd/certs.d`.
@@ -106,10 +107,10 @@ but never newer. Patch releases change neither constraint.
   `--volume-plugin-dir=/var/lib/kubelet/volumeplugins` because `/usr` is read-only.
 - `/etc/resolv.conf` links to systemd-resolved's `/run/systemd/resolve/resolv.conf`
   (base image), the path kubelet's `resolvConf` expects.
-- While `kubelet.service` runs or restarts, the base image's automatic reboot
-  and the boot-deadline rollback reboot stand down and reboots belong to kured
-  (the deadline flags `/run/reboot-required`); see "Updates" in
-  [ddi-installer.md](ddi-installer.md).
+- While `kubelet.service` runs (not while it waits to restart, as before
+  `kubeadm join`), the base image's automatic reboot and the boot-deadline
+  rollback reboot stand down and reboots belong to kured (the deadline flags
+  `/run/reboot-required`); see "Updates" in [ddi-installer.md](ddi-installer.md).
 
 ## Migration
 

@@ -2,7 +2,6 @@
 Advanced minimal still has no profile-specific provisioning; Home Server
 uses a separate argument variable and does not change the Homelab helpers."""
 
-from __future__ import annotations
 
 import os
 import re

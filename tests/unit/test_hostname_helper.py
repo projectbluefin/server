@@ -2,7 +2,6 @@
 static hostname gets a provisioned or a bluefin-<machine-id[:8]> one; a set
 name is kept; an invalid one fails without anything being written (#82)."""
 
-from __future__ import annotations
 
 import os
 import subprocess

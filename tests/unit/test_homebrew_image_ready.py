@@ -17,8 +17,6 @@ Both run with stubs: bluefin-homebrew-image from a copy whose
 systemd-run and sleep stubbed on PATH.
 """
 
-from __future__ import annotations
-
 import os
 import re
 import subprocess

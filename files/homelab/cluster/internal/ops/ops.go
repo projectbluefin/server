@@ -29,6 +29,7 @@ const (
 	KubeadmKubelet    = "/etc/kubernetes/kubelet.conf"
 	K0sAdminConf      = "/var/lib/k0s/pki/admin.conf"
 	K0sTokenFile      = "/etc/k0s/token"
+	K0sKubelet        = "/var/lib/k0s/kubelet.conf" // k0s worker, once bootstrapped
 	CRISocket         = "unix:///run/containerd/containerd.sock"
 
 	RuntimeKubeadm = "kubeadm"

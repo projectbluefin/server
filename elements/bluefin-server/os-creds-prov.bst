@@ -9,14 +9,14 @@ description: |
   password prompt: root ships locked, so without it every headless boot would
   wait on the console. The passwd.*.root credentials still apply.
 
-  Flatcar's /usr is built without systemd-firstboot, so the firstboot.*
-  credentials are applied by /usr/libexec/bluefin-firstboot-credentials
-  (bluefin-host, os-host.bst), which writes the same files systemd-firstboot
-  would (/etc/locale.conf, /etc/vconsole.conf, /etc/localtime) and
-  additionally /etc/hostname plus the live kernel hostname from
-  firstboot.hostname, which systemd <= v259 (Flatcar's) does not read;
-  systemd v260 added it as a static hostname honoured only when none is set,
-  while this helper applies it unconditionally.
+  systemd-firstboot also reads the firstboot.* credentials, but writes each
+  file only when it does not exist yet and takes firstboot.hostname only
+  when no static hostname is set. /usr/libexec/bluefin-firstboot-credentials
+  (bluefin-host, os-host.bst) applies them unconditionally: the same files
+  in the same format (/etc/locale.conf, /etc/vconsole.conf, /etc/localtime),
+  plus /etc/hostname and the live kernel hostname, so the first DHCP request
+  carries the name. Neither is ordered against the other; both take the
+  values from the same credentials, so the order does not change the result.
 
   bluefin-hostname.service runs /usr/libexec/bluefin-hostname (bluefin-host)
   on first boot after those: a node whose static hostname is still unset or

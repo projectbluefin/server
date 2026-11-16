@@ -12,7 +12,10 @@
 //   - /run/reboot-lock or /etc/reboot-lock: the operator holds reboots; log
 //     and stay up;
 //   - kubelet or k0s running: touch /run/reboot-required for kured to cordon,
-//     drain and reboot the node within its cluster lock;
+//     drain and reboot the node within its cluster lock. A unit that failed
+//     or is crash-looping (waiting to restart) does not count: the node is
+//     NotReady, kured cannot run there, and the flag would leave it on the
+//     bad image for good;
 //   - otherwise reboot, so systemd-boot uses up the next try and, after the
 //     last one, falls back to the previous UKI. With a FleetLock server
 //     configured it first takes a reboot slot (bluefin-reboot-lock acquire);

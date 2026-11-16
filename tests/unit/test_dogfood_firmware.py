@@ -2,7 +2,6 @@
 QEMU checks source. An environment variable wins; with none set and no
 firmware at the usual paths the lookup fails and names the variable."""
 
-from __future__ import annotations
 
 import subprocess
 from pathlib import Path

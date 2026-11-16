@@ -16,7 +16,6 @@ With --baseline-usr (a previous release's *.usr.raw) it also prints which
 Needs readelf, zstd, cpio and fsck.erofs (erofs-utils) on PATH.
 """
 
-from __future__ import annotations
 
 import argparse
 import json
@@ -54,8 +53,6 @@ KNOWN_BROKEN = {
     "/usr/lib/systemd/system/quotaon-root.service runs missing /usr/bin/quotaon",
     # Only started when swtpm is installed (systemd-tpm2-swtpm finds none).
     "/usr/lib/systemd/system/systemd-tpm2-swtpm.service runs missing swtpm_ioctl",
-    # tpm2-tools' tpm2_id is not in FSDK; the rule only adds udev properties.
-    "/usr/lib/udev/rules.d/60-tpm2-id.rules runs missing tpm2_id",
     # Only for TI am65-cpsw-nuss switchdev NICs (iproute2 has no devlink here).
     "/usr/lib/udev/rules.d/81-net-bridge.rules runs missing /usr/sbin/devlink",
     # NVIDIA's GLX and EGL-GBM display libraries; the headless image has no
@@ -188,7 +185,7 @@ def check_libraries(name: str, layers: list[Path], own: Path) -> list[str]:
     elves = [
         p
         for p in iter_files(own)
-        if "/lib/modules/" not in str(p) and is_elf(p)
+        if "/lib/modules/" not in str(p) and "/test/support/fixtures/" not in str(p) and is_elf(p)
     ]
     needed, runpaths = elf_needed(elves)
     for path, libs in sorted(needed.items()):
