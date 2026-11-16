@@ -14,6 +14,11 @@ After=containerd.service
 # unit reading /usr/lib/modules meanwhile finds nothing and fails. Let the
 # ones in this boot's transaction finish first (ordering only).
 After=zfs-load-module.service nvidia-load.service
+# The other boot refreshers: two refreshes at once race on the /usr overlay.
+# bluefin-sysext-fetch is already Before=k0s-first-boot, so this keeps all
+# three in one order. Ordering only; a unit not installed or not enabled has
+# no job to wait for.
+After=bluefin-sysext-fetch.service k0s-first-boot.service
 RequiresMountsFor=/var/lib/nvidia-container-toolkit
 
 [Service]

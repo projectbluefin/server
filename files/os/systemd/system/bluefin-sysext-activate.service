@@ -11,6 +11,8 @@ ConditionDirectoryNotEmpty=/usr/lib/extension-release.d
 
 [Service]
 Type=oneshot
+# No RemainAfterExit=: bluefin-sysext-fetch starts it again after a retry
+# merged sysexts this unit's first run did not see.
 ExecStart=/usr/bin/systemctl start --no-block multi-user.target
 
 [Install]

@@ -19,6 +19,10 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# Once per boot: bluefin-sysext-activate.service re-requests
+# multi-user.target, possibly late (after bluefin-sysext-fetch), and a second
+# release would give back a slot this node took since for its next reboot.
+RemainAfterExit=yes
 ImportCredential=bluefin.reboot-lock.*
 # Only a good boot gives the slot back: blessed ("good") or not boot-counted
 # ("clean", e.g. the previous UKI after a rollback). A counted boot that has
