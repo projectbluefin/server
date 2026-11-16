@@ -1,0 +1,19 @@
+# Single source of truth for the Homebrew seed archive
+# (elements/homebrew/seed.bst).
+#
+# Homebrew/brew is fetched with git at the release tag's commit; its
+# portable-ruby is the bottle named by Library/Homebrew/vendor/
+# portable-ruby-version at that tag, with the sha256 from
+# Library/Homebrew/vendor/portable-ruby-{x86_64,arm64}-linux. The bottle
+# comes from the homebrew-portable-ruby GitHub release, which unlike ghcr.io
+# needs no token. Move the tag, the ruby version and the sha256 values
+# together.
+variables:
+  # Homebrew/brew release tag.
+  homebrew-version: "5.0.1"
+  # The commit that tag points to.
+  homebrew-commit: "e8b7739de9f5dfd154a742e83b2a72ac1222fed2"
+  # portable-ruby version that tag vendors.
+  homebrew-portable-ruby-version: "3.4.5"
+  homebrew-portable-ruby-x86-64-sha256: "5ea0e3a30feef0743da5a2924c8a71baead1b9f1d571afbd675bc556e59705f5"
+  homebrew-portable-ruby-arm64-sha256: "58ab194fb0513e8d3f5a3b9a8658cb9909438b405308bf898508eed2b83afc7d"

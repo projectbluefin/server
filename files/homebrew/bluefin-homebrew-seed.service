@@ -1,0 +1,13 @@
+[Unit]
+Description=Seed the Homebrew prefix for the first regular user
+Documentation=https://github.com/projectbluefin/server/blob/main/docs/skills/homebrew-seed.md
+ConditionPathExists=!/var/lib/bluefin-homebrew/seeded
+ConditionPathExists=/usr/share/homebrew/brew.tar.zst
+After=local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bluefin-homebrew-seed
+
+[Install]
+WantedBy=multi-user.target

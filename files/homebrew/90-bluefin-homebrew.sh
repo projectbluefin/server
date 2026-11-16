@@ -1,10 +1,18 @@
 # shellcheck shell=sh
-# Host tools always win. These root-owned generic shims dispatch into the guest;
-# neither the Brew prefix nor guest executables are exposed in the host PATH.
-case ":${PATH-}:" in
-    *:/var/lib/bluefin-homebrew/commands:*) ;;
-    *)
-        # shellcheck disable=SC2123 # appends to PATH, keeping what is there
-        PATH="${PATH:+$PATH:}/var/lib/bluefin-homebrew/commands" ;;
-esac
-export PATH
+# Put Homebrew on PATH once the seed has been extracted.
+if [ "$(id -u)" -ne 0 ] &&
+    [ -x /home/linuxbrew/.linuxbrew/bin/brew ] &&
+    [ "$(id -u)" = "$(if [ -r /var/lib/bluefin-homebrew/seed-owner ]; then
+        cut -d: -f1 /var/lib/bluefin-homebrew/seed-owner
+    else
+        stat -Lc '%u' /home/linuxbrew/.linuxbrew 2>/dev/null
+    fi)" ]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    bluefin_docker_backend=podman
+    if systemctl --user is-active --quiet bluefin-docker.service; then
+        bluefin_docker_backend=docker
+    fi
+    export CONTAINER_HOST="${CONTAINER_HOST:-unix:///run/user/$(id -u)/bluefin-podman/api.sock}"
+    export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/bluefin-$bluefin_docker_backend/api.sock}"
+    unset bluefin_docker_backend
+fi

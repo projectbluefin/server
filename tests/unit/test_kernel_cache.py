@@ -71,8 +71,7 @@ def env(tmp_path: Path) -> dict[str, str]:
         "STATES": (
             "  not cached freedesktop-sdk.bst:components/linux.bst\n"
             "   available freedesktop-sdk.bst:components/go.bst\n"
-            "   available freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst\n"
-            "   available fsdk-containers.bst:oci/brew-nspawn.bst"
+            "   available freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst"
         ),
         "CASD_CLIENT_CERT": "-----BEGIN CERTIFICATE-----\ncert\n-----END CERTIFICATE-----",
         "CASD_CLIENT_KEY": "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----",
@@ -194,7 +193,6 @@ def test_seed_builds_elements_only_cached_locally(checkout: Path, env: dict[str,
         ("shared", {
             "freedesktop-sdk.bst:components/go.bst",
             "freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst",
-            "fsdk-containers.bst:oci/brew-nspawn.bst",
             "freedesktop-sdk.bst:components/ruby.bst",
             "freedesktop-sdk.bst:components/_private/systemd-base.bst",
         }),

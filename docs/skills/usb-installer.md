@@ -78,11 +78,9 @@ question), the target disk, and the installed screen.
    All are profiles of one signed UKI; only Home adds `bluefin.install-home-server=1`.
    Home's `.osrel` sets `PRETTY_NAME`; `.profile` uses `ID=home-server` without `TITLE`.
    `firstboot.keymap=us` avoids a keymap prompt. Secure Boot is checked first.
-2. **Owner/options.** Choose a nonroot owner; Enter defers creation to first boot.
-   Accounts/keys are private, never baked in. Homebrew is included; Podman
-   defaults **on**, Docker and Homelab/KubeStellar **off**. Docker clients use
-   Podman's API unless Docker is selected. Federation stays off. `q`/EOF
-   cancels; minimal skips this.
+2. **Owner/options.** Accounts/keys are private, never baked in. Homebrew is in the base image; Podman defaults
+   **on**, Docker and Homelab/KubeStellar **off**. Docker clients use Podman's API
+   unless Docker is selected. Federation stays off. `q`/EOF cancels; minimal skips this.
 3. **Target disk.** `bluefin-installer-disk.service` lists every disk
    sysinstall can install to, numbered, with its size, model and
    `/dev/disk/by-id/` name (model and serial):
@@ -116,9 +114,8 @@ question), the target disk, and the installed screen.
    The machine restarts into it in 15 seconds (Enter: now).
    Remove the USB stick when the screen goes blank.
 
-   On first boot, create the nonroot owner unless it was privately provisioned.
-   Log in as that owner; Homebrew is ready in its system container.
-   SSH accepts public keys only. The root account stays locked.
+   On its first start the installed system asks here for a new root
+   password. Homebrew is seeded for the first regular user.
    ```
 
    and the machine **restarts by itself**. The stick stays in until the
@@ -231,7 +228,6 @@ the network off, and checks that they form a cluster.
 | Credential | Value / default |
 |---|---|
 | `bluefin.homebrew.profile` | `home-server` |
-| `bluefin.homebrew.owner` | Nonroot name; absent interactively means first-boot creation |
 | `bluefin.homebrew.podman` | Boolean, true by default |
 | `bluefin.homebrew.docker` | Boolean, false by default |
 | `bluefin.homebrew.cluster` | Boolean, false; canonical Homelab/KubeStellar, federation off |

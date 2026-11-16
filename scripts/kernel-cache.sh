@@ -104,7 +104,6 @@ seed() {
         elements=(
             freedesktop-sdk.bst:components/go.bst
             freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst
-            fsdk-containers.bst:oci/brew-nspawn.bst
             freedesktop-sdk.bst:components/ruby.bst
             freedesktop-sdk.bst:components/_private/systemd-base.bst
         )
@@ -147,7 +146,7 @@ seed() {
         exit 1
     fi
     # Push cached upstream outputs too, without demanding missing bootstrap
-    # ancestors. Ruby/systemd are explicit roots even when Brew is cached.
+    # ancestors.
     just bst build "${elements[@]}"
     just bst artifact push --deps none "${elements[@]}"
     echo "kernel-cache: ${variant}: pushed ${elements[*]} to ${PUSH_URL}"
