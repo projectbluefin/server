@@ -312,6 +312,8 @@ In the names below, \`<ver>\` is \`${ver}\` and \`<uuid>\` identifies a partitio
 | \`homelab-*.bu\`, \`homelab-*.ign\` | Editable Butane YAML and rendered Ignition JSON provisioning templates for control-plane/node roles, with kubeadm or k0s. Customise before use. |
 | \`homebrew_<ver>.raw.zst\`, \`homebrew-integration_<ver>.raw.zst\` | Homebrew system container and optional host-integration extension; installed packages persist separately from the immutable runtime. |
 | \`podman_<ver>.raw.zst\`, \`docker_<ver>.raw.zst\` | Rootless host engine extensions; Home Server selects Podman by default. |
+| \`tailscale_<ver>.raw.zst\`, \`netbird_<ver>.raw.zst\` | Optional Tailscale and NetBird VPN extensions (daemon and CLI); disabled until enabled. |
+| \`nspawn-org_<ver>.raw.zst\` | Optional nspawn.org CLI extension for managing system containers. |
 | \`home-server*.bu\` | Home installer profiles, with an optional existing Homelab cluster. |
 | \`bluefin-server_<ver>.spdx.json\` | SPDX software bill of materials (SBOM), listing the image's components. |
 | \`SHA256SUMS\`, \`SHA256SUMS.gpg\` | Release asset checksums and their detached signature. |

@@ -2,6 +2,7 @@
 on main (release) and on pull requests (release-dry-run)."""
 
 
+import fnmatch
 import hashlib
 import json
 import os
@@ -586,3 +587,18 @@ def test_the_image_stages_and_signs_every_homelab_template() -> None:
     assert templates == sorted(HOMELAB_TEMPLATES)
     listed = re.search(r"for t in ([a-z0-9 -]+); do", SCRIPT.read_text(encoding="utf-8"))
     assert listed is not None and sorted(listed[1].split()) == templates
+
+
+def test_release_notes_describe_every_published_file(release: Path, tmp_path: Path, gh_args) -> None:
+    # The "Which asset do I need?" table is written by hand; a new sysext
+    # that ships without a row leaves users guessing what it is.
+    result = run("release", str(release), VERSION, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    args = gh_args()
+    notes = args[args.index("--notes") + 1]
+    table = notes.split("## Which asset do I need?", 1)[1].split("\n\n## ", 1)[0]
+    rows = [line.split("|")[1] for line in table.splitlines() if line.startswith("| `")]
+    globs = [re.sub(r"<[^>]+>", "*", name) for row in rows for name in re.findall(r"`([^`]+)`", row)]
+    published = [*release_files(VERSION), "SHA256SUMS", "SHA256SUMS.gpg"]
+    undescribed = [name for name in published if not any(fnmatch.fnmatchcase(name, g) for g in globs)]
+    assert undescribed == []
