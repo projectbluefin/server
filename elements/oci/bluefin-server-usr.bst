@@ -211,6 +211,9 @@ config:
   - |
     set -eu
     cd "%{install-root}"
+    # Preserve PID 1's native clock floor through repart's reproducible clamp.
+    export SOURCE_DATE_EPOCH="$(cat /sysroot/usr/lib/clock-epoch)"
+    touch -d "@${SOURCE_DATE_EPOCH}" /sysroot/usr/lib/clock-epoch
     systemd-repart \
       --empty=create --size=auto --offline=yes --dry-run=no \
       --seed=6f1b0fe2-3c2a-4f2e-9f0a-b1e5e7a5e001 \
