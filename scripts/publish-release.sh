@@ -309,6 +309,8 @@ In the names below, \`<ver>\` is \`${ver}\` and \`<uuid>\` identifies a partitio
 | \`nvidia-open-595_<ver>.raw.zst\`, \`nvidia-container-toolkit-<toolkit-version>.raw.zst\` | Optional NVIDIA open kernel modules and Container Toolkit extensions. |
 | \`homelab-*.bu\`, \`homelab-*.ign\` | Editable Butane YAML and rendered Ignition JSON provisioning templates for control-plane/node roles, with kubeadm or k0s. Customise before use. |
 | \`podman_<ver>.raw.zst\`, \`docker_<ver>.raw.zst\` | Rootless host engine extensions; Home Server selects Podman by default. |
+| \`tailscale_<ver>.raw.zst\`, \`netbird_<ver>.raw.zst\` | Optional Tailscale and NetBird VPN extensions (daemon and CLI); disabled until enabled. |
+| \`nspawn-org_<ver>.raw.zst\` | Optional nspawn.org CLI extension for managing system containers. |
 | \`home-server*.bu\` | Home installer profiles, with an optional existing Homelab cluster. |
 | \`bluefin-server_<ver>.spdx.json\` | SPDX software bill of materials (SBOM), listing the image's components. |
 | \`SHA256SUMS\`, \`SHA256SUMS.gpg\` | Release asset checksums and their detached signature. |

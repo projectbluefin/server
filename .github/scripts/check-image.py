@@ -185,7 +185,7 @@ def check_libraries(name: str, layers: list[Path], own: Path) -> list[str]:
     elves = [
         p
         for p in iter_files(own)
-        if "/lib/modules/" not in str(p) and is_elf(p)
+        if "/lib/modules/" not in str(p) and "/test/support/fixtures/" not in str(p) and is_elf(p)
     ]
     needed, runpaths = elf_needed(elves)
     for path, libs in sorted(needed.items()):

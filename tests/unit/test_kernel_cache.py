@@ -2,9 +2,9 @@
 
 The CAS is publicly readable, so `seed` must refuse whenever the graph it
 builds reaches the element that stages private keys, before it writes the
-client credentials anywhere; it must build nothing when a remote already holds
-every element; and the push config it hands BuildStream must authenticate
-with the client certificate and leave no credential behind. `just` is stubbed.
+client credentials anywhere; remote metadata alone must not count as a successful
+seed; and the push config it hands BuildStream must authenticate with the
+client certificate and leave no credential behind. `just` is stubbed.
 
 Each variant stages exactly one committed certificate as the only file of
 files/boot-keys/modules/ (whose import is pushed with the kernel): release
@@ -12,6 +12,7 @@ the release certificate, which must not be the dev one; dev the public
 INSECURE dev certificate, never its private key.
 """
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -26,17 +27,19 @@ SCRIPT = ROOT / "scripts" / "kernel-cache.sh"
 # would read it from /src (the checkout).
 JUST = """#!/bin/sh
 case "$*" in
-  *"--deps all"*)
+  "bst show --deps all"*)
     printf '%s\\n' $GRAPH
     i=0; while [ "$i" -lt "${GRAPH_TAIL:-0}" ]; do echo "freedesktop-sdk.bst:components/filler-$i.bst"; i=$((i + 1)); done
     exit "${GRAPH_STATUS:-0}" ;;
   "bst artifact show"*) printf '%s\\n' "$STATES"; [ -z "$UNREACHABLE" ] || echo "$UNREACHABLE" >&2 ;;
+  "bst artifact push"*) echo "$*" > "$LOG/pushed"; exit "${PUSH_STATUS:-0}" ;;
   "bst build"*)
     echo "$*" >> "$LOG/built"
     conf="${BST_FLAGS##*--config /src/}"
     cp "$conf" "$LOG/buildstream.conf"
     cp "$(dirname "$conf")/client.key" "$LOG/client.key"
-    ls -ld "$(dirname "$conf")" > "$LOG/auth-dir" ;;
+    ls -ld "$(dirname "$conf")" > "$LOG/auth-dir"
+    exit "${BUILD_STATUS:-0}" ;;
 esac
 """
 
@@ -65,7 +68,11 @@ def env(tmp_path: Path) -> dict[str, str]:
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "LOG": str(tmp_path / "log"),
         "GRAPH": "freedesktop-sdk.bst:components/linux.bst bluefin-server/keys/linux-module-cert.bst",
-        "STATES": "  not cached freedesktop-sdk.bst:components/linux.bst\n   available freedesktop-sdk.bst:components/go.bst",
+        "STATES": (
+            "  not cached freedesktop-sdk.bst:components/linux.bst\n"
+            "   available freedesktop-sdk.bst:components/go.bst\n"
+            "   available freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst"
+        ),
         "CASD_CLIENT_CERT": "-----BEGIN CERTIFICATE-----\ncert\n-----END CERTIFICATE-----",
         "CASD_CLIENT_KEY": "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----",
         "BST_FLAGS": "",
@@ -89,13 +96,23 @@ def leftovers(checkout: Path) -> list[Path]:
     return list(checkout.glob(".casd.*"))
 
 
-def test_seed_refuses_a_graph_that_reaches_the_keys(checkout: Path, env: dict[str, str]) -> None:
+@pytest.mark.parametrize("variant", ["shared", "release", "dev"])
+def test_seed_refuses_a_graph_that_reaches_the_keys(checkout: Path, env: dict[str, str], variant: str) -> None:
     env["GRAPH"] += " bluefin-server/keys/boot-keys.bst"
-    result = run(checkout, env)
+    result = run(checkout, env, variant)
     assert result.returncode != 0
-    assert "refusing to publish" in result.stderr
+    assert "bluefin-server/keys/boot-keys.bst" in result.stderr
     assert not (Path(env["LOG"]) / "built").exists()
     assert not leftovers(checkout)
+
+
+def test_shared_seed_refuses_a_certificate_dependent_graph(checkout: Path, env: dict[str, str]) -> None:
+    result = run(checkout, env, "shared")
+    assert result.returncode != 0
+    assert "shared outputs depend on the variant certificate" in result.stderr
+    assert not (Path(env["LOG"]) / "built").exists()
+    assert not leftovers(checkout)
+    assert not staged(checkout)
 
 
 def test_seed_refuses_the_keys_early_in_a_long_graph(checkout: Path, env: dict[str, str]) -> None:
@@ -141,12 +158,20 @@ def test_seed_refuses_to_build_when_the_push_remote_is_unreachable(checkout: Pat
     assert not leftovers(checkout)
 
 
-def test_seed_skips_elements_a_remote_already_holds(checkout: Path, env: dict[str, str]) -> None:
+def test_seed_does_not_accept_metadata_when_payload_build_fails(checkout: Path, env: dict[str, str]) -> None:
     env["STATES"] = env["STATES"].replace("not cached", " available")
+    env["BUILD_STATUS"] = "19"
     result = run(checkout, env)
-    assert result.returncode == 0
-    assert "already on a remote" in result.stdout
-    assert not (Path(env["LOG"]) / "built").exists()
+    assert result.returncode == 19
+    assert "pushed" not in result.stdout
+    assert not leftovers(checkout)
+
+
+def test_seed_does_not_report_success_when_replication_fails(checkout: Path, env: dict[str, str]) -> None:
+    env["PUSH_STATUS"] = "23"
+    result = run(checkout, env)
+    assert result.returncode == 23
+    assert "pushed" not in result.stdout
     assert not leftovers(checkout)
 
 
@@ -157,16 +182,41 @@ def test_seed_builds_elements_only_cached_locally(checkout: Path, env: dict[str,
     assert (Path(env["LOG"]) / "built").exists()
 
 
-def test_seed_pushes_with_the_client_certificate(checkout: Path, env: dict[str, str]) -> None:
-    result = run(checkout, env)
+@pytest.mark.parametrize(
+    ("variant", "targets"),
+    [
+        ("release", {
+            "freedesktop-sdk.bst:components/linux.bst",
+            "zfs/openzfs.bst",
+            "nvidia/nvidia-open-595.bst",
+        }),
+        ("shared", {
+            "freedesktop-sdk.bst:components/go.bst",
+            "freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst",
+            "freedesktop-sdk.bst:components/ruby.bst",
+            "freedesktop-sdk.bst:components/_private/systemd-base.bst",
+        }),
+    ],
+)
+def test_seed_pushes_with_the_client_certificate(
+    checkout: Path, env: dict[str, str], variant: str, targets: set[str]
+) -> None:
+    if variant == "shared":
+        env["GRAPH"] = "freedesktop-sdk/components/go.bst"
+    result = run(checkout, env, variant)
     assert result.returncode == 0, result.stderr
     log = Path(env["LOG"])
-    assert (log / "built").read_text().split() == [
-        "bst",
-        "build",
-        "freedesktop-sdk.bst:components/linux.bst",
-        "freedesktop-sdk.bst:components/go.bst",
-    ]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--deps")
+    parser.add_argument("elements", nargs="+")
+    build = parser.parse_args((log / "built").read_text().split()[2:])
+    assert build.deps is None, "normal builds must reuse cached parents, not reconstruct bootstrap ancestors"
+    assert set(build.elements) == targets
+    push = parser.parse_args((log / "pushed").read_text().split()[3:])
+    assert push.deps == "none", "selected publication must not require absent build-only ancestors"
+    assert set(push.elements) == targets
+    if variant == "shared":
+        assert not staged(checkout)
     conf = (log / "buildstream.conf").read_text()
     for kind in ("artifacts:", "source-caches:"):
         section = conf.split(kind, 1)[1]

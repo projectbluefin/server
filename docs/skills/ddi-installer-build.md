@@ -52,7 +52,6 @@ ships the seed archive; see [homebrew-seed.md](homebrew-seed.md). Text-only manu
 elements use `strip-binaries: ""`, matching `os-creds-prov.bst`.
 
 
-
 To publish the set as an OCI artifact (one layer per file, tags `<version>`
 and `latest`, artifact type
 `application/vnd.projectbluefin.server.release.v1`):
@@ -114,13 +113,16 @@ version that sorts higher before building.
 
 ## Reproducible builds
 
-With the same checkout, keys and `image-version`, rebuilding the final
-assembly gives the same bytes. BuildStream exports `SOURCE_DATE_EPOCH` into
-every sandbox and the assembly steps honor it: `mkfs.erofs` and
-`systemd-repart` clamp file times to it, the initrd and ESP trees are clamped
-before `cpio` and `mcopy` copy them, and `systemd-sbsign` (not `sbsign`)
-uses it as the signing time of systemd-boot and the UKIs. `systemd-repart
---seed` fixes partition UUIDs.
+With the same checkout, keys and `image-version`, rebuilding final assembly
+gives the same bytes. BuildStream exports a fixed `SOURCE_DATE_EPOCH`; cpio,
+ESP assembly and signatures honor it, and `systemd-repart --seed` fixes UUIDs.
+PID 1's `/usr/lib/clock-epoch` is a deliberate exception: its **mtime** is the
+first day of the pinned SDK's year/month (`installer-version`), preventing the
+15-year clock sanity window from resetting a valid RTC to 2011 and rejecting
+GPG keys as future-dated. `os-release.bst` records that reproducible epoch;
+initrd assembly restores its mtime after clamping, and repart uses the same
+epoch for the erofs image. Never substitute wall-clock build time or disable
+signature-time checks.
 
 Two outputs carry a signing time of their own: `SHA256SUMS.gpg` and the
 `efi-keys/*.auth` updates, which `sbvarsign` stamps with the current time

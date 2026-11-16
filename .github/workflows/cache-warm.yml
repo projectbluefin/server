@@ -1,0 +1,81 @@
+name: Warm BuildStream cache
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A seed must not occupy build.yml's serialized release queue.
+# Finish the current warming run; GitHub keeps only the latest pending one.
+concurrency:
+  group: cache-seed-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-cache:
+    if: github.ref == 'refs/heads/main'
+    # CASD_CLIENT_KEY lives in this environment, which only main may use.
+    environment: bst-cache
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0
+
+      - name: Set up runner disk space
+        run: bash scripts/ci-runner-disk.sh
+
+      - name: Build and push shared SDK and Brew outputs
+        id: seed
+        env:
+          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
+          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
+        run: bash scripts/kernel-cache.sh seed shared
+
+  kernel-cache:
+    needs: sdk-cache
+    # A failed Brew seed must not suppress both independent kernel variants.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    # CASD_CLIENT_KEY lives in this environment, which only main may use.
+    environment: bst-cache
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [release, dev]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0
+
+      - name: Set up runner disk space
+        run: bash scripts/ci-runner-disk.sh
+
+      - name: Build and push the ${{ matrix.variant }} kernel and module outputs
+        id: seed
+        env:
+          CASD_CLIENT_CERT: ${{ vars.CASD_CLIENT_CERT }}
+          CASD_CLIENT_KEY: ${{ secrets.CASD_CLIENT_KEY }}
+        run: bash scripts/kernel-cache.sh seed ${{ matrix.variant }}
+

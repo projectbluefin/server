@@ -5,11 +5,11 @@ Reads the PR's changed paths (one per line, renames listed under both names)
 on stdin and prints ``true`` or ``false`` for the build workflow's `changes`
 job, which runs this script from the PR's base revision. Only changes that
 cannot reach the image set or the boot test skip the full build (figures in
-docs/skills/ci-tooling.md, "Build time and caches"): docs,
-Markdown outside the build inputs, unit/e2e tests and the workflows that run
-them. Anything else, and anything under a build input root, builds; so does
-any change to this classifier or to the build workflow, and an empty or
-truncated list.
+docs/skills/ci-tooling.md, "Build time and caches"): docs, Markdown outside
+the build inputs, unit tests, and the workflows and scripts that do not build
+or boot the image. Anything else, and anything under a build input root,
+builds; so does any change to this classifier or to the build workflow, and
+an empty or truncated list.
 """
 
 import sys
@@ -29,7 +29,6 @@ BUILD_PREFIXES = (
     "files/",
     "include/",
     "patches/",
-    "plugins/",
     "scripts/",
     "tests/fixtures/",
 )
@@ -37,7 +36,6 @@ BUILD_PREFIXES = (
 SKIP_PREFIXES = (
     "docs/",
     "tests/unit/",
-    "tests/e2e/",
 )
 
 SKIP_FILES = frozenset(
@@ -46,13 +44,21 @@ SKIP_FILES = frozenset(
         ".github/requirements-ci.txt",
         ".github/rulesets/main-merge-queue.json",
         ".github/scripts/docs-checks.py",
+        ".github/scripts/propose-pr.sh",
+        ".github/scripts/track-binaries.py",
+        ".github/scripts/tracking-issue.sh",
         ".github/workflows/docs-checks.yml",
+        ".github/workflows/e2e-opt-in.yml",
         ".github/workflows/lint-actions.yml",
+        ".github/workflows/prow.yml",
+        ".github/workflows/reproducibility.yml",
         ".github/workflows/unit-tests.yml",
+        ".github/workflows/track-binaries.yml",
         ".github/workflows/track-junctions.yml",
         ".pre-commit-config.yaml",
         "cliff.toml",
         "LICENSE",
+        "OWNERS",
     }
 )
 
