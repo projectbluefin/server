@@ -137,15 +137,25 @@ config:
 
 
 class Upstream:
-    """Serves registered URLs; `status` forces an HTTP error, anything else is a 404."""
+    """Serves registered URLs; `status` forces an HTTP error, anything else is a 404.
+
+    `flaky` fails a URL with each listed status (0: a dropped connection) once,
+    in order, before serving it.
+    """
 
     def __init__(self):
         self.files: dict[str, bytes] = {}
         self.status: dict[str, int] = {}
+        self.flaky: dict[str, list[int]] = {}
         self.requests: list[urllib.request.Request] = []
 
     def urlopen(self, request, timeout=None):
         self.requests.append(request)
+        if self.flaky.get(request.full_url):
+            code = self.flaky[request.full_url].pop(0)
+            if not code:
+                raise urllib.error.URLError("Connection reset by peer")
+            raise urllib.error.HTTPError(request.full_url, code, "Error", Message(), None)
         if request.full_url in self.status:
             raise urllib.error.HTTPError(request.full_url, self.status[request.full_url], "Error", Message(), None)
         if request.full_url not in self.files:
@@ -181,6 +191,7 @@ CONTAINERD = "https://github.com/containerd/containerd/releases/download/v2.1.9/
 def upstream(monkeypatch):
     fake = Upstream()
     monkeypatch.setattr(urllib.request, "urlopen", fake.urlopen)
+    monkeypatch.setattr(track, "RETRY_DELAY", 0)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
     return fake
@@ -459,6 +470,33 @@ def test_github_token_is_sent_to_the_api_and_never_to_downloads(repo, upstream, 
         CONTAINERD + ".sha256sum": None,
         CONTAINERD: None,
     }
+
+
+CONTAINERD_RELEASES = "https://api.github.com/repos/containerd/containerd/releases?per_page=100&page=1"
+
+
+def test_a_passing_server_error_or_dropped_connection_is_retried(repo, upstream):
+    upstream.releases("containerd/containerd", [containerd("2.1.9")])
+    upstream.flaky[CONTAINERD_RELEASES] = [502, 0]
+    upstream.asset(CONTAINERD, CONTAINERD + ".sha256sum")
+
+    track.apply(repo, "containerd")
+
+    assert [r.full_url for r in upstream.requests].count(CONTAINERD_RELEASES) == 3
+
+
+def test_a_lasting_server_error_fails_after_the_retries(repo, upstream):
+    upstream.status[CONTAINERD_RELEASES] = 502
+    with pytest.raises(track.TrackError, match="releases.*: HTTP 502"):
+        track.apply(repo, "containerd")
+    assert [r.full_url for r in upstream.requests].count(CONTAINERD_RELEASES) == track.RETRIES + 1
+
+
+def test_a_client_error_is_not_retried(repo, upstream):
+    upstream.status[CONTAINERD_RELEASES] = 403
+    with pytest.raises(track.TrackError, match="releases.*: HTTP 403"):
+        track.apply(repo, "containerd")
+    assert [r.full_url for r in upstream.requests].count(CONTAINERD_RELEASES) == 1
 
 
 ARM64_OLD = {name: sha(f"{name} arm64".encode()) for name in ("runc", "k0s")}

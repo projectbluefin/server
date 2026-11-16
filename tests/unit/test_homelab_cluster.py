@@ -106,9 +106,12 @@ def test_applier_does_nothing_on_a_node() -> None:
 def test_dnssd_advertisement_carries_no_secrets() -> None:
     main = MAIN.read_text()
     publish = main.split("func publish(", 1)[1].split("\n}\n", 1)[0]
-    txt = re.search(r"TxtText=([^\\]*)\\n", publish).group(1)
+    body = main.split("func dnssdBody(", 1)[1].split("\n}\n", 1)[0]
+    assert "dnssdBody(cluster, runtime, port)" in publish
+    txt = re.search(r"TxtText=([^\\]*)\\n", body).group(1)
     assert txt == "v=1 cluster=%s runtime=%s"
-    assert "pass" not in publish.lower() and "token" not in publish.lower()
+    for fn in (publish, body):
+        assert "pass" not in fn.lower() and "token" not in fn.lower()
     assert 'dnssdFile     = "/run/systemd/dnssd/bluefin-cluster.dnssd"' in main
     assert "*.dnssd" in install_script(), "the build refuses a static advertisement in the sysext"
     # serve runs with UMask=0077; systemd-resolved (its own user) must read it.

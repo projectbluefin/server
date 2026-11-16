@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Key-free BuildStream cache of FSDK's kernel (and Go), in the project CAS.
+# Key-free BuildStream cache of hot SDK, Brew and unsigned kernel/module outputs.
 #
-#   CASD_CLIENT_CERT=<pem> CASD_CLIENT_KEY=<pem> kernel-cache.sh seed release|dev
+#   CASD_CLIENT_CERT=<pem> CASD_CLIENT_KEY=<pem> kernel-cache.sh seed shared|release|dev
 #
 # The kernel is most of a cold build (figures: docs/skills/ci-tooling.md,
 # "Build time and caches") and no upstream cache holds it: its cache key
@@ -20,23 +20,24 @@
 #    builds, so they pull the kernel instead of compiling it. Only the
 #    certificate is staged; its private key never enters this graph.
 #
-# `seed` builds ELEMENTS with a BuildStream config that pushes artifacts and
-# sources to the CAS's mTLS endpoint; every build reads them back through the
-# anonymous remote that patches/freedesktop-sdk/0001 adds to the junction's
+# `seed shared` warms certificate-independent tools once. Release/dev then
+# warm their kernel and modules. Ordinary builds reuse cached compiler parents
+# instead of reconstructing every bootstrap ancestor. Each seed explicitly
+# pushes its selected outputs with an mTLS-authenticated BuildStream config;
+# newly built dependencies and sources also push normally. Every build reads
+# them back through the anonymous remote that the FSDK patch adds to the junction's
 # project.conf (the top-level project.conf remote does not reach junction
-# elements such as the kernel). It builds nothing when a remote already
-# holds every element (`available`; an element only cached locally still goes
-# through `bst build`, which pushes it).
+# elements such as the kernel). `available` only proves remote metadata exists;
+# `bst build` must check selected payloads before `artifact push --deps none`.
 #
 # The CAS is publicly readable. What `seed` pushes is key-free by
 # construction: the seed job holds no signing secrets, `seed` refuses to
 # build if bluefin-server/keys/boot-keys.bst (the only element that stages
-# private keys) is anywhere in the graph of ELEMENTS, and it refuses a
-# files/boot-keys/modules/ that holds anything but the one certificate (that
-# directory's import is pushed with the kernel).
+# private keys) is anywhere in its full graph. Shared outputs must not reach
+# the module certificate either. Variant seeds refuse a files/boot-keys/modules/
+# containing anything but the public certificate; that import may be pushed.
 set -euo pipefail
 
-ELEMENTS=(freedesktop-sdk.bst:components/linux.bst freedesktop-sdk.bst:components/go.bst)
 KEYS_ELEMENT=bluefin-server/keys/boot-keys.bst
 PUSH_URL=https://cache.projectbluefin.io:11002
 
@@ -95,17 +96,37 @@ stage_cert() {
 auth=""
 
 seed() {
-    local variant="$1" graph states available
+    local variant="$1" graph states
+    local -a elements
     : "${CASD_CLIENT_CERT:?kernel-cache: CASD_CLIENT_CERT is not set}"
     : "${CASD_CLIENT_KEY:?kernel-cache: CASD_CLIENT_KEY is not set}"
-    stage_cert "${variant}"
+    if [ "${variant}" = shared ]; then
+        elements=(
+            freedesktop-sdk.bst:components/go.bst
+            freedesktop-sdk.bst:bootstrap/build/gcc-stage2.bst
+            fsdk-containers.bst:oci/brew-nspawn.bst
+            freedesktop-sdk.bst:components/ruby.bst
+            freedesktop-sdk.bst:components/_private/systemd-base.bst
+        )
+    else
+        elements=(
+            freedesktop-sdk.bst:components/linux.bst
+            zfs/openzfs.bst
+            nvidia/nvidia-open-595.bst
+        )
+        stage_cert "${variant}"
+    fi
     # Read the whole graph before matching: `bst show | grep -q` under
     # pipefail turns a match into SIGPIPE when grep exits before bst finishes
     # writing, and a failed `bst show` would look like a graph without the keys.
-    graph="$(bst_show show --deps all --format "'%{name}'" "${ELEMENTS[@]}")" \
-        || { echo "kernel-cache: cannot list the graph of ${ELEMENTS[*]}; refusing to publish" >&2; exit 1; }
+    graph="$(bst_show show --deps all --format "'%{name}'" "${elements[@]}")" \
+        || { echo "kernel-cache: cannot list the graph of ${elements[*]}; refusing to publish" >&2; exit 1; }
     if grep -qxF "${KEYS_ELEMENT}" <<< "${graph}"; then
-        echo "kernel-cache: ${KEYS_ELEMENT} is in the graph of ${ELEMENTS[*]}; refusing to publish" >&2
+        echo "kernel-cache: ${KEYS_ELEMENT} is in the graph of ${elements[*]}; refusing to publish" >&2
+        exit 1
+    fi
+    if [ "${variant}" = shared ] && grep -qxF bluefin-server/keys/linux-module-cert.bst <<< "${graph}"; then
+        echo "kernel-cache: shared outputs depend on the variant certificate; refusing to publish" >&2
         exit 1
     fi
     auth="$(umask 077 && mktemp -d .casd.XXXXXX)"
@@ -119,22 +140,20 @@ seed() {
     export BST_FLAGS="${BST_FLAGS:-} --config /src/${auth}/buildstream.conf"
     # BuildStream only warns about a remote it cannot reach (a rejected client
     # certificate included) and would build without pushing anything.
-    states="$(bst_show artifact show --deps none "${ELEMENTS[@]}")"
+    states="$(bst_show artifact show --deps none "${elements[@]}")"
     if grep -qF "Failed to initialize remote ${PUSH_URL}" <<< "${states}"; then
         grep -F "Failed to initialize remote ${PUSH_URL}" <<< "${states}" >&2
         echo "kernel-cache: cannot reach ${PUSH_URL}; refusing to build without pushing" >&2
         exit 1
     fi
-    available="$(grep -cE '^ *available ' <<< "${states}" || true)"
-    if [ "${available}" -eq "${#ELEMENTS[@]}" ]; then
-        echo "kernel-cache: ${variant}: ${ELEMENTS[*]} already on a remote"
-        return 0
-    fi
-    just bst build "${ELEMENTS[@]}"
-    echo "kernel-cache: ${variant}: pushed ${ELEMENTS[*]} to ${PUSH_URL}"
+    # Push cached upstream outputs too, without demanding missing bootstrap
+    # ancestors. Ruby/systemd are explicit roots even when Brew is cached.
+    just bst build "${elements[@]}"
+    just bst artifact push --deps none "${elements[@]}"
+    echo "kernel-cache: ${variant}: pushed ${elements[*]} to ${PUSH_URL}"
 }
 
 case "${1:-} ${2:-}" in
-    "seed release" | "seed dev") seed "$2" ;;
-    *) echo "usage: $0 seed release|dev" >&2; exit 2 ;;
+    "seed shared" | "seed release" | "seed dev") seed "$2" ;;
+    *) echo "usage: $0 seed shared|release|dev" >&2; exit 2 ;;
 esac
