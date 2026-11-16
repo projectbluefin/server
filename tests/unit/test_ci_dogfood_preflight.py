@@ -9,7 +9,6 @@
 - A missing tool, firmware file or KVM device is an error.
 """
 
-from __future__ import annotations
 
 import shutil
 import subprocess

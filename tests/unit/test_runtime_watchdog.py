@@ -10,7 +10,6 @@
   udev loads for the matching chipset (0007-linux-watchdog.patch).
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

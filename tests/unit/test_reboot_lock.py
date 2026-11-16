@@ -6,7 +6,6 @@ a boot is good. Without a configured server both are no-ops. The client
 itself (bluefin-host's bluefin-reboot-lock) runs in test_reboot_lock_client.py.
 """
 
-from __future__ import annotations
 
 import os
 import stat

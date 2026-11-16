@@ -1,7 +1,5 @@
 """Contract for the Tailscale sysext's unit rewrite in elements/runtimes/tailscale-bin.bst."""
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

@@ -105,13 +105,17 @@ DOGFOOD_IGNITION="${state}/kubeadm.ign" DOGFOOD_SERVE_EXTRA="${state}/serve" \
 DOGFOOD_EXTRA_PROBE="${state}/kubeadm.probe" DOGFOOD_MEM="${DOGFOOD_MEM:-8192}" \
 DOGFOOD_TIMEOUT="${DOGFOOD_TIMEOUT:-2400}" \
     bash "${here}/dogfood-diskless.sh" "${dir}" --check | tee "${log}"
-grep -q "PROBE kubeadm-init=active result=success " "${log}"
-grep -q "PROBE init-config=seeded kubeconfig=/etc/kubernetes/admin.conf enabled=enabled,enabled," "${log}"
-grep -q "PROBE cilium-apply=0 " "${log}"
-grep -qE "PROBE node=[^ ]+ Ready=True v" "${log}"
-grep -q "PROBE taints=none kube-proxy=absent recorded=proxy:disabled:true" "${log}"
-grep -qx "PROBE coredns=Running/true Running/true " "${log}"
-grep -q "PROBE kube-system-not-running=0 root-kubectl=1" "${log}"
-grep -q "PROBE rerun=no inactive" "${log}"
-grep -q "PROBE failed=0" "${log}"
+# Report every expectation that does not hold, not only the first.
+rc=0
+check() { grep -q "$@" "${log}" || { echo "FAIL: no match in ${log}: ${*: -1}" >&2; rc=1; }; }
+check "PROBE kubeadm-init=active result=success "
+check "PROBE init-config=seeded kubeconfig=/etc/kubernetes/admin.conf enabled=enabled,enabled,"
+check "PROBE cilium-apply=0 "
+check -E "PROBE node=[^ ]+ Ready=True v"
+check "PROBE taints=none kube-proxy=absent recorded=proxy:disabled:true"
+check -x "PROBE coredns=Running/true Running/true "
+check "PROBE kube-system-not-running=0 root-kubectl=1"
+check "PROBE rerun=no inactive"
+check "PROBE failed=0"
+[ "${rc}" = 0 ] || exit 1
 echo "PASS: kubeadm-init.service brought up a single-node control plane from Ignition; node Ready and untainted, no kube-proxy, kube-system Running with CoreDNS Ready, rerun skipped"

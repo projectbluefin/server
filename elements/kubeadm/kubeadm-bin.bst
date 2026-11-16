@@ -51,11 +51,11 @@ sources:
   directory: containerd
 - kind: remote
   url: github:opencontainers/runc/releases/download/v%{runc-version}/runc.amd64
-  ref: 3f3921dbbee7723e9868f97e88e51ffc910206e3ba55646e74d93d24ea76023c
+  ref: 3c8d24628a006cf52d8791cf8c4586f3a0cb7e29bed8ae4264aca3cb1edb972d
   directory: runc
 - kind: tar
   url: github:containernetworking/plugins/releases/download/v%{cni-plugins-version}/cni-plugins-linux-amd64-v%{cni-plugins-version}.tgz
-  ref: b275772da4026d2161bf8a8b41ed4786754c8a93ebfb6564006d5da7f23831e5
+  ref: b98f74a0f8522f0a83867178729c1aa70f2158f90c45a2ca8fa791db1c76b303
   base-dir: ''
   directory: cni
 
@@ -86,11 +86,11 @@ sources:
       directory: containerd
     - kind: remote
       url: github:opencontainers/runc/releases/download/v%{runc-version}/runc.arm64
-      ref: 6be27a061ef89bb14c6cb495405bba80f46cea213b8f79378a6086b1bac6b747
+      ref: 9edac6cba77b34d955bcdbf7001a1193f8964b255f0a7cf06ced3adf11f7cc00
       directory: runc
     - kind: tar
       url: github:containernetworking/plugins/releases/download/v%{cni-plugins-version}/cni-plugins-linux-arm64-v%{cni-plugins-version}.tgz
-      ref: 16484966a46b4692028ba32d16afd994e079dc2cc63fbc2191d7bfaf5e11f3dd
+      ref: 56171987d3947707c3563db2f4001bccaf50fd63468611b9f3cbecb1375ee7ec
       base-dir: ''
       directory: cni
 

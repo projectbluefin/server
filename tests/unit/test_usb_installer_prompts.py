@@ -9,7 +9,6 @@ installed disk's root password prompt, and the dogfood script that replays
 the same ExecStart= unattended.
 """
 
-from __future__ import annotations
 
 import re
 from pathlib import Path

@@ -1,6 +1,5 @@
 """Contracts for the kubeadm worker sysext and the kernel options it relies on."""
 
-from __future__ import annotations
 
 import configparser
 import re
@@ -44,7 +43,7 @@ def test_versions_stay_on_the_cluster_nodes_series() -> None:
         "crictl-version": "1.35",
         "containerd-version": "2.1",
         "runc-version": "1.3",
-        "cni-plugins-version": "1.1",
+        "cni-plugins-version": "1.9",
     }
     assert pinned["pause-image"] == "registry.k8s.io/pause:3.10.1"
 
@@ -169,6 +168,8 @@ def test_host_modules_and_sysctls() -> None:
     sysctl = (SRC / "sysctl-90-kubeadm.conf").read_text()
     for key in ("net.ipv4.ip_forward", "net.bridge.bridge-nf-call-iptables", "net.bridge.bridge-nf-call-ip6tables"):
         assert f"{key} = 1" in sysctl
+    assert "fs.inotify.max_user_instances = 8192" in sysctl
+    assert "fs.inotify.max_user_watches = 1048576" in sysctl
 
 
 def test_kubelet_units_follow_kubeadm() -> None:

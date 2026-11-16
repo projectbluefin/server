@@ -3,7 +3,6 @@ features for the booted version, from the installer's seed, the boot server
 or the release, and merges them. Runs bluefin-host's bluefin-sysext-fetch
 against stub systemd tools."""
 
-from __future__ import annotations
 
 import os
 import subprocess

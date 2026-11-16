@@ -60,8 +60,11 @@ For the full trust model, key rotation, and transfer configuration, see
 
 This policy covers everything this repository produces and its build pipeline:
 
-- The OS DDI, the signed UKIs and netboot ESP image, and the k0s and OpenZFS
-  `systemd-sysext` images.
+- Every release asset: the OS DDI, signed UKIs, netboot ESP image, offline USB
+  installer, homelab and Home Server profile templates, all opt-in
+  `systemd-sysext` images and the Homebrew system container, the SBOM, and the
+  signed `SHA256SUMS` manifest. The canonical list is the description block of
+  [`elements/oci/bluefin-server-image.bst`](elements/oci/bluefin-server-image.bst).
 - BuildStream elements, build tooling, and GitHub Actions workflows.
 - Release signing and the `systemd-sysupdate` update/verification flow.
 

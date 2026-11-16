@@ -5,7 +5,6 @@ directory the applier (bluefin-homelab-apply) finds under
 "addon" index file (default, runtimes) and manifests rendered offline by
 scripts/render-homelab-manifests.py."""
 
-from __future__ import annotations
 
 import importlib.util
 import re

@@ -15,7 +15,8 @@ BuildStream source ref.
                    k0s-patch                                                           elements/k0s/k0s-bin.bst
   nvidia-open-595  include/nvidia.yml                       NVIDIA-Linux-x86_64-       nvidia-open-595-sha256
                    nvidia-open-595-version                  <version>.run              in include/nvidia.yml
-  oras             Justfile oras_image tag                  setup-oras url + checksum in .github/workflows/*.yml
+  oras             Justfile oras_image tag                  setup-oras url + checksum in .github/workflows/*.yml,
+                                                            the oras_image digest in the Justfile
   nvidia-container-toolkit
                    include/nvidia-container-toolkit.yml     the release tag's commit   nvidia-container-toolkit-
                    nvidia-container-toolkit-version                                    commit in the same include
@@ -33,7 +34,8 @@ amd64 sources and the arm64 ones under `(?): arch == "aarch64"`. Every
 `url:` line carrying the component's marker is a pin, wherever it sits, so a
 bump refreshes all architectures at once, and a release counts as a candidate
 only when every architecture's asset and checksum file is attached. ORAS is
-CI tooling and pinned for amd64 runners only. An NVIDIA driver flavour is
+CI tooling and pinned for amd64 runners only; its Justfile image is pinned
+by the digest of the tag's multi-arch index, read from ghcr.io. An NVIDIA driver flavour is
 x86_64 only, and its sha256 is an atom next to its version, which the
 element's `ref:` reads. The NVIDIA Container Toolkit is built from source
 fetched with git, and NVIDIA publishes no checksum for any archive of it, so
@@ -85,10 +87,13 @@ layout (it re-indents every list in elements/k0s/k0s-bin.bst). BuildStream
 still checks each ref against the bytes when the pull request's build fetches
 the sources.
 
+A request that fails with a server error (5xx) or a dropped connection is
+retried RETRIES times before the component fails, so one upstream hiccup does
+not fail the run; a 4xx fails at once.
+
 Stdlib only. GITHUB_TOKEN or GH_TOKEN, if set, is sent to api.github.com only.
 """
 
-from __future__ import annotations
 
 import argparse
 import hashlib
@@ -97,6 +102,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -109,6 +115,10 @@ from typing import NamedTuple
 ROOT = Path(__file__).resolve().parents[2]
 TIMEOUT = 60
 MAX_RELEASE_PAGES = 20
+# A server error (5xx) or a dropped connection is retried this many times,
+# waiting RETRY_DELAY seconds longer before each try, before the request fails.
+RETRIES = 2
+RETRY_DELAY = 10
 
 URL_LINE_RE = re.compile(r"^\s*(?:-\s+)?url:\s*(?P<url>\S+)\s*$")
 VARIABLE_RE = re.compile(r'^\s+(?P<name>[A-Za-z][\w-]*):\s*"(?P<value>[^"]*)"', re.MULTILINE)
@@ -124,8 +134,8 @@ class NotFound(TrackError):
     pass
 
 
-def _open(url: str, method: str = "GET") -> HTTPResponse:
-    headers = {"User-Agent": "projectbluefin-server-track-binaries"}
+def _open(url: str, method: str = "GET", extra: dict[str, str] | None = None) -> HTTPResponse:
+    headers = {"User-Agent": "projectbluefin-server-track-binaries", **(extra or {})}
     if url.startswith("https://api.github.com/"):
         headers["Accept"] = "application/vnd.github+json"
         token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
@@ -133,12 +143,18 @@ def _open(url: str, method: str = "GET") -> HTTPResponse:
             # Never on downloads: release assets redirect to object storage,
             # which must not see the token.
             headers["Authorization"] = f"Bearer {token}"
-    try:
-        return urllib.request.urlopen(urllib.request.Request(url, headers=headers, method=method), timeout=TIMEOUT)
-    except urllib.error.HTTPError as err:
-        raise (NotFound if err.code == 404 else TrackError)(f"{method} {url}: HTTP {err.code}") from None
-    except urllib.error.URLError as err:
-        raise TrackError(f"{method} {url}: {err.reason}") from None
+    for attempt in range(RETRIES + 1):
+        try:
+            return urllib.request.urlopen(urllib.request.Request(url, headers=headers, method=method), timeout=TIMEOUT)
+        except urllib.error.HTTPError as err:
+            error: TrackError = (NotFound if err.code == 404 else TrackError)(f"{method} {url}: HTTP {err.code}")
+            transient = err.code >= 500
+        except urllib.error.URLError as err:
+            error, transient = TrackError(f"{method} {url}: {err.reason}"), True
+        if not transient or attempt == RETRIES:
+            raise error from None
+        time.sleep(RETRY_DELAY * (attempt + 1))
+    raise AssertionError("unreachable")
 
 
 def _get(url: str) -> bytes:
@@ -716,7 +732,13 @@ class OrasComponent(Component):
     repo = "oras-project/oras"
     sums = "{dir}/oras_{version}_checksums.txt"
     WORKFLOWS = (".github/workflows/*.yml", ".github/workflows/*.yaml")
-    IMAGE_RE = re.compile(r"(?P<head>ghcr\.io/oras-project/oras:v)(?P<version>\d+\.\d+\.\d+)(?![\w.])")
+    IMAGE_RE = re.compile(
+        r"(?P<head>ghcr\.io/oras-project/oras:v)(?P<version>\d+\.\d+\.\d+)@(?P<digest>sha256:[0-9a-f]{64})(?![\w.])"
+    )
+    REGISTRY = "https://ghcr.io"
+    IMAGE = "oras-project/oras"
+    # The multi-arch index, which is what a tag@sha256 pin names for podman.
+    INDEX_TYPES = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json"
     URL_RE = re.compile(
         r"https://github\.com/oras-project/oras/releases/download/"
         r"v(?P<tag>\d+\.\d+\.\d+)/oras_(?P<version>\d+\.\d+\.\d+)_linux_amd64\.tar\.gz"
@@ -725,7 +747,7 @@ class OrasComponent(Component):
     def _sites(self, tree: Tree) -> tuple[list[tuple[str, str]], list[tuple[str, re.Match[str]]]]:
         sites = [("Justfile", m["version"]) for m in self.IMAGE_RE.finditer(tree["Justfile"])]
         if not sites:
-            raise TrackError("Justfile: no ghcr.io/oras-project/oras:vX.Y.Z image")
+            raise TrackError("Justfile: no ghcr.io/oras-project/oras:vX.Y.Z@sha256:... image")
         urls = [(path, m) for path in tree.glob(*self.WORKFLOWS) for m in self.URL_RE.finditer(tree[path])]
         if not urls:
             raise TrackError(".github/workflows: no setup-oras release url")
@@ -744,7 +766,8 @@ class OrasComponent(Component):
     def set_version(self, tree: Tree, version: str) -> None:
         self.parse(version)
         _, urls = self._sites(tree)
-        tree["Justfile"] = self.IMAGE_RE.sub(lambda m: m["head"] + version, tree["Justfile"])
+        # The digest is the old tag's until verify() reads the new one.
+        tree["Justfile"] = self.IMAGE_RE.sub(lambda m: m["head"] + version + "@" + m["digest"], tree["Justfile"])
         new = f"https://github.com/oras-project/oras/releases/download/v{version}/oras_{version}_linux_amd64.tar.gz"
         for path in sorted({path for path, _ in urls}):
             tree[path] = self.URL_RE.sub(new, tree[path])
@@ -755,6 +778,44 @@ class OrasComponent(Component):
         return [
             Pin(path, url, "checksum", url, self._sums(url, version))
             for path, url in sorted({(path, m[0]) for path, m in urls})
+        ]
+
+    def verify(self, tree: Tree) -> list[Change]:
+        """The setup-oras checksums, then the Justfile image's digest for the new tag.
+
+        The digest is the sha256 of the index manifest bytes ghcr.io serves for
+        the tag (anonymous pull token, never GITHUB_TOKEN), which must agree with
+        the registry's Docker-Content-Digest header when it sends one.
+        """
+        changes = super().verify(tree)
+        version = self.current(tree)
+        url = f"{self.REGISTRY}/v2/{self.IMAGE}/manifests/v{version}"
+        scope = urllib.parse.urlencode({"scope": f"repository:{self.IMAGE}:pull", "service": "ghcr.io"})
+        token = json.loads(_get(f"{self.REGISTRY}/token?{scope}")).get("token", "")
+        if not token:
+            raise TrackError(f"{self.REGISTRY}: no anonymous pull token for {self.IMAGE}")
+        with _open(url, extra={"Accept": self.INDEX_TYPES, "Authorization": f"Bearer {token}"}) as response:
+            manifest = response.read()
+            served = getattr(response, "headers", {}).get("Docker-Content-Digest")
+        digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
+        if served and served != digest:
+            raise TrackError(f"{url}: Docker-Content-Digest {served}, but the manifest hashes to {digest}")
+        if json.loads(manifest).get("mediaType") not in self.INDEX_TYPES.split(", "):
+            raise TrackError(f"{url}: not a multi-arch index")
+        (before,) = {m["digest"] for m in self.IMAGE_RE.finditer(tree["Justfile"])}
+        tree["Justfile"] = self.IMAGE_RE.sub(lambda m: m["head"] + m["version"] + "@" + digest, tree["Justfile"])
+        pin = Pin("Justfile", "", "oras_image", url, url)
+        return [*changes, Change(pin, before.removeprefix("sha256:"), digest.removeprefix("sha256:"))]
+
+    def evidence(self, result: Result) -> list[str]:
+        image = [c for c in result.changes if c.pin.path == "Justfile"]
+        return [
+            *super().evidence(Result(result.component, result.old, result.new,
+                                     [c for c in result.changes if c not in image], result.files, result.mentions)),
+            "",
+            "The Justfile image digest is the sha256 of the index manifest ghcr.io serves for the tag:",
+            "",
+            *[f"- {c.pin.url}" for c in image],
         ]
 
 

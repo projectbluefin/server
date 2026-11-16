@@ -9,7 +9,6 @@ An intentional finding is silenced on the line above it, with a reason:
 `# shellcheck disable=SCxxxx # reason`.
 """
 
-from __future__ import annotations
 
 import re
 import subprocess

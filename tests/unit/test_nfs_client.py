@@ -7,7 +7,6 @@ is built from source: FSDK 26.08 has libtirpc and keyutils but no nfs-utils
 or rpcbind element.
 """
 
-from __future__ import annotations
 
 import re
 from pathlib import Path

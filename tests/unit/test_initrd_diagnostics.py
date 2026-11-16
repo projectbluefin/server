@@ -6,7 +6,6 @@ and sleep stubbed on $PATH, a fake /proc/meminfo, fake consoles, and a local
 http.server answering the HEAD request the RAM check makes.
 """
 
-from __future__ import annotations
 
 import http.server
 import os

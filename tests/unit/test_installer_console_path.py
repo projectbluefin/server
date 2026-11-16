@@ -15,7 +15,6 @@ This pins how they are wired, so a cancelled question never lets sysinstall
 start and a good install always restarts.
 """
 
-from __future__ import annotations
 
 import re
 import stat
