@@ -131,6 +131,34 @@ def test_workflow_tests_the_release_as_published() -> None:
     assert runs.index("publish-release.sh verify") < runs.index('e2e-opt-in.sh "${SCENARIO}"')
 
 
+def test_guest_logs_are_uploaded_without_the_release_image_symlinks(tmp_path: Path) -> None:
+    upload = next(s for s in JOBS["e2e"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+    assert upload["if"] == "${{ always() }}"
+    evidence = {
+        "dist/dogfood-mdns/a.log",
+        "dist/dogfood-mdns/result.txt",
+        "dist/dogfood-mdns/a-set/dogfood-serial.log",
+        "dist/dogfood-mdns/b-set/dogfood-serial.log",
+        "dist/dogfood-homelab-cluster/cp-set/dogfood-serial.log",
+        "dist/dogfood-homelab-cluster/node-set/dogfood-serial.log",
+    }
+    images = {"dist/release/bluefin-server_1.2.raw", "dist/release/kubeadm_1.2.raw.zst"}
+    excluded = {"dist/dogfood-mdns/disk.raw", "dist/dogfood-mdns/serve/unrelated.log"}
+    for path in evidence | images | excluded:
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+    for guest in ("a", "b"):
+        for image in images:
+            link = tmp_path / "dist/dogfood-mdns" / f"{guest}-set" / Path(image).name
+            link.symlink_to(tmp_path / image)
+            excluded.add(str(link.relative_to(tmp_path)))
+    matched = {str(p.relative_to(tmp_path)) for pattern in upload["with"]["path"].splitlines()
+               for p in tmp_path.glob(pattern)}
+    assert evidence <= matched
+    assert not excluded & matched
+
+
 def test_workflow_is_read_only_and_secret_free() -> None:
     assert WORKFLOW["permissions"] == {"contents": "read"}
     assert "secrets." not in json.dumps(WORKFLOW)
