@@ -24,6 +24,7 @@ config:
     cat <<EOF > "%{install-root}/usr/lib/os-release"
     NAME="Bluefin Server"
     ID=bluefin-server
+    ID_LIKE="org.freedesktop.platform"
     VERSION="%{image-version}"
     VERSION_ID=%{image-version}
     PRETTY_NAME="Bluefin Server %{image-version}"
