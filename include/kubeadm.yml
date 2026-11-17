@@ -18,7 +18,7 @@ variables:
   # containerd static build
   containerd-version: "2.1.9"
   # runc static build
-  runc-version: "1.3.6"
+  runc-version: "1.3.7"
   # containernetworking/plugins
   cni-plugins-version: "1.9.1"
   # CRI sandbox image (matches kubeadm-flags.env)

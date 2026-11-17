@@ -1,12 +1,9 @@
 """files/runtimes/bluefin-oci-owner-prepare, run end to end in a sandbox.
 
-bluefin-oci-owner-prepare runs as root before the Homebrew machine starts.
-It trusts the owner record only when it is root-owned and unwritable by
-others, grants that owner a 65536-wide subordinate UID/GID range in
+bluefin-oci-owner-prepare runs as root once the optional engine sysexts are merged.
+It picks the first regular account, grants that owner a 65536-wide subordinate UID/GID range in
 /etc/subuid and /etc/subgid without colliding with any account or other
-range, starts or stops the owner's rootless Podman/Docker user units, and
-writes the DOCKER_HOST/CONTAINER_HOST environment the dispatcher reads,
-leaving an operator's own file at that path alone.
+range, and starts or stops the owner's rootless Podman/Docker user units.
 
 The script hardcodes host paths and asks for root-only facts, so each test
 runs a copy whose host paths point into tmp_path, with PATH shims for the
@@ -31,20 +28,16 @@ SOURCE_LINE = 'source "${BASH_SOURCE[0]%/*}/bluefin-oci-features"'
 # sandbox root; a path missing from the script means it changed and this
 # harness needs updating, so the copy refuses to build rather than touch /.
 HOST_PATHS = (
-    "/var/lib/bluefin-homebrew/owner",
     "/etc/subuid",
     "/etc/subgid",
     "/run/lock",
     "/sys/fs/cgroup",
     "/proc/sys/",
     "/usr/bin/",
-    "/run/user/",
     "/usr/lib/bluefin/",
-    "/etc/bluefin-homebrew",
 )
 UID = 1000
 OWNER = "alice"
-MANAGED = "# Managed by bluefin-oci-owner-prepare"
 
 FEATURES_STUB = """\
 set -euo pipefail
@@ -167,22 +160,12 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.write("/db/passwd", f"root:x:0:0::/root:/bin/bash\n{OWNER}:x:{UID}:{UID}::/var/home/{OWNER}:/bin/bash\n")
     box.write("/db/group", f"root:x:0:\n{OWNER}:x:{UID}:\n")
     box.path("/etc").mkdir()
-    box.write("/var/lib/bluefin-homebrew/owner", f"{UID}:{UID}\n")
     box.write("/sys/fs/cgroup/cgroup.controllers", "cpu memory pids\n")
     for helper in ("newuidmap", "newgidmap"):
         box.write(f"/usr/bin/{helper}", "#!/bin/sh\n", 0o755)
-    for engine in ("podman", "docker"):
-        endpoint = f"/run/user/{UID}/bluefin-{engine}"
-        box.path(endpoint).mkdir(parents=True)
-        box.path(endpoint).chmod(0o700)
-        box.owned_by(endpoint, UID)
     box.write("/usr/lib/bluefin/podman/podman", "#!/bin/sh\n", 0o755)
     box.write("/usr/lib/bluefin/docker/bin/dockerd", "#!/bin/sh\n", 0o755)
     return box
-
-
-def env_file(box: Sandbox) -> Path:
-    return box.path(f"/etc/bluefin-homebrew/runtime.{UID}.env")
 
 
 def assert_refused(result, message: str) -> None:
@@ -190,7 +173,15 @@ def assert_refused(result, message: str) -> None:
     assert f"bluefin-oci-owner-prepare: {message}" in result.stderr
 
 
-# --- arguments and owner record ---------------------------------------------
+# --- arguments and owner discovery ------------------------------------------
+
+
+def test_does_nothing_without_a_regular_account(sandbox):
+    sandbox.write("/db/passwd", "root:x:0:0::/root:/bin/bash\n")
+    result = sandbox.run(podman=True)
+    assert result.returncode == 0, result.stderr
+    assert "no regular account yet" in result.stderr
+    assert sandbox.calls() == []
 
 
 def test_refuses_any_argument(sandbox):
@@ -198,49 +189,6 @@ def test_refuses_any_argument(sandbox):
     assert result.returncode == 1
     assert result.stderr == "usage: bluefin-oci-owner-prepare\n"
     assert sandbox.calls() == []
-
-
-def test_refuses_a_symlinked_owner_record(sandbox):
-    record = sandbox.path("/var/lib/bluefin-homebrew/owner")
-    target = sandbox.write("/elsewhere/owner", f"{UID}:{UID}\n")
-    record.unlink()
-    record.symlink_to(target)
-    assert_refused(sandbox.run(), "owner record must be root-owned and not a symlink")
-
-
-def test_refuses_an_owner_record_not_owned_by_root(sandbox):
-    sandbox.owned_by("/var/lib/bluefin-homebrew/owner", UID)
-    assert_refused(sandbox.run(), "owner record must be root-owned and not a symlink")
-
-
-@pytest.mark.parametrize("mode", [0o664, 0o646], ids=["group-writable", "world-writable"])
-def test_refuses_a_writable_owner_record(sandbox, mode):
-    sandbox.path("/var/lib/bluefin-homebrew/owner").chmod(mode)
-    assert_refused(sandbox.run(), "owner record must not be group/world writable")
-
-
-@pytest.mark.parametrize("record", ["0:0\n", "alice:1000\n", "1000\n", "1000:x\n"])
-def test_refuses_a_root_or_malformed_owner_record(sandbox, record):
-    sandbox.write("/var/lib/bluefin-homebrew/owner", record)
-    assert_refused(sandbox.run(), "owner record must contain non-root UID:GID")
-
-
-def test_refuses_an_owner_record_naming_no_account(sandbox):
-    sandbox.write("/var/lib/bluefin-homebrew/owner", "2000:2000\n")
-    assert_refused(sandbox.run(), "owner account does not exist")
-
-
-def test_refuses_an_owner_whose_primary_group_changed(sandbox):
-    sandbox.write("/var/lib/bluefin-homebrew/owner", f"{UID}:{UID + 1}\n")
-    assert_refused(sandbox.run(), "owner identity changed")
-
-
-def test_refuses_an_account_name_that_is_not_a_login_name(sandbox):
-    sandbox.write("/db/passwd", f"-rf:x:{UID}:{UID}::/var/home/x:/bin/bash\n")
-    assert_refused(sandbox.run(), "invalid owner account name")
-
-
-# --- rootless engine prerequisites ------------------------------------------
 
 
 def test_refuses_rootless_engines_without_cgroup_v2(sandbox):
@@ -384,33 +332,6 @@ def test_leaves_maps_and_user_manager_alone_when_no_engine_is_selected(sandbox):
 # --- endpoints and engines --------------------------------------------------
 
 
-@pytest.mark.parametrize("engine", ["podman", "docker"])
-def test_refuses_a_missing_endpoint_directory(sandbox, engine):
-    shutil.rmtree(sandbox.path(f"/run/user/{UID}/bluefin-{engine}"))
-    assert_refused(sandbox.run(), f"{engine} owner endpoint directory is missing or not private")
-
-
-def test_refuses_an_endpoint_directory_others_can_read(sandbox):
-    sandbox.path(f"/run/user/{UID}/bluefin-docker").chmod(0o750)
-    assert_refused(sandbox.run(), "docker owner endpoint directory is missing or not private")
-
-
-def test_refuses_an_endpoint_directory_owned_by_someone_else(sandbox):
-    sandbox.owned_by(f"/run/user/{UID}/bluefin-podman", 0)
-    assert_refused(sandbox.run(), "podman owner endpoint directory is missing or not private")
-
-
-def test_refuses_a_symlinked_endpoint_directory(sandbox):
-    endpoint = sandbox.path(f"/run/user/{UID}/bluefin-podman")
-    endpoint.rmdir()
-    elsewhere = sandbox.path("/elsewhere/podman")
-    elsewhere.mkdir(parents=True)
-    elsewhere.chmod(0o700)
-    endpoint.symlink_to(elsewhere)
-    sandbox.owned_by(f"/run/user/{UID}/bluefin-podman", UID)
-    assert_refused(sandbox.run(), "podman owner endpoint directory is missing or not private")
-
-
 @pytest.mark.parametrize(
     ("engine", "binary", "message"),
     [
@@ -456,79 +377,3 @@ def test_skips_user_units_when_the_user_manager_is_not_running(sandbox):
     result = sandbox.run(podman=True, TEST_USER_MANAGER_INACTIVE="3")
     assert result.returncode == 0, result.stderr
     assert not any("--machine=" in call for call in sandbox.calls())
-
-
-# --- runtime environment ----------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("podman", "docker", "backend"),
-    [(True, False, "podman"), (False, True, "docker"), (True, True, "docker"), (False, False, "podman")],
-)
-def test_writes_the_managed_environment_for_the_selected_backend(sandbox, podman, docker, backend):
-    result = sandbox.run(podman=podman, docker=docker)
-    assert result.returncode == 0, result.stderr
-    assert env_file(sandbox).read_text() == (
-        f"{MANAGED}\n"
-        f"DOCKER_HOST=unix:///run/bluefin-engines/{UID}/{backend}/api.sock\n"
-        f"CONTAINER_HOST=unix:///run/bluefin-engines/{UID}/podman/api.sock\n"
-    )
-    assert env_file(sandbox).stat().st_mode & 0o777 == 0o644
-    assert sandbox.path("/etc/bluefin-homebrew").stat().st_mode & 0o777 == 0o755
-    assert f"chown root:root {env_file(sandbox)}.new" in sandbox.calls()
-    assert not Path(f"{env_file(sandbox)}.new").exists()
-
-
-def test_rewrites_its_own_environment_when_the_selection_changes(sandbox):
-    assert sandbox.run(podman=True).returncode == 0
-    result = sandbox.run(docker=True)
-    assert result.returncode == 0, result.stderr
-    assert f"/{UID}/docker/api.sock" in env_file(sandbox).read_text()
-
-
-def test_preserves_an_operator_environment_at_the_same_path(sandbox):
-    operator = "DOCKER_HOST=tcp://build-box:2375\n"
-    sandbox.write(f"/etc/bluefin-homebrew/runtime.{UID}.env", operator)
-    result = sandbox.run(docker=True)
-    assert result.returncode == 0, result.stderr
-    assert env_file(sandbox).read_text() == operator
-    assert not any(call.startswith("chown") for call in sandbox.calls())
-
-
-def test_refuses_a_symlinked_environment_directory(sandbox):
-    elsewhere = sandbox.path("/elsewhere/config")
-    elsewhere.mkdir(parents=True)
-    sandbox.path("/etc/bluefin-homebrew").symlink_to(elsewhere)
-    assert_refused(sandbox.run(), "runtime environment directory must not be a symlink")
-    assert list(elsewhere.iterdir()) == []
-
-
-def test_refuses_an_environment_directory_not_owned_by_root(sandbox):
-    sandbox.path("/etc/bluefin-homebrew").mkdir(parents=True)
-    sandbox.owned_by("/etc/bluefin-homebrew", UID)
-    assert_refused(sandbox.run(), "runtime environment directory must be root-owned")
-
-
-def test_refuses_a_writable_environment_directory(sandbox):
-    sandbox.path("/etc/bluefin-homebrew").mkdir(parents=True)
-    sandbox.path("/etc/bluefin-homebrew").chmod(0o775)
-    assert_refused(sandbox.run(), "runtime environment directory must not be group/world writable")
-
-
-def test_refuses_a_symlinked_environment_file(sandbox):
-    target = sandbox.write("/elsewhere/env", f"{MANAGED}\n")
-    sandbox.path("/etc/bluefin-homebrew").mkdir(parents=True)
-    env_file(sandbox).symlink_to(target)
-    assert_refused(sandbox.run(), "runtime environment must be root-owned and not a symlink")
-    assert target.read_text() == f"{MANAGED}\n"
-
-
-def test_refuses_an_environment_file_not_owned_by_root(sandbox):
-    sandbox.write(f"/etc/bluefin-homebrew/runtime.{UID}.env", f"{MANAGED}\n")
-    sandbox.owned_by(f"/etc/bluefin-homebrew/runtime.{UID}.env", UID)
-    assert_refused(sandbox.run(), "runtime environment must be root-owned and not a symlink")
-
-
-def test_refuses_a_writable_environment_file(sandbox):
-    sandbox.write(f"/etc/bluefin-homebrew/runtime.{UID}.env", f"{MANAGED}\n", 0o666)
-    assert_refused(sandbox.run(), "runtime environment must not be group/world writable")

@@ -63,5 +63,15 @@ depends:
   # Interactive bash prompt (user@host:cwd$, blue @)
   - bluefin-server/os-prompt.bst
 
+  # Homebrew seed archive, its first-boot extraction unit and shell profile
+  - homebrew/seed.bst
+  - bluefin-server/os-oci-owner.bst
+  - freedesktop-sdk.bst:components/git.bst
+  - freedesktop-sdk.bst:components/file.bst
+  - freedesktop-sdk.bst:components/zstd.bst
+  - freedesktop-sdk.bst:components/tar.bst
+  - freedesktop-sdk.bst:components/xz.bst
+  - freedesktop-sdk.bst:components/gzip.bst
+
   # udev rules (USB installer: other disks' stale partition devices, #359)
   - bluefin-server/os-udev-rules.bst

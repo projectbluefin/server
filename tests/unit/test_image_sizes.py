@@ -32,7 +32,7 @@ SET = {
     f"bluefin-server-installer_{VERSION}.raw": ("installer_raw", 2048 * MiB),
     f"zfs_{VERSION}.raw.zst": ("zfs_sysext_raw_zst", 3 * MiB),
     f"nvidia-open-595_{VERSION}.raw.zst": ("nvidia_open_595_sysext_raw_zst", 180 * MiB),
-    f"homebrew-integration_{VERSION}.raw.zst": ("homebrew_integration_sysext_raw_zst", 4096),
+    f"podman_{VERSION}.raw.zst": ("podman_sysext_raw_zst", 4096),
     "k0s-1.36.4-k0s.0.raw.zst": ("k0s_sysext_raw_zst", 70 * MiB),
     "nvidia-container-toolkit-1.20.1.raw.zst": ("nvidia_container_toolkit_sysext_raw_zst", 9 * MiB),
     f"bluefin-server_{VERSION}.spdx.json": (None, 100),
@@ -105,7 +105,7 @@ def test_report_measures_each_release_file_and_sysext(tmp_path: Path, capsys, su
     table = summary.read_text()
     assert table.startswith(f"### Image sizes of {VERSION}\n\n| File or section | Size |\n| --- | ---: |\n")
     assert "| `installer_raw` | 2.0 GiB |\n" in table
-    assert "| `homebrew_integration_sysext_raw_zst` | 4.0 KiB |\n" in table
+    assert "| `podman_sysext_raw_zst` | 4.0 KiB |\n" in table
     assert "Change since" not in table and "Bold" not in table
 
 
@@ -115,7 +115,7 @@ def test_growth_over_five_percent_or_five_mib_warns(tmp_path: Path, capsys, summ
     old.write_text(json.dumps({"image_version": "26.10.6", "metrics": {
         "usr_raw": 190 * MiB,  # +10 MiB, +5.3 %
         "os_ddi_raw": 894 * MiB,  # +6 MiB, +0.7 %
-        "homebrew_integration_sysext_raw_zst": 3900,  # +196 B, +5.0 %
+        "podman_sysext_raw_zst": 3900,  # +196 B, +5.0 %
         "installer_raw": 2044 * MiB,  # +4 MiB, +0.2 %
         "netboot_uki": 81 * MiB,
         "zfs_sysext_raw_zst": 3 * MiB,
@@ -126,13 +126,13 @@ def test_growth_over_five_percent_or_five_mib_warns(tmp_path: Path, capsys, summ
     assert report["delta"] == {
         "usr_raw": 10 * MiB,
         "os_ddi_raw": 6 * MiB,
-        "homebrew_integration_sysext_raw_zst": 196,
+        "podman_sysext_raw_zst": 196,
         "installer_raw": 4 * MiB,
         "netboot_uki": -MiB,
         "zfs_sysext_raw_zst": 0,
     }
     warned = [line.split("::")[2].split()[0] for line in err.splitlines() if line.startswith("::warning")]
-    assert warned == ["homebrew_integration_sysext_raw_zst", "os_ddi_raw", "usr_raw"]
+    assert warned == ["os_ddi_raw", "podman_sysext_raw_zst", "usr_raw"]
     assert "::warning title=Image size grew::usr_raw grew by +10.0 MiB (+5.3%) since 26.10.6, to 200.0 MiB\n" in err
     table = summary.read_text()
     assert "| File or section | Size | Change since 26.10.6 |\n| --- | ---: | ---: |\n" in table
@@ -223,3 +223,39 @@ def test_disk_uki_sections_and_unpacked_initrd(tmp_path: Path, capsys, summary: 
     rows = [line.split("`")[1] for line in summary.read_text().splitlines() if line.startswith("| `")]
     assert rows[:10] == [*image_sizes.FILES, "uki_linux_section", "uki_initrd_section", "initrd_unpacked"]
     assert rows[10:] == sorted(rows[10:])
+
+
+def test_slot_sizes_are_the_repart_d_maxima() -> None:
+    slots = image_sizes.slot_sizes(image_sizes.REPART_DIR)
+    assert (slots["usr"], slots["usr-verity"]) == (2 * 2**30, 128 * MiB)
+
+
+@pytest.mark.parametrize(
+    ("name", "size", "message"),
+    [
+        (f"bluefin-server_{VERSION}_{UUID}.usr.raw", 1844 * MiB, "usr_raw is 1.8 GiB, more than 90% of the 2.0 GiB usr"),
+        (f"bluefin-server_{VERSION}_{UUID}.usr-verity.raw", 116 * MiB, "usr_verity_raw is 116.0 MiB, more than 90% of the 128.0 MiB usr-verity"),
+    ],
+)
+def test_an_image_filling_its_slot_fails(tmp_path: Path, capsys, summary: Path, name: str, size: int, message: str) -> None:
+    dist = make_set(tmp_path / "diskless")
+    with (dist / name).open("wb") as handle:
+        handle.truncate(size)
+    assert image_sizes.main([str(dist)]) == 1
+    out = capsys.readouterr()
+    assert json.loads(out.out)["metrics"][SET[name][0]] == size
+    assert f"::error title=Image outgrows its slot::{message} partition in " in out.err
+    # 90 % exactly still fits.
+    limit = image_sizes.slot_sizes(image_sizes.REPART_DIR)[image_sizes.SLOTS[SET[name][0]]]
+    with (dist / name).open("wb") as handle:
+        handle.truncate(int(0.9 * limit))
+    assert image_sizes.main([str(dist)]) == 0
+
+
+def test_a_repart_dir_without_the_usr_slot_is_refused(tmp_path: Path, summary: Path) -> None:
+    dist = make_set(tmp_path / "diskless")
+    repart = tmp_path / "repart.d"
+    repart.mkdir()
+    (repart / "10-esp.conf").write_text("[Partition]\nType=esp\nSizeMaxBytes=1G\n")
+    with pytest.raises(SystemExit, match="no usr partition with SizeMaxBytes="):
+        image_sizes.main([str(dist), "--repart-dir", str(repart)])

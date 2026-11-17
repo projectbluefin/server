@@ -195,12 +195,13 @@ tell a human or a policy engine which commit and workflow run produced it.
   plugin (`output-type: spdx`) over the payload of the release set: the /usr
   and initrd stacks, the kernel, and the k0s, KubeStellar, kubeadm and
   OpenZFS sysext payloads. It lists one SPDX package per source (name,
-  version, download URL, source kind), but the list is de-duplicated by
-  SPDX ID, so a package built from two sources is shown only once. That
-  can hide a real second copy: fsdk-containers pins its own FSDK, so its
-  pcre2 has a different version from ours yet shares the same SPDX ID, and
-  the first copy wins (#599). Build-only elements such as the
-  signing keys are not runtime dependencies of that payload and never
+  version, download URL, source kind), and de-duplicates the list. FSDK
+  bootstrap elements are reached through two junction paths, so identical
+  copies collapse to one. Copies that genuinely differ are given a fresh
+  SPDX ID instead of being hidden, so the SBOM lists every real copy:
+  fsdk-containers pins its own FSDK, so its pcre2 has a different version
+  from ours and appears under its own ID (#599). Build-only elements such as
+  the signing keys are not runtime dependencies of that payload and never
   appear. SPDX requires a `creationInfo.created`, which the plugin leaves to
   the build, so the image element stamps it from `SOURCE_DATE_EPOCH`. The
   build runs in a BuildStream sandbox that fixes `SOURCE_DATE_EPOCH` to
@@ -220,9 +221,10 @@ tell a human or a policy engine which commit and workflow run produced it.
   `image-check` writes after the build (see `ci-tooling.md`), is published
   unlisted: information for humans that no signature covers and no transfer
   matches, so `verify` only checks that it reports this version.
-  `release` creates the GitHub Release at the built commit. `oci`
-  pushes the ORAS artifact, then checks the registry manifest layer by layer
-  against the local files. Neither moves `latest` backwards: `release`
+  `oci` pushes the ORAS artifact, then checks the registry manifest layer
+  by layer against the local files. `release` then creates the GitHub
+  Release at the built commit, last because a tag is never re-created: a
+  failed run can be retried, re-pushing the same files. Neither moves `latest` backwards: `release`
   passes `--latest` only when no published release sorts above the version
   (`sort -V`, which orders `YY.MM.<run>` as `strverscmp()` does) and
   `--latest=false` otherwise, and `oci` tags `latest` only when the version
@@ -230,8 +232,8 @@ tell a human or a policy engine which commit and workflow run produced it.
   is not newer. Re-running an older release leaves both where they are. On main the `release` job verifies against the
   committed `files/os/sysupdate-keys/import-pubring.gpg`. On pull requests
   `release-dry-run` verifies against the throwaway keyring the build
-  exported in `sysupdate-keys/`, prints the `gh release create` command, and
-  pushes to a local registry and pulls the artifact back.
+  exported in `sysupdate-keys/`, pushes to a local registry and pulls the
+  artifact back, then prints the `gh release create` command.
 - **Attestations.** The `release` job runs `actions/attest` four times:
   provenance and SBOM for every published file (subjects are the verified
   checksums), and provenance and SBOM for the OCI artifact digest with

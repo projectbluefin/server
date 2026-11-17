@@ -22,7 +22,7 @@ SHIM = ROOT / "elements" / "bluefin-server" / "shim.bst"
 IMAGE = ROOT / "elements" / "oci" / "bluefin-server-image.bst"
 IMAGE_YML = ROOT / "include" / "image.yml"
 SHIM_DATA = "/usr/share/bluefin-server/shim"
-STAGED = ("/sd-boot", "/boot-out", "/shim", "/homelab-templates", "/homebrew-templates", "/homebrew-machine", "/sysext", "/usr-image", "/tmp/")
+STAGED = ("/sd-boot", "/boot-out", "/shim", "/homelab-templates", "/homebrew-templates", "/sysext", "/usr-image", "/tmp/")
 
 
 def load(path: Path) -> dict:
@@ -107,7 +107,7 @@ def run_esp_step(tmp_path: Path, marker: str, shim_esp: str) -> Path:
     staged = "|".join(re.escape(p) for p in (*STAGED, "/out"))
     script = re.sub(rf"(?<=[\s\"=])(?={staged})", str(root), script)
     # Every file the step installs from a staged dependency.
-    for path in set(re.findall(rf"{re.escape(str(root))}/(?:sd-boot|boot-out|shim|homelab-templates|homebrew-templates|homebrew-machine|sysext)/[^\s\"]+", script)):
+    for path in set(re.findall(rf"{re.escape(str(root))}/(?:sd-boot|boot-out|shim|homelab-templates|homebrew-templates|sysext)/[^\s\"]+", script)):
         path = path.replace("*", "x")
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(Path(path).name, encoding="utf-8")

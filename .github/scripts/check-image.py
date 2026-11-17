@@ -53,8 +53,6 @@ KNOWN_BROKEN = {
     "/usr/lib/systemd/system/quotaon-root.service runs missing /usr/bin/quotaon",
     # Only started when swtpm is installed (systemd-tpm2-swtpm finds none).
     "/usr/lib/systemd/system/systemd-tpm2-swtpm.service runs missing swtpm_ioctl",
-    # tpm2-tools' tpm2_id is not in FSDK; the rule only adds udev properties.
-    "/usr/lib/udev/rules.d/60-tpm2-id.rules runs missing tpm2_id",
     # Only for TI am65-cpsw-nuss switchdev NICs (iproute2 has no devlink here).
     "/usr/lib/udev/rules.d/81-net-bridge.rules runs missing /usr/sbin/devlink",
     # NVIDIA's GLX and EGL-GBM display libraries; the headless image has no
@@ -187,7 +185,7 @@ def check_libraries(name: str, layers: list[Path], own: Path) -> list[str]:
     elves = [
         p
         for p in iter_files(own)
-        if "/lib/modules/" not in str(p) and is_elf(p)
+        if "/lib/modules/" not in str(p) and "/test/support/fixtures/" not in str(p) and is_elf(p)
     ]
     needed, runpaths = elf_needed(elves)
     for path, libs in sorted(needed.items()):
@@ -358,13 +356,10 @@ def main(argv: list[str] | None = None) -> int:
             extract_erofs(raw, root)
             raw.unlink()
             name = sysext.name.removesuffix(".raw.zst")
-            # A machine is self-contained, not a sysext layered over host /usr.
-            machine = sysext.name.startswith("homebrew_")
-            layers = [root] if machine else [root, usr_root]
+            layers = [root, usr_root]
             errors += check_libraries(name, layers, root)
             errors += check_programs(name, layers, root)
-            relation = "standalone machine" if machine else "checked over /usr"
-            report.append(f"{sysext.name}: {du(root) / 2**20:.0f} MiB unpacked, {relation}")
+            report.append(f"{sysext.name}: {du(root) / 2**20:.0f} MiB unpacked, checked over /usr")
 
         if args.baseline_usr:
             base_root = work / "baseline"
