@@ -103,7 +103,9 @@ path:
   `BOOTX64.EFI` alone.
 - **Microsoft-only firmware.** Until shim is Microsoft-signed it boots only
   where the Bluefin db is enrolled, and the USB installer's Secure Boot
-  check still refuses firmware that lacks the Bluefin db.
+  check still refuses firmware that lacks the Bluefin db. The boot test
+  shows firmware that holds only other keys refusing the netboot ESP's
+  loader before anything of Bluefin runs (`DOGFOOD_FIRMWARE=foreign-keys`).
 - **UEFI HTTP boot** loads the netboot UKI directly, without shim. shim
   fetches `DEFAULT_LOADER` relative to its own URL when HTTP-booted; serving
   a shim chain that way is Booty-side work.
@@ -193,8 +195,16 @@ in-RAM DDI partitions (`/dev/disk/by-loop-ref/rootdisk.raw-part1` and `part2`):
 systemctl start run-bluefin-boot.mount
 kernel="$(ls /run/bluefin/boot/EFI/Linux/bluefin-server-[0-9]*.efi)"
 systemd-sysinstall --kernel="${kernel}" \
-    --definitions=/run/bluefin/boot/bluefin/repart.d /dev/sdX
+    --definitions=/run/bluefin/boot/bluefin/repart.d
 ```
+
+`systemd-sysinstall` lists the disks and asks for one (its number or name),
+whether to keep what is on it or erase it, whether to register the install in
+the firmware's boot entries, and, after a summary, for `yes`. Name the disk at
+the end of the command (e.g. `/dev/sdX`) to skip the first question. The boot
+test logs in at a diskless node's console, types this block as written and
+answers the questions (`DOGFOOD_INSTALL=diskless-console` of
+`scripts/dogfood-installer.sh`).
 
 On older image builds whose `repart.d` used `CopyBlocks=auto`, active system
 extensions (`systemd-sysext`, e.g. ZFS or k0s) turn `/usr` into an overlayfs,

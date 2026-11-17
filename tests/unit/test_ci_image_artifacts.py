@@ -154,7 +154,8 @@ def test_full_set_consumers_download_every_image_set_part(job: str) -> None:
 
 # The part of the set a dogfood script boots or installs (its first argument)
 # that it reads besides the catch-all; a later set argument is an update
-# source, read whole.
+# source, read whole. DOGFOOD_INSTALL=diskless-console makes the installer
+# check boot the netboot ESP and pull the OS DDI instead of the stick.
 BOOTS = {
     "scripts/dogfood-diskless.sh": "netboot",
     "scripts/dogfood-install.sh": "netboot",
@@ -163,6 +164,7 @@ BOOTS = {
 
 
 def set_args(bucket: str) -> list[tuple[str, list[str]]]:
+    """(part of the set the call boots, its set arguments) for each call."""
     calls = []
     for release in (False, True):
         out = subprocess.run(
@@ -173,7 +175,8 @@ def set_args(bucket: str) -> list[tuple[str, list[str]]]:
         for line in out.stdout.splitlines():
             words = line.split(": ", 1)[1].split()
             script = next(w for w in words if w.startswith("scripts/dogfood-"))
-            calls.append((script, [w for w in words if w.startswith("dist/diskless")]))
+            boots = "netboot" if "DOGFOOD_INSTALL=diskless-console" in words else BOOTS[script]
+            calls.append((boots, [w for w in words if w.startswith("dist/diskless")]))
     return calls
 
 
@@ -186,8 +189,8 @@ def test_a_bucket_downloads_the_parts_its_scripts_read(bucket: str) -> None:
 
     every = {"core", "netboot", "installer", "sysupdate", "sysexts"}
     need: dict[str, set[str]] = {"dist/diskless": set(), "dist/diskless-next": set(), "dist/diskless-broken": set()}
-    for script, sets in set_args(bucket):
-        need[sets[0]] |= {"core", BOOTS[script]}
+    for boots, sets in set_args(bucket):
+        need[sets[0]] |= {"core", boots}
         for later in sets[1:]:
             need[later] |= every
     assert selected(INCLUDE[bucket]["image"], list(UPLOADS)) == {f"image-set-{p}" for p in need["dist/diskless"]}

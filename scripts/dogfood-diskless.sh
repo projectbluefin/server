@@ -45,6 +45,13 @@
 #                              SHA256SUMS re-hashed to match it but no longer matching
 #                              SHA256SUMS.gpg (sums); --check then passes only if the
 #                              initrd's pull refuses it for that reason
+#   DOGFOOD_FIRMWARE=foreign-keys  (--check, netboot, no DOGFOOD_VARS) start from a
+#                              variable store already in user mode with someone else's
+#                              Secure Boot keys (the distribution's pre-enrolled vendor
+#                              keys, OVMF_VARS_FOREIGN) instead of a blank one: --check
+#                              passes only if the firmware itself refuses the netboot
+#                              ESP's boot loader, so neither systemd-boot nor the kernel
+#                              runs
 set -euo pipefail
 
 dir="$(realpath "${1:?usage: $0 <artifact dir> [--check]}")"
@@ -63,6 +70,18 @@ image="bluefin-server_${ver}.raw"
 . "$(dirname "${BASH_SOURCE[0]}")/dogfood-firmware.sh"
 code="$(ovmf_code)" || exit 1
 vars_tmpl="$(ovmf_vars)" || exit 1
+firmware="${DOGFOOD_FIRMWARE:-}"
+case "${firmware}" in
+    '') ;;
+    foreign-keys)
+        if [ "${mode}" != --check ] || [ "${DOGFOOD_BOOT:-netboot}" != netboot ] || [ -n "${DOGFOOD_VARS:-}" ] \
+            || [ -n "${DOGFOOD_REFUSAL:-}${DOGFOOD_TAMPER:-}" ]; then
+            echo "ERROR: DOGFOOD_FIRMWARE=foreign-keys is a --check of a netboot boot, without DOGFOOD_VARS, DOGFOOD_REFUSAL or DOGFOOD_TAMPER" >&2
+            exit 1
+        fi
+        vars_tmpl="$(ovmf_vars_foreign)" || exit 1 ;;
+    *) echo "ERROR: DOGFOOD_FIRMWARE must be foreign-keys" >&2; exit 1 ;;
+esac
 
 work="$(mktemp -d /tmp/bluefin-dogfood.XXXXXX)"
 probe_log="${DOGFOOD_PROBE_LOG:-${work}/probe.log}"
@@ -89,6 +108,11 @@ for f in "${dir}"/*; do ln -s "${f}" "${srv}/"; done
 if [ -n "${DOGFOOD_SERVE_EXTRA:-}" ]; then for f in "${DOGFOOD_SERVE_EXTRA}"/*; do ln -sf "$(realpath "${f}")" "${srv}/"; done; fi
 image_re="${image//./\\.}"
 refusal_re="${DOGFOOD_REFUSAL:-}"
+# OVMF reports each boot option it cannot load on the firmware console; an
+# image Secure Boot rejects fails to load with Access Denied (or, under a
+# deferring policy, Security Violation).
+[ "${firmware}" != foreign-keys ] \
+    || refusal_re='BdsDxe: failed to load Boot[0-9A-F]{4} .*: (Access Denied|Security Violation)'
 case "${DOGFOOD_TAMPER:-}" in
     raw|sums)
         rm "${srv}/${image}"; cp "${dir}/${image}" "${srv}/${image}"
@@ -180,6 +204,7 @@ if [ -n "${DOGFOOD_IGNITION:-}" ]; then
 fi
 tamper="${DOGFOOD_TAMPER:-}"
 refusal="${tamper:+tamper=${tamper}}"
+[ -z "${firmware}" ] || refusal="firmware=${firmware}"
 [ -n "${refusal_re}" ] && refusal="${refusal:-refusal}"
 if [ -n "${tamper}" ]; then
     # The initrd's console shows only that the download unit failed; copy the
@@ -317,7 +342,11 @@ if [ -n "${refusal}" ]; then
     elif [ -n "${DOGFOOD_NODE_IGN:-}" ] && { ! served bluefin-node.ign || ! served bluefin-node.ign.gpg '[0-9]+'; }; then
         echo "FAIL: ${refusal}: refused before fetching bluefin-node.ign and requesting its .gpg" >&2
         status=1
-    elif ! grep -aq 'Secure boot enabled' "${dir}/dogfood-serial.log"; then
+    elif [ -n "${firmware}" ] && grep -aqE 'successfully enrolled|Secure boot enabled' "${dir}/dogfood-serial.log"; then
+        # systemd-boot enrolls the Bluefin keys only into a store in setup mode.
+        echo "FAIL: ${refusal}: refused, but systemd-boot or the kernel ran first" >&2
+        status=1
+    elif [ -z "${firmware}" ] && ! grep -aq 'Secure boot enabled' "${dir}/dogfood-serial.log"; then
         echo "FAIL: ${refusal}: refused, but the kernel did not run with Secure Boot enabled" >&2
         status=1
     else
