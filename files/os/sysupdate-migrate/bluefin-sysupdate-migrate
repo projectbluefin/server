@@ -52,7 +52,8 @@ trim() {
 }
 
 # Fetch (once per URL) the SHA256SUMS next to a transfer's Source Path.
-# Prints the manifest; returns 1 when it cannot be read.
+# Sets the caller's "manifest" variable (no subshell, so the cache persists);
+# returns 1 when it cannot be read.
 fetch_manifest() {
     local url="${1%/}/SHA256SUMS"
     if [ -z "${manifest_cache[$url]+x}" ]; then
@@ -63,7 +64,7 @@ fetch_manifest() {
         fi
     fi
     [ "${manifest_cache[$url]}" != "__FETCH_FAILED__" ] || return 1
-    printf '%s\n' "${manifest_cache[$url]}"
+    manifest="${manifest_cache[$url]}"
 }
 
 # Turn a MatchPattern into an anchored regex; @v is the version wildcard.
@@ -97,7 +98,7 @@ collect_feature_state() {
 
         [ -n "$features" ] || continue
         found=unknown
-        if [ -n "$path" ] && [ -n "$pattern" ] && manifest="$(fetch_manifest "$path")"; then
+        if [ -n "$path" ] && [ -n "$pattern" ] && fetch_manifest "$path"; then
             found=no
             regex="$(pattern_regex "$pattern")"
             while IFS= read -r line; do
@@ -144,6 +145,20 @@ main() {
         fi
         mv -- "$dir" "${dir}${archive_suffix}"
         info "archived ${dir} -> ${dir}${archive_suffix}: enabled feature ${name} is not in the release manifest and would otherwise make systemd-sysupdate report 'No update needed'"
+        changed=$((changed + 1))
+    done
+
+    # A release that ships the feature again restores the operator's opt-in.
+    for dir in "$etc_feature_dir"/*.feature.d"${archive_suffix}"; do
+        name="$(basename "$dir")"
+        name="${name%.feature.d"${archive_suffix}"}"
+        [ "${feature_state[$name]:-}" = "yes" ] || continue
+        if [ -e "${dir%"${archive_suffix}"}" ]; then
+            warn "feature ${name} has both an active and an archived drop-in; leaving the archive in place"
+            continue
+        fi
+        mv -- "$dir" "${dir%"${archive_suffix}"}"
+        info "restored ${dir%"${archive_suffix}"} from ${dir}: feature ${name} is in the release manifest again"
         changed=$((changed + 1))
     done
 

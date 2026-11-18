@@ -67,6 +67,9 @@ the same names
 (`files/os/sysupdate.d/<name>.feature` and `3N-<name>.transfer`), enabled per
 node with `updatectl enable zfs` or a drop-in such as
 `/etc/sysupdate.d/zfs.feature.d/enable.conf` containing `[Feature] Enabled=true`.
+`bluefin-sysupdate-migrate` renames that drop-in directory to
+`zfs.feature.d.disabled` when the release stops shipping the feature, and
+restores it when a later release ships the feature again.
 The k0s and NVIDIA Container Toolkit sysexts stay separate components
 (`files/os/sysupdate.k0s.d/`, `files/os/sysupdate.nvidia-container-toolkit.d/`;
 `systemd-sysupdate --component=<name> update`) with their own version axes.

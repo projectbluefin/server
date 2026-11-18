@@ -12,7 +12,7 @@ These tests pin the shipped fix:
 * the ``bluefin-sysupdate-migrate`` helper exists, is executable, and lives at
   ``/usr/bin/bluefin-sysupdate-migrate`` in the image
 * the one-shot unit runs ahead of the update path (before the timer and the
-  update unit itself) and is enabled by preset
+  update unit itself) and is enabled by a /usr wants symlink
 * the ``systemd-sysupdate.service`` drop-in runs the helper as
   ``ExecStartPre`` so every update -- timer- or hand-triggered -- is covered
 * the helper archives an enabled feature the release no longer ships, keeps a
@@ -224,3 +224,55 @@ def test_features_list_accepts_spaces_and_commas(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert (etc / "k0s.feature.d").is_dir()
     assert (etc / "homebrew.feature.d").is_dir()
+
+
+def test_archived_feature_is_restored_when_release_ships_it_again(
+    tmp_path: Path,
+) -> None:
+    etc, lib = _make_tree(
+        tmp_path,
+        remote=["zfs_1.3.raw.zst"],
+        local={"zfs": "zfs_@v.raw.zst"},
+        enabled=[],
+    )
+    (etc / "zfs.feature.d.disabled").mkdir()
+    result = run_helper(etc, lib)
+    assert result.returncode == 0, result.stderr
+    assert (etc / "zfs.feature.d").is_dir()
+    assert not (etc / "zfs.feature.d.disabled").exists()
+    assert "restored" in result.stdout
+
+
+def test_archived_feature_stays_archived_while_release_lacks_it(
+    tmp_path: Path,
+) -> None:
+    etc, lib = _make_tree(
+        tmp_path, remote=[], local={"zfs": "zfs_@v.raw.zst"}, enabled=[]
+    )
+    (etc / "zfs.feature.d.disabled").mkdir()
+    assert run_helper(etc, lib).returncode == 0
+    assert (etc / "zfs.feature.d.disabled").is_dir()
+    assert not (etc / "zfs.feature.d").exists()
+
+
+def test_manifest_is_fetched_once_per_url(tmp_path: Path) -> None:
+    etc, lib = _make_tree(
+        tmp_path,
+        remote=["a_1.raw"],
+        local={"a": "a_@v.raw", "b": "b_@v.raw", "c": "c_@v.raw"},
+        enabled=["a"],
+    )
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    log = tmp_path / "curl.log"
+    curl = bindir / "curl"
+    curl.write_text(f'#!/bin/sh\necho x >> {log}\nexec /usr/bin/curl "$@"\n')
+    curl.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{bindir}:{os.environ['PATH']}",
+        "SYSUPDATE_ETC_DIR": str(etc),
+        "SYSUPDATE_LIB_DIR": str(lib),
+    }
+    subprocess.run([str(SCRIPT)], env=env, check=True, capture_output=True)
+    assert len(log.read_text().splitlines()) == 1
