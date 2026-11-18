@@ -1,0 +1,17 @@
+[Unit]
+Description=Bluefin: prune deprecated systemd-sysupdate features
+Documentation=https://github.com/projectbluefin/server/issues/688
+# Run ahead of the OTA update path so a feature that the release no longer
+# ships cannot silently stop the next update. This ordering covers the boot
+# path; the ExecStartPre drop-in on systemd-sysupdate.service covers updates
+# triggered later by the timer or by hand.
+Before=systemd-sysupdate.timer
+Before=systemd-sysupdate.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bluefin-sysupdate-migrate
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

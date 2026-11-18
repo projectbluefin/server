@@ -19,6 +19,9 @@ depends:
   # A/B System Update Configurations
   - bluefin-server/os-sysupdate.bst
 
+  # Prune sysupdate features the release no longer ships, before an update
+  - bluefin-server/os-sysupdate-feature-migrate.bst
+
   # Runtime helpers (bluefin-host): update status, reboot interlocks, boot
   # deadline, diskless update check, sysext fetch, first-boot naming
   - bluefin-server/os-host.bst

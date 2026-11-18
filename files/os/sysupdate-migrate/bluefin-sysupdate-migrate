@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#
+# bluefin-sysupdate-migrate -- prune systemd-sysupdate features the current
+# release no longer ships, so a retired feature cannot silently stop updates.
+#
+# systemd-sysupdate only applies an update set when every feature enabled under
+# /etc/sysupdate.d/<feature>.feature.d/ is also provided by a transfer set in
+# /usr/lib/sysupdate.d/. When a feature leaves the release manifest -- for
+# example Homebrew becoming a first-boot seed instead of an opt-in extension --
+# the matching /etc drop-in can no longer be satisfied, and systemd-sysupdate
+# quietly reports "No update needed" instead of updating.
+#
+# This one-shot helper is meant to run ahead of the update path. It lists the
+# enabled features that no transfer set provides any more, archives each stale
+# /etc drop-in, and prints a clear message so an operator is never left
+# wondering why an update was skipped.
+
+set -euo pipefail
+
+# Paths are overridable so the logic can be exercised by unit tests against a
+# scratch tree without touching the real system directories.
+etc_feature_dir="${SYSUPDATE_ETC_DIR:-/etc/sysupdate.d}"
+lib_transfer_dir="${SYSUPDATE_LIB_DIR:-/usr/lib/sysupdate.d}"
+archive_suffix="${SYSUPDATE_ARCHIVE_SUFFIX:-.disabled}"
+
+# systemd captures ExecStartPre stdout/stderr into the journal, so plain prints
+# are enough; the wrapper keeps one message shape for both paths.
+info() {
+    printf 'bluefin-sysupdate-migrate: %s\n' "$*"
+}
+warn() {
+    printf 'bluefin-sysupdate-migrate: warning: %s\n' "$*" >&2
+}
+
+# Feature names the current release still provides, keyed by name.
+declare -A provided_features=()
+
+# Read the Features= key of every transfer set and record the names it lists.
+collect_provided_features() {
+    local transfer line value feature
+    shopt -s nullglob
+    for transfer in "$lib_transfer_dir"/*.transfer; do
+        while IFS= read -r line; do
+            value="${line#*=}"        # text after the first =
+            value="${value//,/ }"     # systemd accepts spaces or commas
+            set -f                   # feature names carry no glob characters
+            for feature in $value; do # word-split on whitespace
+                feature="${feature#"${feature%%[![:space:]]*}"}"   # ltrim
+                feature="${feature%"${feature##*[![:space:]]}"}"   # rtrim
+                [ -n "$feature" ] && provided_features["$feature"]=1
+            done
+            set +f
+        done < <(grep -E '^[[:space:]]*[Ff]eatures[[:space:]]*=' "$transfer" || true)
+    done
+}
+
+main() {
+    if [ ! -d "$etc_feature_dir" ]; then
+        info "no ${etc_feature_dir} directory; nothing to do"
+        return 0
+    fi
+
+    collect_provided_features
+
+    local dir name changed
+    changed=0
+    shopt -s nullglob
+    for dir in "$etc_feature_dir"/*.feature.d; do
+        name="$(basename "$dir")"
+        name="${name%.feature.d}"
+        if [ -n "${provided_features[$name]:-}" ]; then
+            continue
+        fi
+        if [ -e "${dir}${archive_suffix}" ]; then
+            warn "feature ${name} already archived as ${name}${archive_suffix}; leaving it in place"
+            continue
+        fi
+        mv -- "$dir" "${dir}${archive_suffix}"
+        info "archived ${dir} -> ${dir}${archive_suffix}: enabled feature ${name} is not shipped in this release and would otherwise make systemd-sysupdate report 'No update needed'"
+        changed=$((changed + 1))
+    done
+
+    if [ "$changed" -eq 0 ]; then
+        info "no deprecated sysupdate features found; the next update is unaffected"
+    fi
+}
+
+main "$@"
