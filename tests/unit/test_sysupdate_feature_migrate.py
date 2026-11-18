@@ -51,7 +51,7 @@ def run_helper(etc_dir: Path, lib_dir: Path) -> subprocess.CompletedProcess:
         env={
             **os.environ,
             "SYSUPDATE_ETC_DIR": str(etc_dir),
-            "SYSUPDATE_LIB_DIR": str(lib_dir),
+            "SYSUPDATE_LIB_DIR": f"{etc_dir}:{lib_dir}",
         },
         capture_output=True,
         text=True,
@@ -276,3 +276,43 @@ def test_manifest_is_fetched_once_per_url(tmp_path: Path) -> None:
     }
     subprocess.run([str(SCRIPT)], env=env, check=True, capture_output=True)
     assert len(log.read_text().splitlines()) == 1
+
+
+def test_feature_with_transfer_in_etc_dir_is_not_archived(tmp_path: Path) -> None:
+    etc, lib = _make_tree(
+        tmp_path, remote=["homebrew_1.raw.zst"], local={}, enabled=["homebrew"]
+    )
+    rel = tmp_path / "release"
+    (etc / "50-homebrew.transfer").write_text(
+        f"[Transfer]\nFeatures=homebrew\n\n[Source]\nType=url-file\n"
+        f"Path=file://{rel}/\nMatchPattern=homebrew_@v.raw.zst\n",
+        encoding="utf-8",
+    )
+    result = run_helper(etc, lib)
+    assert result.returncode == 0, result.stderr
+    assert (etc / "homebrew.feature.d").is_dir()
+
+
+def test_default_search_path_covers_all_sysupdate_dirs() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    for d in ("/etc/", "/run/", "/usr/local/lib/", "/usr/lib/"):
+        assert f"{d}sysupdate.d" in text
+
+
+def test_higher_precedence_transfer_masks_same_name_below(tmp_path: Path) -> None:
+    etc, lib = _make_tree(
+        tmp_path, remote=["k0s_1.raw.zst"], local={}, enabled=["homebrew"]
+    )
+    rel = tmp_path / "release"
+    body = (
+        "[Transfer]\nFeatures=homebrew\n\n[Source]\nType=url-file\n"
+        f"Path=file://{rel}/\nMatchPattern=homebrew_@v.raw.zst\n"
+    )
+    (etc / "50-homebrew.transfer").write_text(body, encoding="utf-8")
+    (lib / "50-homebrew.transfer").write_text(
+        body.replace("homebrew_@v", "k0s_@v"), encoding="utf-8"
+    )
+    # etc copy wins: pattern matches nothing remote, so feature is archived.
+    result = run_helper(etc, lib)
+    assert result.returncode == 0, result.stderr
+    assert (etc / "homebrew.feature.d.disabled").is_dir()

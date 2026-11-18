@@ -26,7 +26,8 @@ set -euo pipefail
 # Paths are overridable so the logic can be exercised by unit tests against a
 # scratch tree without touching the real system directories.
 etc_feature_dir="${SYSUPDATE_ETC_DIR:-/etc/sysupdate.d}"
-lib_transfer_dir="${SYSUPDATE_LIB_DIR:-/usr/lib/sysupdate.d}"
+# Colon-separated, highest precedence first, like systemd-sysupdate's search path.
+lib_transfer_dirs="${SYSUPDATE_LIB_DIR:-/etc/sysupdate.d:/run/sysupdate.d:/usr/local/lib/sysupdate.d:/usr/lib/sysupdate.d}"
 archive_suffix="${SYSUPDATE_ARCHIVE_SUFFIX:-.disabled}"
 fetch_timeout="${SYSUPDATE_FETCH_TIMEOUT:-20}"
 
@@ -77,9 +78,18 @@ pattern_regex() {
 # Record, for every transfer, whether the remote release still ships the files
 # its features need.
 collect_feature_state() {
-    local transfer line section key value feature features path pattern manifest regex name found
+    local transfer line section key value feature features path pattern manifest regex name found dir base
+    local -A seen_transfer=()
+    local -a dirs
+    IFS=: read -r -a dirs <<< "$lib_transfer_dirs"
     shopt -s nullglob
-    for transfer in "$lib_transfer_dir"/*.transfer; do
+    for dir in "${dirs[@]}"; do
+      [ -n "$dir" ] || continue
+      for transfer in "$dir"/*.transfer; do
+        base="${transfer##*/}"
+        # A transfer in a higher-precedence directory masks the same name below.
+        [ -z "${seen_transfer[$base]:-}" ] || continue
+        seen_transfer["$base"]=1
         features="" path="" pattern="" section=""
         while IFS= read -r line; do
             line="$(trim "$line")"
@@ -119,6 +129,7 @@ collect_feature_state() {
             esac
         done
         set +f
+      done
     done
 }
 
