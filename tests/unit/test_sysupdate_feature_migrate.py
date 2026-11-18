@@ -40,14 +40,7 @@ DROPIN = (
     / "systemd-sysupdate.service.d"
     / "05-bluefin-prune-deprecated-features.conf"
 )
-PRESET = (
-    ROOT
-    / "files"
-    / "os"
-    / "systemd"
-    / "system-preset"
-    / "80-bluefin-sysupdate-feature-migrate.preset"
-)
+USR = ROOT / "elements" / "oci" / "bluefin-server-usr.bst"
 ELEMENT = ROOT / "elements" / "bluefin-server" / "os-sysupdate-feature-migrate.bst"
 STACK = ROOT / "elements" / "bluefin-server" / "os-stack.bst"
 
@@ -104,29 +97,37 @@ def test_migration_unit_runs_before_the_update_path() -> None:
 def test_update_unit_prunes_features_before_every_update() -> None:
     dropin = DROPIN.read_text(encoding="utf-8")
     assert "[Service]" in dropin
-    assert "ExecStartPre=/usr/bin/bluefin-sysupdate-migrate" in dropin, (
+    assert "ExecStartPre=-/usr/bin/bluefin-sysupdate-migrate" in dropin, (
         "the prune must run before systemd-sysupdate itself, so timer- and "
         "hand-triggered updates are both covered"
     )
 
 
-def test_migration_unit_is_enabled_by_preset() -> None:
-    preset = PRESET.read_text(encoding="utf-8")
-    assert preset == "enable bluefin-sysupdate-migrate.service\n"
+def test_migration_unit_is_enabled_in_usr() -> None:
+    # Presets only apply on first boot; updated nodes need the /usr link.
+    usr = USR.read_text(encoding="utf-8")
+    assert "multi-user.target.wants/bluefin-sysupdate-migrate.service" in usr
 
 
 # ── Behavioural contracts ---------------------------------------------------
 
 
-def _make_tree(tmp_path: Path, provided: list[str], enabled: list[str]) -> tuple[Path, Path]:
+def _make_tree(
+    tmp_path: Path, remote: list[str], local: dict[str, str], enabled: list[str]
+) -> tuple[Path, Path]:
+    """Local transfers (feature -> file pattern) against a file:// remote."""
     etc = tmp_path / "etc" / "sysupdate.d"
     lib = tmp_path / "usr" / "lib" / "sysupdate.d"
-    etc.mkdir(parents=True)
-    lib.mkdir(parents=True)
-    if provided:
-        transfers = "\n".join(f"Features={name}" for name in provided)
-        (lib / "10-example.transfer").write_text(
-            "[Transfer]\n\n" + transfers + "\n\n[Source]\nType=url-file\n",
+    rel = tmp_path / "release"
+    for d in (etc, lib, rel):
+        d.mkdir(parents=True)
+    (rel / "SHA256SUMS").write_text(
+        "".join(f"{'0' * 64} *{name}\n" for name in remote), encoding="utf-8"
+    )
+    for i, (feature, pattern) in enumerate(local.items()):
+        (lib / f"{10 + i}-{feature}.transfer").write_text(
+            f"[Transfer]\nFeatures={feature}\n\n[Source]\nType=url-file\n"
+            f"Path=file://{rel}/\nMatchPattern={pattern}\n",
             encoding="utf-8",
         )
     for name in enabled:
@@ -134,37 +135,58 @@ def _make_tree(tmp_path: Path, provided: list[str], enabled: list[str]) -> tuple
     return etc, lib
 
 
-def test_orphaned_feature_is_archived_and_provided_one_kept(tmp_path: Path) -> None:
-    etc, lib = _make_tree(tmp_path, provided=["k0s"], enabled=["k0s", "homebrew"])
+def test_feature_dropped_from_remote_is_archived_though_local_transfer_exists(
+    tmp_path: Path,
+) -> None:
+    # The stalled node still ships the homebrew transfer locally; only the
+    # remote release dropped it.
+    etc, lib = _make_tree(
+        tmp_path,
+        remote=["k0s_1.2.raw.zst", "bluefin_1.2.raw"],
+        local={"k0s": "k0s_@v.raw.zst", "homebrew": "homebrew_@v.raw.zst"},
+        enabled=["k0s", "homebrew"],
+    )
     result = run_helper(etc, lib)
     assert result.returncode == 0, result.stderr
-    assert (etc / "homebrew.feature.d.disabled").is_dir(), (
-        "a feature no transfer provides must be archived"
+    assert (etc / "homebrew.feature.d.disabled").is_dir()
+    assert (etc / "k0s.feature.d").is_dir()
+    assert "not in the release manifest" in result.stdout
+
+
+def test_feature_without_local_transfer_is_archived(tmp_path: Path) -> None:
+    etc, lib = _make_tree(tmp_path, remote=[], local={}, enabled=["homebrew"])
+    assert run_helper(etc, lib).returncode == 0
+    assert (etc / "homebrew.feature.d.disabled").is_dir()
+
+
+def test_unreachable_manifest_leaves_features_alone(tmp_path: Path) -> None:
+    etc, lib = _make_tree(
+        tmp_path, remote=[], local={"homebrew": "homebrew_@v.raw.zst"}, enabled=["homebrew"]
     )
-    assert (etc / "k0s.feature.d").is_dir(), (
-        "a feature a transfer still provides must be left in place"
-    )
-    assert "not shipped in this release" in result.stdout
+    for f in (tmp_path / "release").iterdir():
+        f.unlink()
+    result = run_helper(etc, lib)
+    assert result.returncode == 0, result.stderr
+    assert (etc / "homebrew.feature.d").is_dir(), "offline must never archive"
 
 
 def test_helper_is_idempotent_on_rerun(tmp_path: Path) -> None:
-    etc, lib = _make_tree(tmp_path, provided=[], enabled=["homebrew"])
-    first = run_helper(etc, lib)
-    assert first.returncode == 0
-    assert (etc / "homebrew.feature.d.disabled").is_dir()
+    etc, lib = _make_tree(tmp_path, remote=[], local={}, enabled=["homebrew"])
+    assert run_helper(etc, lib).returncode == 0
     second = run_helper(etc, lib)
     assert second.returncode == 0, second.stderr
-    assert (etc / "homebrew.feature.d.disabled").is_dir(), (
-        "the archived drop-in must survive a second run untouched"
-    )
-    assert not (etc / "homebrew.feature.d.disabled.disabled").exists(), (
-        "a second run must not archive the drop-in again"
-    )
+    assert (etc / "homebrew.feature.d.disabled").is_dir()
+    assert not (etc / "homebrew.feature.d.disabled.disabled").exists()
     assert "no deprecated sysupdate features found" in second.stdout
 
 
 def test_no_orphaned_feature_is_a_noop(tmp_path: Path) -> None:
-    etc, lib = _make_tree(tmp_path, provided=["k0s", "homebrew"], enabled=["k0s", "homebrew"])
+    etc, lib = _make_tree(
+        tmp_path,
+        remote=["k0s_1.raw.zst", "homebrew_1.raw.zst"],
+        local={"k0s": "k0s_@v.raw.zst", "homebrew": "homebrew_@v.raw.zst"},
+        enabled=["k0s", "homebrew"],
+    )
     result = run_helper(etc, lib)
     assert result.returncode == 0, result.stderr
     assert (etc / "k0s.feature.d").is_dir()
@@ -175,33 +197,30 @@ def test_no_orphaned_feature_is_a_noop(tmp_path: Path) -> None:
 def test_missing_etc_directory_is_a_noop(tmp_path: Path) -> None:
     lib = tmp_path / "usr" / "lib" / "sysupdate.d"
     lib.mkdir(parents=True)
-    etc = tmp_path / "does-not-exist"
-    result = run_helper(etc, lib)
+    result = run_helper(tmp_path / "does-not-exist", lib)
     assert result.returncode == 0, result.stderr
     assert "nothing to do" in result.stdout
 
 
 def test_existing_archive_is_not_clobbered(tmp_path: Path) -> None:
-    # If an operator re-enabled a feature while the archived drop-in is still
-    # present, the helper must not move the new drop-in over the archive.
-    etc, lib = _make_tree(tmp_path, provided=[], enabled=["homebrew"])
+    etc, lib = _make_tree(tmp_path, remote=[], local={}, enabled=["homebrew"])
     (etc / "homebrew.feature.d.disabled").mkdir()
     result = run_helper(etc, lib)
     assert result.returncode == 0, result.stderr
     assert "already archived" in result.stderr
-    assert (etc / "homebrew.feature.d.disabled").is_dir()
     assert not (etc / "homebrew.feature.d.disabled" / "homebrew.feature.d").exists()
 
 
 def test_features_list_accepts_spaces_and_commas(tmp_path: Path) -> None:
-    etc, lib = _make_tree(tmp_path, provided=[], enabled=["k0s", "homebrew"])
-    # A single transfer listing both features, mixed separators.
+    etc, lib = _make_tree(
+        tmp_path, remote=["x_1.raw"], local={}, enabled=["k0s", "homebrew"]
+    )
     (lib / "10-example.transfer").write_text(
-        "[Transfer]\nFeatures=k0s, homebrew\n[Source]\nType=url-file\n",
+        f"[Transfer]\nFeatures=k0s, homebrew\n[Source]\nType=url-file\n"
+        f"Path=file://{tmp_path}/release/\nMatchPattern=x_@v.raw\n",
         encoding="utf-8",
     )
     result = run_helper(etc, lib)
     assert result.returncode == 0, result.stderr
     assert (etc / "k0s.feature.d").is_dir()
     assert (etc / "homebrew.feature.d").is_dir()
-

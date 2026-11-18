@@ -1,7 +1,6 @@
 kind: import
 description: |
-  Install systemd presets ensuring sshd is present but off by default and the
-  systemd-sysupdate feature migration is enabled.
+  Install systemd presets ensuring sshd is present but off by default.
 
 sources:
   - kind: local

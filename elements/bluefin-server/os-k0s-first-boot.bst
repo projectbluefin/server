@@ -13,7 +13,10 @@ description: |
   Kubernetes; the boot deadline; the diskless update check;
   bluefin-update-status.service for the login banners and
   bluefin-update-status-migrate.service, which enables it on nodes that
-  updated from an image without it).
+  updated from an image without it), and bluefin-sysupdate-migrate.service
+  plus the systemd-sysupdate.service drop-in
+  (05-bluefin-prune-deprecated-features.conf), which archive enabled
+  sysupdate features the remote release no longer ships.
 
 sources:
   - kind: local
