@@ -24,8 +24,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "files" / "os" / "sysupdate-migrate" / "bluefin-sysupdate-migrate"
 SERVICE = (
@@ -168,6 +166,22 @@ def test_unreachable_manifest_leaves_features_alone(tmp_path: Path) -> None:
     result = run_helper(etc, lib)
     assert result.returncode == 0, result.stderr
     assert (etc / "homebrew.feature.d").is_dir(), "offline must never archive"
+
+
+def test_non_manifest_manifest_leaves_features_alone(tmp_path: Path) -> None:
+    # A 200 response that is not a SHA256SUMS (a captive portal or proxy error
+    # page) must never archive a working feature: it is treated as
+    # unreachable. `curl -f` only fails on HTTP >= 400, so a valid-looking
+    # status with an HTML body would otherwise set found=no for every transfer.
+    etc, lib = _make_tree(
+        tmp_path, remote=[], local={"homebrew": "homebrew_@v.raw.zst"}, enabled=["homebrew"]
+    )
+    (tmp_path / "release" / "SHA256SUMS").write_text(
+        "<html><title>Captive Login</title></html>\n", encoding="utf-8"
+    )
+    result = run_helper(etc, lib)
+    assert result.returncode == 0, result.stderr
+    assert (etc / "homebrew.feature.d").is_dir(), "a non-manifest 200 must never archive"
 
 
 def test_helper_is_idempotent_on_rerun(tmp_path: Path) -> None:

@@ -55,10 +55,19 @@ trim() {
 # Sets the caller's "manifest" variable (no subshell, so the cache persists);
 # returns 1 when it cannot be read.
 fetch_manifest() {
-    local url="${1%/}/SHA256SUMS"
+    local url="${1%/}/SHA256SUMS" body
     if [ -z "${manifest_cache[$url]+x}" ]; then
-        if manifest_cache[$url]="$(curl -fsSL --max-time "$fetch_timeout" -- "$url" 2>/dev/null)"; then
-            :
+        if body="$(curl -fsSL --max-time "$fetch_timeout" -- "$url" 2>/dev/null)"; then
+            # `curl -f` only fails on HTTP >= 400, so a captive portal or proxy
+            # error page can come back 200 with an HTML body and be trusted as a
+            # manifest. Only trust a real SHA256SUMS: at least one "<64 hex>
+            # <filename>" line. Anything else is treated as unreachable, so a
+            # non-release response never archives a working feature.
+            if printf '%s\n' "$body" | grep -qE '^[0-9a-f]{64}([[:space:]]|\*)'; then
+                manifest_cache[$url]="$body"
+            else
+                manifest_cache[$url]="__FETCH_FAILED__"
+            fi
         else
             manifest_cache[$url]="__FETCH_FAILED__"
         fi
