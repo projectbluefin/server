@@ -93,7 +93,7 @@ not fail the run; a 4xx fails at once.
 
 Stdlib only. GITHUB_TOKEN or GH_TOKEN, if set, is sent to api.github.com only.
 """
-
+from __future__ import annotations
 
 import argparse
 import hashlib
