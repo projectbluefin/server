@@ -8,6 +8,7 @@ description: |
   /usr/libexec/bluefin-hostname keep working:
   - update path: bluefin-update-status, bluefin-update-status-migrate,
     bluefin-update-pending, bluefin-reboot-lock (FleetLock client),
+    bluefin-disable-unused-migrate,
     bluefin-boot-deadline, bluefin-diskless-update-check,
     bluefin-sysext-fetch, bluefin-boot-origin;
   - first boot: bluefin-hostname, bluefin-firstboot-credentials,
@@ -56,9 +57,9 @@ config:
     set -eu
     install -D -m 0755 bluefin-host "%{install-root}/usr/bin/bluefin-host"
     mkdir -p "%{install-root}/usr/libexec"
-    for helper in boot-deadline boot-origin diskless-update-check \
-        firstboot-credentials hostname reboot-lock repair-etc-modes \
-        sysext-fetch sysext-modules update-pending update-status \
-        update-status-migrate; do
+    for helper in boot-deadline boot-origin disable-unused-migrate \
+        diskless-update-check firstboot-credentials hostname reboot-lock \
+        repair-etc-modes sysext-fetch sysext-modules update-pending \
+        update-status update-status-migrate; do
       ln -s ../bin/bluefin-host "%{install-root}/usr/libexec/bluefin-${helper}"
     done

@@ -90,3 +90,29 @@ def test_no_base_image_preset_enables_zfs() -> None:
     # The ZFS sysext's own 50-zfs.preset enables its units; a preset in a
     # sysext does nothing until the admin runs `systemctl preset`.
     assert not enable_lines(BASE_PRESETS, "zfs")
+
+
+UNUSED_PRESET = ROOT / "files" / "os" / "systemd" / "system-preset" / "80-bluefin-unused.preset"
+UNUSED_UNITS = ("isnsd.service", "isnsd.socket", "systemd-homed.service", "systemd-homed-activate.service")
+
+
+@pytest.mark.parametrize("unit", UNUSED_UNITS)
+def test_unused_fsdk_daemons_are_disabled_by_preset(unit: str) -> None:
+    # FSDK's implicit "enable" turned on the iSNS server (TCP 3205 on every
+    # interface) and homed; nothing on a node uses either.
+    lines = [line.split() for line in UNUSED_PRESET.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]
+    assert ["disable", unit] in lines
+    assert not enable_lines(PRESETS, unit)
+
+
+def test_nodes_that_updated_apply_the_unused_preset_once() -> None:
+    # Presets apply on first boot only; the migration presets exactly the
+    # preset's units, so an Ignition preset that enables one still wins.
+    unit = (ROOT / "files" / "os" / "systemd" / "system" / "bluefin-disable-unused-migrate.service").read_text(encoding="utf-8")
+    assert "ExecStart=/usr/libexec/bluefin-disable-unused-migrate" in unit
+    assert "ConditionPathExists=!/var/lib/bluefin/disable-unused-migrate.stamp" in unit
+    usr = (ROOT / "elements" / "oci" / "bluefin-server-usr.bst").read_text(encoding="utf-8")
+    assert "multi-user.target.wants/bluefin-disable-unused-migrate.service" in usr
+    go = (ROOT / "files" / "homelab" / "cluster" / "internal" / "host" / "unused" / "unused.go").read_text(encoding="utf-8")
+    listed = go.split("var Units = []string{", 1)[1].split("}", 1)[0]
+    assert sorted(u.strip().strip('",') for u in listed.split() if u.strip()) == sorted(UNUSED_UNITS)

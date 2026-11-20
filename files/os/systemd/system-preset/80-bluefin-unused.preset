@@ -1,0 +1,13 @@
+# Daemons FSDK ships that a server node does not use. FSDK has no catch-all
+# "disable *", so without these lines systemd enables them on first boot:
+# - isnsd: open-isns's iSNS *server*, which listens on TCP 3205 on every
+#   interface. The iSCSI initiator (80-bluefin-iscsi.preset) does not need
+#   it; a node that should run an iSNS server enables it per node.
+# - systemd-homed: portable home directories; this image has no homed users
+#   (root ships locked, accounts come from sysusers and Ignition).
+# bluefin-disable-unused-migrate.service applies these lines once on nodes
+# that first booted an image without them.
+disable isnsd.service
+disable isnsd.socket
+disable systemd-homed.service
+disable systemd-homed-activate.service
