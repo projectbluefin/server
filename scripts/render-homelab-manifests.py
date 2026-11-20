@@ -591,12 +591,39 @@ def normalize(ref: str) -> str:
     return ref
 
 
+# sha256 of no bytes: what `skopeo inspect ... | sha256sum` printed for an
+# image it could not read, when nothing checked the pipeline's status.
+EMPTY_SHA256 = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+# Images the GPU Operator never pulls under the tag the chart names: it adds
+# the node's OS (<version>-ubuntu24.04, <version>-rhel10.0 ...), so the bare
+# tag does not exist in the registry and has no digest to pin. Their operands
+# are off here (the driver and toolkit come from the sysexts); they keep the
+# chart's version, which the operator completes itself.
+OS_SUFFIXED = {
+    "nvcr.io/nvidia/driver",
+    "nvcr.io/nvidia/cloud-native/nvidia-fs",
+    "nvcr.io/nvidia/cloud-native/gdrdrv",
+}
+
+# Prints "<ref> <sha256 of its manifest>" per line of /work/refs.txt, and
+# nothing for a ref skopeo cannot read; the caller names what is missing. The
+# manifest goes straight into sha256sum, so its bytes are exact, and pipefail
+# makes a failed skopeo fail the substitution instead of hashing nothing.
+RESOLVE_SCRIPT = ('set -o pipefail; while read -r r; do '
+                  'if d=$(skopeo inspect --retry-times 3 --raw "docker://$r" | sha256sum); '
+                  'then echo "$r ${d%% *}"; else echo "skopeo: cannot read $r" >&2; fi; '
+                  'done < /work/refs.txt')
+
+
 class Digests:
     """tag -> index digest, resolved in one pinned skopeo container per batch."""
 
     def __init__(self, work: Path):
         self.cache_file = work / "digests.json"
-        self.cache = json.loads(self.cache_file.read_text()) if self.cache_file.exists() else {}
+        cache = json.loads(self.cache_file.read_text()) if self.cache_file.exists() else {}
+        # An older run's bad entries must not outlive the fix.
+        self.cache = {ref: digest for ref, digest in cache.items() if digest != EMPTY_SHA256}
         self.work = work
 
     def resolve(self, refs: set[str]) -> None:
@@ -604,11 +631,11 @@ class Digests:
         if not missing:
             return
         (self.work / "refs.txt").write_text("\n".join(missing) + "\n")
-        script = ('while read -r r; do d=$(skopeo inspect --retry-times 3 --raw "docker://$r" | sha256sum); '
-                  'echo "$r ${d%% *}"; done < /work/refs.txt')
-        out = podman(SKOPEO_IMAGE, self.work, ["-c", script], entrypoint="sh", capture_output=True).stdout
+        out = podman(SKOPEO_IMAGE, self.work, ["-c", RESOLVE_SCRIPT], entrypoint="bash", capture_output=True).stdout
         for line in out.splitlines():
             ref, digest = line.split()
+            if f"sha256:{digest}" == EMPTY_SHA256:
+                sys.exit(f"{ref}: skopeo returned an empty manifest")
             self.cache[ref] = f"sha256:{digest}"
         self.cache_file.write_text(json.dumps(self.cache, indent=1))
         unresolved = [r for r in missing if r not in self.cache]
@@ -644,12 +671,14 @@ def image_refs(doc: dict) -> set[str]:
 
 
 def nvidia_image_specs(doc: dict) -> Iterator[dict]:
-    """GPU Operator ClusterPolicy entries with repository/image/version keys."""
+    """GPU Operator ClusterPolicy entries with repository/image/version keys,
+    except the OS_SUFFIXED ones, which have no digest to pin."""
     stack = [doc.get("spec", {})]
     while stack:
         node = stack.pop()
         if isinstance(node, dict):
-            if {"repository", "image", "version"} <= node.keys() and not str(node["version"]).startswith("sha256:"):
+            if ({"repository", "image", "version"} <= node.keys() and not str(node["version"]).startswith("sha256:")
+                    and f"{node['repository']}/{node['image']}" not in OS_SUFFIXED):
                 yield node
             stack.extend(node.values())
         elif isinstance(node, list):
