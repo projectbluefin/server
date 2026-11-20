@@ -225,7 +225,9 @@ def test_disk_uki_sections_and_unpacked_initrd(tmp_path: Path, capsys, summary: 
     assert rows[10:] == sorted(rows[10:])
 
 
-def test_slot_sizes_are_the_repart_d_maxima() -> None:
+def test_slot_sizes_are_the_repart_d_minima() -> None:
+    # Installed disks keep the 2 GiB slots they were made with, so the gate
+    # holds an image to the minimum, not to the 4 GiB new installs may get.
     slots = image_sizes.slot_sizes(image_sizes.REPART_DIR)
     assert (slots["usr"], slots["usr-verity"]) == (2 * 2**30, 128 * MiB)
 
@@ -256,6 +258,6 @@ def test_a_repart_dir_without_the_usr_slot_is_refused(tmp_path: Path, summary: P
     dist = make_set(tmp_path / "diskless")
     repart = tmp_path / "repart.d"
     repart.mkdir()
-    (repart / "10-esp.conf").write_text("[Partition]\nType=esp\nSizeMaxBytes=1G\n")
-    with pytest.raises(SystemExit, match="no usr partition with SizeMaxBytes="):
+    (repart / "10-esp.conf").write_text("[Partition]\nType=esp\nSizeMinBytes=1G\n")
+    with pytest.raises(SystemExit, match="no usr partition with SizeMinBytes="):
         image_sizes.main([str(dist), "--repart-dir", str(repart)])
