@@ -34,7 +34,7 @@ jobs:
           pip install -r .github/requirements-ci.txt
 
       # Ubuntu's AppArmor policy blocks unprivileged user namespaces; the
-      # os-justfile bats tests run the k8s recipe inside one.
+      # Ignition credential tests run inside one (unshare --user).
       - name: Allow unprivileged user namespaces
         run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then

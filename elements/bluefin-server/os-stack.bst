@@ -51,9 +51,6 @@ depends:
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
 
-  # System Management Justfile
-  - bluefin-server/os-justfile.bst
-
   # system-container helper (machinectl wrapper)
   - bluefin-server/os-system-container.bst
 
