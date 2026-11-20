@@ -128,11 +128,17 @@ Two outputs carry a signing time of their own: `SHA256SUMS.gpg` and the
 `efi-keys/*.auth` updates, which `sbvarsign` stamps with the current time
 (they stay fixed as long as `bluefin-server/keys/efi-keys.bst` stays
 cached). `.github/workflows/reproducibility.yml` checks the rest weekly:
-it builds, deletes the final-assembly artifacts, rebuilds them without remote
-caches, and compares every file except `*.gpg`. The final assembly
-(`FINAL_ASSEMBLY`) is everything `oci/bluefin-server-image.bst` stages into
-the release set plus every `oci/*` target `just validate` resolves;
-`tests/unit/test_reproducibility_workflow.py` fails when a shipped element is missing.
+it builds, deletes the artifact of every project element in the closure of
+the roots, rebuilds them without remote caches, and compares every file except
+`*.gpg`. The roots (`FINAL_ASSEMBLY`) are everything
+`oci/bluefin-server-image.bst` stages into the release set plus every `oci/*`
+target `just validate` resolves; their dependencies (the signed kernel modules,
+OpenZFS and NVIDIA modules, `bluefin-host`, the initrd and the rest of
+`elements/`) are deleted with them, so a non-reproducible intermediate shows up
+in the image it ends up in. freedesktop-sdk's own elements stay cached.
+`tests/unit/test_reproducibility_workflow.py` fails when a shipped element is
+missing. A failing scheduled run opens the "Reproducibility check failing"
+issue.
 
 ## Dogfood: boot it in QEMU
 
