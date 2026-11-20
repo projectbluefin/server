@@ -30,7 +30,7 @@ FIRSTBOOT_DROPIN = (
     / "systemd-firstboot.service.d"
     / "10-bluefin-no-root-prompt.conf"
 )
-SSHD_DROPIN = REPO_ROOT / "files" / "os" / "ssh" / "sshd_config.d" / "bluefin-server.conf"
+SSHD_DROPIN = REPO_ROOT / "files" / "os" / "sshd_config.d" / "bluefin-server.conf"
 GENERATED_SSHD_DROPIN = (
     REPO_ROOT
     / "files"
@@ -128,6 +128,18 @@ def test_sshd_dropin_never_permits_password_authentication() -> None:
     assert re.search(r"^KbdInteractiveAuthentication\s+no$", sshd, re.MULTILINE)
     assert not re.search(r"^PermitRootLogin\s+yes$", sshd, re.MULTILINE)
     assert not re.search(r"^PasswordAuthentication\s+yes$", sshd, re.MULTILINE)
+
+
+def test_sshd_accepts_keys_for_a_root_that_has_no_password() -> None:
+    # Root ships locked ("!unprovisioned"); Ignition and the
+    # ssh.authorized_keys.root credential give it a key without unlocking it.
+    # Without PAM, sshd refuses a locked account even for keys.
+    sshd = SSHD_DROPIN.read_text(encoding="utf-8")
+
+    assert re.search(r"^UsePAM\s+yes$", sshd, re.MULTILINE)
+    # The dogfood SSH login must prove it on a locked root, not unlock it.
+    dogfood = (REPO_ROOT / "scripts" / "dogfood-installer.sh").read_text(encoding="utf-8")
+    assert "usermod -p '*' root" not in dogfood
 
 
 def test_generated_sshd_gets_per_device_host_keys() -> None:

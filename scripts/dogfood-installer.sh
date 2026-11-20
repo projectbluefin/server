@@ -873,10 +873,11 @@ sync
 echo "PROBE update-done"
 UPDATE
 # Appended to the probe of step 6: an SSH login through systemd-ssh-generator's
-# local socket must print the banner (sshd reads /etc/motd). sshd refuses a
-# locked root even for keys, so root gets the unlocked "*" first.
+# local socket must print the banner (sshd reads /etc/motd). Root keeps its
+# locked password, as with an Ignition- or credential-provisioned key: the
+# login proves sshd (UsePAM yes) takes a key for a locked root.
 cat > "${state}/ssh.sh" <<'SSH'
-usermod -p '*' root
+echo "PROBE ssh-root-locked=$(passwd -S root | cut -d' ' -f2)"
 ssh-keygen -q -t ed25519 -N '' -f /run/dogfood-ssh
 install -d -m 0700 /root/.ssh
 cat /run/dogfood-ssh.pub >> /root/.ssh/authorized_keys
@@ -1113,6 +1114,8 @@ banner_lacks 6-updated boot 'FAILED'
 banner_lacks 6-updated boot 'staged'
 grep -aqF "PROBE ssh-motd=Bluefin Server ${next_ver}, automatic updates on" "${state}/6-updated.ttyS1.log" \
     || fail "6-updated: an SSH login does not show the banner: $(grep -a 'ssh' "${state}/6-updated.ttyS1.log" | tail -n 5)"
+grep -aq 'PROBE ssh-root-locked=L' "${state}/6-updated.ttyS1.log" \
+    || fail "6-updated: root was not locked for the SSH key login: $(grep -ao 'PROBE ssh-root-locked=.*' "${state}/6-updated.ttyS1.log")"
 
 checked="a local server after reporting an unreachable and a foreign-signed source as failed checks on its banner"
 [ "${next}" != release ] || checked="the image's own source"
