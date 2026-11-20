@@ -29,5 +29,5 @@ then built locally).
 Only the certificate reaches the kernel build (through
 `bluefin-server/keys/linux-module-cert.bst`, which imports
 `files/boot-keys/modules/`). The key reaches only the signing elements
-through `bluefin-server/keys/boot-keys.bst`, which no pushed artifact
+through `bluefin-server/keys/module-signing-key.bst`, which no pushed artifact
 contains. Details: `docs/skills/secure-boot-keys.md`.

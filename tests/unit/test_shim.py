@@ -51,7 +51,7 @@ def test_shim_is_built_from_a_pinned_upstream_release() -> None:
     assert re.fullmatch(r"16\.\d+", element["variables"]["shim-version"])
     deps = element["build-depends"]
     assert "base/base-stack.bst" in deps
-    assert "bluefin-server/keys/boot-keys.bst" in deps
+    assert "bluefin-server/keys/secure-boot-keys.bst" in deps
     # Hard rule 2: no CPU baseline beyond x86_64.
     assert "-march" not in SHIM.read_text(encoding="utf-8")
 

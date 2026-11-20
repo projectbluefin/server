@@ -429,25 +429,27 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   match, and run `scripts/check-release-keys.sh`, which fails the build if
   the module certificate or key is the dev pair; `seed release` runs it too.
   The CAS is publicly readable: `seed` refuses if
-  `bluefin-server/keys/boot-keys.bst` is anywhere in its full dependency graph,
+  one of the key elements (`module-signing-key.bst`, `secure-boot-keys.bst`,
+  `image-signing-keys.bst`, listed in `KEY_ELEMENTS`) is anywhere in its full dependency graph,
   shared seeding also rejects the module certificate import, and no seed job
   holds a signing secret. A content grep is no guard here: FSDK
   sources (Go's TLS test data and others) carry 307 PEM private keys.
   The independent warming workflow fails visibly on seed errors; its result
   does not gate image building or publication.
-- **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
-  `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
-  and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
-  `efi-keys.bst`, `os-sd-boot-signed.bst`, `shim.bst`, `openzfs-signed.bst`
-  and the `nvidia-open-*-signed.bst` elements
-  build-depend on it, so a release build's own cache must never be saved or
-  pushed anywhere a pull request can read.
+- **No other cache push.** The key elements (`bluefin-server/keys/`:
+  `module-signing-key`, `secure-boot-keys`, `image-signing-keys`) import the
+  `files/boot-keys/` files that, on `main`, hold the private keys; the image,
+  UKIs and every signing element build-depend on one of them, so a release
+  build's own cache must never be saved or pushed anywhere a pull request can
+  read. Each signer depends only on the key it signs with, so the signed
+  modules stay cached across pull requests, which make new Secure Boot and
+  image keys every run (`tests/unit/test_key_elements.py`).
 - **Most pull requests build the image only in the merge queue.** Before
   the queue, only `full-build`, SDK junction and patch changes build; the
   rest run `validate`. Every image-changing merge group builds and boots.
   Dev builds reuse the public module certificate, so their kernel keys
   match `kernel-cache (dev)`; after a kernel change it stays cold until seeded.
-- **No `actions/cache`.** A full build's cache holds `boot-keys.bst`, and
+- **No `actions/cache`.** A full build's cache holds the key elements, and
   pull requests can restore caches saved on `main`; the key-free kernel
   cache lives in the project CAS instead.
 
