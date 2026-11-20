@@ -15,6 +15,7 @@ import (
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/bootorigin"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/diskless"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/etcmodes"
+	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/etcvendor"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/firstboot"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/fleetlock"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/hostname"
@@ -45,6 +46,7 @@ var helpers = map[string]command{
 	"diskless-update-check": diskless.Check,
 	"firstboot-credentials": firstboot.Main,
 	"hostname":              hostname.Main,
+	"migrate-etc-vendor":    etcvendor.Main,
 	"reboot-lock":           fleetlock.Main,
 	"repair-etc-modes":      etcmodes.Main,
 	"sysext-fetch":          sysextfetch.Main,

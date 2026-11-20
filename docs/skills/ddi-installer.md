@@ -57,7 +57,11 @@ hash partition (`bluefin_usr_verity_<ver>`), and the root hash is recorded in
 live in `/usr/share/factory/etc` and are copied in by `systemd-tmpfiles`. A
 diskless node keeps `/etc` on tmpfs, so it starts empty on every boot; a disk
 install keeps it on the root partition (`files/os/repart.d/50-root.conf`),
-where it persists across A/B updates.
+where it persists across A/B updates. `systemd-tmpfiles` copies a factory
+file only when it is missing, so a vendor setting that must follow updates
+ships in `/usr` instead: read from `/usr/lib` (sysctl, journald, resolved,
+`system.conf`) or linked into `/etc` with an `L` line (the sshd drop-in).
+`bluefin-migrate-etc-vendor` removes the unmodified copies older images left.
 
 ## The boot chain
 
