@@ -304,6 +304,10 @@ def test_status_jobs_hold_issues_write_only_and_run_the_shared_script(name: str)
             "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
             " || (needs.changes.outputs.image == 'true' && contains(needs.*.result, 'skipped')) }}"
         )
+    elif name == "e2e-opt-in.yml":
+        # A scenario that hits its job's timeout-minutes is reported as
+        # cancelled, which is the failure this weekly run exists to report.
+        assert report["env"]["FAILED"] == "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}"
     else:
         assert report["env"]["FAILED"] == "${{ contains(needs.*.result, 'failure') }}"
 
