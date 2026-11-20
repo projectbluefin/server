@@ -604,8 +604,8 @@ jobs:
       - name: Install tools
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends erofs-utils binutils cpio zstd
+          bash scripts/ci/retry.sh sudo apt-get update
+          bash scripts/ci/retry.sh sudo apt-get install -y --no-install-recommends erofs-utils binutils cpio zstd
 
       - name: Download the latest release's /usr image and size report
         env:
