@@ -343,8 +343,8 @@ printf 'd /home/%s 0700 %s %s -\nd /home/%s/.ssh 0700 %s %s -\nf+~ /home/%s/.ssh
 # ssh.listen: systemd-ssh-generator takes the binary form only (v261 does
 # not unbase64); services take the base64 form systemd-creds writes
 printf 22 | enc ssh.listen - | base64 -d > ssh.listen.cred
-# "*": no password login, but not locked like sysusers' default "!*", which
-# sshd (UsePAM no) refuses even for keys
+# "*": no password login; sshd takes the key either way (UsePAM yes), but
+# "*" is not reported locked like sysusers' default "!*"
 printf '*' | enc "passwd.hashed-password.$user" "passwd.hashed-password.$user.cred"
 printf '!*' | enc passwd.hashed-password.root passwd.hashed-password.root.cred
 # copy the five .cred files into /loader/credentials/ on the stick's ESP

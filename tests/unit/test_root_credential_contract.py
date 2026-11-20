@@ -130,6 +130,18 @@ def test_sshd_dropin_never_permits_password_authentication() -> None:
     assert not re.search(r"^PasswordAuthentication\s+yes$", sshd, re.MULTILINE)
 
 
+def test_sshd_accepts_keys_for_a_root_that_has_no_password() -> None:
+    # Root ships locked ("!unprovisioned"); Ignition and the
+    # ssh.authorized_keys.root credential give it a key without unlocking it.
+    # Without PAM, sshd refuses a locked account even for keys.
+    sshd = SSHD_DROPIN.read_text(encoding="utf-8")
+
+    assert re.search(r"^UsePAM\s+yes$", sshd, re.MULTILINE)
+    # The dogfood SSH login must prove it on a locked root, not unlock it.
+    dogfood = (REPO_ROOT / "scripts" / "dogfood-installer.sh").read_text(encoding="utf-8")
+    assert "usermod -p '*' root" not in dogfood
+
+
 def test_generated_sshd_gets_per_device_host_keys() -> None:
     dropin = GENERATED_SSHD_DROPIN.read_text(encoding="utf-8")
 

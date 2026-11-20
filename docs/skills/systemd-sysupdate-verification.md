@@ -159,7 +159,7 @@ last success, the last error and the run it last recorded in
 `/var/lib/bluefin-update-status/state`, so they survive reboots and updates,
 and writes `/run/issue.d/40-bluefin-update.issue` (agetty, next to
 `/usr/lib/issue.d/30-bluefin.issue`) and `/run/motd`. login (`MOTD_FILE` in
-`login.defs`) and sshd (`UsePAM no`) only print `/etc/motd`, so
+`login.defs`) and sshd (`PrintMotd`) only print `/etc/motd`, so
 `tmpfiles.d/40-bluefin-motd.conf` links it to `/run/motd` unless the operator
 has an `/etc/motd` of their own. It only reads local state and contacts
 nothing. A failed check also stays a failed unit, `systemd-sysupdate.service`,
