@@ -223,8 +223,11 @@ tell a human or a policy engine which commit and workflow run produced it.
   matches, so `verify` only checks that it reports this version.
   `oci` pushes the ORAS artifact, then checks the registry manifest layer
   by layer against the local files. `release` then creates the GitHub
-  Release at the built commit, last because a tag is never re-created: a
-  failed run can be retried, re-pushing the same files. Neither moves `latest` backwards: `release`
+  Release at the built commit, last: with the assets uploaded under it, with
+  retries, checks the uploaded digests against the verified set, and only
+  then publishes it, because a published release is never touched again. A
+  failed run leaves at most an unpublished release (no tag, nothing nodes
+  read), which the next run replaces, re-pushing the same files to the registry. Neither moves `latest` backwards: `release`
   passes `--latest` only when no published release sorts above the version
   (`sort -V`, which orders `YY.MM.<run>` as `strverscmp()` does) and
   `--latest=false` otherwise, and `oci` tags `latest` only when the version
@@ -233,7 +236,8 @@ tell a human or a policy engine which commit and workflow run produced it.
   committed `files/os/sysupdate-keys/import-pubring.gpg`. On pull requests
   `release-dry-run` verifies against the throwaway keyring the build
   exported in `sysupdate-keys/`, pushes to a local registry and pulls the
-  artifact back, then prints the `gh release create` command.
+  artifact back, then prints the three `gh release` commands (create
+  unpublished, upload, publish).
 - **Attestations.** The `release` job runs `actions/attest` four times:
   provenance and SBOM for every published file (subjects are the verified
   checksums), and provenance and SBOM for the OCI artifact digest with

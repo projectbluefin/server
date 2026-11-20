@@ -320,8 +320,10 @@ projects:
 (already carrying its signed `SHA256SUMS(.gpg)`), runs the QEMU boot test, and
 on `main` publishes `dist/diskless/` as-is (see the `release` job in
 [ci-tooling.md](ci-tooling.md)). One version is published
-exactly once; creating an existing tag fails rather than overwriting assets
-nodes may already trust.
+exactly once: `scripts/publish-release.sh release` refuses a published version
+rather than overwriting assets nodes may already trust, and publishes only
+after the uploaded assets match the verified set (an unpublished release left by
+a failed run is replaced).
 
 ## Common rationalizations
 

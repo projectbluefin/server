@@ -261,19 +261,87 @@ def test_size_report_named_for_another_version_is_refused(release: Path, signers
 
 
 FAKE_GH_RELEASES = """#!/usr/bin/env python3
-import json, os, sys
+# A gh with GitHub's release state: $GH_STATE holds the releases (tag ->
+# {draft, assets: {name: sha256}}), $GH_CALLS every call. $GH_TAGS are
+# releases published before the test. Knobs: GH_LIST_FAILS, GH_UPLOAD_FAILS=N
+# (the first N uploads fail), GH_UPLOAD_CORRUPT (an asset arrives altered),
+# GH_PUBLISH_FAILS (publishing always fails).
+import hashlib, json, os, re, sys
+args = sys.argv[1:]
 with open(os.environ["GH_CALLS"], "a") as calls:
-    calls.write(json.dumps(sys.argv[1:]) + "\\n")
-if sys.argv[1:3] == ["release", "list"]:
+    calls.write(json.dumps(args) + "\\n")
+state_file = os.environ["GH_STATE"]
+state = json.load(open(state_file)) if os.path.exists(state_file) else {"releases": {}, "uploads": 0}
+
+def save():
+    json.dump(state, open(state_file, "w"))
+
+def flag(name):
+    return args[args.index(name) + 1] if name in args else None
+
+cmd = args[:2]
+if cmd == ["release", "list"]:
     if os.environ.get("GH_LIST_FAILS"):
         sys.exit(1)
-    print("\\n".join(os.environ["GH_TAGS"].split()))
+    jq = flag("--jq") or ""
+    match = re.search(r'tagName == "([^"]+)"', jq)
+    if match:
+        rel = state["releases"].get(match.group(1))
+        if rel:
+            print("draft" if rel["draft"] else "published")
+        elif match.group(1) in os.environ.get("GH_TAGS", "").split():
+            print("published")
+    else:
+        tags = os.environ.get("GH_TAGS", "").split()
+        tags += [t for t, r in state["releases"].items() if not r["draft"]]
+        print("\\n".join(tags))
+elif cmd == ["release", "create"]:
+    tag = args[2]
+    if tag in state["releases"] and not state["releases"][tag]["draft"]:
+        sys.exit("a release with the same tag name already exists: " + tag)
+    state["releases"][tag] = {"draft": "--draft" in args, "assets": {}}
+    save()
+    print("https://github.com/example/server/releases/tag/untagged-1")
+elif cmd == ["release", "upload"]:
+    tag = args[2]
+    state["uploads"] += 1
+    if state["uploads"] <= int(os.environ.get("GH_UPLOAD_FAILS", "0")):
+        save()
+        sys.exit("HTTP 502: Bad Gateway")
+    rest = args[3:]
+    names = []
+    while rest:
+        word = rest.pop(0)
+        if word == "--repo":
+            rest.pop(0)
+        elif not word.startswith("--"):
+            names.append(word)
+    for name in names:
+        data = open(name, "rb").read()
+        if os.environ.get("GH_UPLOAD_CORRUPT") and name.endswith("SHA256SUMS.gpg"):
+            data += b"x"
+        state["releases"][tag]["assets"][os.path.basename(name)] = hashlib.sha256(data).hexdigest()
+    save()
+elif cmd == ["release", "view"]:
+    for name, digest in state["releases"][args[2]]["assets"].items():
+        print(digest + " " + name)
+elif cmd == ["release", "edit"]:
+    if "--draft=false" in args:
+        if os.environ.get("GH_PUBLISH_FAILS"):
+            sys.exit("HTTP 502: Bad Gateway")
+        state["releases"][args[2]]["draft"] = False
+    save()
+elif cmd == ["release", "delete"]:
+    state["releases"].pop(args[2], None)
+    save()
+else:
+    sys.exit("fake gh: unsupported " + repr(args))
 """
 
 
 @pytest.fixture
 def fake_gh(tmp_path: Path, monkeypatch) -> Path:
-    """A gh that lists the releases in $GH_TAGS and records every call."""
+    """A gh with GitHub's release state; returns the file of recorded calls."""
     bin_dir = tmp_path / "gh-bin"
     bin_dir.mkdir()
     (bin_dir / "gh").write_text(FAKE_GH_RELEASES)
@@ -281,42 +349,50 @@ def fake_gh(tmp_path: Path, monkeypatch) -> Path:
     calls = tmp_path / "gh-calls"
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     monkeypatch.setenv("GH_CALLS", str(calls))
+    monkeypatch.setenv("GH_STATE", str(tmp_path / "gh-state.json"))
     monkeypatch.setenv("GH_TAGS", "")
-    monkeypatch.delenv("GH_LIST_FAILS", raising=False)
+    monkeypatch.setenv("RETRY_DELAY", "0")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/server")
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
+    for knob in ("GH_LIST_FAILS", "GH_UPLOAD_FAILS", "GH_UPLOAD_CORRUPT", "GH_PUBLISH_FAILS"):
+        monkeypatch.delenv(knob, raising=False)
     return calls
 
 
-def test_dry_run_renders_gh_release_for_top_level_files_only(release: Path, fake_gh: Path) -> None:
+@pytest.fixture
+def gh_args(fake_gh: Path):
+    """The arguments of `gh release create` and `gh release upload`, merged the
+    way the single old create call had them: --notes then the asset paths."""
+    def read() -> list[str]:
+        create = release_calls(fake_gh, "create")[0]
+        upload = release_calls(fake_gh, "upload")[0]
+        return [*create, *[a for a in upload[3:] if a.startswith("/")]]
+    return read
+
+
+def gh_calls(calls: Path) -> list[list[str]]:
+    return [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
+
+
+def release_calls(calls: Path, verb: str) -> list[list[str]]:
+    return [c for c in gh_calls(calls) if c[:2] == ["release", verb]]
+
+
+def test_dry_run_renders_the_three_gh_release_commands_for_top_level_files_only(release: Path, fake_gh: Path) -> None:
     result = run("release", str(release), VERSION, "--dry-run")
     assert result.returncode == 0, result.stderr
-    command = result.stdout.splitlines()[-1]
-    assert command.startswith(f"gh release create v{VERSION} --target {'0' * 40} ")
+    create, upload, publish = result.stdout.splitlines()[-3:]
+    assert create.startswith(f"gh release create v{VERSION} --repo example/server --draft --target {'0' * 40} ")
+    assert upload.startswith(f"gh release upload v{VERSION} --repo example/server --clobber ")
+    assert publish == f"gh release edit v{VERSION} --repo example/server --draft=false --latest "
     for name in [*release_files(VERSION), "SHA256SUMS", "SHA256SUMS.gpg"]:
-        assert f"{release}/{name}" in command
-    assert "efi-keys" not in command
+        assert f"{release}/{name}" in upload
+    assert "efi-keys" not in upload
+    # Nothing was published, or even created.
+    assert release_calls(fake_gh, "create") == [] and release_calls(fake_gh, "edit") == []
 
 
-@pytest.fixture
-def gh_args(tmp_path: Path, monkeypatch):
-    """A gh that records its arguments without publishing; returns a reader."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    capture = tmp_path / "gh-args.json"
-    gh = bin_dir / "gh"
-    gh.write_text(
-        "#!/usr/bin/env python3\n"
-        "import json, os, sys\n"
-        "with open(os.environ['GH_CAPTURE'], 'w') as out: json.dump(sys.argv[1:], out)\n"
-    )
-    gh.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
-    monkeypatch.setenv("GH_CAPTURE", str(capture))
-    monkeypatch.setenv("GITHUB_REPOSITORY", "example/server")
-    monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
-    return lambda: json.loads(capture.read_text())
-
-
-def test_release_notes_use_the_release_version_and_source(release: Path, tmp_path: Path, gh_args) -> None:
+def test_release_notes_use_the_release_version_and_source(release: Path, tmp_path: Path, fake_gh: Path, gh_args) -> None:
     # Run outside the checkout to ensure the release text has no
     # working-directory dependency.
     result = run("release", str(release), VERSION, cwd=tmp_path)
@@ -338,7 +414,7 @@ def test_release_notes_use_the_release_version_and_source(release: Path, tmp_pat
     ]
 
 
-def test_release_notes_end_with_the_size_table(release: Path, tmp_path: Path, gh_args) -> None:
+def test_release_notes_end_with_the_size_table(release: Path, tmp_path: Path, fake_gh: Path, gh_args) -> None:
     report = add_size_report(release)
     result = run("release", str(release), VERSION, cwd=tmp_path)
     assert result.returncode == 0, result.stderr
@@ -359,23 +435,23 @@ def test_release_notes_end_with_the_size_table(release: Path, tmp_path: Path, gh
     [
         ("", "--latest"),
         ("v26.09.6 v26.08.30 v0.9 not-a-version", "--latest"),
-        ("v26.09.7", "--latest"),
         # 26.09.12 is newer than 26.09.7 under sort -V (and strverscmp), not as text.
         ("v26.09.12 v26.09.6", "--latest=false"),
         ("v26.10.1", "--latest=false"),
     ],
-    ids=["first", "newest", "same", "older-by-run", "older-by-month"],
+    # "Same version" is not a case here: a published release of this very
+    # version is refused before anything is created (test_a_published_version_is_never_touched).
+    ids=["first", "newest", "older-by-run", "older-by-month"],
 )
 def test_release_is_marked_latest_only_when_newest(release: Path, fake_gh: Path, monkeypatch, published: str, flag: str) -> None:
     monkeypatch.setenv("GH_TAGS", published)
-    monkeypatch.setenv("GITHUB_REPOSITORY", "example/server")
     result = run("release", str(release), VERSION)
     assert result.returncode == 0, result.stderr
-    calls = [json.loads(line) for line in fake_gh.read_text().splitlines()]
-    assert calls[0][:7] == ["release", "list", "--repo", "example/server", "--exclude-drafts", "--exclude-pre-releases", "--limit"]
-    create = calls[-1]
-    assert create[:8] == ["release", "create", f"v{VERSION}", "--target", "0" * 40, "--title", f"Bluefin Server {VERSION}", flag]
-    assert create[8] == "--notes"
+    assert gh_calls(fake_gh)[0][:7] == ["release", "list", "--repo", "example/server", "--exclude-drafts", "--exclude-pre-releases", "--limit"]
+    create = release_calls(fake_gh, "create")[0]
+    assert create[:9] == ["release", "create", f"v{VERSION}", "--repo", "example/server", "--draft", "--target", "0" * 40, "--title"]
+    # Published last, and that is where "Latest" is decided.
+    assert release_calls(fake_gh, "edit") == [["release", "edit", f"v{VERSION}", "--repo", "example/server", "--draft=false", flag]]
     assert ("::notice title=Not the latest release::" in result.stdout) == (flag == "--latest=false")
 
 
@@ -385,6 +461,70 @@ def test_release_stops_when_the_releases_cannot_be_listed(release: Path, fake_gh
     assert result.returncode != 0
     assert "cannot list the releases of" in result.stderr
     assert [json.loads(line)[:2] for line in fake_gh.read_text().splitlines()] == [["release", "list"]]
+
+
+def test_release_is_created_as_a_draft_and_published_only_after_the_assets_check_out(release: Path, fake_gh: Path) -> None:
+    result = run("release", str(release), VERSION)
+    assert result.returncode == 0, result.stderr
+    verbs = [c[1] for c in gh_calls(fake_gh) if c[0] == "release"]
+    assert verbs == ["list", "list", "create", "upload", "view", "edit"]
+    state = json.loads((fake_gh.parent / "gh-state.json").read_text())
+    assert state["releases"][f"v{VERSION}"]["draft"] is False
+
+
+def test_a_failed_upload_is_retried_and_the_release_still_publishes(release: Path, fake_gh: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GH_UPLOAD_FAILS", "2")
+    result = run("release", str(release), VERSION)
+    assert result.returncode == 0, result.stderr
+    assert len(release_calls(fake_gh, "upload")) == 3
+    assert len(release_calls(fake_gh, "create")) == 1
+    assert result.stderr.count("Retrying") == 2
+
+
+def test_an_upload_that_keeps_failing_leaves_an_unpublished_draft(release: Path, fake_gh: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GH_UPLOAD_FAILS", "9")
+    result = run("release", str(release), VERSION)
+    assert result.returncode != 0
+    assert "the draft is left unpublished" in result.stderr
+    assert release_calls(fake_gh, "edit") == []
+    state = json.loads((fake_gh.parent / "gh-state.json").read_text())
+    assert state["releases"][f"v{VERSION}"]["draft"] is True
+
+
+def test_an_asset_that_arrives_altered_is_never_published(release: Path, fake_gh: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GH_UPLOAD_CORRUPT", "1")
+    result = run("release", str(release), VERSION)
+    assert result.returncode != 0
+    assert "do not match the verified release set" in result.stderr
+    assert release_calls(fake_gh, "edit") == []
+
+
+def test_a_rerun_replaces_the_draft_an_earlier_attempt_left(release: Path, fake_gh: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GH_UPLOAD_FAILS", "9")
+    assert run("release", str(release), VERSION).returncode != 0
+    monkeypatch.delenv("GH_UPLOAD_FAILS")
+    result = run("release", str(release), VERSION)
+    assert result.returncode == 0, result.stderr
+    assert len(release_calls(fake_gh, "delete")) == 1
+    state = json.loads((fake_gh.parent / "gh-state.json").read_text())
+    assert state["releases"][f"v{VERSION}"]["draft"] is False
+
+
+def test_a_published_version_is_never_touched(release: Path, fake_gh: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GH_TAGS", f"v{VERSION}")
+    result = run("release", str(release), VERSION)
+    assert result.returncode != 0
+    assert "already published" in result.stderr
+    for verb in ("create", "upload", "edit", "delete"):
+        assert release_calls(fake_gh, verb) == [], verb
+
+
+def test_a_failed_publish_step_is_retried(release: Path, fake_gh: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GH_PUBLISH_FAILS", "1")
+    result = run("release", str(release), VERSION)
+    assert result.returncode != 0
+    assert len(release_calls(fake_gh, "edit")) == 3
+    assert "publishing" in result.stderr and "left unpublished" in result.stderr
 
 
 # An in-memory OCI registry: enough of `oras push`, `resolve` and
@@ -587,7 +727,7 @@ def test_the_image_stages_and_signs_every_homelab_template() -> None:
     assert listed is not None and sorted(listed[1].split()) == templates
 
 
-def test_release_notes_describe_every_published_file(release: Path, tmp_path: Path, gh_args) -> None:
+def test_release_notes_describe_every_published_file(release: Path, tmp_path: Path, fake_gh: Path, gh_args) -> None:
     # The "Which asset do I need?" table is written by hand; a new sysext
     # that ships without a row leaves users guessing what it is.
     result = run("release", str(release), VERSION, cwd=tmp_path)

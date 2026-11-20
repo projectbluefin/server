@@ -758,9 +758,12 @@ jobs:
           sbom-path: dist/diskless/bluefin-server_${{ env.VERSION }}.spdx.json
           push-to-registry: true
 
-      # Last: the tag is created once and never again, so everything that can
-      # fail runs before it. A failed run re-pushes the same files to the
-      # registry on retry; a GitHub Release created first would refuse the retry.
+      # Last: a published release is never touched again, so everything that
+      # can fail runs before it. The script creates the release as a draft,
+      # uploads the assets (retrying), checks them against the verified set and
+      # only then publishes it, so a failed run leaves no tag and no partial
+      # release: a re-run re-pushes the same files to the registry and replaces
+      # the draft.
       - name: Create GitHub Release
         if: steps.taggable.outputs.publish == 'true'
         env:
