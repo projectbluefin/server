@@ -30,7 +30,7 @@ FIRSTBOOT_DROPIN = (
     / "systemd-firstboot.service.d"
     / "10-bluefin-no-root-prompt.conf"
 )
-SSHD_DROPIN = REPO_ROOT / "files" / "os" / "ssh" / "sshd_config.d" / "bluefin-server.conf"
+SSHD_DROPIN = REPO_ROOT / "files" / "os" / "sshd_config.d" / "bluefin-server.conf"
 GENERATED_SSHD_DROPIN = (
     REPO_ROOT
     / "files"

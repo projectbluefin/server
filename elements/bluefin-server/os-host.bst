@@ -11,7 +11,7 @@ description: |
     bluefin-boot-deadline, bluefin-diskless-update-check,
     bluefin-sysext-fetch, bluefin-boot-origin;
   - first boot: bluefin-hostname, bluefin-firstboot-credentials,
-    bluefin-repair-etc-modes;
+    bluefin-repair-etc-modes, bluefin-migrate-etc-vendor;
   - bluefin-sysext-modules, which module sysexts' load units run.
   Unit drop-ins call `bluefin-host kube-interlock`, `kured-flag`,
   `mask-uki-transfer` and `boot-is-good` directly.
@@ -57,8 +57,8 @@ config:
     install -D -m 0755 bluefin-host "%{install-root}/usr/bin/bluefin-host"
     mkdir -p "%{install-root}/usr/libexec"
     for helper in boot-deadline boot-origin diskless-update-check \
-        firstboot-credentials hostname reboot-lock repair-etc-modes \
-        sysext-fetch sysext-modules update-pending update-status \
-        update-status-migrate; do
+        firstboot-credentials hostname migrate-etc-vendor reboot-lock \
+        repair-etc-modes sysext-fetch sysext-modules update-pending \
+        update-status update-status-migrate; do
       ln -s ../bin/bluefin-host "%{install-root}/usr/libexec/bluefin-${helper}"
     done
