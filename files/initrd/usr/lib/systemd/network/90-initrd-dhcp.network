@@ -4,3 +4,9 @@ Kind=!*
 
 [Network]
 DHCP=yes
+
+# The initrd's machine ID is not the host's, and a diskless node's is new
+# every boot; identify the DHCP client by MAC so its lease is the same in the
+# initrd and the host and on every boot (see 15-wired-diskless.network).
+[DHCPv4]
+ClientIdentifier=mac
