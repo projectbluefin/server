@@ -45,6 +45,35 @@ def test_reproducibility_rebuilds_everything_that_ships() -> None:
     assert not missing, f"add to FINAL_ASSEMBLY in reproducibility.yml: {sorted(missing)}"
 
 
+def rebuild_step() -> str:
+    job = yaml.safe_load((WORKFLOWS / "reproducibility.yml").read_text())["jobs"]["reproducibility"]
+    return next(s["run"] for s in job["steps"] if s["name"].startswith("Rebuild"))
+
+
+def test_the_rebuild_deletes_the_project_elements_the_roots_are_built_from() -> None:
+    # Deleting only the roots reused the cached signed modules, the Go helpers
+    # and the initrd, so their reproducibility was never tested.
+    run = rebuild_step()
+    assert "just bst show --deps all --format '%{name}' ${FINAL_ASSEMBLY}" in run
+    assert "just bst artifact delete $(cat rebuild.txt)" in run
+    # FSDK's own elements and efi-keys stay cached, by name.
+    assert "freedesktop-sdk\\.bst:" in run and "efi-keys\\.bst" in run
+    # Colour codes would break the element names; a short listing must fail.
+    assert "x1b" in run
+    assert "-lt 60" in run and "kernel-modules.bst" in run
+
+
+def test_a_failed_or_cancelled_scheduled_run_opens_the_tracking_issue() -> None:
+    workflow = yaml.safe_load((WORKFLOWS / "reproducibility.yml").read_text())
+    job = workflow["jobs"]["status"]
+    assert job["needs"] == ["reproducibility"]
+    assert job["if"] == "${{ !cancelled() && github.event_name == 'schedule' }}"
+    assert job["permissions"] == {"issues": "write"}
+    report = job["steps"][-1]
+    assert report["env"]["FAILED"] == "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}"
+    assert 'tracking-issue.sh "Reproducibility check failing"' in report["run"]
+
+
 def test_final_assembly_names_real_elements_and_keeps_the_efi_keys() -> None:
     for element in final_assembly():
         assert (ROOT / "elements" / element).is_file(), element
