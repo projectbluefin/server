@@ -9,7 +9,7 @@ build-depends:
 - freedesktop-sdk.bst:public-stacks/runtime-gnu.bst
 - freedesktop-sdk.bst:components/openssl.bst
 - freedesktop-sdk.bst:components/_private/sbsigntools.bst
-- bluefin-server/keys/boot-keys.bst
+- bluefin-server/keys/secure-boot-keys.bst
 
 variables:
   efi-keys-owner: 6f1b0fe2-3c2a-4f2e-9f0a-b1e5e7a5e000

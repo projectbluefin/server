@@ -77,7 +77,7 @@ build-depends:
     location: /sd-boot
 - freedesktop-sdk.bst:components/gnupg.bst
 - freedesktop-sdk.bst:components/jq.bst
-- bluefin-server/keys/boot-keys.bst
+- bluefin-server/keys/image-signing-keys.bst
 - filename: oci/k0s-sysext.bst
   config:
     location: /sysext/k0s

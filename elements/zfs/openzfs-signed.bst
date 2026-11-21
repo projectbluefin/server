@@ -16,7 +16,7 @@ build-depends:
 - freedesktop-sdk.bst:components/openssl.bst
 - freedesktop-sdk.bst:components/sign-file.bst
 - freedesktop-sdk.bst:components/zstd.bst
-- bluefin-server/keys/boot-keys.bst
+- bluefin-server/keys/module-signing-key.bst
 - filename: zfs/openzfs.bst
   config:
     location: /openzfs

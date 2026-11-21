@@ -31,7 +31,7 @@ build-depends:
 - freedesktop-sdk.bst:components/openssl.bst
 - freedesktop-sdk.bst:components/systemd.bst
 - freedesktop-sdk.bst:components/_private/sbsigntools.bst
-- bluefin-server/keys/boot-keys.bst
+- bluefin-server/keys/secure-boot-keys.bst
 
 variables:
   shim-version: "16.1"
