@@ -246,10 +246,10 @@ def test_release_and_dry_run_publish_the_size_report() -> None:
 
 
 def test_release_creates_the_github_release_last() -> None:
-    # gh release create refuses an existing tag, so a run that created the
-    # release and then failed could never be retried. Every step that can
-    # fail (OCI push and its attestations) runs before it; a retry re-pushes
-    # the same files to the registry.
+    # A published release is never touched again, so every step that can fail
+    # (OCI push and its attestations) runs before the script publishes it; a
+    # retry re-pushes the same files to the registry and the script replaces
+    # the draft an earlier attempt left.
     order = step_names(RELEASE)
     assert order[-1] == "Create GitHub Release"
     assert order.index("Push OCI artifact") < order.index("Create GitHub Release")
