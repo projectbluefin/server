@@ -16,8 +16,9 @@ set -euo pipefail
 OVMF_RPM_URL=https://kojipkgs.fedoraproject.org/packages/edk2/20260508/6.fc44/noarch/edk2-ovmf-20260508-6.fc44.noarch.rpm
 OVMF_RPM_SHA256=8b157ab2aa0cccccf021f43011308349147c76ae59550f52239ea50678dd0a5f
 
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends qemu-system-x86 libarchive-tools \
+retry="$(dirname "${BASH_SOURCE[0]}")/retry.sh"
+bash "${retry}" sudo apt-get update
+bash "${retry}" sudo apt-get install -y --no-install-recommends qemu-system-x86 libarchive-tools \
   fdisk dosfstools e2fsprogs mtools
 sudo chmod 666 /dev/kvm
 

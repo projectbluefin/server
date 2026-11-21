@@ -47,8 +47,10 @@ calls() {
 
 install_tools() {
     local tarball="${RUNNER_TEMP:-/tmp}/helm.tar.gz"
-    sudo apt-get update
-    sudo apt-get install -y --no-install-recommends swtpm swtpm-tools xfsprogs zstd
+    local retry
+    retry="$(dirname "${BASH_SOURCE[0]}")/retry.sh"
+    bash "${retry}" sudo apt-get update
+    bash "${retry}" sudo apt-get install -y --no-install-recommends swtpm swtpm-tools xfsprogs zstd
     curl -fsSL --retry 3 -o "${tarball}" "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
     echo "${HELM_SHA256}  ${tarball}" | sha256sum -c -
     sudo tar -xzf "${tarball}" -C /usr/local/bin --strip-components=1 linux-amd64/helm
