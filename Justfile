@@ -122,8 +122,8 @@ build-sysext:
 # Every export-*sysext recipe goes through here so they stay order-independent:
 # dist/sysext/ is never wiped, and a re-export replaces its own SHA256SUMS line
 # instead of appending a duplicate. PREFIX is the element's sysext-image name
-# without the version; the artifact checkout also emits an uncompressed .raw,
-# but only the versioned .raw.zst release asset is published.
+# without the version; the artifact holds only the versioned .raw.zst release
+# asset and its SHA256SUMS (include/sysext.yml).
 _export-sysext-element ELEMENT PREFIX:
     #!/usr/bin/env bash
     set -euo pipefail
