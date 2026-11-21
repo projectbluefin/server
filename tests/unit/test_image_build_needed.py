@@ -73,7 +73,6 @@ def test_changes_job_runs_the_base_revision_classifier():
         "README.md",
         ".github/copilot-instructions.md",
         "tests/unit/test_repart_layout.py",
-        "tests/unit/os-justfile_test.bats",
         ".github/scripts/docs-checks.py",
         ".github/workflows/unit-tests.yml",
         ".github/workflows/lint-actions.yml",

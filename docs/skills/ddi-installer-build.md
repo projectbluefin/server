@@ -73,7 +73,7 @@ module). `bluefin-server/os-host.bst` builds it into `/usr/bin/bluefin-host`
 and links each `/usr/libexec/bluefin-<name>` to it; the binary runs the helper
 its name (or its first argument) names. Unit drop-ins call
 `bluefin-host kube-interlock`, `kured-flag`, `mask-uki-transfer` and
-`boot-is-good` directly. Installer helpers, the justfile and the initrd's
+`boot-is-good` directly. Installer helpers and the initrd's
 copy of `bluefin-boot-origin` stay shell.
 
 ```bash
