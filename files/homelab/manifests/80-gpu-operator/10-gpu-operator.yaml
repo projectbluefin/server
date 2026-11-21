@@ -1110,7 +1110,7 @@ spec:
     usePrecompiled: false
     repository: nvcr.io/nvidia
     image: driver
-    version: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    version: 595.91.07
     imagePullPolicy: IfNotPresent
     startupProbe:
       failureThreshold: 120
@@ -1252,13 +1252,13 @@ spec:
     enabled: false
     repository: nvcr.io/nvidia/cloud-native
     image: nvidia-fs
-    version: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    version: 2.29.4
     imagePullPolicy: IfNotPresent
   gdrcopy:
     enabled: false
     repository: nvcr.io/nvidia/cloud-native
     image: gdrdrv
-    version: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    version: v2.6
     imagePullPolicy: IfNotPresent
   sandboxWorkloads:
     enabled: false
