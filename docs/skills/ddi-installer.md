@@ -171,6 +171,16 @@ first boot of the installed disk runs the initrd's `systemd-repart` (reading
 `/sysusr/usr/lib/repart.d`) to create slot B and the persistent root. The
 installed disk is identical whichever path installed it. No shell installer.
 
+The usr slots are declared 2 GiB minimum, 4 GiB maximum. systemd-repart cannot
+resize a partition that exists, and refuses a layout whose minimum no longer
+fits, so the minimum must never rise above what an installed disk was made with
+(a fixed 4 GiB slot would fail the first-boot repart of every disk installed
+with 2 GiB). A new install takes up to 4 GiB per slot when the disk has room,
+slot A first, then slot B, then root down to its 4 GiB minimum; an installed
+disk keeps its 2 GiB slots and repart reports "No changes". CI holds the image
+to the minimum. The smallest installable disk is the sum of the minimums, about
+9.2 GiB.
+
 Erasing a disk that is not empty needs the kernel to forget that disk's
 partition devices first (systemd-repart v261, #359; why in
 [usb-installer.md](usb-installer.md)). The USB installer does that itself. On

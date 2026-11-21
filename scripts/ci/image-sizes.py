@@ -18,10 +18,13 @@ annotation, never a failure. Releases publish the report next to the set,
 outside its signed SHA256SUMS: it is information, nothing trusts it.
 
 usr_raw and usr_verity_raw must fit their A/B slots on installed disks:
-filling more than 90 % of the SizeMaxBytes= of the usr or usr-verity
+filling more than 90 % of the SizeMinBytes= of the usr or usr-verity
 partition in --repart-dir (default files/os/repart.d) is an ::error:: and
 exit status 1, after the report is written. sysupdate cannot grow a slot,
-so an image that outgrows it would never update an installed node.
+so an image that outgrows it would never update an installed node. The
+minimum is what every installed disk is guaranteed: a disk installed with
+room gets a slot up to SizeMaxBytes=, but one installed from an older image
+keeps its 2 GiB, and a small disk leaves slot B at its minimum.
 
 --render prints the table of a report, for publish-release.sh's release
 notes. Needs zstd on PATH for initrd_unpacked.
@@ -151,13 +154,14 @@ def baseline(report: Path | None, usr: Path | None) -> tuple[str | None, dict[st
 
 
 def slot_sizes(repart: Path) -> dict[str, int]:
-    """Partition type -> SizeMaxBytes= of the first repart.d file of that type."""
+    """Partition type -> SizeMinBytes= of the first repart.d file of that type:
+    the smallest slot an installed disk can have."""
     sizes: dict[str, int] = {}
     for conf in sorted(repart.glob("*.conf")):
         keys = dict(
             line.split("=", 1) for line in conf.read_text(encoding="utf-8").splitlines() if "=" in line
         )
-        match = re.fullmatch(r"([0-9]+)([BKMGT]?)", keys.get("SizeMaxBytes", "").strip())
+        match = re.fullmatch(r"([0-9]+)([BKMGT]?)", keys.get("SizeMinBytes", "").strip())
         if match and keys.get("Type", "").strip() not in sizes:
             sizes[keys["Type"].strip()] = int(match[1]) * UNITS[match[2]]
     return sizes
@@ -254,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
     full = False
     for key, kind in SLOTS.items():
         if key in metrics and kind not in slots:
-            raise SystemExit(f"no {kind} partition with SizeMaxBytes= in {args.repart_dir}")
+            raise SystemExit(f"no {kind} partition with SizeMinBytes= in {args.repart_dir}")
         if key in metrics and metrics[key] > SLOT_RATIO * slots[kind]:
             full = True
             print(
