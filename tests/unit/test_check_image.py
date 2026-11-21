@@ -100,6 +100,76 @@ def test_check_libraries_requires_every_needed_soname(tmp_path):
     assert check_image.check_libraries("usr", [tmp_path], tmp_path) == []
 
 
+def dlopen_note(*entries: str) -> bytes:
+    """ELF bytes carrying a systemd-style .note.dlopen JSON payload."""
+    return b"\x7fELF\x00\x00" + b"\x00".join(e.encode() for e in entries) + b"\x00"
+
+
+def test_check_libraries_flags_a_missing_required_dlopen(tmp_path, monkeypatch):
+    # readelf sees no DT_NEEDED here, so only the .note.dlopen path can fail.
+    monkeypatch.setattr(check_image, "elf_needed", lambda paths: ({}, {}))
+    binary = tmp_path / "usr/lib/systemd/systemd-x"
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(
+        dlopen_note(
+            '[{"feature":"a","priority":"required","soname":["liba.so.2","liba.so.1"]}]',
+            '[{"feature":"b","priority":"recommended","soname":["libb.so.1"]}]',
+        )
+    )
+
+    assert check_image.dlopen_required(binary) == [["liba.so.2", "liba.so.1"]]
+    assert check_image.check_libraries("usr", [tmp_path], tmp_path) == [
+        "usr: /usr/lib/systemd/systemd-x requires dlopen of missing liba.so.2 or liba.so.1"
+    ]
+
+    # Any one alternative satisfies the entry; a recommended entry stays optional.
+    write(tmp_path / "usr/lib/x86_64-linux-gnu/liba.so.1")
+    assert check_image.check_libraries("usr", [tmp_path], tmp_path) == []
+
+
+def test_dlopen_required_skips_malformed_notes(tmp_path):
+    binary = tmp_path / "x"
+    binary.write_bytes(
+        dlopen_note(
+            '[{"soname" broken}]',
+            '[{"feature":"a","priority":"required","soname":["liba.so.1"]}]',
+        )
+    )
+
+    assert check_image.dlopen_required(binary) == [["liba.so.1"]]
+    assert check_image.dlopen_required(tmp_path / "missing") == []
+
+
+def test_elf_needed_parses_multi_file_readelf_output(monkeypatch):
+    # Images hold many ELF files, so readelf always runs on a batch and prints
+    # a "File:" header before each file's dynamic section.
+    out = """
+File: /img/usr/bin/a
+
+Dynamic section at offset 0x2d00 contains 3 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libx.so.1]
+ 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN/../lib/a:/opt/a]
+
+File: /img/usr/bin/b
+
+Dynamic section at offset 0x2d00 contains 2 entries:
+ 0x0000000000000001 (NEEDED)             Shared library: [liby.so.2]
+ 0x000000000000000f (RPATH)              Library rpath: [/usr/lib/b]
+"""
+    monkeypatch.setattr(
+        check_image.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out, stderr=""),
+    )
+    a, b = Path("/img/usr/bin/a"), Path("/img/usr/bin/b")
+
+    needed, runpaths = check_image.elf_needed([a, b])
+
+    assert needed == {a: ["libx.so.1"], b: ["liby.so.2"]}
+    assert runpaths == {a: ["$ORIGIN/../lib/a", "/opt/a"], b: ["/usr/lib/b"]}
+
+
 def test_waivers_are_arch_neutral_and_shrink_only(monkeypatch):
     monkeypatch.setattr(
         check_image,
