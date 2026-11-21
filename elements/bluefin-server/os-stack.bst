@@ -12,7 +12,7 @@ depends:
   - bluefin-server/os-sshd-preset.bst
   - bluefin-server/os-sshd-config.bst
 
-  # Image identity and weekly first-party countme reporting
+  # Image identity and daily active-system countme reporting
   - bluefin-server/os-image-info.bst
   - bluefin-server/os-countme.bst
 

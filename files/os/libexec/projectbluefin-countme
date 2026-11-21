@@ -1,0 +1,45 @@
+#!/usr/bin/bash
+# /usr/libexec/projectbluefin-countme — Bluefin Server
+#
+# Anonymous daily active-system count. Reports "server/main:<stream>" at most
+# once per UTC day to countme.projectbluefin.io
+# (docs.projectbluefin.io/analytics). Bluefin Server is a DDI: no flavor, no
+# bootc ref; the stream is image-tag, the channel systemd-sysupdate follows.
+#
+# On a diskless node whose /var is volatile (no Ignition-provisioned state
+# disk), this marker is lost on reboot, so that UTC day counts boots rather
+# than unique systems.
+#
+# Opt out: `systemctl mask --now projectbluefin-countme.timer`.
+set -uo pipefail
+
+info="${IMAGE_INFO:-/usr/share/ublue-os/image-info.json}"
+state="${STATE_DIRECTORY:-/var/lib/projectbluefin-countme}"
+last="${state}/last"
+today=$(date -u +%F)
+
+# Only Bluefin Server reports through this unit; everything else stays off the
+# network. The image-name is exact, written by os-image-info.bst.
+name=$(jq -r '."image-name" // empty' "$info" 2>/dev/null)
+[[ $name == server ]] || exit 0
+
+# At most one ping per UTC day, matching daily_pings' (day, image) key. A
+# rolling 24h guard would skip the first hours of the next UTC day.
+[[ -e $last ]] && [[ "$(cat "$last")" == "$today" ]] && exit 0
+
+# The stream is the channel sysupdate follows, shipped as image-tag. Anything
+# outside the known channel becomes `unknown` rather than a guess.
+tag=$(jq -r '."image-tag" // empty' "$info" 2>/dev/null)
+case $tag in
+        latest) ;;
+        "") exit 0 ;;
+        *) tag=unknown ;;
+esac
+
+image="server/main:$tag"
+
+# A failed send exits 0; the timer retries on its own schedule. Only a
+# confirmed send records the day, so a lost acknowledgement is retried.
+curl -fsS --max-time 30 -X PUT --json "$(jq -nc --arg i "$image" '{image: $i}')" \
+    "${COUNTME_HOST:-https://countme.projectbluefin.io}/v1/ping" >/dev/null && printf '%s\n' "$today" > "$last"
+exit 0

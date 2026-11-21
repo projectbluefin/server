@@ -175,10 +175,15 @@ disabled since stays disabled until the config changes its selection.
 Disabling is Ignition's own: its files stage runs `systemctl disable` on
 every enabled unit the config disables, on each boot, so an operator's
 `systemctl enable` of such a unit lasts only until the next boot, and a
-preset sorting before `20-ignition.preset` (such as
-`03-projectbluefin-countme.preset`) cannot re-enable it. A diskless node's fresh
-`/etc` gets every selection on every boot; a unit that is missing or masked
-is retried on the next boot.
+preset sorting before `20-ignition.preset` cannot re-enable it. A diskless
+node's fresh `/etc` gets every selection on every boot; a unit that is missing
+or masked is retried on the next boot.
+
+The daily countme reporter (`projectbluefin-countme.timer`) records its
+once-per-UTC-day marker in `/var/lib/projectbluefin-countme/last`. On a
+diskless node whose `/var` is volatile (no Ignition-provisioned state disk), a
+reboot within the same UTC day pings again, so that day's count reflects boots
+rather than unique systems.
 
 There is no first-boot marker: every diskless boot runs every stage against a
 fresh `/etc`, so a config must be idempotent or the node fails the same stage
