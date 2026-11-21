@@ -220,6 +220,14 @@ Useful environment variables:
   `PROBE ignition marker=applied unit=active enabled=enabled ran=yes`.
 - `DOGFOOD_PORT`, `DOGFOOD_MEM`, `DOGFOOD_TIMEOUT` — HTTP port (8765), guest
   memory in MiB (4096), `--check` deadline in seconds (600).
+- `DOGFOOD_RETRY_OK=<ERE>` — `--check` ignores `[FAILED]` console lines that
+  match, for a unit that retries (`Restart=on-failure`) and may fail once while
+  the node comes up. The probe's own `failed=0` must still hold, so a unit that
+  never recovers fails the run.
+
+A `--check` boot that prints the initrd's failure summary (`BLUEFIN: BOOT
+FAILED`) twice has rebooted into the same failure, and the check stops there
+instead of waiting out `DOGFOOD_TIMEOUT`.
 
 Every diskless `--check` boot also runs `bluefin-diskless-update-check` once
 and reports `PROBE update-check=<result> flag=<set|none>`. Its origin is the

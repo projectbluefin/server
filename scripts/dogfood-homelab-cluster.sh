@@ -206,6 +206,7 @@ boot() {
         printf '[Service]\nStandardOutput=journal+console\nStandardError=journal+console\n' \
             > "${state}/${role}-creds/systemd.unit-dropin.${u}"
     done
+    DOGFOOD_RETRY_OK='Apply the Bluefin' \
     DOGFOOD_PORT="${port}" DOGFOOD_MEM="$3" DOGFOOD_TIMEOUT="$4" DOGFOOD_NET="$5" \
     DOGFOOD_IGNITION="${state}/${role}.ign" DOGFOOD_SERVE_EXTRA="${state}/serve" \
     DOGFOOD_EXTRA_PROBE="${state}/${role}.probe" DOGFOOD_CREDS="${state}/${role}-creds" \

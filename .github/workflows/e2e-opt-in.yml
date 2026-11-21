@@ -126,6 +126,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash .github/scripts/tracking-issue.sh "Opt-in feature e2e failing" "The weekly opt-in feature e2e run" "a later weekly run"
