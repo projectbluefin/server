@@ -1,0 +1,21 @@
+[Unit]
+Description=Disable Unused Daemons on Nodes That Updated from an Older Image
+Documentation=file:/usr/libexec/bluefin-disable-unused-migrate
+# Presets apply on first boot only, so a node that first booted an image
+# without 80-bluefin-unused.preset keeps isnsd and systemd-homed enabled.
+# This applies that preset to those units once. Enabled in /usr
+# (elements/oci/bluefin-server-usr.bst), so updated nodes run it. Installed
+# nodes only: a diskless node's /etc starts empty, so its first-boot presets
+# already include the new file.
+ConditionPathExists=!/var/lib/bluefin/disable-unused-migrate.stamp
+ConditionPathExists=!/run/machines/rootdisk.raw
+ConditionKernelCommandLine=!root=tmpfs
+After=systemd-tmpfiles-setup.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bluefin-disable-unused-migrate
+
+[Install]
+WantedBy=multi-user.target

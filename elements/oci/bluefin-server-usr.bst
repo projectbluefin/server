@@ -168,6 +168,9 @@ config:
     # does, once per installed node (projectbluefin/server#367).
     ln -sf ../bluefin-update-status-migrate.service \
       /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-update-status-migrate.service
+    # The same for 80-bluefin-unused.preset (isnsd, systemd-homed).
+    ln -sf ../bluefin-disable-unused-migrate.service \
+      /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-disable-unused-migrate.service
     # Enabled in /usr, not by preset: a node that updated into this image
     # must still give its FleetLock slot back once an operator configures a
     # server, or its group stops rebooting. Inert without a server.
