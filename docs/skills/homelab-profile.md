@@ -104,11 +104,12 @@ port 443 of its MetalLB address, see "TLS" below) by host name under
 (`sectionName: https`), so a bearer token, the Console's login password and
 its session cookie never cross the LAN in cleartext; on port 80 the add-on
 names answer with a 301 to `https://` (`40-envoy-gateway/21-http-redirect.yaml`).
-The certificate (`homelab-tls` in `envoy-gateway-system`, for `argo.`, `mcp.`
-and `kubestellar.<domain>`) comes from the `homelab-ca` ClusterIssuer: a
-self-signed CA that cert-manager creates once (ten years) and keeps in
-`cert-manager/homelab-ca`; the leaf renews by itself and Envoy picks it up.
-Browsers warn until you trust that CA, once per device:
+By default the certificate (`homelab-tls` in `envoy-gateway-system`, for
+`argo.`, `mcp.` and `kubestellar.<domain>`) comes from the `homelab-ca`
+ClusterIssuer: a self-signed CA that cert-manager creates once (ten years)
+and keeps in `cert-manager/homelab-ca`; the leaf renews by itself and Envoy
+picks it up. To sign it with a ClusterIssuer of your own, set
+`HOMELAB_GATEWAY_ISSUER` (below). Trust that CA once per device:
 
 ```bash
 kubectl -n cert-manager get secret homelab-ca -o jsonpath='{.data.ca\.crt}' | base64 -d > homelab-ca.crt
@@ -120,10 +121,14 @@ the add-on routes send `Strict-Transport-Security: max-age=31536000`
 (deliberately without `includeSubDomains`, which would pin every device
 under the domain), and once a browser has that header it turns a
 certificate warning for these names into a hard error with no
-click-through. The Gateway does not use the `acme` ClusterIssuer:
-HTTP-01 needs every name reachable from the internet, which a LAN domain
-such as `home.arpa` never is, and a certificate that cannot be issued would
-leave the add-ons unreachable. `HOMELAB_CERT_MANAGER=no` does the same:
+click-through. `HOMELAB_GATEWAY_ISSUER` must name a ClusterIssuer (the
+`kind` is fixed) that can validate the add-on names — for LAN-only names
+that means DNS-01. That is why the Gateway does not use the bundled `acme`
+ClusterIssuer by default: its HTTP-01 needs every name reachable from the
+internet, which a LAN domain such as `home.arpa` never is, and a certificate
+that cannot be issued would leave the add-ons unreachable. While issuance
+from the named issuer is pending (or failing), the certificate already in
+`homelab-tls` keeps being served. `HOMELAB_CERT_MANAGER=no` does the same:
 the `https` listener has no certificate, and the applier warns for every
 add-on it applies behind it.
 
