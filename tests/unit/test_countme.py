@@ -1,8 +1,11 @@
 """countme: the image's declared identity and the reporter it ships.
 
-os-image-info.bst writes /usr/share/ublue-os/image-info.json, which the shared
-reporter from projectbluefin/common reads. os-countme.bst installs that reporter
-from a pinned commit of common.
+os-image-info.bst writes /usr/share/ublue-os/image-info.json, which the
+reporter (files/os/libexec/projectbluefin-countme) reads. os-countme.bst
+installs that reporter from this repository — Bluefin Server is a standalone
+DDI and does not consume projectbluefin/common. The reporter's service, timer,
+and preset ship with the other base-OS units and presets (os-k0s-first-boot.bst,
+os-sshd-preset.bst).
 """
 
 
@@ -11,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -18,8 +22,11 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ELEMENTS = REPO_ROOT / "elements" / "bluefin-server"
-TRANSFERS = REPO_ROOT / "files" / "os" / "sysupdate.d"
-COMMON_URL = "https://github.com/projectbluefin/common.git"
+FILES = REPO_ROOT / "files" / "os"
+TRANSFERS = FILES / "sysupdate.d"
+SYSTEM_UNITS = FILES / "systemd" / "system"
+PRESETS = FILES / "systemd" / "system-preset"
+REPORTER = FILES / "libexec" / "projectbluefin-countme"
 
 
 def _element(name: str) -> dict:
@@ -57,77 +64,167 @@ def test_image_tag_is_the_channel_sysupdate_follows():
     assert _image_info()["image-tag"] in channels
 
 
-def test_countme_ships_main_reporter_units():
-    commands = " ".join(_element("os-countme.bst")["config"]["install-commands"])
-    for path in (
-        "usr/libexec/projectbluefin-countme",
-        "usr/lib/systemd/system/projectbluefin-countme.service",
-        "usr/lib/systemd/system/projectbluefin-countme.timer",
-        "usr/lib/systemd/system-preset/03-projectbluefin-countme.preset",
+def test_countme_is_server_native_not_common():
+    # Server is a standalone DDI: the reporter is installed from this repository,
+    # not a projectbluefin/common checkout.
+    element = _element("os-countme.bst")
+    assert element["kind"] == "manual"
+    assert element["sources"] == [
+        {"kind": "local", "path": "files/os/libexec", "directory": "libexec-src"}
+    ]
+    commands = " ".join(element["config"]["install-commands"])
+    assert "system_files/shared" not in commands
+    assert "github:projectbluefin/common.git" not in commands
+    assert "install -Dm0755 libexec-src/projectbluefin-countme" in commands
+    assert '"%{install-root}/usr/libexec/projectbluefin-countme"' in commands
+
+
+def test_countme_units_and_preset_ship_with_base_os():
+    # the service and timer ship through os-k0s-first-boot.bst (import of
+    # files/os/systemd/system); the preset ships through os-sshd-preset.bst
+    # (import of files/os/systemd/system-preset).
+    stack = _element("os-stack.bst")["depends"]
+    assert "bluefin-server/os-k0s-first-boot.bst" in stack
+    assert "bluefin-server/os-sshd-preset.bst" in stack
+
+    for name in (
+        "projectbluefin-countme.service",
+        "projectbluefin-countme.timer",
     ):
-        assert f"system_files/shared/{path}" in commands
-    assert not re.search(r"(?<!project)bluefin-countme", commands)
+        assert (SYSTEM_UNITS / name).is_file(), name
+    assert (PRESETS / "80-bluefin-countme.preset").is_file()
+
+    service = (SYSTEM_UNITS / "projectbluefin-countme.service").read_text(encoding="utf-8")
+    assert "/usr/libexec/projectbluefin-countme" in service
+    assert "StateDirectory=projectbluefin-countme" in service
+
+    timer = (SYSTEM_UNITS / "projectbluefin-countme.timer").read_text(encoding="utf-8")
+    assert "WantedBy=timers.target" in timer
+
+    preset = (PRESETS / "80-bluefin-countme.preset").read_text(encoding="utf-8")
+    assert "enable projectbluefin-countme.timer" in preset
 
 
-@pytest.fixture(scope="module")
-def common_main(tmp_path_factory) -> Path:
-    git = shutil.which("git")
-    if git is None:
-        pytest.skip("git is not installed")
-    repo = tmp_path_factory.mktemp("common")
-    subprocess.run([git, "init", "-q", str(repo)], check=True)
-    fetch = subprocess.run(
-        [git, "-C", str(repo), "fetch", "-q", "--filter=tree:0", COMMON_URL, "main"],
-        capture_output=True,
-        text=True,
-        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-        timeout=120,
-        check=False,
-    )
-    if fetch.returncode != 0:
-        if os.environ.get("CI") == "true":
-            pytest.fail(f"cannot fetch projectbluefin/common main: {fetch.stderr}")
-        pytest.skip("projectbluefin/common is unreachable")
-    return repo
-
-
-def _countme_commit() -> str:
-    source = _element("os-countme.bst")["sources"][0]
-    assert source["url"] == "github:projectbluefin/common.git"
-    assert source["track"] == "main"
-    match = re.fullmatch(r".*-g([0-9a-f]{40})", source["ref"])
-    assert match, f"ref {source['ref']!r} is not a tracked git_repo ref"
-    return match.group(1)
-
-
-def test_countme_ref_is_on_common_main(common_main):
-    # projectbluefin/server#95: a ref that is only on a PR branch disappears with
-    # the branch. The pin must be reachable from common main.
-    sha = _countme_commit()
-    ancestor = subprocess.run(
-        ["git", "-C", str(common_main), "merge-base", "--is-ancestor", sha, "FETCH_HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert ancestor.returncode == 0, f"{sha} is not on projectbluefin/common main"
-
-
-def test_countme_reporter_at_ref_reads_image_info(common_main):
-    sha = _countme_commit()
-    commands = " ".join(_element("os-countme.bst")["config"]["install-commands"])
-    for path in re.findall(r"(system_files/\S+?)[\"\s]", commands + " "):
-        listed = subprocess.run(
-            ["git", "-C", str(common_main), "ls-tree", "--name-only", sha, "--", path],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        assert listed.stdout.strip() == path, f"{path} is missing at {sha}"
-    script = subprocess.run(
-        ["git", "-C", str(common_main), "show", f"{sha}:system_files/shared/usr/libexec/projectbluefin-countme"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+def test_reporter_reads_image_info_and_reports_server():
+    script = REPORTER.read_text(encoding="utf-8")
     assert "/usr/share/ublue-os/image-info.json" in script
+    # Exact image-name gate: only Bluefin Server reports, anything else exits.
+    assert "[[ $name == server ]]" in script
+    assert 'image="server/main:$tag"' in script
+    # A DDI has no bootc ref and no /run/ostree-booted: the reporter must not
+    # run bootc or gate on the ostree boot marker.
+    assert "bootc status" not in script
+    assert "/run/ostree-booted" not in script
+    # Server-owned, not pulled from the shared common reporter.
+    assert "projectbluefin/common" not in script
+
+
+def _utc_day(offset_seconds: float = 0) -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime(time.time() + offset_seconds))
+
+
+def _run_reporter(
+    tmp_path: Path,
+    image_info: dict,
+    *,
+    curl_rc: int = 0,
+    last_date: str | None = None,
+) -> tuple[subprocess.CompletedProcess, list[str], Path]:
+    """Run the real reporter with a stub curl, temp identity, and temp state."""
+    if shutil.which("jq") is None:
+        pytest.skip("jq is required for the reporter behavior tests")
+    state = tmp_path / "state"
+    state.mkdir()
+    info = tmp_path / "image-info.json"
+    info.write_text(json.dumps(image_info), encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "curl-calls"
+    stub = bin_dir / "curl"
+    stub.write_text(
+        "#!/usr/bin/bash\n"
+        f'printf "%s\\n" "$*" >> "{calls}"\n'
+        f"exit {curl_rc}\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    if last_date is not None:
+        (state / "last").write_text(f"{last_date}\n", encoding="utf-8")
+    env = {
+        **os.environ,
+        "IMAGE_INFO": str(info),
+        "STATE_DIRECTORY": str(state),
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    result = subprocess.run(
+        ["/usr/bin/bash", str(REPORTER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    logged = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    return result, logged, state
+
+
+def test_first_launch_reports_server_latest(tmp_path):
+    result, calls, state = _run_reporter(
+        tmp_path, {"image-name": "server", "image-tag": "latest"}
+    )
+    assert result.returncode == 0, result.stderr
+    assert len(calls) == 1, calls
+    assert "https://countme.projectbluefin.io/v1/ping" in calls[0]
+    assert '{"image":"server/main:latest"}' in calls[0]
+    assert (state / "last").read_text(encoding="utf-8").strip() == _utc_day()
+
+
+def test_same_utc_day_is_suppressed(tmp_path):
+    result, calls, _ = _run_reporter(
+        tmp_path,
+        {"image-name": "server", "image-tag": "latest"},
+        last_date=_utc_day(),
+    )
+    assert result.returncode == 0
+    assert calls == [], "the recorded UTC day suppresses a second ping"
+
+
+def test_a_new_utc_day_reports_again(tmp_path):
+    _, calls, _ = _run_reporter(
+        tmp_path,
+        {"image-name": "server", "image-tag": "latest"},
+        last_date=_utc_day(-86400),
+    )
+    assert len(calls) == 1, "the next UTC day reports even under 24h later"
+
+
+def test_failed_send_does_not_record_the_day(tmp_path):
+    result, calls, state = _run_reporter(
+        tmp_path,
+        {"image-name": "server", "image-tag": "latest"},
+        curl_rc=1,
+    )
+    assert result.returncode == 0, "a failed send exits 0 so the timer retries"
+    assert len(calls) == 1
+    assert not (state / "last").exists(), "no stamp means the next run retries"
+
+
+@pytest.mark.parametrize(
+    "image_info",
+    [
+        {"image-name": "dakota", "image-tag": "latest"},
+        {"image-name": "server", "image-tag": ""},
+        {},
+    ],
+)
+def test_unreportable_images_never_call_curl(tmp_path, image_info):
+    result, calls, _ = _run_reporter(tmp_path, image_info)
+    assert result.returncode == 0
+    assert calls == []
+
+
+def test_an_invalid_tag_reports_unknown(tmp_path):
+    _, calls, _ = _run_reporter(
+        tmp_path, {"image-name": "server", "image-tag": "2026.11.19"}
+    )
+    assert len(calls) == 1
+    assert '{"image":"server/main:unknown"}' in calls[0]
