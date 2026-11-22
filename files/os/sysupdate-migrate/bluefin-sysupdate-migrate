@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+#
+# bluefin-sysupdate-migrate -- prune systemd-sysupdate features the current
+# release no longer ships, so a retired feature cannot silently stop updates.
+#
+# systemd-sysupdate only applies an update set when every feature enabled under
+# /etc/sysupdate.d/<feature>.feature.d/ is also provided by the release. When a
+# feature leaves the release manifest -- for example Homebrew becoming a
+# first-boot seed instead of an opt-in extension -- the matching /etc drop-in
+# can no longer be satisfied, and systemd-sysupdate quietly reports "No update
+# needed" instead of updating.
+#
+# The node that stalls still ships the retired feature's transfers locally; only
+# the remote release dropped them. So a feature is retired when none of the
+# local transfers that list it find a file matching their [Source] MatchPattern
+# in the remote SHA256SUMS at the newest version. A feature with no local
+# transfer at all is also retired. If a manifest cannot be fetched, the feature
+# is left alone: an offline node must never lose a working feature.
+#
+# This one-shot helper runs ahead of the update path, archives each retired
+# /etc drop-in, and prints a clear message so an operator is never left
+# wondering why an update was skipped.
+
+set -euo pipefail
+
+# Paths are overridable so the logic can be exercised by unit tests against a
+# scratch tree without touching the real system directories.
+etc_feature_dir="${SYSUPDATE_ETC_DIR:-/etc/sysupdate.d}"
+lib_transfer_dir="${SYSUPDATE_LIB_DIR:-/usr/lib/sysupdate.d}"
+archive_suffix="${SYSUPDATE_ARCHIVE_SUFFIX:-.disabled}"
+fetch_timeout="${SYSUPDATE_FETCH_TIMEOUT:-20}"
+
+# systemd captures ExecStartPre stdout/stderr into the journal, so plain prints
+# are enough; the wrapper keeps one message shape for both paths.
+info() {
+    printf 'bluefin-sysupdate-migrate: %s\n' "$*"
+}
+warn() {
+    printf 'bluefin-sysupdate-migrate: warning: %s\n' "$*" >&2
+}
+
+# Per feature: "yes" once a remote manifest lists a match for one of its
+# transfers, "unknown" when a manifest could not be read, else absent.
+declare -A feature_state=()
+declare -A feature_seen=()
+declare -A manifest_cache=()
+
+trim() {
+    local v="$1"
+    v="${v#"${v%%[![:space:]]*}"}"
+    printf '%s' "${v%"${v##*[![:space:]]}"}"
+}
+
+# Fetch (once per URL) the SHA256SUMS next to a transfer's Source Path.
+# Sets the caller's "manifest" variable (no subshell, so the cache persists);
+# returns 1 when it cannot be read.
+fetch_manifest() {
+    local url="${1%/}/SHA256SUMS" body
+    if [ -z "${manifest_cache[$url]+x}" ]; then
+        if body="$(curl -fsSL --max-time "$fetch_timeout" -- "$url" 2>/dev/null)"; then
+            # `curl -f` only fails on HTTP >= 400, so a captive portal or proxy
+            # error page can come back 200 with an HTML body and be trusted as a
+            # manifest. Only trust a real SHA256SUMS: at least one "<64 hex>
+            # <filename>" line. Anything else is treated as unreachable, so a
+            # non-release response never archives a working feature.
+            if printf '%s\n' "$body" | grep -qE '^[0-9a-f]{64}([[:space:]]|\*)'; then
+                manifest_cache[$url]="$body"
+            else
+                manifest_cache[$url]="__FETCH_FAILED__"
+            fi
+        else
+            manifest_cache[$url]="__FETCH_FAILED__"
+        fi
+    fi
+    [ "${manifest_cache[$url]}" != "__FETCH_FAILED__" ] || return 1
+    manifest="${manifest_cache[$url]}"
+}
+
+# Turn a MatchPattern into an anchored regex; @v is the version wildcard.
+pattern_regex() {
+    local pat="$1"
+    pat="$(printf '%s' "$pat" | sed -e 's/[][\.^$*+?(){}|\/]/\\&/g')"
+    printf '^%s$' "${pat//@v/[^[:space:]]+}"
+}
+
+# Record, for every transfer, whether the remote release still ships the files
+# its features need.
+collect_feature_state() {
+    local transfer line section key value feature features path pattern manifest regex name found
+    shopt -s nullglob
+    for transfer in "$lib_transfer_dir"/*.transfer; do
+        features="" path="" pattern="" section=""
+        while IFS= read -r line; do
+            line="$(trim "$line")"
+            case "$line" in
+                "["*"]") section="$line"; continue ;;
+                ""|"#"*|";"*) continue ;;
+            esac
+            key="$(trim "${line%%=*}")"
+            value="$(trim "${line#*=}")"
+            case "$section:$key" in
+                "[Transfer]:Features") features="$features ${value//,/ }" ;;
+                "[Source]:Path") path="$value" ;;
+                "[Source]:MatchPattern") pattern="${value%% *}" ;;
+            esac
+        done < "$transfer"
+
+        [ -n "$features" ] || continue
+        found=unknown
+        if [ -n "$path" ] && [ -n "$pattern" ] && fetch_manifest "$path"; then
+            found=no
+            regex="$(pattern_regex "$pattern")"
+            while IFS= read -r line; do
+                name="${line##*[[:space:]]}"
+                name="${name#\*}"
+                if [[ "$name" =~ $regex ]]; then found=yes; break; fi
+            done <<< "$manifest"
+        fi
+        set -f
+        for feature in $features; do
+            feature_seen["$feature"]=1
+            case "$found:${feature_state[$feature]:-}" in
+                yes:*) feature_state["$feature"]=yes ;;
+                unknown:yes) ;;
+                unknown:*) feature_state["$feature"]=unknown ;;
+                no:yes|no:unknown) ;;
+                no:*) feature_state["$feature"]=no ;;
+            esac
+        done
+        set +f
+    done
+}
+
+main() {
+    if [ ! -d "$etc_feature_dir" ]; then
+        info "no ${etc_feature_dir} directory; nothing to do"
+        return 0
+    fi
+
+    collect_feature_state
+
+    local dir name changed
+    changed=0
+    shopt -s nullglob
+    for dir in "$etc_feature_dir"/*.feature.d; do
+        name="$(basename "$dir")"
+        name="${name%.feature.d}"
+        if [ -n "${feature_seen[$name]:-}" ] && [ "${feature_state[$name]:-}" != "no" ]; then
+            continue
+        fi
+        if [ -e "${dir}${archive_suffix}" ]; then
+            warn "feature ${name} already archived as ${name}${archive_suffix}; leaving it in place"
+            continue
+        fi
+        mv -- "$dir" "${dir}${archive_suffix}"
+        info "archived ${dir} -> ${dir}${archive_suffix}: enabled feature ${name} is not in the release manifest and would otherwise make systemd-sysupdate report 'No update needed'"
+        changed=$((changed + 1))
+    done
+
+    # A release that ships the feature again restores the operator's opt-in.
+    for dir in "$etc_feature_dir"/*.feature.d"${archive_suffix}"; do
+        name="$(basename "$dir")"
+        name="${name%.feature.d"${archive_suffix}"}"
+        [ "${feature_state[$name]:-}" = "yes" ] || continue
+        if [ -e "${dir%"${archive_suffix}"}" ]; then
+            warn "feature ${name} has both an active and an archived drop-in; leaving the archive in place"
+            continue
+        fi
+        mv -- "$dir" "${dir%"${archive_suffix}"}"
+        info "restored ${dir%"${archive_suffix}"} from ${dir}: feature ${name} is in the release manifest again"
+        changed=$((changed + 1))
+    done
+
+    if [ "$changed" -eq 0 ]; then
+        info "no deprecated sysupdate features found; the next update is unaffected"
+    fi
+}
+
+main "$@"

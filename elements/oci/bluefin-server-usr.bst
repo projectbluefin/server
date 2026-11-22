@@ -168,6 +168,10 @@ config:
     # does, once per installed node (projectbluefin/server#367).
     ln -sf ../bluefin-update-status-migrate.service \
       /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-update-status-migrate.service
+    # Presets apply on first boot only; enable the sysupdate feature prune in
+    # /usr so nodes updating into this image run it too (#688).
+    ln -sf ../bluefin-sysupdate-migrate.service \
+      /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-sysupdate-migrate.service
     # Enabled in /usr, not by preset: a node that updated into this image
     # must still give its FleetLock slot back once an operator configures a
     # server, or its group stops rebooting. Inert without a server.
