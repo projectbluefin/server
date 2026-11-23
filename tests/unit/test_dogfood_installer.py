@@ -301,3 +301,4 @@ def test_type_keys_widens_its_gap_under_console_noise(tmp_path: Path) -> None:
     # Eleven keys at 0.15s vs 0.35s are about 2.2s apart; this separates the
     # two without depending on per-key scheduling jitter.
     assert quiet < 3.0, f"quiet gap unexpectedly large: {quiet:.2f}s"
+    assert noisy - quiet > 1.5, f"noise did not widen the gap: {quiet:.2f}s vs {noisy:.2f}s"

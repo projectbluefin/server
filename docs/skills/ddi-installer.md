@@ -91,8 +91,7 @@ keeps `secure-boot-enroll if-safe`: firmware in Setup Mode does not check
 shim, systemd-boot enrolls the Bluefin keys, and the DB-signed shim boots
 with them afterwards. Default builds lay out the ESPs exactly as before.
 
-Not wired yet, so the option is groundwork rather than an enrollment-free
-path:
+Not wired yet (the option is groundwork, not an enrollment-free path):
 
 - **Installed disks.** `systemd-sysinstall` runs `bootctl install`, which
   writes systemd-boot to `EFI/BOOT/BOOTX64.EFI` and registers a firmware
@@ -102,10 +101,9 @@ path:
   entry on shim; `bootctl update` already leaves a non-systemd-boot
   `BOOTX64.EFI` alone.
 - **Microsoft-only firmware.** Until shim is Microsoft-signed it boots only
-  where the Bluefin db is enrolled, and the USB installer's Secure Boot
-  check still refuses firmware that lacks the Bluefin db. The boot test
-  shows firmware that holds only other keys refusing the netboot ESP's
-  loader before anything of Bluefin runs (`DOGFOOD_FIRMWARE=foreign-keys`).
+  where the Bluefin db is enrolled (the boot test shows firmware holding only
+  other keys refusing the netboot ESP's loader: `DOGFOOD_FIRMWARE=foreign-keys`),
+  and the USB installer's Secure Boot check still refuses firmware lacking that db.
 - **UEFI HTTP boot** loads the netboot UKI directly, without shim. shim
   fetches `DEFAULT_LOADER` relative to its own URL when HTTP-booted; serving
   a shim chain that way is Booty-side work.
@@ -208,13 +206,11 @@ systemd-sysinstall --kernel="${kernel}" \
     --definitions=/run/bluefin/boot/bluefin/repart.d
 ```
 
-`systemd-sysinstall` lists the disks and asks for one (its number or name),
-whether to keep what is on it or erase it, whether to register the install in
-the firmware's boot entries, and, after a summary, for `yes`. Name the disk at
-the end of the command (e.g. `/dev/sdX`) to skip the first question. The boot
-test logs in at a diskless node's console, types this block as written and
-answers the questions (`DOGFOOD_INSTALL=diskless-console` of
-`scripts/dogfood-installer.sh`).
+`systemd-sysinstall` asks for the disk (number or name; naming it at the end
+of the command, e.g. `/dev/sdX`, skips this), whether to keep or erase what is
+on it, whether to add a firmware boot entry, and, after a summary, for `yes`.
+The boot test types this block at a diskless node's console and answers them
+(`DOGFOOD_INSTALL=diskless-console` of `scripts/dogfood-installer.sh`).
 
 On older image builds whose `repart.d` used `CopyBlocks=auto`, active system
 extensions (`systemd-sysext`, e.g. ZFS or k0s) turn `/usr` into an overlayfs,
@@ -258,11 +254,9 @@ systemd 261 limits keep it working (#375):
 
 The k0s and NVIDIA Container Toolkit sysexts are separate sysupdate components
 on their own version axes (`sysupdate.k0s.d/`,
-`sysupdate.nvidia-container-toolkit.d/`); see `systemd-sysupdate-verification.md`.
-
-Sources are the release assets on GitHub Releases, verified against the
-GPG-signed `SHA256SUMS` with `Verify=yes` (see
-`systemd-sysupdate-verification.md`).
+`sysupdate.nvidia-container-toolkit.d/`). Sources are the release assets on
+GitHub Releases, verified against the GPG-signed `SHA256SUMS` with
+`Verify=yes`; see `systemd-sysupdate-verification.md`.
 
 The `/usr/libexec/bluefin-*` update and first-boot helpers named below are
 symlinks to one static Go binary, `/usr/bin/bluefin-host`, which runs the
@@ -331,12 +325,11 @@ only when a newer version than the booted one is installed.
     (`bluefin-update-pending`, above);
   - `kubelet.service`, `k0scontroller.service` or `k0sworker.service` is
     running (not crash-looping, as above), the Kubernetes interlock also
-    proposed in #182. Kubernetes nodes
-    reboot through [kured](https://kured.dev/) (cordon, drain, one node at a
-    time): `systemd-sysupdate.service.d/20-kured.conf` touches
-    `/run/reboot-required` after each run once `bluefin-update-pending` reports
-    an update. Without kured, a Kubernetes node keeps the staged update until
-    someone reboots it.
+    proposed in #182. Kubernetes nodes reboot through [kured](https://kured.dev/)
+    (cordon, drain, one node at a time): `systemd-sysupdate.service.d/20-kured.conf`
+    touches `/run/reboot-required` after each run once `bluefin-update-pending`
+    reports an update. Without kured, a Kubernetes node keeps the staged update
+    until someone reboots it.
 - **Fleet reboot lock.** Hosts that serve together without Kubernetes can
   take turns: every local reboot, the nightly one and the boot deadline's,
   first takes a reboot slot from a
@@ -423,13 +416,12 @@ the new release. An origin that names a versioned file,
 `import.pull` credential) or `bluefin-server-netboot_<ver>.efi`, is pinned:
 the node would pull the same version again, and kured would drain and reboot
 it on every check. A pinned node only logs `... but this node is pinned to
-<file>; not flagging`; repoint its boot origin to update it.
-Network and signature errors are logged and leave the flag alone; the unit
-never fails and never reboots. Kured reboots a diskless Kubernetes node on the
-flag. Other nodes wait for an operator or fleet tooling to act on it
-(`test -e /run/reboot-required`,
-`journalctl -u bluefin-diskless-update-check`). The boot server (Booty)
-decides what the next boot pulls.
+<file>; not flagging`; repoint its boot origin to update it. Network and
+signature errors are logged and leave the flag alone; the unit never fails and
+never reboots. Kured reboots a diskless Kubernetes node on the flag. Other
+nodes wait for an operator or fleet tooling to act on it (`test -e
+/run/reboot-required`, `journalctl -u bluefin-diskless-update-check`). The
+boot server (Booty) decides what the next boot pulls.
 
 ## Ignition (opt-in)
 
