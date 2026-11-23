@@ -1,0 +1,10 @@
+[Unit]
+Description=Seed Homebrew when the first regular user appears
+ConditionPathExists=!/var/lib/bluefin-homebrew/seeded
+
+[Path]
+PathChanged=/etc/passwd
+Unit=bluefin-homebrew-seed.service
+
+[Install]
+WantedBy=multi-user.target

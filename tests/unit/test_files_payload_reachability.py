@@ -27,6 +27,7 @@ element that no OCI target depends on still counts as staged here.
 the waiver is deleted, so the record cannot outlive the bug it describes.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -120,8 +121,13 @@ def _is_host_tooling(rel_path):
 
 
 def _payload_files():
+    # The gitignored key directory is judged by test_declared_key_paths_are_generated
+    # and test_no_element_stages_a_private_key_it_does_not_use, not here: what is
+    # in it depends on whether scripts/gen-dev-keys.sh has run in this checkout.
     return sorted(
-        p.relative_to(ROOT).as_posix() for p in FILES_DIR.rglob("*") if p.is_file()
+        p.relative_to(ROOT).as_posix()
+        for p in FILES_DIR.rglob("*")
+        if p.is_file() and not _is_generated_key_path(p.relative_to(ROOT).as_posix())
     )
 
 
@@ -164,11 +170,27 @@ def test_declared_key_paths_are_generated(declared):
         f"{KEY_GENERATOR.name} no longer writes {GENERATED_KEY_DIR}"
     )
     entry = declared[len(GENERATED_KEY_DIR):].lstrip("/")
-    assert not entry or f'"${{dir}}/{entry}"' in generator, (
+    # The generator names a file by its path under the key directory, either
+    # on its own ("${dir}/PK.crt") or in a list of key files (PK.crt ...).
+    named = f'"${{dir}}/{entry}"' in generator or re.search(rf"(?<![\w./-]){re.escape(entry)}(?![\w./-])", generator)
+    assert not entry or named, (
         f"{owners} stages {declared}, which {KEY_GENERATOR.name} does not "
         f"produce. Renaming key material requires updating the generator and "
         f"the element that stages it."
     )
+
+
+def test_no_element_stages_a_private_key_it_does_not_use():
+    """Each signing element stages only the keys it signs with.
+
+    elements/bluefin-server/keys/ has one element per kind of key. The Ignition
+    config signing key is used by scripts/sign-node-config.sh on the host and
+    by no element, so no element may stage it (the old whole-directory import
+    put it in the artifact of every signing element).
+    """
+    declared = _declared_paths()
+    assert f"{GENERATED_KEY_DIR}/ignition-signing.asc" not in declared
+    assert GENERATED_KEY_DIR not in declared, "importing the whole key directory stages every private key"
 
 
 def test_every_payload_file_is_staged_or_declared():

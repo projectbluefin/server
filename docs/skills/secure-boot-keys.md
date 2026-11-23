@@ -69,7 +69,9 @@ certificate, so the kernel still compiles; `just gen-dev-keys` says so, and
   `/keys/linux-module-cert.crt` (`SYSTEM_TRUSTED_KEYS`, `MODULE_SIG_KEY ""`,
   no `MODULE_SIG_ALL`): the private key is used only by
   `bluefin-server/kernel-modules.bst` and the other signing elements through
-  `bluefin-server/keys/boot-keys.bst`, which is never pushed. No element
+  the key elements in `elements/bluefin-server/keys/` (`module-signing-key`,
+  `secure-boot-keys`, `image-signing-keys`: one per kind of key, so a signer's
+  cache key moves only with its own key), which are never pushed. No element
   stages `files/dev-keys/` (`tests/unit/test_dev_module_key.py`).
 
 ## CI secrets

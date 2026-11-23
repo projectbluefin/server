@@ -135,13 +135,22 @@ def test_release_builds_check_their_keys_after_staging_them() -> None:
     assert release_branch.index("bash scripts/check-release-keys.sh") > staged
 
 
-def test_both_kernel_variants_are_seeded_on_releases_and_only_release_gates_the_build() -> None:
-    jobs = WORKFLOW["jobs"]
-    for job, variant in (("kernel-cache", "release"), ("kernel-cache-dev", "dev")):
-        assert jobs[job]["if"] == "needs.changes.outputs.release == 'true'"
+def test_kernel_seeders_are_release_only_and_have_no_signing_keys() -> None:
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "cache-warm.yml").read_text())
+    triggers = workflow.get("on", workflow.get(True))
+    assert set(triggers) == {"push", "workflow_dispatch"}
+    assert triggers["push"] == {"branches": ["main"]}
+    jobs = workflow["jobs"]
+    assert jobs["sdk-cache"]["if"] == "github.ref == 'refs/heads/main'"
+    assert jobs["kernel-cache"]["if"] == "${{ !cancelled() && github.ref == 'refs/heads/main' }}"
+    assert jobs["kernel-cache"]["needs"] == "sdk-cache"
+    assert jobs["kernel-cache"]["strategy"] == {"fail-fast": False, "matrix": {"variant": ["release", "dev"]}}
+    for job, variant in (("sdk-cache", "shared"), ("kernel-cache", "${{ matrix.variant }}")):
         runs = [s.get("run", "") for s in jobs[job]["steps"]]
         assert f"bash scripts/kernel-cache.sh seed {variant}" in runs
         assert "BOOT_KEYS_TARBALL" not in str(jobs[job]) and "SYSUPDATE_SIGNING_KEY" not in str(jobs[job])
         assert "gen-dev-keys" not in str(jobs[job])
-    assert "kernel-cache" in jobs["build"]["needs"]
-    assert not any("kernel-cache-dev" in str(j.get("needs", "")) for j in jobs.values())
+        for step in jobs[job]["steps"]:
+            for key, value in (step.get("env") or {}).items():
+                if "secrets." in str(value):
+                    assert (key, value) == ("CASD_CLIENT_KEY", "${{ secrets.CASD_CLIENT_KEY }}")

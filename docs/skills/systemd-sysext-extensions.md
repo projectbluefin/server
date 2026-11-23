@@ -274,13 +274,7 @@ there into the extension's `/usr` dangles once it is gone. sudo skips
 `sudoers.d` entries it cannot stat as regular files and FSDK's `/etc/profile`
 sources only readable `profile.d` scripts, but sshd exits when a file its
 `Include` glob matches cannot be opened, so never link an sshd drop-in into an
-extension. The homebrew-integration sysext writes
-`/etc/ssh/sshd_config.d/90-bluefin-homebrew-sysext.conf` as a real file whose
-one line includes `/usr/lib/bluefin-homebrew/sshd.conf`; sshd ignores an
-`Include` of a missing path. Once that sysext is removed, this file and the
-dangling `/etc/sudoers.d/bluefin-homebrew` and
-`/etc/profile.d/90-bluefin-homebrew.sh` links remain, inert; delete them if
-you like.
+extension.
 
 ## Key constraints
 

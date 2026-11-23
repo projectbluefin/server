@@ -11,6 +11,8 @@ the network are replaced by in-process fakes.
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -131,6 +133,30 @@ def test_cluster_policy_images_are_pinned_through_repository_image_version(tmp_p
     assert pinned["spec"]["operator"]["image"] == "gpu-operator"
 
 
+def test_cluster_policy_images_the_operator_suffixes_with_the_os_keep_their_tag(tmp_path: Path) -> None:
+    # nvcr.io/nvidia/driver:595.91.07 does not exist; the operator pulls
+    # 595.91.07-<os>. There is no digest to pin, and asking for one is what
+    # produced the empty-manifest hash.
+    doc = {"apiVersion": "nvidia.com/v1", "kind": "ClusterPolicy", "metadata": {"name": "cluster-policy"},
+           "spec": {
+               "operator": {"repository": "nvcr.io/nvidia", "image": "gpu-operator", "version": "v26.7.1"},
+               "driver": {"enabled": False, "repository": "nvcr.io/nvidia", "image": "driver", "version": "595.91.07"},
+               "gdrcopy": {"repository": "nvcr.io/nvidia/cloud-native", "image": "gdrdrv", "version": "v2.6"},
+           }}
+    assert render.image_refs(doc) == {"nvcr.io/nvidia/gpu-operator:v26.7.1"}
+    pinned = render.pin_images(doc, digests(tmp_path, {"nvcr.io/nvidia/gpu-operator:v26.7.1": D1}))
+    assert pinned["spec"]["operator"]["version"] == D1
+    assert pinned["spec"]["driver"]["version"] == "595.91.07"
+    assert pinned["spec"]["gdrcopy"]["version"] == "v2.6"
+
+
+def test_every_os_suffixed_image_is_still_one_the_chart_names() -> None:
+    # A stale entry would silently stop pinning something real.
+    for ref in render.OS_SUFFIXED:
+        repository, image = ref.rsplit("/", 1)
+        assert repository.startswith("nvcr.io/") and image, ref
+
+
 # Digests ---------------------------------------------------------------------
 
 def test_digests_resolve_only_uncached_refs_and_persist_the_cache(tmp_path: Path, monkeypatch) -> None:
@@ -138,7 +164,7 @@ def test_digests_resolve_only_uncached_refs_and_persist_the_cache(tmp_path: Path
 
     def fake_podman(image, work, args, entrypoint="", **kw):
         calls.append(args)
-        assert image == render.SKOPEO_IMAGE and entrypoint == "sh"
+        assert image == render.SKOPEO_IMAGE and entrypoint == "bash"
         refs = (work / "refs.txt").read_text().split()
         return type("R", (), {"stdout": "".join(f"{r} {'3' * 64}\n" for r in refs)})()
 
@@ -153,6 +179,41 @@ def test_digests_resolve_only_uncached_refs_and_persist_the_cache(tmp_path: Path
         "quay.io/a/b:1": D1, "quay.io/c/d:2": "sha256:" + "3" * 64}
     assert ds.pin("quay.io/c/d:2") == "quay.io/c/d:2@sha256:" + "3" * 64
     assert ds.pin("quay.io/c/d:2@" + D1) == "quay.io/c/d:2@" + D1
+
+
+def test_the_resolver_script_fails_a_ref_skopeo_cannot_read_instead_of_hashing_nothing(tmp_path: Path) -> None:
+    # Run the script itself with a stub skopeo: the first ref is readable, the
+    # second is not. Without pipefail the second printed sha256("") as its digest.
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "skopeo").write_text(
+        "#!/bin/bash\n"
+        'case "$5" in *good*) printf \'{"manifests":[]}\' ;; *) echo "manifest unknown" >&2; exit 1 ;; esac\n')
+    (stub / "skopeo").chmod(0o755)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "refs.txt").write_text("quay.io/a/good:1\nquay.io/a/bad:2\n")
+    script = render.RESOLVE_SCRIPT.replace("/work/refs.txt", str(work / "refs.txt"))
+    out = subprocess.run(["bash", "-c", script], env={**os.environ, "PATH": f"{stub}:{os.environ['PATH']}"},
+                         capture_output=True, text=True, check=True)
+    lines = out.stdout.splitlines()
+    assert [line.split()[0] for line in lines] == ["quay.io/a/good:1"]
+    assert render.EMPTY_SHA256.removeprefix("sha256:") not in out.stdout
+    assert "cannot read quay.io/a/bad:2" in out.stderr
+
+
+def test_an_empty_manifest_digest_is_refused_and_never_cached(tmp_path: Path, monkeypatch) -> None:
+    empty = render.EMPTY_SHA256.removeprefix("sha256:")
+    monkeypatch.setattr(render, "podman", lambda *a, **k: type("R", (), {"stdout": f"quay.io/a/b:1 {empty}\n"})())
+    ds = render.Digests(tmp_path)
+    with pytest.raises(SystemExit, match="empty manifest"):
+        ds.resolve({"quay.io/a/b:1"})
+    assert not (tmp_path / "digests.json").exists()
+
+
+def test_a_cache_left_by_the_old_script_loses_its_empty_digests(tmp_path: Path) -> None:
+    ds = digests(tmp_path, {"quay.io/a/b:1": D1, "nvcr.io/nvidia/driver:1": render.EMPTY_SHA256})
+    assert ds.cache == {"quay.io/a/b:1": D1}
 
 
 def test_digests_fail_when_skopeo_leaves_a_ref_unresolved(tmp_path: Path, monkeypatch) -> None:

@@ -12,7 +12,7 @@ depends:
   - bluefin-server/os-sshd-preset.bst
   - bluefin-server/os-sshd-config.bst
 
-  # Image identity and weekly first-party countme reporting
+  # Image identity and daily active-system countme reporting
   - bluefin-server/os-image-info.bst
   - bluefin-server/os-countme.bst
 
@@ -51,9 +51,6 @@ depends:
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
 
-  # System Management Justfile
-  - bluefin-server/os-justfile.bst
-
   # system-container helper (machinectl wrapper)
   - bluefin-server/os-system-container.bst
 
@@ -62,6 +59,16 @@ depends:
 
   # Interactive bash prompt (user@host:cwd$, blue @)
   - bluefin-server/os-prompt.bst
+
+  # Homebrew seed archive, its first-boot extraction unit and shell profile
+  - homebrew/seed.bst
+  - bluefin-server/os-oci-owner.bst
+  - freedesktop-sdk.bst:components/git.bst
+  - freedesktop-sdk.bst:components/file.bst
+  - freedesktop-sdk.bst:components/zstd.bst
+  - freedesktop-sdk.bst:components/tar.bst
+  - freedesktop-sdk.bst:components/xz.bst
+  - freedesktop-sdk.bst:components/gzip.bst
 
   # udev rules (USB installer: other disks' stale partition devices, #359)
   - bluefin-server/os-udev-rules.bst

@@ -19,7 +19,7 @@ patch = subprocess
 [report]
 # A ratchet, enforced by pytest --cov and `coverage report`: the measured
 # total rounded down. Raise it when coverage grows; never lower it to pass.
-fail_under = 84
+fail_under = 90
 skip_covered = true
 show_missing = true
 exclude_also =

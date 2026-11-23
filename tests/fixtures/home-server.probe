@@ -1,65 +1,13 @@
 # Appended by dogfood-installer.sh only for DOGFOOD_PROFILE=home-server.
-# Exercise ordinary nonroot SSH commands against the actual installed image.
+# The base image seeds Homebrew; the profile adds no Homebrew machinery.
 set -euo pipefail
 home_fail() { echo "PROBE home-server=FAIL $*"; exit 1; }
-systemctl is-active --quiet bluefin-homebrew.service || home_fail 'Brew machine inactive'
-owner=dogfood
-home="$(getent passwd "$owner" | cut -d: -f6)"
-uid="$(id -u "$owner")"
-[ "$uid" -ne 0 ] || home_fail 'owner is root'
-if [ ! -f /run/dogfood-home-ssh ]; then
-    ssh-keygen -q -t ed25519 -N '' -f /run/dogfood-home-ssh
+[ -f /usr/share/homebrew/brew.tar.zst ] || home_fail 'seed archive missing'
+[ "$(readlink /home/linuxbrew)" = /var/home/linuxbrew ] || home_fail '/home/linuxbrew is not linked to /var/home/linuxbrew'
+systemctl is-enabled --quiet bluefin-homebrew-seed.service || home_fail 'seed unit not enabled'
+if getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { found = 1 } END { exit !found }'; then
+    systemctl start bluefin-homebrew-seed.service || home_fail 'seed unit failed'
+    [ -x /home/linuxbrew/.linuxbrew/bin/brew ] || home_fail 'brew not seeded'
+    /home/linuxbrew/.linuxbrew/bin/brew --version >/dev/null || home_fail 'brew --version'
 fi
-install -d -m 0700 -o "$owner" -g "$(id -gn "$owner")" "$home/.ssh"
-cat /run/dogfood-home-ssh.pub > "$home/.ssh/authorized_keys"
-chown "$owner:$(id -gn "$owner")" "$home/.ssh/authorized_keys"
-chmod 0600 "$home/.ssh/authorized_keys"
-ssh_args=(-i /run/dogfood-home-ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes)
-home_ssh() { timeout 600 ssh "${ssh_args[@]}" "$owner@.host" "$@"; }
-# The profile's boot-time oneshot installs these through the real dispatch path.
-systemctl start bluefin-homebrew-default-formulae.service || home_fail 'default formulae unit'
-home_ssh 'brew list --versions tmux neovim && nvim --version' || home_fail 'default formulae missing'
-# Literal dollar, whitespace, and exit status must cross a real SSH/dispatch path.
-if [ ! -f /var/lib/bluefin-homebrew/dogfood-packages ]; then
-    home_ssh 'brew config && brew install tmux docker podman && brew update' || home_fail 'package install/update'
-    touch /var/lib/bluefin-homebrew/dogfood-packages
-fi
-home_ssh 'brew list --versions tmux docker podman && tmux -V' || home_fail 'installed tools missing after boot'
-# Detached tmux's guest scope must outlive the host SSH session that created it.
-timeout 60 ssh -tt "${ssh_args[@]}" "$owner@.host" 'tmux new-session -d -s bluefin-dogfood "sleep 300"' </dev/null || home_fail 'PTY tmux start'
-home_ssh 'tmux has-session -t bluefin-dogfood && tmux kill-session -t bluefin-dogfood' || home_fail 'tmux lost after disconnect'
-# Brew's Docker CLI uses the rootless host Podman API; workloads must not
-# be descendants of the Brew system container's PID namespace.
-home_ssh 'docker version && docker run --rm docker.io/library/alpine:3.23 printf "%s|%s\n" "two words" "literal\$dollar"' > /run/dogfood-home-workload
-cat /run/dogfood-home-workload
-grep -qx 'two words|literal$dollar' /run/dogfood-home-workload || home_fail 'client workload/argv'
-set +e
-home_ssh 'docker run --rm docker.io/library/alpine:3.23 sh -c "exit 37"'
-status=$?
-set -e
-[ "$status" = 37 ] || home_fail "exit status=$status instead of 37"
-home_ssh 'docker run -d --name bluefin-dogfood-runtime docker.io/library/alpine:3.23 sleep 300' >/dev/null
-workload_pid="$(home_ssh 'docker inspect --format "{{.State.Pid}}" bluefin-dogfood-runtime')"
-guest_pid="$(machinectl show bluefin-homebrew -p Leader --value)"
-[[ "$workload_pid" =~ ^[0-9]+$ && -e /proc/$workload_pid/status ]] || home_fail 'host workload PID missing'
-ancestor=$workload_pid
-while [ "$ancestor" -gt 1 ]; do
-    [ "$ancestor" != "$guest_pid" ] || home_fail 'workload nested in Brew machine'
-    parent=0
-    while IFS=$'\t' read -r key value; do
-        [ "$key" != PPid: ] || parent=$value
-    done < "/proc/$ancestor/status"
-    ancestor=$parent
-done
-home_ssh 'docker rm -f bluefin-dogfood-runtime' >/dev/null
-home_ssh 'mkdir -p "$HOME/bluefin-dogfood"; printf bridge-data > "$HOME/bluefin-dogfood/input"; docker run --rm -v "$HOME/bluefin-dogfood:/work:ro" docker.io/library/alpine:3.23 cat /work/input' > /run/dogfood-home-volume
-grep -qx bridge-data /run/dogfood-home-volume || home_fail 'same-path host volume mount'
-home_ssh 'podman info --format "{{.Host.Security.Rootless}}"' > /run/dogfood-home-rootless
-grep -qx true /run/dogfood-home-rootless || home_fail 'host backend is not rootless'
-# Compose uses the same host API from the Brew-installed executable.
-home_ssh 'brew install docker-compose; printf "services:\n  probe:\n    image: docker.io/library/alpine:3.23\n    command: [printf, compose-host-engine]\n" > "$HOME/bluefin-dogfood/compose.yml"; docker-compose -f "$HOME/bluefin-dogfood/compose.yml" run --rm probe' > /run/dogfood-home-compose || home_fail 'Compose workload'
-cat /run/dogfood-home-compose
-grep -qx compose-host-engine /run/dogfood-home-compose || home_fail 'Compose workload output'
-# Keep the source tree and per-user engine state across subsequent harness boots.
-rm -f /run/dogfood-home-workload /run/dogfood-home-volume /run/dogfood-home-rootless /run/dogfood-home-compose
 echo 'PROBE home-server=PASS'

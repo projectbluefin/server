@@ -39,7 +39,7 @@ Kubernetes is not baked into the base /usr image. The base image stays small and
 - `elements/oci/k0s-sysext.bst` builds the sysext.
 - `files/os/sysupdate.k0s.d/70-k0s.transfer` enables component-scoped OTA
   updates of the sysext.
-- `files/os/justfile` provides the `just k8s` entrypoint.
+- `files/os/systemd/system/k0s-first-boot.service` merges the sysext and starts the role (see [k0s-sysext-ops.md](k0s-sysext-ops.md)).
 
 See [k0s-sysext.md](k0s-sysext.md) for details.
 

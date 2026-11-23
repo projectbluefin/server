@@ -1,0 +1,25 @@
+# The wired DHCP network (20-wired.network) on a diskless boot, with the DHCP
+# client identified by the link's MAC address.
+#
+# networkd's default client ID is a DUID built from /etc/machine-id, and a
+# diskless node (root=tmpfs) gets a new machine ID every boot, so each boot
+# would ask for a new lease from a new "client" and a DHCP reservation by
+# client ID could never match. The MAC is the one identity the node keeps,
+# and what a reservation by MAC (Booty's setups) already expects. Installed
+# nodes keep their machine ID, so they keep the default: this file does not
+# match them, and a node's lease does not change when it is installed.
+#
+# Sorts after 10-static.network, the name a network.network.10-static
+# credential takes to override DHCP, and before 20-wired.network, which it
+# repeats (keep the two [Network] sections the same).
+[Match]
+Name=e*
+KernelCommandLine=root=tmpfs
+
+[Network]
+DHCP=ipv4
+MulticastDNS=yes
+LLMNR=no
+
+[DHCPv4]
+ClientIdentifier=mac

@@ -102,7 +102,7 @@ def test_modules_are_signed_with_the_module_key(flavour: str) -> None:
     signed = load(element_files(flavour)["signed"])
     assert signed["config"]["install-commands"] == ["%{nvidia-sign}"]
     deps = [d if isinstance(d, str) else d["filename"] for d in signed["build-depends"]]
-    assert "bluefin-server/keys/boot-keys.bst" in deps and f"nvidia/{flavour}.bst" in deps
+    assert "bluefin-server/keys/module-signing-key.bst" in deps and f"nvidia/{flavour}.bst" in deps
     sign = recipe()["nvidia-sign"]
     assert "sign-file sha512 /boot-keys/linux-module-cert.key module-cert.der" in sign
     assert 'modinfo -F sig_hashalgo "${ko}")" != sha512' in sign

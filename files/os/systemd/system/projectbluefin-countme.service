@@ -1,0 +1,17 @@
+[Unit]
+Description=Send daily active-system ping to Project Bluefin
+Documentation=https://docs.projectbluefin.io/analytics
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/etc/projectbluefin/countme/disabled
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/projectbluefin-countme
+StateDirectory=projectbluefin-countme
+
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6

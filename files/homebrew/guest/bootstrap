@@ -1,9 +1,0 @@
-#!/usr/bin/bash
-set -euo pipefail
-while IFS=: read -r account uid; do
-    [[ $uid =~ ^[0-9]+$ && $uid -ge 1000 && $uid -lt 65534 ]] || exit 1
-    loginctl enable-linger "$account"
-    systemctl start "user@$uid.service"
-done </etc/bluefin-homebrew-users
-# Readiness includes actual per-user managers, not a root nsenter probe.
-touch /run/bluefin-homebrew.ready

@@ -2,8 +2,8 @@ kind: manual
 description: |
   Declare this image's identity at /usr/share/ublue-os/image-info.json.
 
-  The shared countme reporter from projectbluefin/common reads this file to know
-  which image it is counting. Every other image in the family already writes one;
+  The countme reporter (os-countme.bst) reads this file to know which image it
+  is counting. Every other image in the family already writes one;
   this image is a DDI rather than an OCI image, so it has no image-info.json of
   its own and no bootc ref to fall back to.
 

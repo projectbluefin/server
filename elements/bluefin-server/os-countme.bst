@@ -1,28 +1,17 @@
 kind: manual
 description: |
-  First-party countme reporting.
+  First-party countme reporting for Bluefin Server.
 
-  The reporter is not defined here. It is taken from projectbluefin/common main,
-  system_files/shared, the same unit and helper every other image ships, so this
-  image counts through exactly the same projectbluefin-countme as the rest of the
-  family. It identifies the image from /usr/share/ublue-os/image-info.json
-  (os-image-info.bst).
+  Bluefin Server is a standalone DDI and does not consume projectbluefin/common.
+  The reporter lives in this repository and identifies the image from
+  /usr/share/ublue-os/image-info.json (os-image-info.bst): image-name `server`,
+  no flavor, stream `latest` from image-tag. Its service, timer, and preset are
+  base-OS units and presets that ship from files/os/systemd (os-k0s-first-boot.bst
+  and os-sshd-preset.bst); this element installs only the reporter helper and
+  its curl/jq runtime.
 
-  The preset from common enables the timer; this image applies systemd presets,
-  so no enablement symlink is needed. The service honours common's opt-outs:
-  `systemctl mask --now projectbluefin-countme.timer`, or any of the opt-out
-  files its unit lists (for example /etc/projectbluefin/countme/disabled).
-
-  Common's reporter currently counts only bootc-booted Dakota and Utah images
-  (its unit requires /run/ostree-booted and it reads the stream from
-  `bootc status`), so on this DDI it does nothing and never touches the network
-  until common extends its scope; re-tracking this element picks that up.
-
-sources:
-  - kind: git_repo
-    url: github:projectbluefin/common.git
-    track: main
-    ref: v2026.08-272-ge4162845362d60593117480660f5470abc00af80
+  Opt out: `systemctl mask --now projectbluefin-countme.timer`, or create
+  /etc/projectbluefin/countme/disabled.
 
 build-depends:
   - base/base-stack.bst
@@ -33,12 +22,17 @@ depends:
   - freedesktop-sdk.bst:components/jq.bst
   - bluefin-server/os-image-info.bst
 
+sources:
+  - kind: local
+    path: files/os/libexec
+    directory: libexec-src
+
 variables:
   strip-binaries: ""
 
 config:
   install-commands:
-    - install -Dm755 system_files/shared/usr/libexec/projectbluefin-countme "%{install-root}%{prefix}/libexec/projectbluefin-countme"
-    - install -Dm644 system_files/shared/usr/lib/systemd/system/projectbluefin-countme.service -t "%{install-root}%{prefix}/lib/systemd/system/"
-    - install -Dm644 system_files/shared/usr/lib/systemd/system/projectbluefin-countme.timer -t "%{install-root}%{prefix}/lib/systemd/system/"
-    - install -Dm644 system_files/shared/usr/lib/systemd/system-preset/03-projectbluefin-countme.preset -t "%{install-root}%{prefix}/lib/systemd/system-preset/"
+    - |
+      set -euo pipefail
+      install -Dm0755 libexec-src/projectbluefin-countme \
+        "%{install-root}/usr/libexec/projectbluefin-countme"

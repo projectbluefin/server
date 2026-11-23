@@ -4,13 +4,13 @@ default:
     @just --list
 
 # Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3) -- pinned by digest.
-export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:b3e011d47e686a89781495c9a87bc80349af742965e5d51e79cd51711982e4a2")
+export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:0daf6a73fb6ad75dcd62d9a5270e58572f1aea95bb9331db7c2eedd6e47c9cb5")
 # oras for `just publish-oci` -- pinned by digest; track-binaries.py moves it with CI's setup-oras pins.
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6@sha256:9cfb578be975b762fd898b9d004243d8003aeb807a3e15b2ed212cdd1326c9eb")
 # Same bst2 container image FSDK/dakota CI uses. Its tag names the
 # freedesktop-sdk-docker-images commit it was built from; it is a mutable tag,
 # not a digest pin.
-export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:bfe040b083407483ef58685bfc2b7e2a2b91afdc")
+export bst2_image := env("BST2_IMAGE", "registry.gitlab.com/freedesktop-sdk/infrastructure/freedesktop-sdk-docker-images/bst2:6f164dcf4368b8ed6f7ce91c854153335165b41b")
 # bats for `just test-unit` when none is installed -- pinned by digest.
 export bats_image := env("BATS_IMAGE", "docker.io/bats/bats:1.14.0@sha256:5322b877351fda0cc435de8c6116de7d0a2ec79d7c680132a0ef329a633bc66f")
 # butane (built from the Ignition tree) for `just homelab-templates` -- pinned by digest.
@@ -89,7 +89,7 @@ validate: gen-dev-keys
     python3 .github/scripts/check-release-version.py
     python3 .github/scripts/check-k0s-version.py
     python3 .github/scripts/check-renovate-series.py
-    just bst show --deps all oci/bluefin-server-image.bst oci/k0s-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst oci/homelab-sysext.bst oci/argo-workflows-sysext.bst oci/mcp-sysext.bst oci/kubestellar-sysext.bst oci/nvidia-open-595-sysext.bst oci/nvidia-container-toolkit-sysext.bst homebrew/image.bst runtimes/podman-sysext.bst runtimes/docker-sysext.bst
+    just bst show --deps all oci/bluefin-server-image.bst oci/k0s-sysext.bst oci/zfs-sysext.bst oci/kubeadm-sysext.bst oci/homelab-sysext.bst oci/argo-workflows-sysext.bst oci/mcp-sysext.bst oci/kubestellar-sysext.bst oci/nvidia-open-595-sysext.bst oci/nvidia-container-toolkit-sysext.bst homebrew/seed.bst runtimes/podman-sysext.bst runtimes/docker-sysext.bst
 
 # Run the unit test suite (pytest in parallel with coverage + bats; bats from
 # a container if not installed). `pytest -m "not slow"` skips the slow tests
@@ -118,18 +118,31 @@ lint-python:
 build-sysext:
     just bst build oci/k0s-sysext.bst
 
+# Export one opt-in sysext element's .raw.zst + SHA256SUMS line to dist/sysext/.
+# Every export-*sysext recipe goes through here so they stay order-independent:
+# dist/sysext/ is never wiped, and a re-export replaces its own SHA256SUMS line
+# instead of appending a duplicate. PREFIX is the element's sysext-image name
+# without the version; the artifact holds only the versioned .raw.zst release
+# asset and its SHA256SUMS (include/sysext.yml).
+_export-sysext-element ELEMENT PREFIX:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scratch="dist/{{ELEMENT}}-checkout"
+    rm -rf "${scratch}"
+    mkdir -p dist/sysext
+    just bst artifact checkout "oci/{{ELEMENT}}.bst" --directory "/src/${scratch}"
+    cp "${scratch}"/{{PREFIX}}*.raw.zst dist/sysext/
+    grep 'raw.zst$' "${scratch}/SHA256SUMS" > "${scratch}/new-sums"
+    touch dist/sysext/SHA256SUMS
+    awk 'NR == FNR { drop[$NF]; next } !($NF in drop)' "${scratch}/new-sums" dist/sysext/SHA256SUMS > "${scratch}/kept-sums"
+    cat "${scratch}/kept-sums" "${scratch}/new-sums" > dist/sysext/SHA256SUMS
+    rm -rf "${scratch}"
+    echo "==> wrote {{PREFIX}} sysext:" && ls -lh dist/sysext/
+
 # Export the k0s systemd-sysext image + SHA256SUMS to dist/sysext/.
-# The artifact checkout also emits an uncompressed .raw; only the
-# versioned .raw.zst release asset and its SHA256SUMS are published.
 [group('sysext')]
 export-sysext: build-sysext
-    rm -rf dist/sysext dist/sysext-checkout
-    mkdir -p dist/sysext-checkout dist/sysext
-    just bst artifact checkout oci/k0s-sysext.bst --directory /src/dist/sysext-checkout
-    cp dist/sysext-checkout/k0s-*.raw.zst dist/sysext/
-    cp dist/sysext-checkout/SHA256SUMS dist/sysext/
-    rm -rf dist/sysext-checkout
-    @echo "==> wrote k0s sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element k0s-sysext k0s-
 
 # -- Diskless /usr image + signed boot chain ----------------------------------
 
@@ -241,13 +254,7 @@ build-zfs-sysext: gen-dev-keys
 # Export the OpenZFS sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-zfs-sysext: build-zfs-sysext
-    rm -rf dist/zfs-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/zfs-sysext.bst --directory /src/dist/zfs-checkout
-    cp dist/zfs-checkout/zfs_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/zfs-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/zfs-checkout
-    @echo "==> wrote zfs sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element zfs-sysext zfs_
 
 # Build the homelab sysext (component manifests + bluefin-homelab-apply) and
 # its add-on sysexts (Argo Workflows, MCP server, KubeStellar).
@@ -258,17 +265,10 @@ build-homelab-sysext:
 # Export the homelab sysext and its add-ons + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-homelab-sysext: build-homelab-sysext
-    #!/usr/bin/env bash
-    set -euo pipefail
-    mkdir -p dist/sysext
-    for name in homelab argo-workflows mcp kubestellar; do
-        rm -rf dist/homelab-checkout
-        just bst artifact checkout "oci/${name}-sysext.bst" --directory /src/dist/homelab-checkout
-        cp dist/homelab-checkout/${name}_*.raw.zst dist/sysext/
-        grep 'raw.zst$' dist/homelab-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    done
-    rm -rf dist/homelab-checkout
-    echo "==> wrote homelab sysexts:" && ls -lh dist/sysext/
+    just _export-sysext-element homelab-sysext homelab_
+    just _export-sysext-element argo-workflows-sysext argo-workflows_
+    just _export-sysext-element mcp-sysext mcp_
+    just _export-sysext-element kubestellar-sysext kubestellar_
 
 # Re-render files/homelab/manifests/ and files/homelab/addons/ from the pins in the render script (network, podman).
 [group('sysext')]
@@ -302,13 +302,7 @@ build-nvidia-sysext FLAVOUR="nvidia-open-595": gen-dev-keys
 # Export an NVIDIA driver sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-nvidia-sysext FLAVOUR="nvidia-open-595": (build-nvidia-sysext FLAVOUR)
-    rm -rf dist/{{FLAVOUR}}-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/{{FLAVOUR}}-sysext.bst --directory /src/dist/{{FLAVOUR}}-checkout
-    cp dist/{{FLAVOUR}}-checkout/{{FLAVOUR}}_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/{{FLAVOUR}}-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/{{FLAVOUR}}-checkout
-    @echo "==> wrote {{FLAVOUR}} sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element {{FLAVOUR}}-sysext {{FLAVOUR}}_
 
 # Install dist/diskless/ in QEMU, merge its NVIDIA sysext and probe it (no GPU).
 [group('sysext')]
@@ -347,13 +341,7 @@ build-nvidia-container-toolkit-sysext:
 # Export the NVIDIA Container Toolkit sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-nvidia-container-toolkit-sysext: build-nvidia-container-toolkit-sysext
-    rm -rf dist/nvidia-ctk-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/nvidia-container-toolkit-sysext.bst --directory /src/dist/nvidia-ctk-checkout
-    cp dist/nvidia-ctk-checkout/nvidia-container-toolkit-*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/nvidia-ctk-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/nvidia-ctk-checkout
-    @echo "==> wrote nvidia-container-toolkit sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element nvidia-container-toolkit-sysext nvidia-container-toolkit-
 
 # Build the Tailscale systemd-sysext (locked to one image version).
 [group('sysext')]
@@ -363,13 +351,7 @@ build-tailscale-sysext:
 # Export the Tailscale sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-tailscale-sysext: build-tailscale-sysext
-    rm -rf dist/tailscale-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/tailscale-sysext.bst --directory /src/dist/tailscale-checkout
-    cp dist/tailscale-checkout/tailscale_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/tailscale-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/tailscale-checkout
-    @echo "==> wrote tailscale sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element tailscale-sysext tailscale_
 
 # Build the NetBird systemd-sysext (locked to one image version).
 [group('sysext')]
@@ -379,13 +361,7 @@ build-netbird-sysext:
 # Export the NetBird sysext + SHA256SUMS to dist/sysext/.
 [group('sysext')]
 export-netbird-sysext: build-netbird-sysext
-    rm -rf dist/netbird-checkout
-    mkdir -p dist/sysext
-    just bst artifact checkout oci/netbird-sysext.bst --directory /src/dist/netbird-checkout
-    cp dist/netbird-checkout/netbird_*.raw.zst dist/sysext/
-    grep 'raw.zst$' dist/netbird-checkout/SHA256SUMS >> dist/sysext/SHA256SUMS
-    rm -rf dist/netbird-checkout
-    @echo "==> wrote netbird sysext:" && ls -lh dist/sysext/
+    just _export-sysext-element netbird-sysext netbird_
 
 # Set up KubeStellar kc-agent for the user in ONE command.
 [group('test')]
