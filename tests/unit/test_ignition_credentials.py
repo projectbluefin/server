@@ -21,7 +21,7 @@ import shutil
 import stat
 import subprocess
 import threading
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -185,6 +185,7 @@ def run(
     creds: dict[str, str] | None = None,
     keyring: Path | None = None,
     keyring_dirs: tuple[Path, Path] | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[int, str, str | None]:
     """Run bluefin-ignition-credentials. Returns (returncode, combined output,
     the staged user.ign contents or None if nothing was staged). keyring_dirs
@@ -194,6 +195,9 @@ def run(
     env = dict(os.environ, BLUEFIN_IGNITION_OUT=str(out / "user.ign"), CURL_CA_BUNDLE=str(tmp_path / "cert.pem"))
     env.pop("CREDENTIALS_DIRECTORY", None)
     env.pop("BLUEFIN_IGNITION_KEYRING", None)
+    # Never read the test host's DMI: a CI runner or dev box can itself be a Linode.
+    env["BLUEFIN_DMI_VENDOR"] = "/nonexistent"
+    env.update(extra_env or {})
     if keyring is not None:
         env["BLUEFIN_IGNITION_KEYRING"] = str(keyring)
     if creds:
@@ -468,3 +472,112 @@ def test_no_credential_and_no_boot_origin_is_a_no_op(tmp_path: Path) -> None:
     assert rc == 0, log
     assert contents is None
     assert "nothing to apply" in log
+
+
+class Metadata(BaseHTTPRequestHandler):
+    """A Linode Metadata service stand-in. USER_DATA is the body served for
+    /v1/user-data (None: HTTP 404); TOKEN_STATUS is the status of the token PUT."""
+
+    USER_DATA: bytes | None = None
+    TOKEN_STATUS = 200
+    SEEN: list[tuple[str, str, str | None]] = []
+
+    def log_message(self, *args) -> None:
+        pass
+
+    def do_PUT(self) -> None:
+        self.SEEN.append(("PUT", self.path, None))
+        if self.path != "/v1/token" or self.TOKEN_STATUS != 200:
+            self.send_error(self.TOKEN_STATUS if self.path == "/v1/token" else 404)
+            return
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"tok-123")
+
+    def do_GET(self) -> None:
+        self.SEEN.append(("GET", self.path, self.headers.get("Metadata-Token")))
+        if self.path != "/v1/user-data" or self.headers.get("Metadata-Token") != "tok-123" or self.USER_DATA is None:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(self.USER_DATA)
+
+
+@pytest.fixture()
+def metadata():
+    handler = type("M", (Metadata,), {"SEEN": []})
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    yield handler, f"http://127.0.0.1:{httpd.server_address[1]}"
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def _linode(tmp_path: Path, url: str, vendor: str = "Linode") -> dict[str, str]:
+    dmi = tmp_path / "sys_vendor"
+    dmi.write_text(vendor + "\n", encoding="utf-8")
+    return {"BLUEFIN_LINODE_METADATA": url, "BLUEFIN_DMI_VENDOR": str(dmi)}
+
+
+@needs_tools
+def test_linode_user_data_is_decoded_and_staged(tmp_path: Path, metadata) -> None:
+    import base64
+
+    handler, url = metadata
+    handler.USER_DATA = base64.b64encode(CONFIG.encode())
+    rc, log, contents = run(tmp_path, extra_env=_linode(tmp_path, url))
+    assert rc == 0, log
+    assert contents == CONFIG
+    assert "Linode Metadata service" in log
+    assert handler.SEEN[0][:2] == ("PUT", "/v1/token")
+
+
+@needs_tools
+def test_a_credential_wins_over_linode_metadata(tmp_path: Path, metadata) -> None:
+    import base64
+
+    handler, url = metadata
+    handler.USER_DATA = base64.b64encode(b'{"ignition":{"version":"3.6.0"},"x":1}')
+    rc, log, contents = run(tmp_path, creds={"ignition.config": CONFIG}, extra_env=_linode(tmp_path, url))
+    assert rc == 0, log
+    assert contents == CONFIG
+    assert handler.SEEN == []
+
+
+@needs_tools
+def test_a_non_linode_host_never_contacts_the_metadata_service(tmp_path: Path, metadata) -> None:
+    handler, url = metadata
+    rc, log, contents = run(tmp_path, extra_env=_linode(tmp_path, url, vendor="QEMU"))
+    assert rc == 0, log
+    assert contents is None
+    assert handler.SEEN == []
+
+
+@needs_tools
+def test_linode_without_user_data_is_nothing_to_apply(tmp_path: Path, metadata) -> None:
+    _, url = metadata
+    rc, log, contents = run(tmp_path, extra_env=_linode(tmp_path, url))
+    assert rc == 0, log
+    assert contents is None
+    assert "no user data" in log
+
+
+@needs_tools
+def test_linode_user_data_that_is_not_base64_is_refused(tmp_path: Path, metadata) -> None:
+    handler, url = metadata
+    handler.USER_DATA = b"{not base64!"
+    rc, log, contents = run(tmp_path, extra_env=_linode(tmp_path, url))
+    assert rc != 0
+    assert contents is None
+    assert "not base64" in log
+
+
+@needs_tools
+def test_a_failing_linode_token_request_fails_the_boot(tmp_path: Path, metadata) -> None:
+    handler, url = metadata
+    handler.TOKEN_STATUS = 500
+    rc, log, contents = run(tmp_path, extra_env=_linode(tmp_path, url))
+    assert rc != 0
+    assert contents is None
+    assert "Metadata token" in log
