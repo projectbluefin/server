@@ -14,12 +14,17 @@ Linode instances boot legacy BIOS (no `/sys/firmware/efi`; `direct-disk` boots
 the disk's MBR), so the UEFI paths do not apply: no installed disk UKI, no
 `systemd-sysupdate` A/B, no boot counting. The supported shape is the diskless
 BIOS path described in [booty-integration.md](booty-integration.md): a BIOS
-iPXE boots the netboot UKI's kernel and initrd sections with the UKI's own
+bootloader (iPXE, or the syslinux boot disk the Akamai tooling builds) boots the netboot UKI's kernel and initrd sections with the UKI's own
 `.cmdline` (`rd.systemd.pull` pointing at the release), and the initrd pulls
 the signed OS DDI into RAM, so size the instance as in
 [diskless-troubleshooting.md](diskless-troubleshooting.md). Keep state on a
 second disk (`/var`, provisioned by Ignition). The console is `ttyS0` (Lish);
 a virtual UART ignores the baud rate, so the sealed `115200` works.
+
+The initrd ships `/etc/resolv.conf` as a symlink to the resolved stub
+(`files/initrd/etc/resolv.conf`, covered by `tests/unit/test_initrd_resolv.py`).
+Without it nothing resolves a hostname in the initrd, so only IP-literal pull
+URLs worked; the `tmpfiles.d` rules for it are not applied there.
 
 Deployment tooling (OpenTofu, the iPXE boot disk, e2e) lives outside this
 repo: [idvoretskyi/bluefin-server-on-akamai](https://github.com/idvoretskyi/bluefin-server-on-akamai).
