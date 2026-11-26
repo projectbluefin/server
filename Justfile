@@ -4,7 +4,7 @@ default:
     @just --list
 
 # Tooling for `just check-image` (erofs-utils, binutils, cpio, zstd, python3) -- pinned by digest.
-export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:9e6aa1917e422110bac3ee401f2b53ac4ade82f815b442a6a31164822fde88f9")
+export check_image_base := env("CHECK_IMAGE_BASE", "registry.fedoraproject.org/fedora:44@sha256:c2311603edaa76512f78e9edbb2b5b3903b3ad5bbc43a94ecb2e6c5c501d5f0c")
 # oras for `just publish-oci` -- pinned by digest; track-binaries.py moves it with CI's setup-oras pins.
 export oras_image := env("ORAS_IMAGE", "ghcr.io/oras-project/oras:v1.3.6@sha256:9cfb578be975b762fd898b9d004243d8003aeb807a3e15b2ed212cdd1326c9eb")
 # Same bst2 container image FSDK/dakota CI uses. Its tag names the
@@ -122,8 +122,8 @@ build-sysext:
 # Every export-*sysext recipe goes through here so they stay order-independent:
 # dist/sysext/ is never wiped, and a re-export replaces its own SHA256SUMS line
 # instead of appending a duplicate. PREFIX is the element's sysext-image name
-# without the version; the artifact checkout also emits an uncompressed .raw,
-# but only the versioned .raw.zst release asset is published.
+# without the version; the artifact holds only the versioned .raw.zst release
+# asset and its SHA256SUMS (include/sysext.yml).
 _export-sysext-element ELEMENT PREFIX:
     #!/usr/bin/env bash
     set -euo pipefail

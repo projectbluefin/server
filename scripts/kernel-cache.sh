@@ -32,13 +32,21 @@
 #
 # The CAS is publicly readable. What `seed` pushes is key-free by
 # construction: the seed job holds no signing secrets, `seed` refuses to
-# build if bluefin-server/keys/boot-keys.bst (the only element that stages
-# private keys) is anywhere in its full graph. Shared outputs must not reach
+# build if one of the elements that stage private keys (KEY_ELEMENTS: the
+# module, Secure Boot and image signing keys) is anywhere in its full graph.
+# Shared outputs must not reach
 # the module certificate either. Variant seeds refuse a files/boot-keys/modules/
 # containing anything but the public certificate; that import may be pushed.
 set -euo pipefail
 
-KEYS_ELEMENT=bluefin-server/keys/boot-keys.bst
+# Every element that stages private key material, one per kind of key. A new
+# one must be added here (tests/unit/test_key_elements.py fails when a key
+# element is missing).
+KEY_ELEMENTS=(
+    bluefin-server/keys/module-signing-key.bst
+    bluefin-server/keys/secure-boot-keys.bst
+    bluefin-server/keys/image-signing-keys.bst
+)
 PUSH_URL=https://cache.projectbluefin.io:11002
 
 cd "$(dirname "$0")/.."
@@ -120,10 +128,12 @@ seed() {
     # writing, and a failed `bst show` would look like a graph without the keys.
     graph="$(bst_show show --deps all --format "'%{name}'" "${elements[@]}")" \
         || { echo "kernel-cache: cannot list the graph of ${elements[*]}; refusing to publish" >&2; exit 1; }
-    if grep -qxF "${KEYS_ELEMENT}" <<< "${graph}"; then
-        echo "kernel-cache: ${KEYS_ELEMENT} is in the graph of ${elements[*]}; refusing to publish" >&2
-        exit 1
-    fi
+    for key_element in "${KEY_ELEMENTS[@]}"; do
+        if grep -qxF "${key_element}" <<< "${graph}"; then
+            echo "kernel-cache: ${key_element} is in the graph of ${elements[*]}; refusing to publish" >&2
+            exit 1
+        fi
+    done
     if [ "${variant}" = shared ] && grep -qxF bluefin-server/keys/linux-module-cert.bst <<< "${graph}"; then
         echo "kernel-cache: shared outputs depend on the variant certificate; refusing to publish" >&2
         exit 1

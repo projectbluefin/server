@@ -8,8 +8,8 @@
 #
 # .github/workflows/build.yml runs these same commands in the `release` job
 # on main and in the `release-dry-run` job on every pull request. The dry
-# run only prints the `gh release create` command, and pushes the OCI
-# artifact to a throwaway local registry and pulls it back.
+# run only prints the `gh release` commands, and pushes the OCI artifact to
+# a throwaway local registry and pulls it back.
 #
 # A release publishes the top-level files of DIR: the ones SHA256SUMS lists,
 # plus SHA256SUMS and SHA256SUMS.gpg, and the size report image-check
@@ -44,6 +44,20 @@ published_digests() {
     } | LC_ALL=C sort -k2
 }
 
+# retry ATTEMPTS COMMAND...: run COMMAND until it succeeds, at most ATTEMPTS
+# times, waiting RETRY_DELAY seconds (default 15) times the attempt number
+# in between. For network calls: a dropped connection is not a failed release.
+retry() {
+    local attempts="$1" n=1
+    shift
+    until "$@"; do
+        [ "${n}" -lt "${attempts}" ] || return 1
+        echo "::warning title=Retrying::${1} ${2:-} failed (attempt ${n} of ${attempts})" >&2
+        sleep $(( ${RETRY_DELAY:-15} * n ))
+        n=$(( n + 1 ))
+    done
+}
+
 output() {
     echo "$1=$2"
     if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -70,6 +84,22 @@ newest_github_release() {
         --limit 1000 --json tagName --jq '.[].tagName')" \
         || die "cannot list the releases of $1"
     sed -n 's/^v\([0-9]\)/\1/p' <<<"${tags}" | sort -V | tail -n1
+}
+
+# "published", "draft" or "none": what REPO has for the release tag TAG.
+# check_version keeps TAG to characters that are safe inside the jq program.
+release_state() {
+    local rows
+    rows="$(gh release list --repo "$1" --limit 1000 --json tagName,isDraft \
+        --jq ".[] | select(.tagName == \"$2\") | if .isDraft then \"draft\" else \"published\" end")" \
+        || die "cannot list the releases of $1"
+    if grep -qx published <<<"${rows}"; then
+        echo published
+    elif grep -qx draft <<<"${rows}"; then
+        echo draft
+    else
+        echo none
+    fi
 }
 
 # The version REF:latest carries (its org.opencontainers.image.version
@@ -339,20 +369,42 @@ EOF
         echo "::notice title=Not the latest release::v${ver} is older than v${newest}, which stays Latest"
     fi
 
-    # A version is published exactly once: gh refuses an existing tag, so
-    # assets nodes may already trust are never overwritten.
-    local cmd=(gh release create "v${ver}" --target "${sha}"
-        --title "Bluefin Server ${ver}"
-        "${latest}"
-        --notes "${notes}"
-        "${files[@]}")
+    # Nothing is visible until the last step: the release is a draft while its
+    # assets upload, the uploaded assets are checked against the verified set,
+    # and only then is the draft published (which is when the tag appears). A
+    # version is published exactly once: a published one is never touched, and
+    # a draft is only ever one an earlier, failed attempt of this job left.
+    local tag="v${ver}"
+    local create=(gh release create "${tag}" --repo "${repo}" --draft --target "${sha}"
+        --title "Bluefin Server ${ver}" --notes "${notes}")
+    local upload=(gh release upload "${tag}" --repo "${repo}" --clobber "${files[@]}")
+    local publish=(gh release edit "${tag}" --repo "${repo}" --draft=false "${latest}")
     if [ "${dry}" = 1 ]; then
         echo "dry run, would run:"
-        printf '%q ' "${cmd[@]}"
+        printf '%q ' "${create[@]}"
         echo
-    else
-        "${cmd[@]}"
+        printf '%q ' "${upload[@]}"
+        echo
+        printf '%q ' "${publish[@]}"
+        echo
+        return
     fi
+
+    local state
+    state="$(release_state "${repo}" "${tag}")"
+    [ "${state}" != published ] || die "${tag} is already published; a version is published exactly once"
+    if [ "${state}" = draft ]; then
+        echo "removing the unpublished draft an earlier attempt left for ${tag}"
+        gh release delete "${tag}" --repo "${repo}" --yes
+    fi
+
+    "${create[@]}"
+    retry 3 "${upload[@]}" || die "uploading the assets of ${tag} failed; the draft is left unpublished"
+    diff -u <(published_digests "${dir}" "${ver}") \
+        <(gh release view "${tag}" --repo "${repo}" --json assets \
+            --jq '.assets[] | "\(.digest | ltrimstr("sha256:")) \(.name)"' | LC_ALL=C sort -k2) \
+        || die "the assets uploaded to ${tag} do not match the verified release set; the draft is left unpublished"
+    retry 3 "${publish[@]}" || die "publishing ${tag} failed; the draft is left unpublished"
 }
 
 cmd_oci() {

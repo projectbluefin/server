@@ -248,7 +248,7 @@ def test_the_banners_are_the_files_agetty_login_and_sshd_read() -> None:
     # agetty merges /run/issue.d with the image's /usr/lib/issue.d banner.
     assert '"/run/issue.d/40-bluefin-update.issue"' in script
     assert (ROOT / "files" / "os" / "issue.d" / "30-bluefin.issue").name < "40-bluefin-update.issue"
-    # shadow's login (MOTD_FILE /etc/motd) and sshd (UsePAM no) read only
+    # shadow's login (MOTD_FILE /etc/motd) and sshd (PrintMotd) read only
     # /etc/motd; it links to the runtime file, never over an operator's own.
     assert '"/run/motd"' in script
     lines = [line.split() for line in MOTD_LINK.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]

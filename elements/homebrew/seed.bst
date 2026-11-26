@@ -67,6 +67,12 @@ config:
     git -C "$repo" remote remove origin 2>/dev/null || true
     git -C "$repo" remote add origin https://github.com/Homebrew/brew
     git -C "$repo" tag -f "%{homebrew-version}" HEAD
+    # The index caches each file's inode, ctime and mtime, and the reflogs
+    # stamp the checkout above with the build time, so neither is the same
+    # twice. Rebuild the index from HEAD with no stat data (git re-reads the
+    # files and refreshes it on first use) and drop the reflogs.
+    git -C "$repo" read-tree HEAD
+    rm -rf "$repo/.git/logs"
     mkdir -p "%{install-root}%{datadir}/homebrew"
     tar --sort=name --mtime=@1767225600 --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime \

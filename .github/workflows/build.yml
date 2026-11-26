@@ -141,7 +141,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
           tool: just@1.59.0
 
@@ -202,7 +202,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
           tool: just@1.59.0
 
@@ -758,9 +758,12 @@ jobs:
           sbom-path: dist/diskless/bluefin-server_${{ env.VERSION }}.spdx.json
           push-to-registry: true
 
-      # Last: the tag is created once and never again, so everything that can
-      # fail runs before it. A failed run re-pushes the same files to the
-      # registry on retry; a GitHub Release created first would refuse the retry.
+      # Last: a published release is never touched again, so everything that
+      # can fail runs before it. The script creates the release as a draft,
+      # uploads the assets (retrying), checks them against the verified set and
+      # only then publishes it, so a failed run leaves no tag and no partial
+      # release: a re-run re-pushes the same files to the registry and replaces
+      # the draft.
       - name: Create GitHub Release
         if: steps.taggable.outputs.publish == 'true'
         env:

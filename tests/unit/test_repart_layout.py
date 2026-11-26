@@ -51,11 +51,28 @@ def test_layout_files_and_types():
     "a,b",
     [("20-usr-a.conf", "30-usr-b.conf"), ("21-usr-verity-a.conf", "31-usr-verity-b.conf")],
 )
-def test_ab_slots_have_identical_fixed_sizes(a: str, b: str):
+def test_ab_slots_are_declared_alike(a: str, b: str):
     slot_a, slot_b = load(REPART_DIR / a), load(REPART_DIR / b)
-    for slot in (slot_a, slot_b):
-        assert slot["SizeMinBytes"] == slot["SizeMaxBytes"], "slots must not grow"
     assert slot_a["SizeMinBytes"] == slot_b["SizeMinBytes"]
+    assert slot_a["SizeMaxBytes"] == slot_b["SizeMaxBytes"]
+
+
+def test_usr_slots_have_room_to_grow_but_never_shrink_below_the_installed_size():
+    # systemd-repart cannot resize a partition that exists, and refuses a
+    # layout whose minimum no longer fits the free space: raising SizeMinBytes
+    # would fail the first-boot repart of every disk installed with 2G
+    # slots ("Can't fit requested partitions", verified with systemd 259).
+    # A range lets new installs take more while those disks see "No changes".
+    for name in ("20-usr-a.conf", "30-usr-b.conf"):
+        slot = load(REPART_DIR / name)
+        assert slot["SizeMinBytes"] == "2G", "disks installed with 2G slots must keep matching"
+        assert slot["SizeMaxBytes"] == "4G"
+
+
+def test_verity_slots_stay_fixed():
+    for name in ("21-usr-verity-a.conf", "31-usr-verity-b.conf"):
+        slot = load(REPART_DIR / name)
+        assert slot["SizeMinBytes"] == slot["SizeMaxBytes"]
 
 
 def test_slot_a_is_copied_from_the_running_image():

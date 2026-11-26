@@ -12,7 +12,7 @@ depends:
   - bluefin-server/os-sshd-preset.bst
   - bluefin-server/os-sshd-config.bst
 
-  # Image identity and weekly first-party countme reporting
+  # Image identity and daily active-system countme reporting
   - bluefin-server/os-image-info.bst
   - bluefin-server/os-countme.bst
 
@@ -50,9 +50,6 @@ depends:
 
   # First-Boot Credentials Provisioning
   - bluefin-server/os-creds-prov.bst
-
-  # System Management Justfile
-  - bluefin-server/os-justfile.bst
 
   # system-container helper (machinectl wrapper)
   - bluefin-server/os-system-container.bst

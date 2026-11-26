@@ -96,12 +96,20 @@ def leftovers(checkout: Path) -> list[Path]:
     return list(checkout.glob(".casd.*"))
 
 
+KEY_ELEMENTS = [
+    "bluefin-server/keys/module-signing-key.bst",
+    "bluefin-server/keys/secure-boot-keys.bst",
+    "bluefin-server/keys/image-signing-keys.bst",
+]
+
+
+@pytest.mark.parametrize("key_element", KEY_ELEMENTS)
 @pytest.mark.parametrize("variant", ["shared", "release", "dev"])
-def test_seed_refuses_a_graph_that_reaches_the_keys(checkout: Path, env: dict[str, str], variant: str) -> None:
-    env["GRAPH"] += " bluefin-server/keys/boot-keys.bst"
+def test_seed_refuses_a_graph_that_reaches_the_keys(checkout: Path, env: dict[str, str], variant: str, key_element: str) -> None:
+    env["GRAPH"] += f" {key_element}"
     result = run(checkout, env, variant)
     assert result.returncode != 0
-    assert "bluefin-server/keys/boot-keys.bst" in result.stderr
+    assert key_element in result.stderr
     assert not (Path(env["LOG"]) / "built").exists()
     assert not leftovers(checkout)
 
@@ -118,7 +126,7 @@ def test_shared_seed_refuses_a_certificate_dependent_graph(checkout: Path, env: 
 def test_seed_refuses_the_keys_early_in_a_long_graph(checkout: Path, env: dict[str, str]) -> None:
     # grep -q stops reading at the match; the rest of the listing must not
     # turn that match into a pass.
-    env["GRAPH"] = "bluefin-server/keys/boot-keys.bst"
+    env["GRAPH"] = KEY_ELEMENTS[0]
     env["GRAPH_TAIL"] = "20000"
     result = run(checkout, env)
     assert result.returncode != 0

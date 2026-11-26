@@ -4,11 +4,18 @@
 # static extension identity as sysext-src/extension-release.<sysext-name>,
 # sets the variables below, and runs "%{sysext-pack}" as its last install
 # command. The recipe stamps the extension-release file, packs ./sysext into
-# an EROFS image, compresses the release asset and checksums it:
+# an EROFS image, compresses the release asset and checksums it. The artifact
+# holds only:
 #
-#   <sysext-image>.raw       uncompressed EROFS image
 #   <sysext-image>.raw.zst   release asset
 #   SHA256SUMS               sha256 of the .raw.zst
+#
+# The uncompressed EROFS image is an intermediate of the build, written to the
+# build directory and not part of the artifact: nothing reads it (the image
+# element, the Justfile exports and the release all take the .raw.zst), and
+# kept in the artifact it made every sysext several times larger in the cache
+# (kubeadm: 383 MB of .raw beside its 106 MB .raw.zst) and in the sandbox of
+# every element that stages it.
 #
 # Variables each element sets:
 #   sysext-name          stem of the static identity file in sysext-src/
@@ -28,11 +35,12 @@ variables:
       echo "ARCHITECTURE=%{sysext-architecture}" >> "${rel}"
     fi
 
-    out="%{install-root}/%{sysext-image}.raw"
+    # Not under install-root: only the compressed image is the artifact.
+    out="${PWD}/%{sysext-image}.raw"
     # mkfs.erofs would pick a random filesystem UUID; derive it from the image
     # name instead so a rebuild of the same image is byte-identical.
     h="$(printf '%s' '%{sysext-image}' | sha256sum)"
     mkdir -p "%{install-root}"
     mkfs.erofs -d0 -U "${h:0:8}-${h:8:4}-${h:12:4}-${h:16:4}-${h:20:12}" "${out}" sysext
-    zstd -T0 -19 -q "${out}" -o "${out}.zst"
+    zstd -T0 -19 -q "${out}" -o "%{install-root}/%{sysext-image}.raw.zst"
     (cd "%{install-root}" && sha256sum --binary "%{sysext-image}.raw.zst" > SHA256SUMS)

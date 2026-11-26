@@ -1,15 +1,22 @@
 name: Reproducibility
 
-# Builds the image set, deletes the artifacts of the final assembly steps
-# (images, UKIs, initrd, sysexts, signed systemd-boot) from the local
-# BuildStream cache, rebuilds them without pulling from any remote, and
-# compares every output file except the GPG signatures, which embed their
-# signing time. Both builds share one checkout, one set of throwaway keys and
-# one image-version, so any difference comes from the assembly itself.
+# Builds the image set, deletes the artifact of every project element it is
+# made of (the final assembly and everything it is built from: the signed
+# kernel modules and ZFS and NVIDIA modules, the Go helpers, the initrd, the
+# sysext payloads, signed systemd-boot) from the local BuildStream cache,
+# rebuilds them without pulling from any remote, and compares every output
+# file except the GPG signatures, which embed their signing time. Both builds
+# share one checkout, one set of throwaway keys and one image-version, so any
+# difference comes from the elements themselves.
 #
-# bluefin-server/keys/efi-keys.bst is kept: sbvarsign stamps the current time
+# Kept cached, so not compared: freedesktop-sdk's own elements (the kernel is
+# most of a cold build, and they are built and checked upstream), and
+# bluefin-server/keys/efi-keys.bst, because sbvarsign stamps the current time
 # into each Secure Boot variable update it signs (PK/KEK/db.auth), the same
 # way gpg timestamps SHA256SUMS.gpg, and has no option to fix it.
+#
+# A failed or cancelled scheduled run opens "Reproducibility check failing"
+# (the status job below); a run that passes closes it.
 on:
   schedule:
     - cron: '0 9 * * 1'
@@ -27,8 +34,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 300
     env:
-      # Everything oci/bluefin-server-image.bst stages into the release set,
-      # and every oci/* target `just validate` resolves;
+      # The roots: everything oci/bluefin-server-image.bst stages into the
+      # release set, and every oci/* target `just validate` resolves. The
+      # rebuild deletes these and every project element they depend on;
       # tests/unit/test_reproducibility_workflow.py fails when a shipped element is missing.
       FINAL_ASSEMBLY: >-
         oci/bluefin-server-image.bst
@@ -60,7 +68,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up just
-        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
           tool: just@1.59.0
 
@@ -82,11 +90,25 @@ jobs:
           (cd dist/first && find . -type f ! -name '*.gpg' -exec sha256sum {} + | sort -k2) > first.sha256
           rm -rf dist/first
 
-      - name: Rebuild the final assembly
+      - name: Rebuild the final assembly and what it is built from
         run: |
           set -euo pipefail
+          # Every project element in the closure of the roots; the junction's
+          # elements (freedesktop-sdk.bst:...) and efi-keys stay cached (see
+          # the header). bst colours its output even when piped.
           # shellcheck disable=SC2086
-          just bst artifact delete ${FINAL_ASSEMBLY}
+          just bst show --deps all --format '%{name}' ${FINAL_ASSEMBLY} \
+            | sed 's/\x1b\[[0-9;]*m//g' \
+            | grep -vE '^(freedesktop-sdk\.bst:|bluefin-server/keys/efi-keys\.bst$)' \
+            | grep -E '^[a-z0-9-]+(/[a-z0-9-]+)*\.bst$' | sort -u > rebuild.txt
+          # A listing that lost its elements would quietly compare nothing new.
+          if [ "$(wc -l < rebuild.txt)" -lt 60 ] || ! grep -qx 'bluefin-server/kernel-modules.bst' rebuild.txt; then
+            echo "::error::The element listing is incomplete ($(wc -l < rebuild.txt) elements)."
+            exit 1
+          fi
+          echo "Rebuilding $(wc -l < rebuild.txt) project elements"
+          # shellcheck disable=SC2046
+          just bst artifact delete $(cat rebuild.txt)
           just bst build --ignore-project-artifact-remotes oci/bluefin-server-image.bst
           just bst artifact checkout oci/bluefin-server-image.bst --directory /src/dist/second
           (cd dist/second && find . -type f ! -name '*.gpg' -exec sha256sum {} + | sort -k2) > second.sha256
@@ -100,3 +122,41 @@ jobs:
             exit 1
           fi
           echo "Both builds produced identical files."
+
+      - name: Upload both checksum lists
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reproducibility-checksums
+          path: |
+            first.sha256
+            second.sha256
+            rebuild.txt
+          retention-days: 14
+
+  # Nobody watches a weekly run: one open "Reproducibility check failing"
+  # issue gets a comment per failed scheduled run and is closed by the next
+  # one that passes. A cancelled run (the job's timeout) counts as a failure.
+  # Dispatched runs do not touch it.
+  status:
+    needs: [reproducibility]
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout the tracking-issue script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/tracking-issue.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/tracking-issue.sh "Reproducibility check failing" "The weekly reproducibility check" "a later weekly run"

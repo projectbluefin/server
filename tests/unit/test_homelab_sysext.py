@@ -135,7 +135,13 @@ def test_every_container_image_is_pinned_by_digest() -> None:
                 node = stack.pop()
                 if isinstance(node, dict):
                     if {"repository", "image", "version"} <= node.keys():
-                        assert re.fullmatch(r"sha256:[0-9a-f]{64}", node["version"]), node
+                        render = render_module()
+                        if f"{node['repository']}/{node['image']}" in render.OS_SUFFIXED:
+                            # The operator adds the node's OS to the tag; no digest exists.
+                            assert not node["version"].startswith("sha256:"), node
+                        else:
+                            assert re.fullmatch(r"sha256:[0-9a-f]{64}", node["version"]), node
+                            assert node["version"] != render.EMPTY_SHA256, f"{node}: the digest of no bytes"
                     stack.extend(node.values())
                 elif isinstance(node, list):
                     stack.extend(node)

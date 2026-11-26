@@ -43,7 +43,7 @@ build-depends:
 - freedesktop-sdk.bst:components/systemd-ukify.bst
 - freedesktop-sdk.bst:components/zstd.bst
 - freedesktop-sdk.bst:components/_private/sbsigntools.bst
-- bluefin-server/keys/boot-keys.bst
+- bluefin-server/keys/secure-boot-keys.bst
 - filename: bluefin-server/keys/efi-keys.bst
   config:
     location: /efi-keys
