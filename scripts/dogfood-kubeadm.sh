@@ -35,7 +35,7 @@ zstd -dqf "${sysext}" -o "${state}/serve/${name}.raw"
 sum="$(sha256sum "${state}/serve/${name}.raw" | cut -d' ' -f1)"
 
 chart="${state}/cilium-${cilium_version}.tgz"
-[ -f "${chart}" ] || curl -fsSL -o "${chart}" "https://helm.cilium.io/cilium-${cilium_version}.tgz"
+[ -f "${chart}" ] || curl -fsSL --retry 3 -o "${chart}" "https://helm.cilium.io/cilium-${cilium_version}.tgz"
 echo "${cilium_sha256}  ${chart}" | sha256sum -c --quiet -
 # K8S_SERVICE_HOST: the probe substitutes the node's address. Without
 # kube-proxy, Cilium cannot reach the API through the service VIP.

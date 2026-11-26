@@ -295,7 +295,7 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
    inside `oci/bluefin-server-image.bst` (gpg sign plus a `gpgv` proof
    against the shipped keyring). Other pull requests run `validate`. Every
    job that builds keeps the podman and BuildStream caches on the runner's
-   `/mnt` SSD (`scripts/ci-runner-disk.sh`).
+   `/mnt` SSD (`scripts/ci-runner-disk.sh`). Network steps safe to run twice (`apt-get`, e2e release download) use `scripts/ci/retry.sh`; publishing steps never do.
 4. **Boot test:** Runs the exported sets in Secure Boot QEMU via
    `scripts/ci/boot-test.sh` (`--list` prints the scenarios); each bucket stops at its first failure.
    Fedora's `edk2-ovmf` is pinned by Koji URL + SHA-256 in `scripts/ci/install-qemu-ovmf.sh`:
