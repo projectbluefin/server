@@ -105,6 +105,27 @@ def test_countme_units_and_preset_ship_with_base_os():
     assert "enable projectbluefin-countme.timer" in preset
 
 
+def _unit_section(text: str, section: str) -> list[str]:
+    lines, current = [], None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            current = line[1:-1]
+        elif current == section and line and not line.startswith("#"):
+            lines.append(line)
+    return lines
+
+
+def test_disabled_file_opt_out_gates_the_service():
+    # os-countme.bst documents creating /etc/projectbluefin/countme/disabled as
+    # an opt-out next to masking the timer. Only this [Unit] condition makes
+    # that file work: without it the reporter still pings.
+    service = (SYSTEM_UNITS / "projectbluefin-countme.service").read_text(encoding="utf-8")
+    unit = _unit_section(service, "Unit")
+    assert "ConditionPathExists=!/etc/projectbluefin/countme/disabled" in unit
+    assert "/etc/projectbluefin/countme/disabled" in _element("os-countme.bst")["description"]
+
+
 def test_reporter_reads_image_info_and_reports_server():
     script = REPORTER.read_text(encoding="utf-8")
     assert "/usr/share/ublue-os/image-info.json" in script
