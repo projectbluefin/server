@@ -28,6 +28,10 @@ func Migrate(h *sys.Host, _ []string) int {
 	stamp := h.Env("BLUEFIN_DISABLE_UNUSED_STAMP", Stamp)
 	failed := false
 	for _, unit := range Units {
+		// If the unit file is not installed on this image version, nothing to disable.
+		if h.Exec(systemctl, "list-unit-files", "--no-legend", unit) != 0 {
+			continue
+		}
 		if h.Exec(systemctl, "preset", "--now", unit) != 0 {
 			h.Eprintf("bluefin-disable-unused-migrate: systemctl preset --now %s failed\n", unit)
 			failed = true

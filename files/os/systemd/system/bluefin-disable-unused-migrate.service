@@ -7,6 +7,7 @@ Documentation=file:/usr/libexec/bluefin-disable-unused-migrate
 # (elements/oci/bluefin-server-usr.bst), so updated nodes run it. Installed
 # nodes only: a diskless node's /etc starts empty, so its first-boot presets
 # already include the new file.
+ConditionFirstBoot=no
 ConditionPathExists=!/var/lib/bluefin/disable-unused-migrate.stamp
 ConditionPathExists=!/run/machines/rootdisk.raw
 ConditionKernelCommandLine=!root=tmpfs
