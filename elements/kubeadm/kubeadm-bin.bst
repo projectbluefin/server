@@ -29,15 +29,15 @@ variables:
 sources:
 - kind: remote
   url: k8s_dl:release/v%{kubernetes-version}/bin/linux/amd64/kubelet
-  ref: 25d2645e4f8975dec8d864b7cf289e9609456fc864c892c9c6e644c384a2a061
+  ref: 17f0007724a6c3b1866a66483dd4e8f7e60199601ff346c7b0ce3923d1aaf4a2
   directory: k8s
 - kind: remote
   url: k8s_dl:release/v%{kubernetes-version}/bin/linux/amd64/kubeadm
-  ref: ea583f31809d73394f4b038c6b3c5f9fecdb5627a82e203edae1d0e742e71504
+  ref: 7071b814f9badee75b99482fbd75e6c79aa06a9a3013339660337a490eb4b98e
   directory: k8s
 - kind: remote
   url: k8s_dl:release/v%{kubernetes-version}/bin/linux/amd64/kubectl
-  ref: c49a28f1f4efc4d475ed05f47f2ce8e563bf7bef69ed77fe1b924ea6d83b6327
+  ref: eeddea383a302f9a633a292af1d886054c7cf152fb407f827f12bfe286dc46d6
   directory: k8s
 - kind: tar
   url: github:kubernetes-sigs/cri-tools/releases/download/v%{crictl-version}/crictl-v%{crictl-version}-linux-amd64.tar.gz
@@ -64,15 +64,15 @@ sources:
     sources:
     - kind: remote
       url: k8s_dl:release/v%{kubernetes-version}/bin/linux/arm64/kubelet
-      ref: 322cf11cd6b5d217e1e9f309b9fd119a3ec60cfcecf1d2c4e284f0d0762f9151
+      ref: 542f14c7ffcf10a149dba1e1b3b40ca8b3774c8016025aa55a89ba9868bc1710
       directory: k8s
     - kind: remote
       url: k8s_dl:release/v%{kubernetes-version}/bin/linux/arm64/kubeadm
-      ref: d0d813b1a1b256a266e1bd6d2122f286ea682f62c850dc4fee13197f89bc36de
+      ref: 8fc928f51a4433fda7d9e6e49e35efd3cf1dfd1777620590a30e99c5bd2657e1
       directory: k8s
     - kind: remote
       url: k8s_dl:release/v%{kubernetes-version}/bin/linux/arm64/kubectl
-      ref: 283f1be6a46b3695b625e25030106b8ffe18bd0d3a900f5b65c259ca407f04f5
+      ref: e69973a0b8c23412f2f6bba6a91b98579a1787c4d731fb4cb5987ba273763318
       directory: k8s
     - kind: tar
       url: github:kubernetes-sigs/cri-tools/releases/download/v%{crictl-version}/crictl-v%{crictl-version}-linux-arm64.tar.gz
