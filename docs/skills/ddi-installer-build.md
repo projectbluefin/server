@@ -174,6 +174,61 @@ DOGFOOD_PROFILE=home-server DOGFOOD_INSTALL=console just dogfood-installer # Hom
 unattended and skips the disk question; never use one to instrument an
 attended run.
 
+### External USB console driver (interface v1)
+
+Set `DOGFOOD_INSTALL=console DOGFOOD_CONSOLE_DRIVER=/absolute/executable` to
+hand the USB install boot to a testsuite driver. This is an opt-in transport,
+not expanded coverage: diskless login, firmware fixtures, repeated screenshots
+and hosted resource measurements still need native evidence under #450.
+Noise/failure injection cannot combine with this handoff. Existing commands,
+enrollment, disks, credentials, post-install probes and installed-system
+boots remain Server-owned. No workflow permissions or secrets change.
+
+The harness starts **only the install boot** paused (`-S`), then invokes the
+executable with one argument: the absolute path of `<boot>.driver.json`.
+It leaves the scratch installer's shipped loader configuration unchanged;
+the driver must select the requested profile with real keyboard input, not
+by rewriting the default. The JSON fields are:
+
+| Field | Meaning |
+|---|---|
+| `version` | Integer `1`; reject unknown versions. |
+| `boot`, `image_version`, `profile` | Boot identity, tested image version and expected install profile. |
+| `monitor` | Actual sole QEMU HMP UNIX socket, in a private short `/tmp` directory, independent of the state path length. |
+| `qemu_pid`, `deadline_unix`, `paused` | Guest process, absolute host deadline in seconds, initially `true`. |
+| `screen_log` | Append-only foreground VT mirror; absent before Linux. |
+| `serial_logs` | Paths keyed by `ttyS0` (firmware), `ttyS1` (probes), `ttyS2` (journal), active until the driver returns. |
+| `state_dir`, `target_device` | Disposable run directory and expected guest target device. |
+
+The executable is the **only monitor owner** until it returns. Wait for the
+socket to accept connections, then issue `cont` and establish boot-menu
+readiness from firmware serial/framebuffer evidence before the shipped
+three-second timeout expires. A running process or an empty screenshot is
+not menu readiness. Serialize observations and input: assert a checkpoint,
+complete `screendump` and release that command/connection, send keys, then
+assert the transition. Reuse testsuite's stdlib PPM-to-PNG conversion, not a
+Server-side converter or a second QEMU monitor/controller.
+
+Linux mirror frames start with
+`=== screen <guest-uptime> rows <rows> cols <cols> x <cursor-x> cursor <cursor-y>`
+(zero-based cursor coordinates), followed by the screen text. In USB console
+mode a frame is committed only by its following
+`=== console <guest-uptime> printk=<n> mute=<state> noise=<n>` trailer. Ignore
+partial trailing frames; require a newer complete frame after input rather
+than matching old text elsewhere in the log. The periodic complete frames
+provide freshness even when the screen does not change. This mirror cannot
+assert anything about a pre-Linux menu.
+
+The driver must finish the native install, observe/capture completion and
+request the normal restart, close the monitor and stop all its children before
+returning. Exit nonzero on missing checkpoints, unsupported cases or a guest
+exit before the expected transition. Server bounds execution by the existing
+boot deadline and fails on driver error/timeout; exit zero alone cannot pass:
+the existing sysinstall result, target/decoy partition, disk-choice and done
+screen checks still run, followed by installed-disk boot/login checks. Driver
+evidence belongs in `state_dir`; never capture or publish passwords. This
+interface does not itself certify an exhaustive screenshot run or publication.
+
 `scripts/dogfood-diskless.sh <dir> [--check]` boots the way a PXE/HTTP-booted
 node would: signed systemd-boot -> signed netboot UKI -> initrd pulls
 `bluefin-server_<ver>.raw` over HTTP into RAM -> dm-verity /usr, tmpfs root.

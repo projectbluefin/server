@@ -111,6 +111,8 @@
 #   DOGFOOD_INSTALL=<mode>     unattended (default: the drop-in credential),
 #                              console (typed at the monitor, see above) or
 #                              diskless-console (from a diskless boot, see above)
+#   DOGFOOD_CONSOLE_DRIVER=<executable> external USB console driver (optional);
+#                              receives a JSON manifest; see ddi-installer-build.md
 #   DOGFOOD_CONSOLE_NOISE=0|1  concurrent error noise (default 0; console only)
 #   DOGFOOD_CONSOLE_FAILURE=.. none (default) or kernel (console only): a wrong
 #                              guest kernel payload path, before any disk write
@@ -174,6 +176,19 @@ case "${console_hold}" in
 esac
 [ "${install_mode}" = console ] || { [ "${console_noise}" = 0 ] && [ "${console_failure}" = none ]; } \
     || { echo "ERROR: console noise/failure requires DOGFOOD_INSTALL=console" >&2; exit 1; }
+# A testsuite driver may own input/capture for the USB install boot only.
+# Keep fault injection and diskless authentication on their existing paths.
+console_driver="${DOGFOOD_CONSOLE_DRIVER:-}"
+driver_socket_dir=""
+if [ -n "${console_driver}" ]; then
+    if [ "${install_mode}" != console ] || [ "${console_noise}" != 0 ] || [ "${console_failure}" != none ]; then
+        echo "ERROR: DOGFOOD_CONSOLE_DRIVER requires console mode without noise/failure injection" >&2; exit 1
+    fi
+    console_driver="$(realpath "${console_driver}")"
+    if [ ! -f "${console_driver}" ] || [ ! -x "${console_driver}" ]; then
+        echo "ERROR: DOGFOOD_CONSOLE_DRIVER must name an executable file" >&2; exit 1
+    fi
+fi
 profile="${DOGFOOD_PROFILE:-minimal}"
 case "${profile}" in
     minimal|home-server) ;;
@@ -233,14 +248,17 @@ truncate -s 16G "${target}"
 vars="${state}/vars.fd"
 cp "${vars_tmpl}" "${vars}"
 
-# Reuse the Homelab harness's stock systemd-boot profile selection. Only the
-# scratch stick changes; the signed UKI and release artifact remain intact.
+# Built-in runs reuse the Homelab harness's stock default selection. An
+# external driver gets the shipped loader config and must select with keys.
+# Only the scratch stick changes; signed UKIs and release artifacts stay intact.
 if [ "${install_mode}" != diskless-console ]; then
     cp --reflink=auto "${installer}" "${state}/installer.raw"
     installer="${state}/installer.raw"
     esp_offset="$(sfdisk --json "${installer}" | python3 -c 'import json,sys; print(next(p["start"] for p in json.load(sys.stdin)["partitiontable"]["partitions"] if p.get("name") == "bluefin-installer") * 512)')"
-    printf 'timeout 3\nconsole-mode keep\nsecure-boot-enroll if-safe\ndefault bluefin-server-installer_*@%s\n' "${profile}" > "${state}/loader.conf"
-    mcopy -o -i "${installer}@@${esp_offset}" "${state}/loader.conf" ::/loader/loader.conf
+    if [ -z "${console_driver}" ]; then
+        printf 'timeout 3\nconsole-mode keep\nsecure-boot-enroll if-safe\ndefault bluefin-server-installer_*@%s\n' "${profile}" > "${state}/loader.conf"
+        mcopy -o -i "${installer}@@${esp_offset}" "${state}/loader.conf" ::/loader/loader.conf
+    fi
 fi
 
 fail() {
@@ -254,7 +272,11 @@ fail() {
 # shellcheck disable=SC2329 # the EXIT trap below runs it
 cleanup() {
     local pid
-    for pid in ${qemu_pid:-} ${http_pid:-}; do kill "${pid}" 2>/dev/null || true; done
+    for pid in ${qemu_pid:-} ${http_pid:-}; do
+        kill "${pid}" 2>/dev/null || true
+        wait "${pid}" 2>/dev/null || true
+    done
+    [ -z "${driver_socket_dir:-}" ] || rm -rf "${driver_socket_dir}"
 }
 trap cleanup EXIT
 
@@ -328,11 +350,19 @@ fi
 # guest keyboard (type_keys).
 boot_start() {
     local name="$1"; shift
-    local log="${state}/${name}"
-    rm -f "${log}.mon"
-    "${qemu[@]}" "$@" \
+    local log="${state}/${name}" startup=()
+    monitor_path="${log}.mon"
+    if [ -n "${console_driver:-}" ]; then
+        # All boots in a driver run need short sockets, including enrollment
+        # and the built-in installed-system login checks.
+        [ -n "${driver_socket_dir:-}" ] || driver_socket_dir="$(mktemp -d /tmp/bluefin-console.XXXXXX)"
+        monitor_path="${driver_socket_dir}/qemu.mon"
+    fi
+    [ "${boot_with_driver:-0}" != 1 ] || startup=(-S)
+    rm -f "${monitor_path}"
+    "${qemu[@]}" "${startup[@]}" "$@" \
         -serial "file:${log}.ttyS0" -serial "file:${log}.ttyS1" -serial "file:${log}.ttyS2" \
-        -monitor "unix:${log}.mon,server=on,wait=off" \
+        -monitor "unix:${monitor_path},server=on,wait=off" \
         -device virtio-serial-pci,id=dogfood-vser \
         -chardev "file,id=dogfood-screen,path=${log}.screen.log" \
         -device virtserialport,bus=dogfood-vser.0,chardev=dogfood-screen,name=dogfood.screen \
@@ -360,7 +390,7 @@ boot_wait() {
             kill "${qemu_pid}" 2>/dev/null || true
         else
             # A result is not a power cut: let the guest flush and stop normally.
-            python3 - "${log}.mon" <<'PY' || fail "${name}: cannot request orderly shutdown"
+            python3 - "${monitor_path:-${log}.mon}" <<'PY' || fail "${name}: cannot request orderly shutdown"
 import socket, sys
 with socket.socket(socket.AF_UNIX) as monitor:
     monitor.settimeout(5)
@@ -384,7 +414,7 @@ PY
             | tr -d '\r' > "${log}.${s}.log" || true
         rm -f "${log}.${s}"
     done
-    rm -f "${log}.mon"
+    rm -f "${monitor_path:-${log}.mon}"
     grep -aoE 'PROBE[ -].*' "${log}.ttyS1.log" || true
     [ "${timed_out}" = 0 ] || { tail -n 40 "${log}.ttyS0.log" >&2; fail "${name}: no result within ${timeout_s}s"; }
     [ "${shutdown_failed}" = 0 ] || fail "${name}: guest ignored orderly ACPI shutdown"
@@ -508,7 +538,7 @@ hold_console() {
 # lost one keystroke under noise, so the two password prompts did not match
 # (#600).
 type_keys() {
-    python3 - "${state}/$1.mon" "$2" "${console_noise:-0}" <<'PY'
+    python3 - "${monitor_path:-${state}/$1.mon}" "$2" "${console_noise:-0}" <<'PY'
 import socket, sys, time
 keys = {" ": "spc", "\n": "ret", "\x15": "ctrl-u", "-": "minus", ".": "dot", "/": "slash", "=": "equal",
         ",": "comma", ";": "semicolon", "'": "apostrophe", "`": "grave_accent", "\\": "backslash",
@@ -552,8 +582,8 @@ console=0 failed_probe=0
 while :; do
     if [ -w "${port}" ] && [ -r /dev/vcsa ]; then
         # vcsa starts with the screen's rows, columns and the cursor's x, y.
-        read -r _ cols _ y < <(od -An -tu1 -N4 /dev/vcsa)
-        screen="cursor ${y}
+        read -r rows cols x y < <(od -An -tu1 -N4 /dev/vcsa)
+        screen="rows ${rows} cols ${cols} x ${x} cursor ${y}
 $(tr '\000-\037\177-\377' '?' < /dev/vcs | fold -w "${cols:-80}" | sed 's/ *$//')"
         if [ "${console}" = 1 ] || [ "${screen}" != "${last}" ]; then
             printf '=== screen %s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "${screen}" > "${port}"
@@ -726,6 +756,37 @@ run_install() {
     check_done_screen "$1"
 }
 
+# Synchronous ownership transfer: no Server monitor client runs until the
+# driver returns. A zero exit does not replace the native install probes.
+run_console_driver() {
+    local name="$1" manifest="${state}/$1.driver.json" remaining
+    python3 - "${manifest}" "${name}" "${monitor_path}" "${qemu_pid}" "${qemu_deadline}" \
+        "${state}" "${profile}" "${target_dev}" "${ver}" <<'PY'
+import json, sys
+path, name, monitor, pid, deadline, state, profile, target, version = sys.argv[1:]
+with open(path, "w") as out:
+    json.dump({"version": 1, "boot": name, "monitor": monitor,
+               "qemu_pid": int(pid), "deadline_unix": int(deadline), "paused": True,
+               "screen_log": f"{state}/{name}.screen.log",
+               "serial_logs": {s: f"{state}/{name}.{s}" for s in ("ttyS0", "ttyS1", "ttyS2")},
+               "state_dir": state, "profile": profile, "target_device": target,
+               "image_version": version}, out)
+PY
+    remaining=$(( qemu_deadline - $(date +%s) ))
+    [ "${remaining}" -gt 0 ] || fail "${name}: no time left for console driver"
+    timeout --kill-after=5 "${remaining}" "${console_driver}" "${manifest}" \
+        || fail "${name}: console driver failed or exceeded the boot deadline"
+}
+
+check_console_install() {
+    local name="$1" log="${state}/$1"
+    grep -aq "PROBE sysinstall=success installed-slot-b=0 installed-parts=3 decoy-parts=0" "${log}.ttyS1.log" \
+        || fail "${name}: expected the ESP and usr slot A (+ verity) on the target and the other disk untouched: $(grep -ao 'PROBE sysinstall=.*' "${log}.ttyS1.log")"
+    grep -aqF "PROBE-LOG disk-choice BLUEFIN_INSTALL_TARGET=${target_dev}" "${log}.ttyS1.log" \
+        || fail "${name}: the disk question did not hand ${target_dev} to sysinstall"
+    check_done_screen "${name}"
+}
+
 # console_install <name>: install the way a person at the monitor does: pick
 # the target by its number among two disks, confirm with "yes", see the
 # "installed" screen, press Enter to restart (or retain a genuine failure).
@@ -748,9 +809,15 @@ ExecStartPost=/bin/bash -c 'echo BLUEFIN_INSTALL_KERNEL=/run/bluefin/installer/b
 FAILURE
         console_creds+=(-smbios "$(cred systemd.unit-dropin.bluefin-installer-disk.service~dogfood-failure "${state}/failure-kernel.conf")")
     fi
-    boot_start "${name}" "${stick[@]}" "${disk[@]}" \
+    boot_with_driver="${console_driver:+1}" boot_start "${name}" "${stick[@]}" "${disk[@]}" \
         -drive "if=none,id=decoy,format=raw,file=${decoy}" -device virtio-blk-pci,drive=decoy,serial=bluefin-decoy \
         -nic none "${install_creds[@]}" "${console_creds[@]}"
+    if [ -n "${console_driver}" ]; then
+        run_console_driver "${name}"
+        boot_wait "${name}" ''
+        check_console_install "${name}"
+        return 0
+    fi
     if [ "${profile}" = home-server ]; then
         for option in 'Podman host engine' 'Docker host engine' 'existing Homelab/KubeStellar cluster'; do
             wait_prompt "${name}" "Enable ${option}.*yes/no or q to cancel:$"
@@ -822,11 +889,7 @@ FAILURE
     # Enter restarts at once, without the countdown.
     type_keys "${name}" $'\n'
     boot_wait "${name}" ''
-    grep -aq "PROBE sysinstall=success installed-slot-b=0 installed-parts=3 decoy-parts=0" "${log}.ttyS1.log" \
-        || fail "${name}: expected the ESP and usr slot A (+ verity) on the target and the other disk untouched: $(grep -ao 'PROBE sysinstall=.*' "${log}.ttyS1.log")"
-    grep -aqF "PROBE-LOG disk-choice BLUEFIN_INSTALL_TARGET=${target_dev}" "${log}.ttyS1.log" \
-        || fail "${name}: the disk question did not hand ${target_dev} to sysinstall"
-    check_done_screen "${name}"
+    check_console_install "${name}"
 }
 
 # diskless_install_command: the commands "From a diskless node" in
