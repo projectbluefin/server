@@ -440,16 +440,20 @@ hold_console() {
 }
 
 # type_keys <name> <text>: type <text> on the guest's keyboard through the
-# QEMU monitor (sendkey); a newline is Enter.
+# QEMU monitor (sendkey); a newline is Enter. Widen the per-key gap while
+# console noise is active: the injected errors can make the guest miss a
+# scancode, and a 16-character password typed at the default gap lost one
+# keystroke under noise, so the two password prompts did not match (#600).
 type_keys() {
-    python3 - "${state}/$1.mon" "$2" <<'PY'
+    python3 - "${state}/$1.mon" "$2" "${console_noise:-0}" <<'PY'
 import socket, sys, time
 keys = {" ": "spc", "\n": "ret", "-": "minus", ".": "dot", "/": "slash", "=": "equal", ",": "comma"}
+gap = 0.35 if sys.argv[3] == "1" else 0.15
 with socket.socket(socket.AF_UNIX) as s:
     s.connect(sys.argv[1])
     for ch in sys.argv[2]:
         s.sendall(f"sendkey {keys.get(ch, ch)}\n".encode())
-        time.sleep(0.15)
+        time.sleep(gap)
     time.sleep(0.5)
 PY
 }
@@ -570,12 +574,6 @@ for kv in firstboot.locale=C.UTF-8 firstboot.keymap=us firstboot.timezone=UTC 'p
     printf '%s' "${kv#*=}" > "${state}/${kv%%=*}"
     install_creds+=(-smbios "$(cred "${kv%%=*}" "${state}/${kv%%=*}")")
 done
-if [ "${profile}" = home-server ] && [ "${install_mode}" = unattended ]; then
-    printf dogfood > "${state}/bluefin.homebrew.owner"
-    printf '*' > "${state}/passwd.hashed-password.dogfood"
-    install_creds+=(-smbios "$(cred bluefin.homebrew.owner "${state}/bluefin.homebrew.owner")"
-        -smbios "$(cred passwd.hashed-password.dogfood "${state}/passwd.hashed-password.dogfood")")
-fi
 install_creds+=("${screen_creds[@]}")
 if [ "${install_mode}" = console ]; then
     printf 1 > "${state}/console"
@@ -670,11 +668,6 @@ FAILURE
         -drive "if=none,id=decoy,format=raw,file=${decoy}" -device virtio-blk-pci,drive=decoy,serial=bluefin-decoy \
         -nic none "${install_creds[@]}" "${console_creds[@]}"
     if [ "${profile}" = home-server ]; then
-        wait_prompt "${name}" 'Owner account .*or q to cancel:$'
-        type_keys "${name}" $'root\n'
-        wait_screen "${name}" 'Use a nonroot account name'
-        wait_prompt "${name}" 'Owner account .*or q to cancel:$'
-        type_keys "${name}" $'\n'
         for option in 'Podman host engine' 'Docker host engine' 'existing Homelab/KubeStellar cluster'; do
             wait_prompt "${name}" "Enable ${option}.*yes/no or q to cancel:$"
             type_keys "${name}" $'\n'
@@ -880,10 +873,11 @@ sync
 echo "PROBE update-done"
 UPDATE
 # Appended to the probe of step 6: an SSH login through systemd-ssh-generator's
-# local socket must print the banner (sshd reads /etc/motd). sshd refuses a
-# locked root even for keys, so root gets the unlocked "*" first.
+# local socket must print the banner (sshd reads /etc/motd). Root keeps its
+# locked password, as with an Ignition- or credential-provisioned key: the
+# login proves sshd (UsePAM yes) takes a key for a locked root.
 cat > "${state}/ssh.sh" <<'SSH'
-usermod -p '*' root
+echo "PROBE ssh-root-locked=$(passwd -S root | cut -d' ' -f2)"
 ssh-keygen -q -t ed25519 -N '' -f /run/dogfood-ssh
 install -d -m 0700 /root/.ssh
 cat /run/dogfood-ssh.pub >> /root/.ssh/authorized_keys
@@ -986,37 +980,19 @@ banner_lacks() {
     ! grep -aF "PROBE banner-$2=" "${log}" | grep -aqF -- "$3" || fail "$1: console banner after '$2' still shows '$3'"
 }
 
-# console_first_boot <name>: create the profile's account at tty1, refuse
-# invalid input and a wrong login password, then log in with the typed password.
+# console_first_boot <name>: set the root password at tty1, refuse invalid
+# input and a wrong login password, then log in with the typed password.
 console_first_boot() {
     local name="$1" log="${state}/$1" pw user=root
     pw="$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
     boot_start "${name}" "${disk[@]}" -nic user,model=virtio-net-pci "${creds[@]}"
-    if [ "${profile}" = home-server ]; then
-        user=dogfood
-        wait_prompt "${name}" 'non-root Homebrew owner account:' "${timeout_s}"
-        type_keys "${name}" $'root\n'
-        wait_screen "${name}" 'Use a nonroot account name' 60
-        wait_prompt "${name}" 'non-root Homebrew owner account:' 60
-        type_keys "${name}" "${user}"$'\n'
-        wait_prompt "${name}" "Password for new Bluefin Homebrew owner ${user}:" 60
-        type_keys "${name}" $'\n'
-        wait_prompt "${name}" 'Confirm account password:' 60
-        type_keys "${name}" $'\n'
-        wait_screen "${name}" 'Account passwords must be non-empty and match' 60
-        wait_prompt "${name}" "Password for new Bluefin Homebrew owner ${user}:" 60
-        type_keys "${name}" "${pw}"$'\n'
-        wait_prompt "${name}" 'Confirm account password:' 60
-        type_keys "${name}" "${pw}"$'\n'
-    else
-        wait_prompt "${name}" 'new root password' "${timeout_s}"
-        type_keys "${name}" $'\n'
-        wait_screen "${name}" 'not accepted here' 60
-        wait_prompt "${name}" 'new root password' 60
-        type_keys "${name}" "${pw}"$'\n'
-        wait_prompt "${name}" 'root password again' 60
-        type_keys "${name}" "${pw}"$'\n'
-    fi
+    wait_prompt "${name}" 'new root password' "${timeout_s}"
+    type_keys "${name}" $'\n'
+    wait_screen "${name}" 'not accepted here' 60
+    wait_prompt "${name}" 'new root password' 60
+    type_keys "${name}" "${pw}"$'\n'
+    wait_prompt "${name}" 'root password again' 60
+    type_keys "${name}" "${pw}"$'\n'
     # agetty reprints the banner when DHCP adds the address.
     wait_screen "${name}" 'ssh root@[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
     wait_prompt "${name}" ' login:$'
@@ -1035,15 +1011,10 @@ console_first_boot() {
     wait_screen "${name}" "uid=[0-9]+\\(${user}\\) gid=[0-9]+\\(${user}\\)" 60
     last_screen "${name}" | sed '/^$/d' | tail -n 6 | sed 's/^/    screen| /'
     boot_wait "${name}" 'PROBE failed='
-    if [ "${profile}" = home-server ]; then
-        grep -aq 'PROBE root-password=locked' "${log}.ttyS1.log" || fail "${name}: Home Server unlocked root"
-        ! grep -aqF 'Please enter the new root password' "${log}.screen.log" || fail "${name}: Home Server asked for a root password"
-    else
-        grep -aqF 'Please enter the new root password' "${log}.screen.log" || fail "${name}: no root password prompt on tty1"
-        grep -aq 'PROBE root-password=set' "${log}.ttyS1.log" || fail "${name}: root has no password after the prompt"
-        grep -aqF 'would lock root for good, so it is not accepted here.' "${log}.screen.log" \
-            || fail "${name}: the empty answer was not refused"
-    fi
+    grep -aqF 'Please enter the new root password' "${log}.screen.log" || fail "${name}: no root password prompt on tty1"
+    grep -aq 'PROBE root-password=set' "${log}.ttyS1.log" || fail "${name}: root has no password after the prompt"
+    grep -aqF 'would lock root for good, so it is not accepted here.' "${log}.screen.log" \
+        || fail "${name}: the empty answer was not refused"
     local host ip
     host="$(sed -n 's/^PROBE hostname=//p' "${log}.ttyS1.log" | tail -n1)"
     ip="$(sed -n 's/^PROBE ipv4=//p' "${log}.ttyS1.log" | tail -n1)"
@@ -1084,7 +1055,7 @@ fi
 
 if [ "${install_mode}" = console ]; then
     login_proof="the first boot refused an empty root password, took one typed at tty1, showed the hostname and IP address on the login banner, and root logged in at tty1 with it"
-    [ "${profile}" != home-server ] || login_proof="the nonroot owner logged in at tty1, root stayed locked, and the SSH Homebrew and host-engine workloads passed on both installed boots"
+    [ "${profile}" != home-server ] || login_proof="${login_proof}; the Homebrew seed archive and its first-boot unit were in place"
     echo "PASS: offline installer installed ${ver} at the console: the target picked by number from a list with size and model, confirmed, 'installed, remove the USB stick' shown before the restart; ${login_proof}"
     exit 0
 fi
@@ -1143,6 +1114,8 @@ banner_lacks 6-updated boot 'FAILED'
 banner_lacks 6-updated boot 'staged'
 grep -aqF "PROBE ssh-motd=Bluefin Server ${next_ver}, automatic updates on" "${state}/6-updated.ttyS1.log" \
     || fail "6-updated: an SSH login does not show the banner: $(grep -a 'ssh' "${state}/6-updated.ttyS1.log" | tail -n 5)"
+grep -aq 'PROBE ssh-root-locked=L' "${state}/6-updated.ttyS1.log" \
+    || fail "6-updated: root was not locked for the SSH key login: $(grep -ao 'PROBE ssh-root-locked=.*' "${state}/6-updated.ttyS1.log")"
 
 checked="a local server after reporting an unreachable and a foreign-signed source as failed checks on its banner"
 [ "${next}" != release ] || checked="the image's own source"

@@ -40,8 +40,8 @@ def publish_commands(job: dict) -> list[str]:
 
 
 def test_both_jobs_publish_through_the_script_only() -> None:
-    assert publish_commands(RELEASE) == ["verify", "taggable", "release", "oci"]
-    assert publish_commands(DRY_RUN) == ["verify", "release", "oci"]
+    assert publish_commands(RELEASE) == ["verify", "taggable", "oci", "release"]
+    assert publish_commands(DRY_RUN) == ["verify", "oci", "release"]
     for job in (RELEASE, DRY_RUN):
         runs = "\n".join(s.get("run", "") for s in job["steps"])
         assert "oras push" not in runs
@@ -216,6 +216,7 @@ def test_image_check_measures_the_set_against_the_latest_release(tmp_path: Path)
     # The step itself, on a one-file set and the latest release's files.
     (tmp_path / "scripts" / "ci").mkdir(parents=True)
     shutil.copy(ROOT / "scripts" / "ci" / "image-sizes.py", tmp_path / "scripts" / "ci")
+    shutil.copytree(ROOT / "files" / "os" / "repart.d", tmp_path / "files" / "os" / "repart.d")
     uuid = "d3107d37-a9da-32cf-3c19-49fa3b0cb1df"
     (tmp_path / "dist" / "diskless").mkdir(parents=True)
     (tmp_path / "dist" / "diskless" / f"bluefin-server_0.42_{uuid}.usr.raw").write_bytes(b"u" * 300)
@@ -242,3 +243,13 @@ def test_release_and_dry_run_publish_the_size_report() -> None:
     assert "if" not in named_step(RELEASE, "Download the size report")
     assert named_step(DRY_RUN, "Download the size report")["if"] == "needs.image-check.result == 'success'"
     assert DRY_RUN["needs"] == ["build", "image-check"]
+
+
+def test_release_creates_the_github_release_last() -> None:
+    # A published release is never touched again, so every step that can fail
+    # (OCI push and its attestations) runs before the script publishes it; a
+    # retry re-pushes the same files to the registry and the script replaces
+    # the draft an earlier attempt left.
+    order = step_names(RELEASE)
+    assert order[-1] == "Create GitHub Release"
+    assert order.index("Push OCI artifact") < order.index("Create GitHub Release")

@@ -243,6 +243,25 @@ those, and reserve null-key credentials for non-secret payloads such as the
 Deliver root's `authorized_keys` as the `ssh.authorized_keys.root` credential
 (for example `/loader/credentials/ssh.authorized_keys.root.cred`); systemd's
 stock `provision.conf` tmpfiles rule writes it to `/root/.ssh/authorized_keys`.
+### Stable SSH host keys on a diskless node
+
+Host keys are generated on the device (`ssh-host-keygen.service`), never baked
+into the public image. A diskless node's `/etc` is tmpfs, so it makes new ones
+every boot and clients report "host key has changed". Deliver the key as a
+`tmpfiles.extra` credential instead (null-key sealing is no protection for a
+private key: use `--with-key=tpm2` or an encrypted channel):
+
+```text
+f~ /etc/ssh/ssh_host_ed25519_key 0600 root root - <base64 of the private key file>
+f~ /etc/ssh/ssh_host_ed25519_key.pub 0644 root root - <base64 of the .pub file>
+```
+
+`ssh-host-keygen.service` stands down when `ssh_host_ed25519_key` exists, and
+sshd then offers that key. The other key types are still generated each boot
+(`ssh-keygen -A` fills in what is missing), so deliver them too if clients pin
+them; most clients pick ed25519 first. Verified with systemd-tmpfiles: the file
+is written byte for byte, mode 0600.
+
 For other accounts, use a `tmpfiles.extra` credential; the payload must create
 parent directories before writing the file:
 
@@ -251,6 +270,12 @@ d /var/home/alice 0700 alice alice -
 d /var/home/alice/.ssh 0700 alice alice -
 f~ /var/home/alice/.ssh/authorized_keys 0600 alice alice - c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTEAAAA...
 ```
+
+A diskless node's DHCP client is identified by its MAC address
+(`15-wired-diskless.network` and the initrd's `90-initrd-dhcp.network`):
+networkd's default ID derives from `/etc/machine-id`, which is new on every
+diskless boot and differs between the initrd and the host, so a reservation by
+client ID could not match. Installed nodes keep the default.
 
 Example static network credential name: `network.network.10-static`.
 

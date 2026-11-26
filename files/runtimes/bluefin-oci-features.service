@@ -1,0 +1,11 @@
+[Unit]
+Description=Select optional Home Server engines before fetching
+Before=bluefin-sysext-fetch.service
+
+[Service]
+Type=oneshot
+ImportCredential=bluefin.homebrew.profile
+ImportCredential=bluefin.homebrew.podman
+ImportCredential=bluefin.homebrew.docker
+ExecStart=/usr/libexec/bluefin-oci-features --configure-features
+RemainAfterExit=yes

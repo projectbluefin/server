@@ -135,7 +135,13 @@ def test_every_container_image_is_pinned_by_digest() -> None:
                 node = stack.pop()
                 if isinstance(node, dict):
                     if {"repository", "image", "version"} <= node.keys():
-                        assert re.fullmatch(r"sha256:[0-9a-f]{64}", node["version"]), node
+                        render = render_module()
+                        if f"{node['repository']}/{node['image']}" in render.OS_SUFFIXED:
+                            # The operator adds the node's OS to the tag; no digest exists.
+                            assert not node["version"].startswith("sha256:"), node
+                        else:
+                            assert re.fullmatch(r"sha256:[0-9a-f]{64}", node["version"]), node
+                            assert node["version"] != render.EMPTY_SHA256, f"{node}: the digest of no bytes"
                     stack.extend(node.values())
                 elif isinstance(node, list):
                     stack.extend(node)
@@ -463,8 +469,8 @@ def test_homelab_sysext_ships_in_the_signed_release_set() -> None:
     assert '"homelab_${v}\\\\.raw\\\\.zst"' in (ROOT / "scripts" / "publish-release.sh").read_text()
     justfile = (ROOT / "Justfile").read_text()
     assert "oci/homelab-sysext.bst" in justfile
-    assert "for name in homelab argo-workflows mcp kubestellar; do" in justfile
-    assert "cp dist/homelab-checkout/${name}_*.raw.zst dist/sysext/" in justfile
+    for name in ("homelab", "argo-workflows", "mcp", "kubestellar"):
+        assert f"just _export-sysext-element {name}-sysext {name}_" in justfile
 
 
 def test_applier_never_deletes() -> None:

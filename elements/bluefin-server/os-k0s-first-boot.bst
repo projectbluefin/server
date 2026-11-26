@@ -13,7 +13,8 @@ description: |
   Kubernetes; the boot deadline; the diskless update check;
   bluefin-update-status.service for the login banners and
   bluefin-update-status-migrate.service, which enables it on nodes that
-  updated from an image without it).
+  updated from an image without it), and the daily countme service and timer
+  (projectbluefin-countme.service, projectbluefin-countme.timer).
 
 sources:
   - kind: local

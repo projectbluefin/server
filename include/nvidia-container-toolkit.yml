@@ -9,6 +9,6 @@
 # them together.
 variables:
   # NVIDIA/nvidia-container-toolkit release tag, without the leading "v".
-  nvidia-container-toolkit-version: "1.20.1"
+  nvidia-container-toolkit-version: "1.20.2"
   # The commit that tag points to.
-  nvidia-container-toolkit-commit: "dffc40b4f820ce5c512633bac9e0418d0e05a2ee"
+  nvidia-container-toolkit-commit: "adbd28c39b60f8eb7e03115b5ac61e58703f0ce7"

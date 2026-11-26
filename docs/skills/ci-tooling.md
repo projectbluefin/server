@@ -4,7 +4,7 @@ description: CI workflow conventions for Bluefin Server. Use when writing or edi
 metadata:
   type: reference
   status: stable
-  last_updated: "2026-10-17"
+  last_updated: "2026-11-08"
   context7-sources:
     - /websites/github_en_actions
     - /websites/cli_github_manual
@@ -89,7 +89,7 @@ and measures coverage of the repo's Python (`.coveragerc`: `scripts/`,
 `.github/scripts/`, `files/`) into `term-missing:skip-covered`; the `unit`
 job appends the same report as markdown to the step summary. `fail_under` in `.coveragerc` is a ratchet (the measured total, rounded down): raise it as coverage grows, never lower it to pass.
 importlib-by-path loads are measured, and so are `python3` subprocesses (`patch = subprocess`) unless a test hands them a fresh `env=`.
-`pytest.ini` registers two markers: `-m "not slow"` skips the slow tests; `root` tests (real ownership changes, privilege drops) skip unprivileged, and the `unit` job's last step runs them with `sudo ... pytest -m root`, where in CI they fail if not root (`tests/unit/conftest.py`).
+`pytest.ini` registers two markers: `-m "not slow"` skips the slow tests; `root` tests (real ownership changes, privilege drops) skip unprivileged, and the `unit` job's last step runs them with `sudo ... pytest -m root`, where in CI they fail if not root (`tests/unit/conftest.py`). Tests using synthetic logins must mock prefix-owner UIDs too; never assume the runner's real UID matches the fixture.
 
 ### Workflow linting
 
@@ -120,7 +120,7 @@ build scripts come from the PR head), so no job that runs on `pull_request`
 may hold a write token. In `build.yml`, write tokens to the repository's
 contents and packages are granted to exactly one job:
 
-- `release` — creates the GitHub Release and pushes the OCI artifact; gated to
+- `release` — pushes the OCI artifact, then creates the GitHub Release; gated to
   `refs/heads/main`. It holds `contents: write` (release),
   `packages: write` (ghcr.io push and attestation referrers), and
   `id-token: write`, `attestations: write` and `artifact-metadata: write`
@@ -225,18 +225,18 @@ use: remove only this repository from their repository access.
 | `sdk-cache`, `kernel-cache` | `cache-warm.yml` | `push/main`, `workflow_dispatch` on main | Warms selected key-free SDK/Brew outputs once, then release/dev kernel and unsigned module variants in parallel. Separate workflow and concurrency group: never occupies the serialized release queue. Read-only token; mTLS credentials in `bst-cache` only. |
 | `boot-test` | `build.yml` | after `build` | Runs the Secure Boot QEMU checks on the exported sets (see Core Process step 4), with the harness checked out at the commit `build` built. A `fail-fast: false` matrix over the buckets of `scripts/ci/boot-test.sh`, one runner each, so its checks are `boot-test (<bucket>)`; each bucket downloads only the `build` artifacts its scenarios read, as listed in its matrix entry. Each bucket's wall time, passed or failed, is a notice and a row of its step summary. On failure each bucket uploads its logs as `boot-test-logs-<bucket>`. Read-only token. |
 | `boot-test-result` | `build.yml` | after `boot-test`, when `build` succeeded | The one result of every `boot-test` bucket: fails unless `boot-test` succeeded. `release` and `nightly-status` gate on it, and it is skipped like `boot-test` when nothing was built, so it is the boot test's required check. No checkout, `permissions: {}`. |
-| `image-check` | `build.yml` | after `build` | Runs `.github/scripts/check-image.py` on the built image set: no missing libraries, required dlopen libraries, or unit/udev programs in `/usr`, the disk UKI's initrd, or the sysexts (resolved over `/usr`); the step summary diffs `/usr` paths against the latest release. Then `scripts/ci/image-sizes.py` tables the size of every file, the disk UKI's `.linux` and `.initrd` and the unpacked initrd against the latest release's `bluefin-server_<ver>.size.json` (or its `*.usr.raw` alone), with a `::warning::` for each that grew by more than 5 % or 5 MiB (never a failure), and uploads this set's report as the `image-size` artifact that `release` and `release-dry-run` publish with the set, unsigned (see "Publishing" in `systemd-sysupdate-verification.md`). `release` needs it. Read-only token. |
+| `image-check` | `build.yml` | after `build` | Runs `.github/scripts/check-image.py` on the built image set: no missing libraries, required dlopen libraries, or unit/udev programs in `/usr`, the disk UKI's initrd, or the sysexts (resolved over `/usr`); the step summary diffs `/usr` paths against the latest release. Then `scripts/ci/image-sizes.py` tables the size of every file, the disk UKI's `.linux` and `.initrd` and the unpacked initrd against the latest release's `bluefin-server_<ver>.size.json` (or its `*.usr.raw` alone), with a `::warning::` for each that grew by more than 5 % or 5 MiB (never a failure) and an `::error::` failing the job if `usr_raw` or `usr_verity_raw` fills over 90 % of the minimum size (`SizeMinBytes=`, 2 GiB) of its `files/os/repart.d` A/B slot, and uploads this set's report as the `image-size` artifact that `release` and `release-dry-run` publish with the set, unsigned (see "Publishing" in `systemd-sysupdate-verification.md`). `release` needs it. Read-only token. |
 | `release` | `build.yml` | `release=true` | Publishes `dist/diskless/` as-is through `scripts/publish-release.sh`: an immutable GitHub Release tagged `v<image-version>` plus an ORAS OCI artifact at `ghcr.io/<owner>/bluefin-server:<ver>,latest` (one layer per file, artifact type `application/vnd.projectbluefin.server.release.v1`), with provenance and SBOM attestations for both. It runs only when `build`, `boot-test-result` and `image-check` succeeded (`!cancelled()` plus each job's result, so a failed `kernel-cache` does not hold it back), and marks the set latest (GitHub "Latest", ghcr `latest`) only when no newer version is published (see "Publishing" in `systemd-sysupdate-verification.md`). Write permissions listed above. Main runs queue, so a merge that edits `build.yml` can land before an earlier run publishes; GitHub then refuses `GITHUB_TOKEN` a tag at that run's commit (it would need the `workflows` permission). `publish-release.sh taggable` detects this before anything is published and skips that version with a warning; the newer run releases its content. |
-| `release-dry-run` | `build.yml` | `pull_request` or `merge_group` that builds | Runs the same `scripts/publish-release.sh` commands against the PR's or merge group's image set, with `image-check`'s size report when that job passed: verify, render `gh release create`, and a real `oras push` to a `registry` service container (pinned by digest) that it pulls back. Read-only token, no secrets. |
-| `nightly-status` | `build.yml` | `schedule`, after `boot-test-result` and `image-check` | Opens the "Nightly build failing" issue (or comments on the open one) with the run URL when `changes`, `build`, `boot-test-result` or `image-check` failed, and closes it when a later nightly passes, through `.github/scripts/tracking-issue.sh` (finds the open issue by exact title). `issues: write` only. |
+| `release-dry-run` | `build.yml` | `pull_request` or `merge_group` that builds | Runs the same `scripts/publish-release.sh` commands against the PR's or merge group's image set, with `image-check`'s size report when that job passed: verify, a real `oras push` to a `registry` service container (pinned by digest) that it pulls back, then render `gh release create`. Read-only token, no secrets. |
+| `nightly-status` | `build.yml` | `schedule`, after `boot-test-result` and `image-check` | Opens the "Nightly build failing" issue (or comments on the open one) with the run URL when `changes`, `boot-test-preflight`, `build`, `boot-test-result` or `image-check` failed, was cancelled or was skipped (a nightly always builds), and closes it when a later nightly passes, through `.github/scripts/tracking-issue.sh` (finds the open issue by exact title). `issues: write` only. |
 | `status` | `track-junctions.yml`, `track-binaries.yml`, `e2e-opt-in.yml` | after every other job, unless cancelled (`e2e-opt-in.yml`: `schedule` only) | The same script and semantics: "Junction tracker failing" / "Binary tracker failing" / "Opt-in feature e2e failing". `issues: write` only. |
 | `docs` | `docs-checks.yml` | every `pull_request`, `merge_group`, `push/main` | Runs markdown and skill metadata checks via `docs-checks.py`. No `paths:` filter, so it can be a required check. Read-only token. |
 | `release`, `e2e` | `e2e-opt-in.yml` | `schedule` (Wednesdays 09:00 UTC), `workflow_dispatch` (optional `release` tag) | QEMU end to end of the opt-in features the boot test never boots, on a published release: `release` resolves the latest release (or the dispatched tag); `e2e` is a `fail-fast: false` matrix over `scripts/ci/e2e-opt-in.sh --scenarios`, one runner each: `mdns` (two appliances resolve each other), `kubeadm` (single-node control plane with Cilium), `nvidia` (each driver flavour's sysext on a disk install, no GPU), `homelab-cluster`, `homelab-templates` and `homelab-installer` (the homelab sysexts as a two-node cluster from Ignition, from the published templates, and from the USB installer's Homelab entries). Each checks out the release's tag, downloads the set to `/mnt`, verifies it with `publish-release.sh verify` against the committed release keyring, and runs one dogfood script; the guests need internet. `e2e-opt-in.sh --install-tools` adds swtpm, xfsprogs and helm (pinned by version and sha256, bumped by hand) to what `install-qemu-ovmf.sh` installs. Logs upload as `e2e-logs-<scenario>`. Never on `pull_request`; nothing built or published. Read-only token. |
-| `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the final-assembly artifacts, rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). Throwaway keys, nothing published. Read-only token. |
+| `reproducibility` | `reproducibility.yml` | `schedule` (Mondays 09:00 UTC), `workflow_dispatch` | Builds the image set, deletes the artifact of every project element it is made of (the roots below and what they build from: signed kernel modules, ZFS and NVIDIA modules, the Go helpers, the initrd; FSDK's own elements and `efi-keys` stay cached), rebuilds them without remote caches and diffs every output except `*.gpg` (see "Reproducible builds" in `ddi-installer-build.md`). A `status` job opens, updates and closes "Reproducibility check failing" like the trackers (`schedule` only; a cancelled run counts); a failed run uploads both checksum lists. Throwaway keys, nothing published. Read-only token apart from that job's `issues: write`. |
 | `unit`, `go` | `unit-tests.yml` | every `pull_request`, `merge_group`, `push/main` | `unit` runs `just lint-python` (see [Python lint](#python-lint)), then the pytest and BATS suites, then the `root`-marked tests under `sudo`; `go` runs `gofmt -l`, `go vet` and `go test -race` for each Go module in the repository (a matrix; `tests/unit/test_ci_workflows.py` fails if a `go.mod` is missing from it). No `paths:` filter, so both can be required checks. Read-only token. |
 | `actionlint`, `zizmor` | `lint-actions.yml` | every `pull_request`, `merge_group`, `push/main` | Lint the workflows (see [Workflow linting](#workflow-linting)). Read-only token; zizmor uses it for its online audits. |
 | `authorize` | `prow.yml` | `issue_comment` | Calls `projectbluefin/.project`'s reusable `prow-authorize.yml` (pinned by SHA) to look the commenter up in the org's `maintainers.yaml` roster; its `triage` output unlocks `/triage`, `/priority` and `/label` for the `prow` job. A failed lookup blocks the comment's commands. `contents: read`. |
-| `prow` | `prow.yml` | `issues`, `issue_comment`, `pull_request_target`, `pull_request_review`, `check_suite`, `schedule` (hourly) | Runs `cncf/prow-github-actions` v3.0.1 (pinned by SHA): `/` commands from the `prow-commands` allowlist, `needs-kind` on issues, reviewers and approvers from `OWNERS`, and merging through the merge queue once a PR has `lgtm` + `approved` (the hourly schedule is a backstop). `pull_request_target` is safe because nothing checks out or runs PR code. Write scopes granted per job. |
+| `prow` | `prow.yml` | `issues`, `issue_comment`, `pull_request_target`, `pull_request_review`, `check_suite`, `schedule` (hourly) | Runs `cncf/prow-github-actions` v3.5.0 (pinned by SHA): `/` commands from the `prow-commands` allowlist, `needs-kind` on issues, reviewers and approvers from `OWNERS`, and merging through the merge queue once a PR has `lgtm` + `approved` (the hourly schedule is a backstop). `pull_request_target` is safe because nothing checks out or runs PR code. Write scopes granted per job. |
 | `label-sync` | `prow.yml` | `workflow_dispatch`, `push` of a repository `.github/prow.yaml` (none exists) | Same reusable workflow with `jobs: label-sync`: syncs repository labels from the org config at `projectbluefin/.project/prow.yaml`. Run by hand after every change to that config. |
 | `check`, `propose` | `track-binaries.yml` | `schedule` (08:30 UTC), `workflow_dispatch` | `check` finds the newest patch release in each pinned series of the upstream components pinned by version + sha256 (Kubernetes, cri-tools, containerd, runc, CNI plugins, k0s, each NVIDIA driver flavour inside its branch, Tailscale, NetBird, ORAS) or by version + git commit (NVIDIA Container Toolkit), and the newest dated snapshot of the IANA registries behind `/etc/protocols` and `/etc/services` (`iana-etc`, no series), with `.github/scripts/track-binaries.py`; `propose` moves each version together with its sha256 pins for every pinned architecture (amd64 and the `arch == "aarch64"` sources), verified against upstream's checksum files and the downloaded assets (a git commit: the GitHub API and `git ls-remote` must agree), and opens or updates one PR per component on `auto/track-binaries/<component>`. Minor bumps stay manual (`kubeadm-sysext.md`, `k0s-sysext.md`); a new NVIDIA branch is a new flavour (`nvidia-sysext.md`). Read-only `GITHUB_TOKEN`; writes use the mergeraptor app token (`trackers` environment, `propose` only), minted after the apply step and narrowed to `contents` + `pull-requests` (+ `workflows` for ORAS, pinned in `build.yml`). Never on `pull_request`. |
 
@@ -348,8 +348,6 @@ those of the org config `projectbluefin/.project/prow.yaml`; the hive
 
 ## Build time and caches
 
-The Brew machine shares the server's SDK junction, not a second bootstrap.
-
 The canonical build-time figures; other files link here instead of
 restating them:
 
@@ -391,11 +389,11 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   classifier or `build.yml` always builds. The `changes` job itself runs
   from the PR head's `build.yml`, which a PR can edit to skip anything: the
   control for that is reviewing workflow changes. It answers `false` only when every
-  path is docs, Markdown outside the build inputs, `tests/unit/`,
-  `tests/e2e/`, or a workflow or script that does not build the image;
-  `tests/unit/test_image_build_needed.py` fails if any tracked build input
-  (`elements/`, `files/`, `include/`, `patches/`, `plugins/`, `scripts/`,
-  `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
+  path is docs, Markdown outside the build inputs, `tests/unit/`, or a
+  workflow or script that does not build the image (the trackers, Prow,
+  e2e-opt-in, reproducibility); `tests/unit/test_image_build_needed.py` fails
+  if any tracked build input (`elements/`, `files/`, `include/`, `patches/`,
+  `scripts/`, `tests/fixtures/`, `project.conf`, `Justfile`, `build.yml`) would skip.
   A skipped job reports as passing, so its required check does not hold it.
 - **Key-free build cache in the project CAS.** `cache-warm.yml` runs on pushes
   to `main` or a main-only dispatch. `sdk-cache` runs `seed shared` on the
@@ -431,25 +429,27 @@ version) and the NVIDIA Container Toolkit (Go); the driver sysext adds about
   match, and run `scripts/check-release-keys.sh`, which fails the build if
   the module certificate or key is the dev pair; `seed release` runs it too.
   The CAS is publicly readable: `seed` refuses if
-  `bluefin-server/keys/boot-keys.bst` is anywhere in its full dependency graph,
+  one of the key elements (`module-signing-key.bst`, `secure-boot-keys.bst`,
+  `image-signing-keys.bst`, listed in `KEY_ELEMENTS`) is anywhere in its full dependency graph,
   shared seeding also rejects the module certificate import, and no seed job
   holds a signing secret. A content grep is no guard here: FSDK
   sources (Go's TLS test data and others) carry 307 PEM private keys.
   The independent warming workflow fails visibly on seed errors; its result
   does not gate image building or publication.
-- **No other cache push.** `bluefin-server/keys/boot-keys.bst` imports
-  `files/boot-keys/`, which on `main` holds the Secure Boot, module-signing
-  and sysupdate private keys, and the image, UKIs, `kernel-modules.bst`,
-  `efi-keys.bst`, `os-sd-boot-signed.bst`, `shim.bst`, `openzfs-signed.bst`
-  and the `nvidia-open-*-signed.bst` elements
-  build-depend on it, so a release build's own cache must never be saved or
-  pushed anywhere a pull request can read.
+- **No other cache push.** The key elements (`bluefin-server/keys/`:
+  `module-signing-key`, `secure-boot-keys`, `image-signing-keys`) import the
+  `files/boot-keys/` files that, on `main`, hold the private keys; the image,
+  UKIs and every signing element build-depend on one of them, so a release
+  build's own cache must never be saved or pushed anywhere a pull request can
+  read. Each signer depends only on the key it signs with, so the signed
+  modules stay cached across pull requests, which make new Secure Boot and
+  image keys every run (`tests/unit/test_key_elements.py`).
 - **Most pull requests build the image only in the merge queue.** Before
   the queue, only `full-build`, SDK junction and patch changes build; the
   rest run `validate`. Every image-changing merge group builds and boots.
   Dev builds reuse the public module certificate, so their kernel keys
   match `kernel-cache (dev)`; after a kernel change it stays cold until seeded.
-- **No `actions/cache`.** A full build's cache holds `boot-keys.bst`, and
+- **No `actions/cache`.** A full build's cache holds the key elements, and
   pull requests can restore caches saved on `main`; the key-free kernel
   cache lives in the project CAS instead.
 

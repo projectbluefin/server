@@ -99,6 +99,8 @@ RERUN_ON_PURPOSE = {
     "bluefin-sysext-activate.service",
     # systemd-sysupdate.service's OnSuccess=/OnFailure= refresh the banners.
     "bluefin-update-status.service",
+    # Triggered by path activation per user session.
+    "bluefin-homebrew-seed.service",
 }
 
 
@@ -145,7 +147,7 @@ def test_extension_release_name_is_its_stem(path: Path) -> None:
     assert name == path.name.removeprefix("extension-release.")
 
 
-@pytest.mark.parametrize("stem", ["homebrew-integration", "tailscale", "netbird"])
+@pytest.mark.parametrize("stem", ["tailscale", "netbird"])
 def test_extension_release_names_itself(stem: str) -> None:
     (path,) = (ROOT / "files").rglob(f"extension-release.{stem}")
     assert release_fields(path)["NAME"] == stem

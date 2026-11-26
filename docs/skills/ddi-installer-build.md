@@ -47,16 +47,9 @@ payloads, and a `SHA256SUMS` over all of it with its detached signature
 `SHA256SUMS.gpg` (signed in-element by `oci/bluefin-server-image.bst`). See
 [ddi-installer.md](ddi-installer.md) for what each artifact is.
 
-Home Server builds `homebrew/image.bst` through `fsdk-containers.bst`; the
-producer exports a separate Brew machine, not host binaries. Its SDK and
-community-plugin junctions are overridden with the server's junctions, reusing
-artifact keys without sharing a root filesystem. Keep that mapping when
-updating the producer pin. Text-only manual elements use `strip-binaries: ""`, matching
-`os-creds-prov.bst`, rather than adding a binary-stripping toolchain.
-The separate `oci/homebrew-integration-sysext.bst` supplies the optional host
-bridge and Python closure, not base `/usr`. Its version-locked asset and the
-machine asset are signed together; the `homebrew` feature stages both.
-Use a merged `fsdk-containers` main SHA before shipping this consumer.
+Homebrew is in the base image: `homebrew/seed.bst` (pins in `include/homebrew.yml`)
+ships the seed archive; see [homebrew-seed.md](homebrew-seed.md). Text-only manual
+elements use `strip-binaries: ""`, matching `os-creds-prov.bst`.
 
 
 To publish the set as an OCI artifact (one layer per file, tags `<version>`
@@ -80,7 +73,7 @@ module). `bluefin-server/os-host.bst` builds it into `/usr/bin/bluefin-host`
 and links each `/usr/libexec/bluefin-<name>` to it; the binary runs the helper
 its name (or its first argument) names. Unit drop-ins call
 `bluefin-host kube-interlock`, `kured-flag`, `mask-uki-transfer` and
-`boot-is-good` directly. Installer helpers, the justfile and the initrd's
+`boot-is-good` directly. Installer helpers and the initrd's
 copy of `bluefin-boot-origin` stay shell.
 
 ```bash
@@ -135,11 +128,17 @@ Two outputs carry a signing time of their own: `SHA256SUMS.gpg` and the
 `efi-keys/*.auth` updates, which `sbvarsign` stamps with the current time
 (they stay fixed as long as `bluefin-server/keys/efi-keys.bst` stays
 cached). `.github/workflows/reproducibility.yml` checks the rest weekly:
-it builds, deletes the final-assembly artifacts, rebuilds them without remote
-caches, and compares every file except `*.gpg`. The final assembly
-(`FINAL_ASSEMBLY`) is everything `oci/bluefin-server-image.bst` stages into
-the release set plus every `oci/*` target `just validate` resolves;
-`tests/unit/test_reproducibility_workflow.py` fails when a shipped element is missing.
+it builds, deletes the artifact of every project element in the closure of
+the roots, rebuilds them without remote caches, and compares every file except
+`*.gpg`. The roots (`FINAL_ASSEMBLY`) are everything
+`oci/bluefin-server-image.bst` stages into the release set plus every `oci/*`
+target `just validate` resolves; their dependencies (the signed kernel modules,
+OpenZFS and NVIDIA modules, `bluefin-host`, the initrd and the rest of
+`elements/`) are deleted with them, so a non-reproducible intermediate shows up
+in the image it ends up in. freedesktop-sdk's own elements stay cached.
+`tests/unit/test_reproducibility_workflow.py` fails when a shipped element is
+missing. A failing scheduled run opens the "Reproducibility check failing"
+issue.
 
 ## Dogfood: boot it in QEMU
 
@@ -327,8 +326,10 @@ projects:
 (already carrying its signed `SHA256SUMS(.gpg)`), runs the QEMU boot test, and
 on `main` publishes `dist/diskless/` as-is (see the `release` job in
 [ci-tooling.md](ci-tooling.md)). One version is published
-exactly once; creating an existing tag fails rather than overwriting assets
-nodes may already trust.
+exactly once: `scripts/publish-release.sh release` refuses a published version
+rather than overwriting assets nodes may already trust, and publishes only
+after the uploaded assets match the verified set (an unpublished release left by
+a failed run is replaced).
 
 ## Common rationalizations
 
