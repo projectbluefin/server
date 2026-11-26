@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install what the boot test runs on an Ubuntu runner: QEMU, the disk tools
 # the dogfood scripts call, and Fedora's Secure Boot OVMF, then export
-# OVMF_CODE, OVMF_CODE_INSECURE and OVMF_VARS to the job's later steps.
+# OVMF_CODE, OVMF_CODE_INSECURE, OVMF_VARS and OVMF_VARS_FOREIGN (Fedora's
+# store with its vendor keys enrolled) to the job's later steps.
 # boot-test and boot-test-preflight both run this, so they cannot drift.
 #
 #   bash scripts/ci/install-qemu-ovmf.sh
@@ -18,7 +19,7 @@ OVMF_RPM_SHA256=8b157ab2aa0cccccf021f43011308349147c76ae59550f52239ea50678dd0a5f
 
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends qemu-system-x86 libarchive-tools \
-  fdisk dosfstools e2fsprogs mtools
+  fdisk dosfstools e2fsprogs mtools openssl
 sudo chmod 666 /dev/kvm
 
 rpm="${RUNNER_TEMP:?}/edk2-ovmf.rpm"
@@ -28,9 +29,10 @@ echo "${OVMF_RPM_SHA256}  ${rpm}" | sha256sum -c -
 mkdir -p "${RUNNER_TEMP}/ovmf"
 bsdtar -xf "${rpm}" -C "${RUNNER_TEMP}/ovmf" \
   ./usr/share/edk2/ovmf/OVMF_CODE.secboot.fd ./usr/share/edk2/ovmf/OVMF_VARS.fd \
-  ./usr/share/edk2/ovmf/OVMF_CODE.fd
+  ./usr/share/edk2/ovmf/OVMF_CODE.fd ./usr/share/edk2/ovmf/OVMF_VARS.secboot.fd
 {
   echo "OVMF_CODE=${ovmf}/OVMF_CODE.secboot.fd"
   echo "OVMF_CODE_INSECURE=${ovmf}/OVMF_CODE.fd"
   echo "OVMF_VARS=${ovmf}/OVMF_VARS.fd"
+  echo "OVMF_VARS_FOREIGN=${ovmf}/OVMF_VARS.secboot.fd"
 } >> "${GITHUB_ENV:?}"
