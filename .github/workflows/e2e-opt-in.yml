@@ -80,7 +80,11 @@ jobs:
           set -euo pipefail
           # ~3 GB: one dropped connection must not fail the week's run.
           # --clobber replaces what a failed attempt left half written.
-          bash scripts/ci/retry.sh gh release download "${TAG}" --clobber --dir dist/release
+          if [ -f scripts/ci/retry.sh ]; then
+            bash scripts/ci/retry.sh gh release download "${TAG}" --clobber --dir dist/release
+          else
+            gh release download "${TAG}" --clobber --dir dist/release
+          fi
           bash scripts/publish-release.sh verify dist/release "${TAG#v}" files/os/sysupdate-keys/import-pubring.gpg
 
       - name: Install QEMU and OVMF
