@@ -8,6 +8,10 @@ ConditionKernelCommandLine=!root=tmpfs
 
 [Service]
 Type=oneshot
+# No RemainAfterExit=: systemd-sysupdate.service starts it again after every
+# run (30-update-status.conf), which an active unit would ignore. A second
+# run when bluefin-sysext-activate.service re-requests multi-user.target only
+# rewrites the same banners.
 ExecStart=/usr/libexec/bluefin-update-status
 StateDirectory=bluefin-update-status
 
