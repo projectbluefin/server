@@ -72,7 +72,7 @@ config:
     grep -q '^root:' /sysroot/etc/passwd
     chmod 0400 /sysroot/etc/shadow /sysroot/etc/gshadow
 
-    mkdir -p /sysroot/etc/systemd/system /sysroot/etc/systemd/journald.conf.d /sysroot/etc/sysctl.d
+    mkdir -p /sysroot/etc/systemd/system
     # Headless: homed-firstboot would block the console asking for a user.
     ln -sf /dev/null /sysroot/etc/systemd/system/systemd-homed-firstboot.service
     # The initrd's import.pull credential (local name "rootdisk") stays in
@@ -80,8 +80,13 @@ config:
     # /etc is the only unit directory that outranks generator output.
     ln -sf /dev/null /sysroot/etc/systemd/system/systemd-import@var-lib-machines-rootdisk.raw.service
     ln -sf /dev/null /sysroot/etc/systemd/system/systemd-loop@var-lib-machines-rootdisk.raw.service
-    printf '[Journal]\nForwardToConsole=no\nMaxLevelConsole=warning\n' > /sysroot/etc/systemd/journald.conf.d/10-console.conf
-    printf 'kernel.printk = 3 4 1 3\n' > /sysroot/etc/sysctl.d/10-console.conf
+    # Vendor drop-ins go to /usr/lib, not the factory /etc: tmpfiles' C
+    # never overwrites, so a copy in /etc would stay at the version an
+    # installed node first booted. An /etc file of the same name overrides.
+    # bluefin-migrate-etc-vendor removes the copies older images left.
+    mkdir -p /sysroot/usr/lib/systemd/journald.conf.d /sysroot/usr/lib/sysctl.d
+    printf '[Journal]\nForwardToConsole=no\nMaxLevelConsole=warning\n' > /sysroot/usr/lib/systemd/journald.conf.d/10-console.conf
+    printf 'kernel.printk = 3 4 1 3\n' > /sysroot/usr/lib/sysctl.d/10-console.conf
     printf 'LANG=C.UTF-8\n' > /sysroot/etc/locale.conf
     ln -sf ../usr/share/zoneinfo/UTC /sysroot/etc/localtime
     rm -f /sysroot/etc/machine-id
@@ -160,6 +165,12 @@ config:
     [Install]
     WantedBy=multi-user.target
     EOF
+    # Enabled in /usr, not by preset, so nodes that updated into it run it.
+    # Before systemd-tmpfiles-setup, so the same boot links the /usr copy in
+    # where it removed an unmodified one.
+    mkdir -p /sysroot/usr/lib/systemd/system/sysinit.target.wants
+    ln -sf ../bluefin-migrate-etc-vendor.service \
+      /sysroot/usr/lib/systemd/system/sysinit.target.wants/bluefin-migrate-etc-vendor.service
     mkdir -p /sysroot/usr/lib/systemd/system/multi-user.target.wants
     ln -sf ../bluefin-repair-etc-modes.service \
       /sysroot/usr/lib/systemd/system/multi-user.target.wants/bluefin-repair-etc-modes.service

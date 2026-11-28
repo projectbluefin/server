@@ -1,0 +1,23 @@
+[Unit]
+Description=Remove Vendor Drop-ins Older Images Copied into /etc
+Documentation=file:/usr/libexec/bluefin-migrate-etc-vendor
+# Older images shipped the sshd, sysctl and journald drop-ins in the factory
+# /etc, which tmpfiles copies only when missing, so an installed node kept
+# the copy it first booted. They ship in /usr now; this removes each copy
+# that is still exactly as an image shipped it, and tmpfiles-setup then
+# links the /usr one in. Enabled in /usr (elements/oci/bluefin-server-usr.bst)
+# so updated nodes run it; once per node. Installed nodes only: a diskless
+# node's /etc starts empty every boot.
+ConditionPathExists=!/var/lib/bluefin/etc-vendor-migrate.stamp
+ConditionPathExists=!/run/machines/rootdisk.raw
+ConditionKernelCommandLine=!root=tmpfs
+DefaultDependencies=no
+After=local-fs.target
+Before=systemd-tmpfiles-setup.service sysinit.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bluefin-migrate-etc-vendor

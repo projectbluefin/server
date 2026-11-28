@@ -70,6 +70,7 @@ HOST_HELPERS = (
     "diskless-update-check",
     "firstboot-credentials",
     "hostname",
+    "migrate-etc-vendor",
     "reboot-lock",
     "repair-etc-modes",
     "sysext-fetch",

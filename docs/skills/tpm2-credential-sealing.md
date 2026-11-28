@@ -40,7 +40,7 @@ The image ships no password. Root's `/etc/shadow` entry is `!unprovisioned`
 (`elements/oci/bluefin-server-usr.bst`), systemd's marker for a root account
 nobody has configured: `passwd -S root` reports `L`, console login, `su` and
 `sulogin` refuse it, and sshd accepts keys only
-(`files/os/ssh/sshd_config.d/bluefin-server.conf`). Access is provisioned per
+(`files/os/sshd_config.d/bluefin-server.conf`). Access is provisioned per
 node:
 
 - **SSH key:** Ignition `passwd.users` with `name: root` and
