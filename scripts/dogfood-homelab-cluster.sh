@@ -131,6 +131,8 @@ echo "PROBE cp-nodes-ready=$(ready) nodes=$(kubectl get nodes --no-headers | wc 
 journalctl -b -o cat -u bluefin-cluster-serve.service | sed 's/^/PROBE-LOG serve: /' | tail -n 20
 echo "PROBE cp-issued=$(journalctl -b -o cat -u bluefin-cluster-serve.service | grep -c 'issued a join token') denied=$(journalctl -b -o cat -u bluefin-cluster-serve.service | grep -c 'did not prove the passphrase') leaked=$(journalctl -b -o cat --no-pager | grep -c -e orbit-maple -e 'riverbank')"
 echo "PROBE cp-tokens=$(kubectl -n kube-system get secrets --field-selector type=bootstrap.kubernetes.io/token -o jsonpath='{range .items[*]}{.data.description}{"\n"}{end}' | base64 -d 2>/dev/null | grep -c 'bluefin-cluster join')"
+for _ in $(seq 120); do [ "$(systemctl show -P ActiveState bluefin-homelab-apply.service)" = active ] && break; sleep 5; done
+echo "PROBE cp-apply=$(systemctl show -P ActiveState bluefin-homelab-apply.service)/$(systemctl show -P Result bluefin-homelab-apply.service)"
 # Release the node (it stays up, Ready, until the count above is taken), and
 # keep the API server up until it has seen that and reported Ready itself.
 kubectl label nodes --all --overwrite dogfood-done=true >/dev/null
@@ -206,6 +208,7 @@ boot() {
         printf '[Service]\nStandardOutput=journal+console\nStandardError=journal+console\n' \
             > "${state}/${role}-creds/systemd.unit-dropin.${u}"
     done
+    DOGFOOD_RETRY_OK='Apply the Bluefin' \
     DOGFOOD_PORT="${port}" DOGFOOD_MEM="$3" DOGFOOD_TIMEOUT="$4" DOGFOOD_NET="$5" \
     DOGFOOD_IGNITION="${state}/${role}.ign" DOGFOOD_SERVE_EXTRA="${state}/serve" \
     DOGFOOD_EXTRA_PROBE="${state}/${role}.probe" DOGFOOD_CREDS="${state}/${role}-creds" \
@@ -233,6 +236,7 @@ check cp 'PROBE cp-passphrase-mode=600 issue-mode=600 '
 check cp 'PROBE cp-nodes-ready=2 nodes=2'
 check cp 'PROBE cp-issued=1 denied=[1-9][0-9]* leaked=0'
 check cp 'PROBE cp-tokens=1'
+check cp 'PROBE cp-apply=active/success'
 check node 'PROBE node-joined=yes hostname=bluefin-[0-9a-f]{8} kubelet=active enabled=enabled,enabled,'
 check node 'PROBE node-passphrase-left=0 server=https://bluefin-[0-9a-f]{8}\.local:6443'
 check node 'PROBE node-resolves-cp=10\.0\.2\.[0-9]+ pinned=10\.0\.2\.[0-9]+ cluster=dogfood'

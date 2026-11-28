@@ -28,6 +28,7 @@
 # dogfood-homelab-cluster.sh.
 # Usage: dogfood-homelab-installer.sh <dir with bluefin-server-installer_<ver>.raw>
 set -euo pipefail
+script_start="$(date +%s)"
 
 here="$(cd "$(dirname "$0")" && pwd)"
 dir="$(realpath "${1:?usage: $0 <artifact dir>}")"
@@ -298,7 +299,16 @@ boot_disk node 42 4096
 node_pid="${VM_PID}"
 rc=0
 finish node-3-disk "${node_pid}" 'PROBE failed=' 3000 || rc=1
-finish cp-3-disk "${cp_pid}" 'PROBE failed=' 4200 || rc=1
+# The control plane's own 4200 s would start only now, after the node's
+# install and boot (up to about 2 h in all), so a slow run could outlast the
+# job (e2e-opt-in.yml, timeout-minutes: 150) and be killed with no FAIL
+# summary. Cap the whole script at DOGFOOD_BUDGET seconds; the control plane
+# gets what is left (4200 s at most, 120 s at least: it has long since
+# printed the probe line this reads).
+cp_left=$(( ${DOGFOOD_BUDGET:-7800} - ($(date +%s) - script_start) ))
+[ "${cp_left}" -le 4200 ] || cp_left=4200
+[ "${cp_left}" -ge 120 ] || cp_left=120
+finish cp-3-disk "${cp_pid}" 'PROBE failed=' "${cp_left}" || rc=1
 
 check() { grep -aqE "$2" "${state}/$1.ttyS1.log" || { echo "FAIL: $1: no match for: $2" >&2; rc=1; }; }
 v="${ver//./\\.}"

@@ -17,6 +17,10 @@
 #   DOGFOOD_MEM=<MiB>          guest memory (default 4096)
 #   DOGFOOD_TIMEOUT=<seconds>  --check deadline (default 600)
 #   DOGFOOD_EXPECT=<ERE>       --check also requires the probe output to match
+#   DOGFOOD_RETRY_OK=<ERE>     --check ignores [FAILED] console lines matching <ERE>: a
+#                              unit that retries (Restart=on-failure) may fail once while
+#                              the node comes up. The probe's own failed=0 still has to
+#                              hold at the end, so a unit that never recovers fails the run.
 #   DOGFOOD_IGNITION=<file>    pass an Ignition config as the ignition.config credential
 #   DOGFOOD_CREDS=<dir>        pass every file in <dir> as a system credential named after it
 #   DOGFOOD_STATE_DISK=<file>  attach a persistent second disk (/dev/vdb), created if missing
@@ -304,6 +308,16 @@ UNIT
     </dev/null >/dev/null 2>&1 &
 qemu_pid=$!
 probe_done() { grep -aq 'PROBE failed=' "${probe_log}" 2>/dev/null; }
+# A node whose boot fails prints the initrd's failure summary and reboots
+# (initrd emergency.service.d/10-reboot.conf), then tries again. A failure
+# that does not depend on timing, such as a refused download, fails every
+# attempt the same way, so waiting out --check's deadline only delays the
+# failure by minutes to hours. Two summaries mean the retry failed too.
+boot_failed() {
+    local n
+    n="$(grep -ac 'BOOT FAILED' "${work}/serial.log" 2>/dev/null || true)"
+    [ "${n:-0}" -ge 2 ]
+}
 # Console output interleaves CSI, OSC and DCS escape sequences, sometimes in the
 # middle of a line (the initrd's failure summary writes to the console while
 # systemd-importd logs), so strip all three before matching.
@@ -315,7 +329,7 @@ if [ -n "${refusal}" ]; then
     stop() { probe_done || refused; }
 else
     # shellcheck disable=SC2329 # wait_for runs it by name
-    stop() { probe_done; }
+    stop() { probe_done || boot_failed; }
 fi
 wait_for "${timeout_s}" "${qemu_pid}" stop && status=0
 kill "${qemu_pid}" 2>/dev/null || true
@@ -361,7 +375,16 @@ if [ -n "${refusal}" ]; then
     exit "${status}"
 fi
 
+if ! probe_done && boot_failed; then
+    echo "FAIL: the boot failed twice, so the node is retrying a failure that does not go away (serial log: ${dir}/dogfood-serial.log)" >&2
+    tail -n 40 "${dir}/dogfood-serial.log" >&2
+    exit 1
+fi
+
 failed="$(grep -a '\[FAILED\]' "${dir}/dogfood-serial.log" || true)"
+if [ -n "${DOGFOOD_RETRY_OK:-}" ]; then
+    failed="$(printf '%s\n' "${failed}" | grep -avE -- "${DOGFOOD_RETRY_OK}" || true)"
+fi
 if [ "${status}" = 0 ] && [ -n "${DOGFOOD_EXPECT:-}" ] && ! grep -aqE -- "${DOGFOOD_EXPECT}" "${dir}/dogfood-serial.log"; then
     echo "FAIL: booted, but the probe output does not match DOGFOOD_EXPECT=${DOGFOOD_EXPECT}" >&2
     status=1
