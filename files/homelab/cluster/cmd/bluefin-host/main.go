@@ -22,6 +22,7 @@ import (
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/kube"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/sys"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/sysextfetch"
+	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/unused"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/updatepending"
 	"github.com/projectbluefin/server/files/homelab/cluster/internal/host/updatestatus"
 )
@@ -40,18 +41,19 @@ var cLocale = map[string]bool{
 
 // helpers are installed as /usr/libexec/bluefin-<name> symlinks.
 var helpers = map[string]command{
-	"boot-deadline":         bootdeadline.Main,
-	"boot-origin":           bootorigin.Main,
-	"diskless-update-check": diskless.Check,
-	"firstboot-credentials": firstboot.Main,
-	"hostname":              hostname.Main,
-	"reboot-lock":           fleetlock.Main,
-	"repair-etc-modes":      etcmodes.Main,
-	"sysext-fetch":          sysextfetch.Main,
-	"sysext-modules":        kmods.Main,
-	"update-pending":        updatepending.Main,
-	"update-status":         updatestatus.Main,
-	"update-status-migrate": updatestatus.Migrate,
+	"boot-deadline":          bootdeadline.Main,
+	"boot-origin":            bootorigin.Main,
+	"diskless-update-check":  diskless.Check,
+	"disable-unused-migrate": unused.Migrate,
+	"firstboot-credentials":  firstboot.Main,
+	"hostname":               hostname.Main,
+	"reboot-lock":            fleetlock.Main,
+	"repair-etc-modes":       etcmodes.Main,
+	"sysext-fetch":           sysextfetch.Main,
+	"sysext-modules":         kmods.Main,
+	"update-pending":         updatepending.Main,
+	"update-status":          updatestatus.Main,
+	"update-status-migrate":  updatestatus.Migrate,
 }
 
 // units are run by unit files as /usr/bin/bluefin-host <name>.

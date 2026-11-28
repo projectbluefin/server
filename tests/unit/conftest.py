@@ -67,6 +67,7 @@ HOST_MODULE = REPO_ROOT / "files" / "homelab" / "cluster"
 HOST_HELPERS = (
     "boot-deadline",
     "boot-origin",
+    "disable-unused-migrate",
     "diskless-update-check",
     "firstboot-credentials",
     "hostname",

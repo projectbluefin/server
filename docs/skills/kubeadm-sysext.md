@@ -249,7 +249,9 @@ and `iscsid`, with `iscsid.socket` enabled by `80-bluefin-iscsi.preset` so
 iscsid starts on first use. `iscsid.service` requires `iscsi-init.service`,
 which writes `/etc/iscsi/initiatorname.iscsi` only if absent (a fresh name per
 diskless boot; an Ignition-written file wins). `iscsi.service` auto-login is
-off. `/etc/iscsi/iscsid.conf` comes from the factory `/etc`
+off, and so is `isnsd`, open-isns's iSNS server (TCP 3205), which the
+initiator does not need (`80-bluefin-unused.preset`, with systemd-homed).
+`/etc/iscsi/iscsid.conf` comes from the factory `/etc`
 (`30-bluefin-iscsi.conf` restores it and creates `/var/lib/iscsi`), which is
 what democratic-csi's `chroot /host ... iscsiadm` node plugin needs.
 
