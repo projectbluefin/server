@@ -174,6 +174,34 @@ DOGFOOD_PROFILE=home-server DOGFOOD_INSTALL=console just dogfood-installer # Hom
 unattended and skips the disk question; never use one to instrument an
 attended run.
 
+### Console observations and scope
+
+The existing installer script owns console input and observations; there is
+no external console-driver handoff. Each run uses one private short `/tmp`
+monitor socket, independent of the state path length, and removes it on exit.
+USB runs still select the requested profile through the scratch stick's
+`loader.conf` default. They do **not** prove real boot-menu navigation. Under
+#450's approved direction, that navigation belongs in this script using QEMU
+monitor `sendkey` and `screendump` within the shipped three-second timeout,
+not in a separate driver. Signed UKIs and release artifacts stay unchanged.
+
+Linux mirror frames start with
+`=== screen <guest-uptime> rows <rows> cols <cols> x <cursor-x> cursor <cursor-y>`
+(zero-based cursor coordinates), followed by the screen text. In USB console
+mode a frame is committed only by its following
+`=== console <guest-uptime> printk=<n> mute=<state> noise=<n>` trailer. Ignore
+partial trailing frames; require a newer complete frame after input rather
+than matching old text elsewhere in the log. The periodic complete frames
+provide freshness even when the screen does not change. This mirror cannot
+assert anything about a pre-Linux menu.
+
+The existing prompt-driven flow retains the sysinstall result, target/decoy
+partition, disk-choice and done-screen checks, followed by installed-disk
+boot/login checks. Evidence belongs in the disposable state directory; never
+capture or publish passwords. Real firmware/menu captures, repeated screenshots
+and hosted resource measurements remain open under #450. These harness
+improvements do not certify an exhaustive screenshot run or publication.
+
 `scripts/dogfood-diskless.sh <dir> [--check]` boots the way a PXE/HTTP-booted
 node would: signed systemd-boot -> signed netboot UKI -> initrd pulls
 `bluefin-server_<ver>.raw` over HTTP into RAM -> dm-verity /usr, tmpfs root.

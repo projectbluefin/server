@@ -174,6 +174,8 @@ case "${console_hold}" in
 esac
 [ "${install_mode}" = console ] || { [ "${console_noise}" = 0 ] && [ "${console_failure}" = none ]; } \
     || { echo "ERROR: console noise/failure requires DOGFOOD_INSTALL=console" >&2; exit 1; }
+# Monitor sockets must fit sun_path even when DOGFOOD_STATE is deeply nested.
+monitor_socket_dir=""
 profile="${DOGFOOD_PROFILE:-minimal}"
 case "${profile}" in
     minimal|home-server) ;;
@@ -233,8 +235,9 @@ truncate -s 16G "${target}"
 vars="${state}/vars.fd"
 cp "${vars_tmpl}" "${vars}"
 
-# Reuse the Homelab harness's stock systemd-boot profile selection. Only the
-# scratch stick changes; the signed UKI and release artifact remain intact.
+# Reuse the Homelab harness's stock default selection. Real boot-menu
+# navigation remains separate work under #450, inside this script.
+# Only the scratch stick changes; signed UKIs and release artifacts stay intact.
 if [ "${install_mode}" != diskless-console ]; then
     cp --reflink=auto "${installer}" "${state}/installer.raw"
     installer="${state}/installer.raw"
@@ -254,7 +257,11 @@ fail() {
 # shellcheck disable=SC2329 # the EXIT trap below runs it
 cleanup() {
     local pid
-    for pid in ${qemu_pid:-} ${http_pid:-}; do kill "${pid}" 2>/dev/null || true; done
+    for pid in ${qemu_pid:-} ${http_pid:-}; do
+        kill "${pid}" 2>/dev/null || true
+        wait "${pid}" 2>/dev/null || true
+    done
+    [ -z "${monitor_socket_dir:-}" ] || rm -rf "${monitor_socket_dir}"
 }
 trap cleanup EXIT
 
@@ -324,15 +331,17 @@ fi
 # boot_start <name> <qemu args...>: start QEMU in the background. Serial logs
 # land in ${state}/<name>.*.log; the monitor (what a person sees on tty1)
 # in <name>.screen.log, through a virtio port the dogfood-screen.service
-# credential writes to; <name>.mon is the QEMU monitor that types on the
-# guest keyboard (type_keys).
+# credential writes to. One private short socket serves every boot's QEMU
+# monitor, including guest keyboard input (type_keys).
 boot_start() {
     local name="$1"; shift
     local log="${state}/${name}"
-    rm -f "${log}.mon"
+    [ -n "${monitor_socket_dir:-}" ] || monitor_socket_dir="$(mktemp -d /tmp/bluefin-console.XXXXXX)"
+    monitor_path="${monitor_socket_dir}/qemu.mon"
+    rm -f "${monitor_path}"
     "${qemu[@]}" "$@" \
         -serial "file:${log}.ttyS0" -serial "file:${log}.ttyS1" -serial "file:${log}.ttyS2" \
-        -monitor "unix:${log}.mon,server=on,wait=off" \
+        -monitor "unix:${monitor_path},server=on,wait=off" \
         -device virtio-serial-pci,id=dogfood-vser \
         -chardev "file,id=dogfood-screen,path=${log}.screen.log" \
         -device virtserialport,bus=dogfood-vser.0,chardev=dogfood-screen,name=dogfood.screen \
@@ -360,7 +369,7 @@ boot_wait() {
             kill "${qemu_pid}" 2>/dev/null || true
         else
             # A result is not a power cut: let the guest flush and stop normally.
-            python3 - "${log}.mon" <<'PY' || fail "${name}: cannot request orderly shutdown"
+            python3 - "${monitor_path:-${log}.mon}" <<'PY' || fail "${name}: cannot request orderly shutdown"
 import socket, sys
 with socket.socket(socket.AF_UNIX) as monitor:
     monitor.settimeout(5)
@@ -384,7 +393,7 @@ PY
             | tr -d '\r' > "${log}.${s}.log" || true
         rm -f "${log}.${s}"
     done
-    rm -f "${log}.mon"
+    rm -f "${monitor_path:-${log}.mon}"
     grep -aoE 'PROBE[ -].*' "${log}.ttyS1.log" || true
     [ "${timed_out}" = 0 ] || { tail -n 40 "${log}.ttyS0.log" >&2; fail "${name}: no result within ${timeout_s}s"; }
     [ "${shutdown_failed}" = 0 ] || fail "${name}: guest ignored orderly ACPI shutdown"
@@ -508,7 +517,7 @@ hold_console() {
 # lost one keystroke under noise, so the two password prompts did not match
 # (#600).
 type_keys() {
-    python3 - "${state}/$1.mon" "$2" "${console_noise:-0}" <<'PY'
+    python3 - "${monitor_path:-${state}/$1.mon}" "$2" "${console_noise:-0}" <<'PY'
 import socket, sys, time
 keys = {" ": "spc", "\n": "ret", "\x15": "ctrl-u", "-": "minus", ".": "dot", "/": "slash", "=": "equal",
         ",": "comma", ";": "semicolon", "'": "apostrophe", "`": "grave_accent", "\\": "backslash",
@@ -552,8 +561,8 @@ console=0 failed_probe=0
 while :; do
     if [ -w "${port}" ] && [ -r /dev/vcsa ]; then
         # vcsa starts with the screen's rows, columns and the cursor's x, y.
-        read -r _ cols _ y < <(od -An -tu1 -N4 /dev/vcsa)
-        screen="cursor ${y}
+        read -r rows cols x y < <(od -An -tu1 -N4 /dev/vcsa)
+        screen="rows ${rows} cols ${cols} x ${x} cursor ${y}
 $(tr '\000-\037\177-\377' '?' < /dev/vcs | fold -w "${cols:-80}" | sed 's/ *$//')"
         if [ "${console}" = 1 ] || [ "${screen}" != "${last}" ]; then
             printf '=== screen %s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "${screen}" > "${port}"
@@ -726,6 +735,15 @@ run_install() {
     check_done_screen "$1"
 }
 
+check_console_install() {
+    local name="$1" log="${state}/$1"
+    grep -aq "PROBE sysinstall=success installed-slot-b=0 installed-parts=3 decoy-parts=0" "${log}.ttyS1.log" \
+        || fail "${name}: expected the ESP and usr slot A (+ verity) on the target and the other disk untouched: $(grep -ao 'PROBE sysinstall=.*' "${log}.ttyS1.log")"
+    grep -aqF "PROBE-LOG disk-choice BLUEFIN_INSTALL_TARGET=${target_dev}" "${log}.ttyS1.log" \
+        || fail "${name}: the disk question did not hand ${target_dev} to sysinstall"
+    check_done_screen "${name}"
+}
+
 # console_install <name>: install the way a person at the monitor does: pick
 # the target by its number among two disks, confirm with "yes", see the
 # "installed" screen, press Enter to restart (or retain a genuine failure).
@@ -822,11 +840,7 @@ FAILURE
     # Enter restarts at once, without the countdown.
     type_keys "${name}" $'\n'
     boot_wait "${name}" ''
-    grep -aq "PROBE sysinstall=success installed-slot-b=0 installed-parts=3 decoy-parts=0" "${log}.ttyS1.log" \
-        || fail "${name}: expected the ESP and usr slot A (+ verity) on the target and the other disk untouched: $(grep -ao 'PROBE sysinstall=.*' "${log}.ttyS1.log")"
-    grep -aqF "PROBE-LOG disk-choice BLUEFIN_INSTALL_TARGET=${target_dev}" "${log}.ttyS1.log" \
-        || fail "${name}: the disk question did not hand ${target_dev} to sysinstall"
-    check_done_screen "${name}"
+    check_console_install "${name}"
 }
 
 # diskless_install_command: the commands "From a diskless node" in
