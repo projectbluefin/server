@@ -46,6 +46,9 @@ declare -A PATTERN=(
 	[METALLB_ADDRESSES]='^[0-9A-Fa-f.:/, -]+$'
 	[ACME_EMAIL]='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$'
 	[ACME_SERVER]='^https://[A-Za-z0-9./_-]+$'
+	# The Gateway certificate's issuer: an RFC 1123 subdomain (a
+	# ClusterIssuer name, lowercase).
+	[GATEWAY_ISSUER]='^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
 	[ARGOCD_ROOT_REPO]='^(https://|http://|ssh://|git@)[A-Za-z0-9._~:/@+-]+$'
 	[ARGOCD_ROOT_REVISION]='^[A-Za-z0-9._/-]+$'
 	[ARGOCD_ROOT_PATH]='^[A-Za-z0-9._/-]+$'
@@ -64,6 +67,7 @@ declare -A PATTERN=(
 )
 declare -A DEFAULT=(
 	[ACME_SERVER]=https://acme-v02.api.letsencrypt.org/directory
+	[GATEWAY_ISSUER]=homelab-ca
 	[ARGOCD_ROOT_REVISION]=HEAD
 	[ARGOCD_ROOT_PATH]=.
 	[KURED_TIME_ZONE]=UTC

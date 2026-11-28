@@ -39,6 +39,11 @@
 # there.
 #HOMELAB_ACME_EMAIL=you@example.com
 #HOMELAB_ACME_SERVER=https://acme-staging-v02.api.letsencrypt.org/directory
+# The ClusterIssuer that signs the Gateway's certificate (default
+# homelab-ca). It must be able to validate the add-on names, which for
+# LAN-only names means DNS-01; the bundled "acme" issuer is HTTP-01-only
+# (homelab-profile.md, TLS).
+#HOMELAB_GATEWAY_ISSUER=homelab-ca
 
 # Argo CD: an app-of-apps root Application "homelab-root".
 #HOMELAB_ARGOCD_ROOT_REPO=https://example.com/you/homelab.git
