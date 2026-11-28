@@ -73,6 +73,7 @@ All local `just` targets run BuildStream inside the FSDK `bst2` container via `j
 | Offline USB installer (unattended installs, install-time provisioning) | [`docs/skills/usb-installer.md`](docs/skills/usb-installer.md) |
 | Network boot at scale (Booty: HTTP boot, per-node Ignition) | [`docs/skills/booty-integration.md`](docs/skills/booty-integration.md) |
 | Diskless boot failures, RAM sizing, node logs, Ignition configs | [`docs/skills/diskless-troubleshooting.md`](docs/skills/diskless-troubleshooting.md) |
+| Deploy to Akamai Cloud (Linode), Ignition from the Metadata service | [`docs/skills/akamai.md`](docs/skills/akamai.md) |
 | Factory role, k0s sysext rationale, lab integration | [`docs/skills/factory-integration.md`](docs/skills/factory-integration.md) |
 | Work with `systemd-sysext` / `systemd-confext` | [`docs/skills/systemd-sysext-extensions.md`](docs/skills/systemd-sysext-extensions.md) |
 | Build or run the kubeadm worker sysext | [`docs/skills/kubeadm-sysext.md`](docs/skills/kubeadm-sysext.md) |

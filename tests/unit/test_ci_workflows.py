@@ -152,7 +152,8 @@ def test_renovate_tracks_every_just_pin() -> None:
 
     pins = []
     for path in tracked_files():
-        if path.startswith("docs/"):
+        # A symlink (files/initrd/etc/resolv.conf) can point at a path that only exists at runtime.
+        if path.startswith("docs/") or (ROOT / path).is_symlink():
             continue
         text = (ROOT / path).read_text(encoding="utf-8", errors="replace")
         pins += [(path, m.group(1)) for m in re.finditer(r"\bjust@([0-9][^\s'\"]*)", text)]

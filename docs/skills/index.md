@@ -22,6 +22,7 @@ This is the lazy-load routing table for agent skills. Keep this file in memory w
 
 | Skill file | When to load | One-line scope |
 |---|---|---|
+| [`akamai.md`](akamai.md) | Deploying to Akamai Cloud (Linode), Ignition from the Metadata service | Why Akamai nodes are diskless BIOS, the Metadata user-data source, trust model. |
 | [`avoid-over-engineering.md`](avoid-over-engineering.md) | Cutting scope, deleting code, resisting bloat | Rules and red flags for keeping solutions small. |
 | [`architecture-roadmap.md`](architecture-roadmap.md) | Future architecture direction, long-lead design | Roadmap for systemd-native architecture work. |
 | [`booty-integration.md`](booty-integration.md) | HTTP boot, iPXE chainloading, per-node Ignition, kubeadm worker provisioning via Booty | How the Booty network boot server serves releases to nodes. |
